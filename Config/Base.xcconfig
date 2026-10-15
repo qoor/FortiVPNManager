@@ -1,0 +1,3 @@
+// Shared build settings. Personal settings (DEVELOPMENT_TEAM) live in Local.xcconfig,
+// which `make local-config` generates from your Apple Development certificate.
+#include? "Local.xcconfig"

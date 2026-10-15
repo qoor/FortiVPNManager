@@ -1,0 +1,91 @@
+# XcodeGen project definition. Generate with `make gen`; the .xcodeproj is not committed.
+name: FortiVPNManager
+
+options:
+  bundleIdPrefix: com.qoor
+  developmentLanguage: en
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_APP_SANDBOX: NO
+    # Bumped on every `make build`; app and helper compare it as their BuildID.
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.1.0"
+
+packages:
+  FortiCore:
+    path: Packages/FortiCore
+
+targets:
+  FortiVPNManager:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      - path: Support/LaunchDaemons/com.qoor.FortiVPNManager.Helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    info:
+      path: App/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: FortiVPNManager
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        # UI text is English in code; Korean lives in App/Resources/Localizable.xcstrings.
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    dependencies:
+      - package: FortiCore
+        products: [FortiShared, FortiCore, FortiConfig]
+      - target: FortiVPNManagerHelper
+        embed: true
+        link: false
+        codeSign: true
+        copy:
+          destination: executables
+
+  FortiVPNManagerHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helper
+    settings:
+      base:
+        PRODUCT_NAME: FortiVPNManagerHelper
+        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.Helper
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        # Keep the signing identifier stable: launchd pins it at the first register().
+        OTHER_CODE_SIGN_FLAGS: "$(inherited) --identifier $(PRODUCT_BUNDLE_IDENTIFIER)"
+        SKIP_INSTALL: YES
+        ENABLE_DEBUG_DYLIB: NO
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - package: FortiCore
+        products: [FortiShared, FortiCore, FortiHelperCore]
+
+schemes:
+  FortiVPNManager:
+    build:
+      targets:
+        FortiVPNManager: all
+        FortiVPNManagerHelper: all

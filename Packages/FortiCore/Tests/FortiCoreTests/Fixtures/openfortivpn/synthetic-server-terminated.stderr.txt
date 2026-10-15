@@ -1,0 +1,8 @@
+Thu Oct 15 09:12:04 2026 : publish_entry SCDSet() failed: Success!
+Thu Oct 15 09:12:04 2026 : publish_entry SCDSet() failed: Success!
+Thu Oct 15 09:12:04 2026 : Using interface ppp0
+Thu Oct 15 09:12:04 2026 : Connect: ppp0 <--> /dev/ttys004
+Thu Oct 15 09:12:04 2026 : local  IP address 10.212.134.200
+Thu Oct 15 09:12:04 2026 : remote IP address 169.254.2.1
+Thu Oct 15 12:12:05 2026 : Modem hangup
+Thu Oct 15 12:12:05 2026 : Connection terminated.

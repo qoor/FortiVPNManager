@@ -1,0 +1,3146 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@ (%@ ago)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (%@ 전)"
+          }
+        }
+      }
+    },
+    "%@ (%lld) must be less than %@ (%lld).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@(%lld)는 %@(%lld)보다 작아야 합니다."
+          }
+        }
+      }
+    },
+    "%@ Using the last valid settings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 마지막 정상 설정으로 동작합니다."
+          }
+        }
+      }
+    },
+    "%@ can't start or end with a space.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값의 앞뒤에 공백을 둘 수 없습니다."
+          }
+        }
+      }
+    },
+    "%@ contains a character that is not allowed (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 쓸 수 없는 문자(%@)가 있습니다."
+          }
+        }
+      }
+    },
+    "%@ contains characters that aren't allowed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값에 쓸 수 없는 문자가 있습니다."
+          }
+        }
+      }
+    },
+    "%@ failed: %@: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 실패: %@: %@"
+          }
+        }
+      }
+    },
+    "%@ has a quoted value \"%@\".": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 \"%@\"이(가) 따옴표로 감싸져 있습니다."
+          }
+        }
+      }
+    },
+    "%@ is set to %@, which is not allowed. It must be %lld.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 %@은(는) 쓸 수 없습니다. %lld이어야 합니다."
+          }
+        }
+      }
+    },
+    "%@ is set to %@, which is outside the allowed range (%lld–%lld).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 %@이(가) 허용 범위(%lld~%lld)를 벗어났습니다."
+          }
+        }
+      }
+    },
+    "%@ is set to '%@', which is not allowed. Use one of: %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 '%@'은(는) 쓸 수 없습니다. 다음 중 하나로 적어 주세요: %@."
+          }
+        }
+      }
+    },
+    "%@ is set to '%@', which is not allowed. Use true or false.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 '%@'은(는) 쓸 수 없습니다. true 또는 false로 적어 주세요."
+          }
+        }
+      }
+    },
+    "%@ is set to '%@', which is not an accepted number format.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값 '%@'은(는) 쓸 수 없는 숫자 형식입니다."
+          }
+        }
+      }
+    },
+    "%@ is too long (at most %lld bytes).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값이 너무 깁니다 (최대 %lld바이트)."
+          }
+        }
+      }
+    },
+    "%@ rejected (%@): %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 거부됨 (%@): %@"
+          }
+        }
+      }
+    },
+    "%@ timed out": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 응답 시간 초과"
+          }
+        }
+      }
+    },
+    "2-Step Verification (Gmail)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2단계 인증(Gmail)"
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정"
+          }
+        }
+      }
+    },
+    "Account changes apply from the next connection.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 정보 변경은 다음 연결부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "Account details": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 정보"
+          }
+        }
+      }
+    },
+    "Account details changed. They apply from the next connection.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 정보가 바뀌었습니다. 다음 연결부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "고급"
+          }
+        }
+      }
+    },
+    "All Mail (\\All)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "전체보관함(\\All)"
+          }
+        }
+      }
+    },
+    "Allow background activity for FortiVPNManager in System Settings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시스템 설정에서 FortiVPNManager의 백그라운드 활동을 허용하세요."
+          }
+        }
+      }
+    },
+    "Allowed to run": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 가능"
+          }
+        }
+      }
+    },
+    "Anchors (&) and aliases (*) are not allowed. Write the values out directly.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앵커(&)와 별칭(*)은 쓸 수 없습니다. 값을 직접 적어 주세요."
+          }
+        }
+      }
+    },
+    "App password": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 비밀번호"
+          }
+        }
+      }
+    },
+    "App password (IMAP)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 비밀번호 (IMAP)"
+          }
+        }
+      }
+    },
+    "Authentication failed (%@), retrying once": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인증 실패(%@), 1회 재시도"
+          }
+        }
+      }
+    },
+    "Auto-scroll": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동 스크롤"
+          }
+        }
+      }
+    },
+    "Automatic reconnection stopped after too many sign-in attempts within an hour.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1시간 동안 인증 시도가 너무 많아 자동 재연결을 멈췄습니다."
+          }
+        }
+      }
+    },
+    "Can't connect with the saved account details. %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장된 계정 정보로는 연결할 수 없습니다. %@"
+          }
+        }
+      }
+    },
+    "Can't read the config file (%@). %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일(%@)을 읽을 수 없습니다. %@"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "취소"
+          }
+        }
+      }
+    },
+    "Changed the config file permissions from %@ to 0600.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일 권한을 %@에서 0600으로 고쳤습니다."
+          }
+        }
+      }
+    },
+    "Check Gmail app password": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 앱 비밀번호 확인 필요"
+          }
+        }
+      }
+    },
+    "Check Google account connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정 연결 확인 필요"
+          }
+        }
+      }
+    },
+    "Checking readiness": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "준비 확인"
+          }
+        }
+      }
+    },
+    "Checking…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "확인 중…"
+          }
+        }
+      }
+    },
+    "Choose an openfortivpn config file.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn 설정 파일을 선택하세요."
+          }
+        }
+      }
+    },
+    "Choose the OAuth client JSON (Desktop app) downloaded from Google Cloud Console.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Cloud Console에서 내려받은 OAuth 클라이언트 JSON(데스크톱 앱)을 선택하세요."
+          }
+        }
+      }
+    },
+    "Clear": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지우기"
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
+          }
+        }
+      }
+    },
+    "Config file operation (%@) failed: %@: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일 작업(%@) 실패: %@: %@"
+          }
+        }
+      }
+    },
+    "Configured (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정됨 (%@)"
+          }
+        }
+      }
+    },
+    "Connect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결"
+          }
+        }
+      }
+    },
+    "Connect Google Account": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정 연결"
+          }
+        }
+      }
+    },
+    "Connect automatically at launch": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 시작 시 자동 연결"
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결됨"
+          }
+        }
+      }
+    },
+    "Connected (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결됨 (%@)"
+          }
+        }
+      }
+    },
+    "Connected at": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결된 시각"
+          }
+        }
+      }
+    },
+    "Connecting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 중"
+          }
+        }
+      }
+    },
+    "Connecting to Gmail": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 연결"
+          }
+        }
+      }
+    },
+    "Connecting to the server": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 연결"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 관리"
+          }
+        }
+      }
+    },
+    "Connection method": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 방식"
+          }
+        }
+      }
+    },
+    "Connection succeeded · Archive: %@, Trash: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 성공 · 전체보관함 %@, 휴지통 %@"
+          }
+        }
+      }
+    },
+    "Connection succeeded · Archive: %@, Trash: %@, Spam: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 성공 · 전체보관함 %@, 휴지통 %@, 스팸함 %@"
+          }
+        }
+      }
+    },
+    "Connection succeeded · Gmail API (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 성공 · Gmail API (%@)"
+          }
+        }
+      }
+    },
+    "Contacting server": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 연결"
+          }
+        }
+      }
+    },
+    "Control characters, line breaks, BOMs and similar characters are not allowed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "제어 문자, 줄바꿈, BOM 같은 문자는 쓸 수 없습니다."
+          }
+        }
+      }
+    },
+    "Copy All": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "모두 복사"
+          }
+        }
+      }
+    },
+    "Could not build the IMAP command (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMAP 명령을 만들 수 없습니다 (%@)"
+          }
+        }
+      }
+    },
+    "Could not parse the response (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "응답을 해석할 수 없습니다 (%@)"
+          }
+        }
+      }
+    },
+    "Could not reach the Gmail server: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 서버와 통신하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Could not read the Helper response: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 응답 해석 실패: %@"
+          }
+        }
+      }
+    },
+    "Could not read the openfortivpn config file (%@): %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn 설정 파일을 읽을 수 없습니다(%@): %@"
+          }
+        }
+      }
+    },
+    "Couldn't connect to the VPN server.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 서버에 연결하지 못했습니다."
+          }
+        }
+      }
+    },
+    "Couldn't open the tunnel after login.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 후 터널을 열지 못했습니다."
+          }
+        }
+      }
+    },
+    "Couldn't open the web browser for Google sign-in.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 로그인을 위한 웹 브라우저를 열지 못했습니다."
+          }
+        }
+      }
+    },
+    "Couldn't reach Google: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 서버와 통신하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't read Gmail with the Google account. Connect the Google account again, or check the fallback app password.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정으로 Gmail을 읽지 못했습니다. Google 계정을 다시 연결하거나 예비용 앱 비밀번호를 확인하세요."
+          }
+        }
+      }
+    },
+    "Couldn't read the OAuth client file: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 클라이언트 파일을 읽지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't read the app password from Keychain: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain에서 앱 비밀번호를 읽지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't save the password to Keychain: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain에 비밀번호를 저장하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't start openfortivpn": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn 실행 실패"
+          }
+        }
+      }
+    },
+    "Couldn't start the local sign-in listener: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 응답을 받을 로컬 수신기를 시작하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Current status": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 상태"
+          }
+        }
+      }
+    },
+    "Disconnect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 해제"
+          }
+        }
+      }
+    },
+    "Disconnecting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 해제 중"
+          }
+        }
+      }
+    },
+    "Disconnecting before sleep": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠자기 전 연결 종료 중"
+          }
+        }
+      }
+    },
+    "Dropped right after connecting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 직후 끊김"
+          }
+        }
+      }
+    },
+    "Enter only a host name or IPv4 address as the server address (no https://, :port, or /). Enter the port in the Port field.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 주소에는 호스트 이름이나 IPv4 주소만 입력하세요 (https://, :포트, / 제외). 포트는 포트 칸에 입력합니다."
+          }
+        }
+      }
+    },
+    "Enter the Gmail address to save the app password.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 비밀번호를 저장하려면 Gmail 주소를 입력하세요."
+          }
+        }
+      }
+    },
+    "Enter the Gmail address.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 주소를 입력하세요."
+          }
+        }
+      }
+    },
+    "Enter the app password.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 비밀번호를 입력하세요."
+          }
+        }
+      }
+    },
+    "Enter the server address and username to save the VPN password.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 비밀번호를 저장하려면 서버 주소와 사용자명을 입력하세요."
+          }
+        }
+      }
+    },
+    "Error": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오류"
+          }
+        }
+      }
+    },
+    "Error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오류: %@"
+          }
+        }
+      }
+    },
+    "Formats such as 0443 (octal), 2:30 (base 60), 0x1BB (hex) and 1_000 are not accepted.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0443(8진수), 2:30(60진수), 0x1BB(16진수), 1_000 같은 형식은 받지 않습니다."
+          }
+        }
+      }
+    },
+    "FortiVPNManager Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager 설정"
+          }
+        }
+      }
+    },
+    "FortiVPNManager: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager: %@"
+          }
+        }
+      }
+    },
+    "FortiVPNManager: Google sign-in was not completed. You can close this window.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager: Google 로그인이 완료되지 않았습니다. 이 창을 닫아도 됩니다."
+          }
+        }
+      }
+    },
+    "FortiVPNManager: this sign-in response is not valid. Start the sign-in again in Settings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager: 올바르지 않은 로그인 응답입니다. 설정에서 로그인을 다시 시작하세요."
+          }
+        }
+      }
+    },
+    "FortiVPNManager: you can close this window.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager: 이 창을 닫아도 됩니다."
+          }
+        }
+      }
+    },
+    "General > Login Items & Extensions > App Background Activity": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일반 > 로그인 항목 및 확장 프로그램 > 앱 백그라운드 활동"
+          }
+        }
+      }
+    },
+    "Gmail access was not granted. Sign in again and allow access to Gmail.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 접근 권한이 허용되지 않았습니다. 다시 로그인해 Gmail 접근을 허용하세요."
+          }
+        }
+      }
+    },
+    "Gmail address": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 주소"
+          }
+        }
+      }
+    },
+    "Gmail app password": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 앱 비밀번호"
+          }
+        }
+      }
+    },
+    "Gmail rejected the login. Check the app password and that IMAP is enabled.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail이 로그인을 거부했습니다. 앱 비밀번호와 IMAP 사용 설정을 확인하세요."
+          }
+        }
+      }
+    },
+    "Gmail rejected the sign-in. Check the Gmail address, the app password and that IMAP is enabled.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail이 로그인을 거부했습니다. Gmail 주소, 앱 비밀번호와 IMAP 사용 설정을 확인하세요."
+          }
+        }
+      }
+    },
+    "Gmail rejected the sign-in. Check the Gmail address, the app password and that IMAP is enabled. (Server response: %@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail이 로그인을 거부했습니다. Gmail 주소, 앱 비밀번호와 IMAP 사용 설정을 확인하세요. (서버 응답: %@)"
+          }
+        }
+      }
+    },
+    "Google access was revoked or has expired. Sign in with Google again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 접근 권한이 취소되었거나 만료되었습니다. Google로 다시 로그인하세요."
+          }
+        }
+      }
+    },
+    "Google account": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정"
+          }
+        }
+      }
+    },
+    "Google account (Gmail API)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정 (Gmail API)"
+          }
+        }
+      }
+    },
+    "Google account connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정 연결"
+          }
+        }
+      }
+    },
+    "Google account is recommended: the Gmail API detects the OTP email as soon as it arrives. Over IMAP, Gmail can show it several seconds later.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 계정 방식을 권장합니다. Gmail API는 OTP 메일이 도착하는 즉시 감지하고, IMAP에서는 몇 초 늦게 보일 수 있습니다."
+          }
+        }
+      }
+    },
+    "Google did not return a refresh token. Sign in again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google이 갱신 토큰을 주지 않았습니다. 다시 로그인하세요."
+          }
+        }
+      }
+    },
+    "Google rejected the OAuth client. Import the client JSON again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google이 OAuth 클라이언트를 거부했습니다. 클라이언트 JSON을 다시 가져오세요."
+          }
+        }
+      }
+    },
+    "Google rejected the access token. Sign in with Google again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google이 액세스 토큰을 거부했습니다. Google로 다시 로그인하세요."
+          }
+        }
+      }
+    },
+    "Google rejected the sign-in: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google이 로그인을 거부했습니다: %@"
+          }
+        }
+      }
+    },
+    "Google returned an error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google이 오류를 반환했습니다: %@"
+          }
+        }
+      }
+    },
+    "Google sign-in failed (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 로그인에 실패했습니다 (%@)."
+          }
+        }
+      }
+    },
+    "Google sign-in is already in progress.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 로그인이 이미 진행 중입니다."
+          }
+        }
+      }
+    },
+    "Google sign-in timed out after 5 minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5분 안에 Google 로그인이 끝나지 않아 중단했습니다."
+          }
+        }
+      }
+    },
+    "Google sign-in was cancelled in the browser.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "브라우저에서 Google 로그인이 취소되었습니다."
+          }
+        }
+      }
+    },
+    "Google sign-in was cancelled.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 로그인을 취소했습니다."
+          }
+        }
+      }
+    },
+    "Helper": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper"
+          }
+        }
+      }
+    },
+    "Helper connection failed: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 연결 실패: %@"
+          }
+        }
+      }
+    },
+    "Helper error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 오류: %@"
+          }
+        }
+      }
+    },
+    "Helper internal error": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 내부 오류"
+          }
+        }
+      }
+    },
+    "Helper is busy with another connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 다른 연결을 처리 중"
+          }
+        }
+      }
+    },
+    "Helper refused the request": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 요청을 거부함"
+          }
+        }
+      }
+    },
+    "Helper registration and approval": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 등록·승인"
+          }
+        }
+      }
+    },
+    "Helper version mismatch": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 버전 불일치"
+          }
+        }
+      }
+    },
+    "IMAP fallback (optional)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMAP 예비 수단(선택)"
+          }
+        }
+      }
+    },
+    "IMAP protocol error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMAP 프로토콜 오류: %@"
+          }
+        }
+      }
+    },
+    "If the Gmail API can't be used during a connection, the OTP email is read over IMAP with this app password instead.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 중 Gmail API를 쓸 수 없으면 이 앱 비밀번호로 IMAP에서 OTP 메일을 읽습니다."
+          }
+        }
+      }
+    },
+    "Ignored unknown keys: %@. openfortivpn doesn't read the settings after such keys.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알 수 없는 키를 무시했습니다: %@. openfortivpn은 이런 키 뒤의 설정을 읽지 않습니다."
+          }
+        }
+      }
+    },
+    "Ignoring unknown key '%@'. It will be removed the next time you save in Settings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알 수 없는 키 '%@'는 무시합니다. 설정창에서 저장하면 사라집니다."
+          }
+        }
+      }
+    },
+    "Import": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "불러오기"
+          }
+        }
+      }
+    },
+    "Import JSON…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JSON 불러오기…"
+          }
+        }
+      }
+    },
+    "Import openfortivpn Settings…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기존 openfortivpn 설정 불러오기…"
+          }
+        }
+      }
+    },
+    "Import the JSON of a Desktop app OAuth client from a Google Cloud project with the Gmail API enabled. Connecting opens Google sign-in in your web browser.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail API를 사용 설정한 Google Cloud 프로젝트에서 데스크톱 앱 유형 OAuth 클라이언트의 JSON을 불러오세요. 계정을 연결하면 웹 브라우저에서 Google 로그인 화면이 열립니다."
+          }
+        }
+      }
+    },
+    "Import the OAuth client JSON first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "먼저 OAuth 클라이언트 JSON을 가져오세요."
+          }
+        }
+      }
+    },
+    "Imported from %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에서 불러왔습니다."
+          }
+        }
+      }
+    },
+    "Imported openfortivpn Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "불러온 openfortivpn 설정"
+          }
+        }
+      }
+    },
+    "In %@, entry %lld duplicates an earlier entry and is ignored.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목은 앞 항목과 같아서 무시합니다."
+          }
+        }
+      }
+    },
+    "In %@, entry %lld is not a SHA-256 digest (64 hex digits) and is ignored.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목은 SHA-256 digest(16진수 64자리)가 아니어서 무시합니다."
+          }
+        }
+      }
+    },
+    "In %@, entry %lld is not a SHA-256 digest (64 lowercase hex digits).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목이 SHA-256 digest(소문자 16진수 64자리)가 아닙니다."
+          }
+        }
+      }
+    },
+    "Invalid connection request": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잘못된 연결 요청"
+          }
+        }
+      }
+    },
+    "It must be a list (e.g. [] or '- value' lines)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목록이어야 합니다(예: [] 또는 '- 값' 줄)"
+          }
+        }
+      }
+    },
+    "It must be a string": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "문자열이어야 합니다"
+          }
+        }
+      }
+    },
+    "It must be an unquoted integer": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "따옴표 없는 정수여야 합니다"
+          }
+        }
+      }
+    },
+    "It must be an unquoted true or false": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "따옴표 없는 true 또는 false여야 합니다"
+          }
+        }
+      }
+    },
+    "It must be nested entries in 'key: value' form": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'키: 값' 형식의 하위 항목이어야 합니다"
+          }
+        }
+      }
+    },
+    "Keychain error %d": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain 오류 %d"
+          }
+        }
+      }
+    },
+    "Keychain error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain 오류: %@"
+          }
+        }
+      }
+    },
+    "Keys must be plain strings.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키는 단순한 문자열이어야 합니다."
+          }
+        }
+      }
+    },
+    "Larger than %lld KiB.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldKiB보다 큽니다."
+          }
+        }
+      }
+    },
+    "Launch at Login can only be set from the app installed in /Applications.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 시 실행은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Line %lld, column %lld": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "줄 %lld, 열 %lld"
+          }
+        }
+      }
+    },
+    "Log": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그"
+          }
+        }
+      }
+    },
+    "Logging in": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인"
+          }
+        }
+      }
+    },
+    "Mailboxes not visible over IMAP: %@. In Gmail Settings > Labels, turn on 'Show in IMAP'.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 메일함이 IMAP에 보이지 않습니다. Gmail 설정 > 라벨에서 'IMAP에서 표시'를 켜 주세요."
+          }
+        }
+      }
+    },
+    "Margin": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여유분"
+          }
+        }
+      }
+    },
+    "Maximum session length": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "세션 최대시간"
+          }
+        }
+      }
+    },
+    "Merge keys (<<) are not allowed. Write the values out directly.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "병합 키(<<)는 쓸 수 없습니다. 값을 직접 적어 주세요."
+          }
+        }
+      }
+    },
+    "Minimum sleep time": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최소 잠자기 시간"
+          }
+        }
+      }
+    },
+    "Needs approval": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "승인 필요"
+          }
+        }
+      }
+    },
+    "Needs approval in System Settings > General > Login Items & Extensions.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 승인이 필요합니다."
+          }
+        }
+      }
+    },
+    "Network error": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크 오류"
+          }
+        }
+      }
+    },
+    "Network error (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크 오류 (%@)"
+          }
+        }
+      }
+    },
+    "Next attempt": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 시도"
+          }
+        }
+      }
+    },
+    "Next proactive reconnect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 선제 재연결"
+          }
+        }
+      }
+    },
+    "No OTP email was found within 50 seconds.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "50초 안에 OTP 메일을 찾지 못했습니다."
+          }
+        }
+      }
+    },
+    "No response": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "응답 없음"
+          }
+        }
+      }
+    },
+    "No response: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "응답 없음: %@"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "없음"
+          }
+        }
+      }
+    },
+    "Not a regular file.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일반 파일이 아닙니다."
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 안 됨"
+          }
+        }
+      }
+    },
+    "Not created yet. Saving in the Account tab creates it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 없습니다. 계정 탭에서 저장하면 만들어집니다."
+          }
+        }
+      }
+    },
+    "Not found": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "찾을 수 없음"
+          }
+        }
+      }
+    },
+    "Not imported": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "불러오지 않음"
+          }
+        }
+      }
+    },
+    "Not registered": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미등록"
+          }
+        }
+      }
+    },
+    "OAuth client": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 클라이언트"
+          }
+        }
+      }
+    },
+    "OTP email is in Spam": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 메일이 스팸함에 있음"
+          }
+        }
+      }
+    },
+    "OTP email not received": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 메일 미수신"
+          }
+        }
+      }
+    },
+    "OTP verification failed": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 인증 실패"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "꺼짐"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 열기"
+          }
+        }
+      }
+    },
+    "Open System Settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시스템 설정 열기"
+          }
+        }
+      }
+    },
+    "Open at login": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 시 실행"
+          }
+        }
+      }
+    },
+    "Open at login can only be set for the app installed in /Applications.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 시 실행은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Opening tunnel": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "터널 여는 중"
+          }
+        }
+      }
+    },
+    "Optional": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택"
+          }
+        }
+      }
+    },
+    "Options": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "옵션"
+          }
+        }
+      }
+    },
+    "Options not imported: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져오지 않은 옵션: %@"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비밀번호"
+          }
+        }
+      }
+    },
+    "Port": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포트"
+          }
+        }
+      }
+    },
+    "Proactive reconnect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선제 재연결"
+          }
+        }
+      }
+    },
+    "Proactive reconnect connects again before the server ends the session (maximum session length − margin). Reconnect after sleep starts a new connection when the Mac wakes from sleeping at least the minimum sleep time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선제 재연결은 서버가 세션을 끊기 전(세션 최대시간 − 여유분)에 미리 다시 연결합니다. 잠자기 후 재연결은 최소 잠자기 시간 이상 잠들었다 깨어나면 연결을 새로 맺습니다."
+          }
+        }
+      }
+    },
+    "Quit": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료"
+          }
+        }
+      }
+    },
+    "Quitting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료 중"
+          }
+        }
+      }
+    },
+    "Realm": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "realm"
+          }
+        }
+      }
+    },
+    "Realm: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "realm %@"
+          }
+        }
+      }
+    },
+    "Reason": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사유"
+          }
+        }
+      }
+    },
+    "Recommended: create a Gmail filter (search `subject:AuthCode` → Never send it to Spam). If the OTP email lands in Spam, automatic entry fails.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "권장: Gmail에 필터(검색어 `subject:AuthCode` → 스팸으로 보내지 않음)를 만들어 두세요. OTP 메일이 스팸함에 들어가면 자동 입력이 실패합니다."
+          }
+        }
+      }
+    },
+    "Reconnect Now": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 재연결"
+          }
+        }
+      }
+    },
+    "Reconnect after sleep": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠자기 후 재연결"
+          }
+        }
+      }
+    },
+    "Reconnecting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재연결 중"
+          }
+        }
+      }
+    },
+    "Reconnecting · Closing current connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재연결 중 · 기존 연결 종료"
+          }
+        }
+      }
+    },
+    "Reconnects in about %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "약 %@ 후 재연결"
+          }
+        }
+      }
+    },
+    "Reconnects soon": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "곧 재연결"
+          }
+        }
+      }
+    },
+    "Register Helper": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 등록"
+          }
+        }
+      }
+    },
+    "Required": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "입력 필요"
+          }
+        }
+      }
+    },
+    "Required: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "필요: %@"
+          }
+        }
+      }
+    },
+    "Response with an unknown tag": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알 수 없는 태그의 응답"
+          }
+        }
+      }
+    },
+    "Resuming after sleep": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "잠자기 후 재개"
+          }
+        }
+      }
+    },
+    "Revert": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "되돌리기"
+          }
+        }
+      }
+    },
+    "Running (build %@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행 중 (빌드 %@)"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장"
+          }
+        }
+      }
+    },
+    "Save the Gmail address first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "먼저 Gmail 주소를 저장하세요."
+          }
+        }
+      }
+    },
+    "Saved in Keychain · enter only to change": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain에 저장됨 · 바꿀 때만 입력"
+          }
+        }
+      }
+    },
+    "Saved the password to Keychain.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "비밀번호를 Keychain에 저장했습니다."
+          }
+        }
+      }
+    },
+    "Saved.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장했습니다."
+          }
+        }
+      }
+    },
+    "Server address": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 주소"
+          }
+        }
+      }
+    },
+    "Server certificate changed": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 인증서 변경"
+          }
+        }
+      }
+    },
+    "Server certificates: %lld": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 인증서 %lld개"
+          }
+        }
+      }
+    },
+    "Server ended the session": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 세션을 종료함"
+          }
+        }
+      }
+    },
+    "Server rejected tunnel mode": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 터널 모드를 거부함"
+          }
+        }
+      }
+    },
+    "Server: %@:%lld": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 %@:%lld"
+          }
+        }
+      }
+    },
+    "Settings File": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일"
+          }
+        }
+      }
+    },
+    "Settings file error": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일 오류"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정…"
+          }
+        }
+      }
+    },
+    "Setup required": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 필요"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder에서 보기"
+          }
+        }
+      }
+    },
+    "Sign in with Google first.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "먼저 Google로 로그인하세요."
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상태"
+          }
+        }
+      }
+    },
+    "Test Gmail Connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail 연결 테스트"
+          }
+        }
+      }
+    },
+    "The Gmail API rate limit was reached. Try again in a minute.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail API 사용량 한도에 도달했습니다. 1분 후에 다시 시도하세요."
+          }
+        }
+      }
+    },
+    "The Gmail API refused access (%@). Check that the Gmail API is enabled for the Google Cloud project.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gmail API가 접근을 거부했습니다 (%@). Google Cloud 프로젝트에서 Gmail API가 사용 설정되어 있는지 확인하세요."
+          }
+        }
+      }
+    },
+    "The Google authorization belongs to %@, not %@. Sign in with Google again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google 인증이 %@ 계정의 것이며 %@ 계정이 아닙니다. Google로 다시 로그인하세요."
+          }
+        }
+      }
+    },
+    "The Helper can only be registered from the app installed in /Applications (make install).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper는 /Applications에 설치된 앱에서만 등록할 수 있습니다 (make install)."
+          }
+        }
+      }
+    },
+    "The Helper is not responding.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 응답하지 않습니다."
+          }
+        }
+      }
+    },
+    "The OAuth client JSON has a missing or invalid %@ field.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 클라이언트 JSON의 %@ 필드가 없거나 올바르지 않습니다."
+          }
+        }
+      }
+    },
+    "The OTP email is in Spam. Check your Gmail filter.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 메일이 스팸함에 있습니다. Gmail 필터를 확인하세요."
+          }
+        }
+      }
+    },
+    "The VPN password can't contain line breaks and must be at most 255 bytes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 비밀번호에는 줄바꿈을 넣을 수 없고 255바이트 이하여야 합니다."
+          }
+        }
+      }
+    },
+    "The YAML structure is nested too deeply.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML 구조가 너무 깊게 중첩되어 있습니다."
+          }
+        }
+      }
+    },
+    "The app is not signed with a team certificate.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱이 팀 인증서로 서명되지 않았습니다."
+          }
+        }
+      }
+    },
+    "The app password is the 16-character code created under Google Account > Security > 2-Step Verification > App passwords. Spaces are ignored.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 비밀번호는 Google 계정 > 보안 > 2단계 인증 > 앱 비밀번호에서 만든 16자리 값입니다. 공백은 무시합니다."
+          }
+        }
+      }
+    },
+    "The client secret is missing from Keychain. Import the JSON again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keychain에 클라이언트 보안 비밀번호가 없습니다. JSON을 다시 불러오세요."
+          }
+        }
+      }
+    },
+    "The config file (%@) is a symbolic link to a target that doesn't exist.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일(%@)이 존재하지 않는 대상을 가리키는 심볼릭 링크입니다."
+          }
+        }
+      }
+    },
+    "The config file (%@) kept changing while it was being saved, so it wasn't saved. Try again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일(%@)이 저장하는 동안 계속 바뀌어 저장하지 못했습니다. 다시 시도해 주세요."
+          }
+        }
+      }
+    },
+    "The config file contains a character that is not allowed (%@). Remove that character.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일에 쓸 수 없는 문자(%@)가 있습니다. 해당 문자를 지워 주세요."
+          }
+        }
+      }
+    },
+    "The config file has %lld hard links. When the app saves, only this path is replaced with a new file; the other links keep the old contents.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일에 하드 링크가 %lld개 있습니다. 앱이 저장하면 이 경로만 새 파일로 바뀌고 다른 링크는 예전 내용으로 남습니다."
+          }
+        }
+      }
+    },
+    "The config file is not valid UTF-8 text. Save it as UTF-8.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일이 올바른 UTF-8 텍스트가 아닙니다. UTF-8로 저장해 주세요."
+          }
+        }
+      }
+    },
+    "The config file is too large (%lld bytes). It must be %lld KiB (%lld bytes) or smaller.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일이 너무 큽니다(%lld바이트). %lldKiB(%lld바이트) 이하여야 합니다."
+          }
+        }
+      }
+    },
+    "The config file must contain only one YAML document. Remove the document separator (---).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일에는 YAML 문서가 하나만 있어야 합니다. 문서 구분선(---)을 지워 주세요."
+          }
+        }
+      }
+    },
+    "The config file path (%@) is not a regular file.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일 경로(%@)가 일반 파일이 아닙니다."
+          }
+        }
+      }
+    },
+    "The config file permissions are %@. They will be changed to 0600 on the next save.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일 권한이 %@입니다. 다음 저장 때 0600으로 고칩니다."
+          }
+        }
+      }
+    },
+    "The connection dropped within 2 minutes.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결된 지 2분 안에 끊겼습니다."
+          }
+        }
+      }
+    },
+    "The connection is not open": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결되지 않았습니다"
+          }
+        }
+      }
+    },
+    "The connection request was rejected. Check the account details and VPN password. The Log tab shows why.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결 요청이 거부됐습니다. 계정 정보와 VPN 비밀번호를 확인하세요. 이유는 로그 탭에 있습니다."
+          }
+        }
+      }
+    },
+    "The connection was already started": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이미 연결을 시작했습니다"
+          }
+        }
+      }
+    },
+    "The connection was closed": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결이 닫혔습니다"
+          }
+        }
+      }
+    },
+    "The file does not exist.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일이 없습니다."
+          }
+        }
+      }
+    },
+    "The file has no password. Enter the VPN password above.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일에 비밀번호가 없습니다. 위에서 VPN 비밀번호를 입력하세요."
+          }
+        }
+      }
+    },
+    "The file is too large to be an OAuth client JSON.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 클라이언트 JSON이라기에는 파일이 너무 큽니다."
+          }
+        }
+      }
+    },
+    "The gateway doesn't allow SSL VPN tunnel mode.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "게이트웨이가 SSL VPN 터널 모드를 허용하지 않습니다."
+          }
+        }
+      }
+    },
+    "The key '%@' appears more than once at the same level. Keep only one.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "키 '%@'가 같은 위치에 두 번 이상 있습니다. 하나만 남겨 주세요."
+          }
+        }
+      }
+    },
+    "The openfortivpn config file has no host: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn 설정 파일에 host가 없습니다: %@"
+          }
+        }
+      }
+    },
+    "The original file contains the password in plain text. The app never changes that file, so delete the password yourself if you don't need it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "원본 파일에 비밀번호가 평문으로 들어 있습니다. 앱은 원본을 고치지 않으니 필요 없으면 직접 지우세요."
+          }
+        }
+      }
+    },
+    "The password was not saved to the Keychain because there is no username.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자명이 없어 비밀번호를 Keychain에 저장하지 않았습니다."
+          }
+        }
+      }
+    },
+    "The port must be a number from 1 to 65535.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "포트는 1에서 65535 사이의 숫자여야 합니다."
+          }
+        }
+      }
+    },
+    "The previous command has not finished": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 명령이 끝나지 않았습니다"
+          }
+        }
+      }
+    },
+    "The server certificate was rejected after login.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그인 후 서버 인증서가 거부됐습니다."
+          }
+        }
+      }
+    },
+    "The server closed the connection": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 연결을 닫았습니다"
+          }
+        }
+      }
+    },
+    "The server closed the connection: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 연결을 닫았습니다: %@"
+          }
+        }
+      }
+    },
+    "The server did not accept the OTP.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 OTP를 받아들이지 않았습니다."
+          }
+        }
+      }
+    },
+    "The server rejected the login. Check the username and password.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버가 로그인을 거부했습니다. 사용자명과 비밀번호를 확인하세요."
+          }
+        }
+      }
+    },
+    "The settings to save are invalid. %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장할 설정이 올바르지 않습니다. %@"
+          }
+        }
+      }
+    },
+    "The top level of the config file must be in 'key: value' form.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일의 최상위는 '키: 값' 형식이어야 합니다."
+          }
+        }
+      }
+    },
+    "The value of %@ has the wrong type. %@.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 값의 형식이 맞지 않습니다. %@."
+          }
+        }
+      }
+    },
+    "This config file was written by a newer version of the app (schema_version %lld).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 설정 파일은 더 새로운 버전의 앱이 만든 형식입니다(schema_version %lld)."
+          }
+        }
+      }
+    },
+    "This file has no Desktop app client. Download the JSON of an OAuth client of type Desktop app.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 파일에는 데스크톱 앱 클라이언트가 없습니다. 데스크톱 앱 유형 OAuth 클라이언트의 JSON을 다운로드하세요."
+          }
+        }
+      }
+    },
+    "This file is not a Google OAuth client JSON.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 파일은 Google OAuth 클라이언트 JSON이 아닙니다."
+          }
+        }
+      }
+    },
+    "This is a Web application client. Create an OAuth client of type Desktop app in Google Cloud Console and download its JSON.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "웹 애플리케이션 유형의 클라이언트입니다. Google Cloud Console에서 데스크톱 앱 유형의 OAuth 클라이언트를 만들고 JSON을 다운로드하세요."
+          }
+        }
+      }
+    },
+    "This is not a regular file.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일반 파일이 아닙니다."
+          }
+        }
+      }
+    },
+    "This isn't a tested version (1.24.x). Its output may differ and connections may fail.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검증된 버전(1.24.x)이 아닙니다. 출력 형식이 달라 연결이 실패할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Too many reconnects": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재연결 과다"
+          }
+        }
+      }
+    },
+    "Trash (\\Trash)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴지통(\\Trash)"
+          }
+        }
+      }
+    },
+    "Tunnel IP": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "터널 IP"
+          }
+        }
+      }
+    },
+    "Tunnel setup failed": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "터널 설정 실패"
+          }
+        }
+      }
+    },
+    "Unexpected continuation request (+)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예상하지 못한 계속 요청(+)"
+          }
+        }
+      }
+    },
+    "Unexpected server greeting": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예상하지 못한 서버 인사말"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알 수 없음"
+          }
+        }
+      }
+    },
+    "Unreadable lines: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "읽을 수 없는 줄: %@"
+          }
+        }
+      }
+    },
+    "Update the app. Until then, this file is treated as read-only and is never overwritten.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 업데이트해 주세요. 그전까지 이 파일은 읽기 전용으로 두고 덮어쓰지 않습니다."
+          }
+        }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자명"
+          }
+        }
+      }
+    },
+    "Username: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "사용자명 %@"
+          }
+        }
+      }
+    },
+    "VPN": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN"
+          }
+        }
+      }
+    },
+    "VPN login rejected": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 로그인 거부"
+          }
+        }
+      }
+    },
+    "VPN password": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 비밀번호"
+          }
+        }
+      }
+    },
+    "Verifying OTP": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 확인"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버전"
+          }
+        }
+      }
+    },
+    "Version mismatch (Helper %@, app %@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "버전 불일치 (Helper %@, 앱 %@)"
+          }
+        }
+      }
+    },
+    "Waiting 90 seconds after authentication failure": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인증 실패 후 90초 대기"
+          }
+        }
+      }
+    },
+    "Waiting for Google sign-in in the browser…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "브라우저에서 Google 로그인 기다리는 중…"
+          }
+        }
+      }
+    },
+    "Waiting for OTP email": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OTP 메일 기다리는 중"
+          }
+        }
+      }
+    },
+    "Waiting for network": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "네트워크 대기 중"
+          }
+        }
+      }
+    },
+    "Waiting to reconnect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재연결 대기 중"
+          }
+        }
+      }
+    },
+    "Waiting to reconnect (%@)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "재연결 대기 중 (%@)"
+          }
+        }
+      }
+    },
+    "Write it as a decimal number without leading zeros (e.g. %@: 443).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0으로 시작하지 않는 10진수로 적어 주세요(예: %@: 443)."
+          }
+        }
+      }
+    },
+    "Write numbers without quotes (e.g. %@: 443).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "숫자는 따옴표 없이 적어 주세요(예: %@: 443)."
+          }
+        }
+      }
+    },
+    "Write true/false without quotes (e.g. %@: true).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "true/false는 따옴표 없이 적어 주세요(예: %@: true)."
+          }
+        }
+      }
+    },
+    "YAML syntax error (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML 문법 오류입니다(%@)."
+          }
+        }
+      }
+    },
+    "YAML tags (%@) are not allowed. Write just the value, without a tag.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML 태그(%@)는 쓸 수 없습니다. 태그 없이 값만 적어 주세요."
+          }
+        }
+      }
+    },
+    "You signed in as %@, but the Gmail address is %@. Sign in with that account.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 계정으로 로그인했지만 Gmail 주소는 %@입니다. 해당 계정으로 로그인하세요."
+          }
+        }
+      }
+    },
+    "less than a minute": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1분 미만"
+          }
+        }
+      }
+    },
+    "min": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "분"
+          }
+        }
+      }
+    },
+    "openfortivpn": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn"
+          }
+        }
+      }
+    },
+    "openfortivpn config file not found: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn 설정 파일이 없습니다: %@"
+          }
+        }
+      }
+    },
+    "openfortivpn not found": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openfortivpn을 찾을 수 없음"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

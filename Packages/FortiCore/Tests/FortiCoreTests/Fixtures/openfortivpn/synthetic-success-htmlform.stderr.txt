@@ -1,0 +1,6 @@
+Mon Oct  5 08:01:09 2026 : publish_entry SCDSet() failed: Success!
+Mon Oct  5 08:01:09 2026 : publish_entry SCDSet() failed: Success!
+Mon Oct  5 08:01:09 2026 : Using interface ppp0
+Mon Oct  5 08:01:09 2026 : Connect: ppp0 <--> /dev/ttys004
+Mon Oct  5 08:01:09 2026 : local  IP address 10.212.134.201
+Mon Oct  5 08:01:09 2026 : remote IP address 169.254.2.1
