@@ -37,13 +37,22 @@ final class ReadinessChecker {
     @ObservationIgnored private let credentials: CredentialStore
     @ObservationIgnored private let installer: HelperInstaller
     @ObservationIgnored private let helper: HelperClient
+    /// Whether the Gmail API can be used for an address (a usable OAuth client plus a refresh token).
+    @ObservationIgnored private let gmailAPIAuthorized: (String) -> Bool
     @ObservationIgnored private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "readiness")
 
-    init(configStore: ConfigStore, credentials: CredentialStore, installer: HelperInstaller, helper: HelperClient) {
+    init(
+        configStore: ConfigStore,
+        credentials: CredentialStore,
+        installer: HelperInstaller,
+        helper: HelperClient,
+        gmailAPIAuthorized: @escaping (String) -> Bool
+    ) {
         self.configStore = configStore
         self.credentials = credentials
         self.installer = installer
         self.helper = helper
+        self.gmailAPIAuthorized = gmailAPIAuthorized
     }
 
     func check() async -> Readiness {
@@ -111,8 +120,7 @@ final class ReadinessChecker {
         let address = otp.gmailAddress
         if keychainHas({ try credentials.hasGmailAppPassword(address: address) }) { return true }
         guard otp.method == .gmailAPI else { return false }
-        let clientID = otp.googleClientID
-        return keychainHas { try credentials.hasGmailAPIAuthorization(address: address, clientID: clientID) }
+        return gmailAPIAuthorized(address)
     }
 
     private func keychainHas(_ lookup: () throws -> Bool) -> Bool {

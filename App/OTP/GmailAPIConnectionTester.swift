@@ -26,7 +26,7 @@ struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
     private func run(address: String) async -> GmailAPITestResult {
         guard !address.isEmpty else { return .notAuthorized(String(localized: "Enter the Gmail address.")) }
         guard !oauth.clientID.isEmpty, oauth.hasClientSecret else {
-            return .notAuthorized(String(localized: "Import the OAuth client JSON first."))
+            return .notAuthorized(String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced."))
         }
         guard oauth.isAuthorized(address: address) else {
             return .notAuthorized(String(localized: "Sign in with Google first."))

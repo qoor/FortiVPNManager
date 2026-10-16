@@ -311,6 +311,16 @@
         }
       }
     },
+    "Built-in client": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱 내장 클라이언트"
+          }
+        }
+      }
+    },
     "Can't connect with the saved account details. %@": {
       "localizations": {
         "ko": {
@@ -441,16 +451,6 @@
         }
       }
     },
-    "Configured (%@)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "설정됨 (%@)"
-          }
-        }
-      }
-    },
     "Connect": {
       "localizations": {
         "ko": {
@@ -517,6 +517,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "연결 중"
+          }
+        }
+      }
+    },
+    "Connecting opens Google sign-in in your web browser. Sign in with the Gmail address above.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결하면 웹 브라우저에서 Google 로그인이 열립니다. 위의 Gmail 주소로 로그인하세요."
           }
         }
       }
@@ -1331,22 +1341,12 @@
         }
       }
     },
-    "Import the JSON of a Desktop app OAuth client from a Google Cloud project with the Gmail API enabled. Connecting opens Google sign-in in your web browser.": {
+    "Imported (%@)": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gmail API를 사용 설정한 Google Cloud 프로젝트에서 데스크톱 앱 유형 OAuth 클라이언트의 JSON을 불러오세요. 계정을 연결하면 웹 브라우저에서 Google 로그인 화면이 열립니다."
-          }
-        }
-      }
-    },
-    "Import the OAuth client JSON first.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "먼저 OAuth 클라이언트 JSON을 가져오세요."
+            "value": "가져온 클라이언트 (%@)"
           }
         }
       }
@@ -1367,6 +1367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "불러온 openfortivpn 설정"
+          }
+        }
+      }
+    },
+    "Importing a Desktop app OAuth client JSON from another Google Cloud project replaces the built-in client. Changing the client requires connecting the Google account again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 Google Cloud 프로젝트의 데스크톱 앱 OAuth 클라이언트 JSON을 가져오면 내장 클라이언트 대신 사용합니다. 클라이언트를 바꾸면 Google 계정을 다시 연결해야 합니다."
           }
         }
       }
@@ -1701,6 +1711,16 @@
         }
       }
     },
+    "Not configured": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 안 됨"
+          }
+        }
+      }
+    },
     "Not connected": {
       "localizations": {
         "ko": {
@@ -1731,16 +1751,6 @@
         }
       }
     },
-    "Not imported": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "불러오지 않음"
-          }
-        }
-      }
-    },
     "Not registered": {
       "localizations": {
         "ko": {
@@ -1757,6 +1767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OAuth 클라이언트"
+          }
+        }
+      }
+    },
+    "OAuth client (advanced)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 클라이언트 (고급)"
           }
         }
       }
@@ -2411,16 +2431,6 @@
         }
       }
     },
-    "The client secret is missing from Keychain. Import the JSON again.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keychain에 클라이언트 보안 비밀번호가 없습니다. JSON을 다시 불러오세요."
-          }
-        }
-      }
-    },
     "The config file (%@) is a symbolic link to a target that doesn't exist.": {
       "localizations": {
         "ko": {
@@ -2601,6 +2611,16 @@
         }
       }
     },
+    "The imported client's secret is missing from Keychain. Import the JSON again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져온 클라이언트의 시크릿이 Keychain에 없습니다. JSON을 다시 가져오세요."
+          }
+        }
+      }
+    },
     "The key '%@' appears more than once at the same level. Keep only one.": {
       "localizations": {
         "ko": {
@@ -2737,6 +2757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 값의 형식이 맞지 않습니다. %@."
+          }
+        }
+      }
+    },
+    "This build has no built-in OAuth client. Import a client JSON under Advanced.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 빌드에는 내장 OAuth 클라이언트가 없습니다. 고급에서 클라이언트 JSON을 가져오세요."
           }
         }
       }
@@ -2887,6 +2917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "앱을 업데이트해 주세요. 그전까지 이 파일은 읽기 전용으로 두고 덮어쓰지 않습니다."
+          }
+        }
+      }
+    },
+    "Use Built-in Client": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내장 클라이언트 사용"
           }
         }
       }

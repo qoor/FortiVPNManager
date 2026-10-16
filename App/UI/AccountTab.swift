@@ -11,6 +11,7 @@ struct AccountTab: View {
 
     @State private var showsAdvanced = false
     @State private var showsIMAPFallback = false
+    @State private var showsOAuthClient = false
 
     private var oauth: GoogleOAuthService { environment.googleOAuth }
     private var otpMethod: AppConfig.OTP.Method { environment.configStore.otpMethod }
@@ -104,6 +105,9 @@ struct AccountTab: View {
                     Text("If the Gmail API can't be used during a connection, the OTP email is read over IMAP with this app password instead.")
                         .footnoteStyle()
                 }
+                DisclosureGroup("OAuth client (advanced)", isExpanded: oauthClientExpanded) {
+                    googleClientRows
+                }
             case .imap:
                 appPasswordRow(required: true)
             }
@@ -120,7 +124,7 @@ struct AccountTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 switch otpMethod {
                 case .gmailAPI:
-                    Text("Import the JSON of a Desktop app OAuth client from a Google Cloud project with the Gmail API enabled. Connecting opens Google sign-in in your web browser.")
+                    Text("Connecting opens Google sign-in in your web browser. Sign in with the Gmail address above.")
                 case .imap:
                     Text("The app password is the 16-character code created under Google Account > Security > 2-Step Verification > App passwords. Spaces are ignored.")
                 }
@@ -154,14 +158,6 @@ struct AccountTab: View {
     @ViewBuilder
     private var googleAccountRows: some View {
         let busy = oauth.isConnecting || editor.isDisconnectingGoogle
-        AccountStatusRow("OAuth client") {
-            googleClientStatus
-        } actions: {
-            Button("Import JSON…") {
-                Task { await editor.importGoogleClient() }
-            }
-            .disabled(busy || editor.isChoosingGoogleClient)
-        }
         AccountStatusRow("Google account") {
             googleAccountStatus
         } actions: {
@@ -189,17 +185,49 @@ struct AccountTab: View {
         }
     }
 
+    /// Expanded on its own when the build has no built-in client, so the import is easy to find.
+    private var oauthClientExpanded: Binding<Bool> {
+        Binding(
+            get: { showsOAuthClient || oauth.clientSource == .none },
+            set: { showsOAuthClient = $0 }
+        )
+    }
+
+    /// Advanced: which OAuth client is used. Normally the one built into the app; a client JSON from
+    /// another Google Cloud project can be imported to override it.
+    @ViewBuilder
+    private var googleClientRows: some View {
+        let busy = oauth.isConnecting || editor.isDisconnectingGoogle || editor.isChoosingGoogleClient
+        AccountStatusRow("OAuth client") {
+            googleClientStatus
+        } actions: {
+            if oauth.clientSource == .imported, GoogleOAuthService.builtInClient != nil {
+                Button("Use Built-in Client") { editor.useBuiltInGoogleClient() }
+                    .disabled(busy)
+            }
+            Button("Import JSON…") {
+                Task { await editor.importGoogleClient() }
+            }
+            .disabled(busy)
+        }
+        if oauth.importedClientBroken {
+            NoticeRow(text: String(localized: "The imported client's secret is missing from Keychain. Import the JSON again."), style: .warning)
+        }
+        Text("Importing a Desktop app OAuth client JSON from another Google Cloud project replaces the built-in client. Changing the client requires connecting the Google account again.")
+            .footnoteStyle()
+    }
+
     @ViewBuilder
     private var googleClientStatus: some View {
-        let clientID = oauth.clientID
-        if clientID.isEmpty {
-            Text("Not imported")
-                .foregroundStyle(.secondary)
-        } else if editor.googleClientStored {
-            NoticeRow(text: String(localized: "Configured (\(Self.clientIDTail(clientID)))"), style: .success)
-                .help(clientID)
-        } else {
-            NoticeRow(text: String(localized: "The client secret is missing from Keychain. Import the JSON again."), style: .warning)
+        switch oauth.clientSource {
+        case .builtIn:
+            NoticeRow(text: String(localized: "Built-in client"), style: .success)
+                .help(oauth.clientID)
+        case .imported:
+            NoticeRow(text: String(localized: "Imported (\(Self.clientIDTail(oauth.clientID)))"), style: .success)
+                .help(oauth.clientID)
+        case .none:
+            NoticeRow(text: String(localized: "Not configured"), style: .warning)
         }
     }
 

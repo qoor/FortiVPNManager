@@ -24,7 +24,7 @@
 | 번들 ID | 앱 `com.qoor.FortiVPNManager`, 헬퍼 `com.qoor.FortiVPNManager.Helper`(launchd Label과 Mach 서비스 이름도 같다). **최초 register 이후에는 바꾸지 않는다** |
 | openfortivpn | Homebrew 경로를 그대로 쓴다. 개인 Mac이라 위험을 감수한다 |
 | 서버 인증서 | **무조건 자동 신뢰.** 사용자가 신경 쓸 필요가 없게 UI에서 뺀다. 처음 확인한 digest는 **config.yaml의 자동 관리 필드 `vpn.trusted_certs`에 저장**하고, 이후 매 연결에 `trusted-cert`로 넘긴다. 그래서 평소에는 openfortivpn을 1회만 실행한다. 2회 실행은 처음 연결할 때와 인증서가 바뀌었을 때뿐이다. digest는 openfortivpn이 거부할 때 출력하는 값을 읽어 얻는다. 앱이 TLS나 해시를 직접 계산하지 않는다 |
-| OTP | **Gmail API(OAuth, 권장)**: 조직 내 Google Cloud 프로젝트의 데스크톱 OAuth 클라이언트(Internal, `gmail.modify`) + PKCE 루프백 로그인, history.list 0.5초 폴링으로 메일이 Gmail에 들어오는 즉시 감지. **대체: 앱 비밀번호 + IMAP IDLE**(API 인증 실패 시 같은 시도 안에서 자동 전환). 사용한 OTP 메일은 휴지통으로 옮긴다. 실측: IMAP은 Gmail 도착 후 IMAP 노출까지 약 7초 지연 |
+| OTP | **Gmail API(OAuth, 권장)**: 조직 내 Google Cloud 프로젝트의 데스크톱 OAuth 클라이언트(Internal, `gmail.modify`) + PKCE 루프백 로그인, history.list 0.5초 폴링으로 메일이 Gmail에 들어오는 즉시 감지. OAuth 클라이언트는 gitignore된 `Config/GoogleOAuthClient.json`을 빌드 시 앱 번들에 내장하고(데스크톱 클라이언트 secret은 비밀로 취급되지 않음, PKCE로 보호), 사용자는 'Google 계정 연결'만 한다. 다른 클라이언트는 계정 탭 '고급'에서 JSON으로 가져와 덮어쓸 수 있다. **대체: 앱 비밀번호 + IMAP IDLE**(API 인증 실패 시 같은 시도 안에서 자동 전환). 사용한 OTP 메일은 휴지통으로 옮긴다. 실측: IMAP은 Gmail 도착 후 IMAP 노출까지 약 7초 지연 |
 | 설정 저장 | `~/.config/FortiVPNManager/config.yaml`(비밀이 아닌 설정). 비밀번호 2종은 Keychain. 자세한 내용은 5.7절 |
 | 잠자기 | 터널을 유지하고, 깨어나면 6.3절 규칙으로 판단한다 |
 | 헬스체크 | 프로세스와 ppp 인터페이스만 감시한다. 별도 host 설정은 두지 않는다 |

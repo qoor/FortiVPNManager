@@ -50,7 +50,8 @@ final class AppEnvironment {
         helperInstaller = HelperInstaller()
         helperClient = HelperClient()
         readinessChecker = ReadinessChecker(
-            configStore: configStore, credentials: credentials, installer: helperInstaller, helper: helperClient
+            configStore: configStore, credentials: credentials, installer: helperInstaller, helper: helperClient,
+            gmailAPIAuthorized: { [googleOAuth] address in googleOAuth.isAuthorized(address: address) }
         )
         systemMonitor = SystemMonitor()
         logStore = LogStore()
@@ -74,6 +75,7 @@ final class AppEnvironment {
 
         firstLaunchImport = importer.importOnFirstLaunch()
         configStore.start()
+        googleOAuth.dropImportMatchingBuiltIn()
         loginItems.registerOnFirstInstalledLaunch(state: stateStore)
 
         // Keychain changes raise no config notification.

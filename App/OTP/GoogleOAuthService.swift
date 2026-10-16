@@ -62,7 +62,7 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
     /// The client JSON could not be read; the text says why (localized).
     case clientFileUnreadable(String)
     case clientFile(GoogleOAuthClientFileError)
-    /// No OAuth client JSON imported (no client ID in config.yaml, or no client secret in the Keychain).
+    /// No OAuth client: none built into this build and none imported.
     case clientNotConfigured
     case addressMissing
     case alreadyInProgress
@@ -97,7 +97,7 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
         case let .clientFile(.missingField(name)), let .clientFile(.invalidField(name)):
             String(localized: "The OAuth client JSON has a missing or invalid \(name) field.")
         case .clientNotConfigured:
-            String(localized: "Import the OAuth client JSON first.")
+            String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced.")
         case .addressMissing:
             String(localized: "Enter the Gmail address.")
         case .alreadyInProgress:
@@ -185,15 +185,109 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
 
     // MARK: - Client
 
-    /// `otp.google_client_id` from config.yaml (empty when no client JSON was imported).
-    var clientID: String { configStore.config.otp.googleClientID }
+    /// Where the OAuth client in use comes from.
+    enum ClientSource: Equatable {
+        /// Built into the app at build time (`Config/GoogleOAuthClient.json`, gitignored).
+        case builtIn
+        /// Imported by the user under Advanced; overrides the built-in client.
+        case imported
+        /// No usable client: this build has none built in and nothing was imported.
+        case none
+    }
 
-    /// Whether the client secret for `clientID` is in the Keychain.
-    var hasClientSecret: Bool {
+    /// Resource name of the client JSON the build copies into the app bundle.
+    static let builtInClientResource = "GoogleOAuthClient"
+
+    /// The Desktop-app OAuth client shipped inside the app bundle, if this build has one.
+    /// Desktop client secrets are not confidential (Google's own guidance); PKCE protects the flow.
+    static let builtInClient: GoogleOAuthClient? = {
+        guard let url = Bundle.main.url(forResource: builtInClientResource, withExtension: "json"),
+              let data = try? FileIO.readRegularFile(url, limit: maxClientFileBytes) else { return nil }
+        return try? GoogleOAuthClientFile.parse(data)
+    }()
+
+    /// `otp.google_client_id` from config.yaml: an imported client (empty when none was imported).
+    private var importedClientID: String { configStore.config.otp.googleClientID }
+
+    /// An imported client with its secret in the Keychain wins; otherwise the built-in client.
+    var clientSource: ClientSource {
         _ = revision
-        let clientID = clientID
-        guard !clientID.isEmpty else { return false }
-        return keychainHas { try credentials.hasGoogleClientSecret(clientID: clientID) }
+        let imported = importedClientID
+        if !imported.isEmpty, keychainHas({ try credentials.hasGoogleClientSecret(clientID: imported) }) {
+            return .imported
+        }
+        return Self.builtInClient == nil ? .none : .builtIn
+    }
+
+    /// The client ID in use (empty when there is none).
+    var clientID: String {
+        switch clientSource {
+        case .imported: importedClientID
+        case .builtIn: Self.builtInClient?.clientID ?? ""
+        case .none: ""
+        }
+    }
+
+    /// Whether a usable client (ID and secret) is available.
+    var hasClientSecret: Bool { clientSource != .none }
+
+    /// The import was configured but its secret is missing from the Keychain (the built-in client,
+    /// if any, is used meanwhile).
+    var importedClientBroken: Bool {
+        _ = revision
+        let imported = importedClientID
+        return !imported.isEmpty && !keychainHas({ try credentials.hasGoogleClientSecret(clientID: imported) })
+    }
+
+    /// The secret for `clientID`: the Keychain for an imported client, the bundle for the built-in one.
+    private func clientSecret(for clientID: String) throws -> String? {
+        if !clientID.isEmpty, clientID == importedClientID,
+           let secret = try credentials.googleClientSecret(clientID: clientID), !secret.isEmpty {
+            return secret
+        }
+        if let builtIn = Self.builtInClient, builtIn.clientID == clientID {
+            return builtIn.clientSecret
+        }
+        return nil
+    }
+
+    /// Drops an imported client that is identical to the built-in one (left over from before the
+    /// client was built in). The refresh token stays valid because the client ID does not change.
+    func dropImportMatchingBuiltIn() {
+        let imported = importedClientID
+        guard !imported.isEmpty, imported == Self.builtInClient?.clientID else { return }
+        removeImportedClient(keepingAuthorization: true)
+        logger.notice("Dropped the imported OAuth client: it matches the built-in client")
+    }
+
+    /// "Use Built-in Client": forgets the imported client. Its refresh token was issued to that client,
+    /// so it is deleted unless the client IDs are the same.
+    func removeImportedClient() {
+        removeImportedClient(keepingAuthorization: importedClientID == Self.builtInClient?.clientID)
+    }
+
+    private func removeImportedClient(keepingAuthorization: Bool) {
+        let imported = importedClientID
+        guard !imported.isEmpty else { return }
+        do {
+            try configStore.update { $0.otp.googleClientID = "" }
+        } catch {
+            logger.error("clearing the imported OAuth client failed: \(error.message, privacy: .public)")
+            return
+        }
+        logIfFails("deleting the imported client secret") {
+            try credentials.deleteGoogleClientSecret(clientID: imported)
+        }
+        if !keepingAuthorization {
+            let address = configStore.config.otp.gmailAddress
+            if !address.isEmpty {
+                logIfFails("deleting the refresh token of the imported client") {
+                    try credentials.deleteGoogleRefreshToken(address: address)
+                }
+            }
+        }
+        cachedTokens.removeAll()
+        authorizationChanged()
     }
 
     /// Imports a Google Cloud "Desktop app" OAuth client JSON: the secret goes to the Keychain, the
@@ -214,6 +308,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
             throw .clientFile(error)
         }
         let previous = clientID
+        let previousImport = importedClientID
         do {
             try credentials.setGoogleClientSecret(client.clientSecret, clientID: client.clientID)
         } catch {
@@ -231,9 +326,9 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
                     try credentials.deleteGoogleRefreshToken(address: address)
                 }
             }
-            if !previous.isEmpty {
+            if !previousImport.isEmpty, previousImport != client.clientID {
                 logIfFails("deleting the previous client secret") {
-                    try credentials.deleteGoogleClientSecret(clientID: previous)
+                    try credentials.deleteGoogleClientSecret(clientID: previousImport)
                 }
             }
             cachedTokens.removeAll()
@@ -245,12 +340,12 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
 
     // MARK: - Authorization state
 
-    /// The client secret and a refresh token for `address` are stored (the Gmail API can be used).
+    /// A usable client and a refresh token for `address` exist (the Gmail API can be used).
     func isAuthorized(address: String) -> Bool {
         _ = revision
         let address = Self.normalized(address)
-        let clientID = clientID
-        return keychainHas { try credentials.hasGmailAPIAuthorization(address: address, clientID: clientID) }
+        guard !address.isEmpty, hasClientSecret else { return false }
+        return keychainHas { try credentials.hasGoogleRefreshToken(address: address) }
     }
 
     /// What `OTPSessionRouter` should use for `address`.
@@ -269,7 +364,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         guard !clientID.isEmpty else { throw .clientNotConfigured }
         let storedSecret: String?
         do {
-            storedSecret = try credentials.googleClientSecret(clientID: clientID)
+            storedSecret = try clientSecret(for: clientID)
         } catch {
             throw .keychain(error.localizedDescription)
         }
@@ -395,7 +490,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         let secret: String?
         let refreshToken: String?
         do {
-            secret = try credentials.googleClientSecret(clientID: clientID)
+            secret = try clientSecret(for: clientID)
             refreshToken = try credentials.googleRefreshToken(address: address)
         } catch {
             return .failure(.keychain(error.localizedDescription))

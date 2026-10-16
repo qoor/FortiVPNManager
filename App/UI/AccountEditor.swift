@@ -318,7 +318,9 @@ final class AccountEditor {
 
     /// Why "Connect Google Account" can't run now (shown under the row), or `nil`.
     var googleConnectBlocker: String? {
-        guard googleClientStored else { return String(localized: "Import the OAuth client JSON first.") }
+        guard googleClientStored else {
+            return String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced.")
+        }
         let typed = trimmed(fields.gmailAddress)
         guard !typed.isEmpty else { return String(localized: "Enter the Gmail address.") }
         guard typed == savedGmailAddress else { return String(localized: "Save the Gmail address first.") }
@@ -382,6 +384,15 @@ final class AccountEditor {
         } catch {
             googleError = error.localizedDescription
         }
+        refreshGoogleState()
+        environment.connection.recheckReadiness()
+    }
+
+    /// "Use Built-in Client": forgets the imported OAuth client.
+    func useBuiltInGoogleClient() {
+        googleError = nil
+        gmailTest = .idle
+        environment.googleOAuth.removeImportedClient()
         refreshGoogleState()
         environment.connection.recheckReadiness()
     }

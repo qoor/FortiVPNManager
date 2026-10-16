@@ -53,6 +53,22 @@ targets:
         # UI text is English in code; Korean lives in App/Resources/Localizable.xcstrings.
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        # The OAuth-client script below reads an optional, gitignored file.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    postBuildScripts:
+      - name: Embed Google OAuth client
+        basedOnDependencyAnalysis: false
+        script: |
+          # Copies the gitignored Desktop-app OAuth client (Config/GoogleOAuthClient.json) into the
+          # app bundle. Without it the app still builds; users then import a client JSON in Settings.
+          src="${SRCROOT}/Config/GoogleOAuthClient.json"
+          dst="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleOAuthClient.json"
+          if [ -f "$src" ]; then
+            install -m 644 "$src" "$dst"
+          else
+            rm -f "$dst"
+            echo "warning: Config/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
+          fi
     dependencies:
       - package: FortiCore
         products: [FortiShared, FortiCore, FortiConfig]
