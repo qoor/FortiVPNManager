@@ -14,19 +14,23 @@ public struct ConnectionSettings: Sendable, Equatable, Codable {
     public var proactiveMarginMinutes: Int
     public var reconnectAfterSleepEnabled: Bool
     public var minSleepMinutes: Int
+    /// `connection.schedule`, or `nil` when the schedule is off.
+    public var schedule: ConnectionSchedule?
 
     public init(
         sessionMaxMinutes: Int = 180,
         proactiveReconnectEnabled: Bool = true,
         proactiveMarginMinutes: Int = 5,
         reconnectAfterSleepEnabled: Bool = false,
-        minSleepMinutes: Int = 30
+        minSleepMinutes: Int = 30,
+        schedule: ConnectionSchedule? = nil
     ) {
         self.sessionMaxMinutes = sessionMaxMinutes
         self.proactiveReconnectEnabled = proactiveReconnectEnabled
         self.proactiveMarginMinutes = proactiveMarginMinutes
         self.reconnectAfterSleepEnabled = reconnectAfterSleepEnabled
         self.minSleepMinutes = minSleepMinutes
+        self.schedule = schedule
     }
 
     /// `true` when a change from `old` requires recomputing `plannedReconnectAt`.
@@ -243,6 +247,9 @@ public enum RetryReason: Sendable, Equatable, Codable {
     case authCooldown
     /// An attempt was interrupted by sleep and resumes after wake.
     case sleep
+    /// Outside the scheduled hours with the user away: the reconnect waits until the user returns
+    /// (`until` is when it is given up).
+    case userAway
 }
 
 /// Why an attempt was started.
@@ -267,12 +274,24 @@ public enum AttemptReason: Sendable, Equatable {
     case tunnelLost
     /// Resuming after sleep, or `reconnect_after_sleep` applied.
     case afterSleep
+    /// The scheduled hours started.
+    case scheduled
 
     /// Manual attempts bypass the rolling 60-minute cap (the user's action resets the ledger).
     var isManual: Bool {
         switch self {
         case .user, .manualReconnect: true
         default: false
+        }
+    }
+
+    /// Reconnects the app starts on its own after a connection was wanted; outside the scheduled
+    /// hours they wait for, or give up on, an away user. Launch and the schedule start are gated
+    /// by the schedule itself, and a certificate retry continues an attempt already running.
+    var isAutomaticReconnect: Bool {
+        switch self {
+        case .retry, .proactive, .networkChanged, .tunnelLost, .afterSleep, .setupCompleted: true
+        case .launch, .user, .manualReconnect, .certificateRetry, .scheduled: false
         }
     }
 }
@@ -290,4 +309,8 @@ public enum ConnectionTimer: String, Sendable, Equatable, Hashable, CaseIterable
     case proactiveReconnect
     /// Upper bound for a graceful quit (12 s).
     case quitDeadline
+    /// Next start or end of the scheduled hours.
+    case schedule
+    /// When the user will have been away for `schedule.awayMinutes`.
+    case awayLimit
 }

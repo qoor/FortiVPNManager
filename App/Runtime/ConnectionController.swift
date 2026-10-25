@@ -16,6 +16,7 @@ struct ConnectionStatusInputs: Equatable {
     var plannedReconnectAt: Date?
     var nextRetryAt: Date?
     var lastFailure: ConnectionFailureReason?
+    var scheduleOutlook: ScheduleOutlook?
 }
 
 /// Owns the `ConnectionModel`, feeds every input through `ConnectionReducer` and executes the
@@ -50,6 +51,7 @@ final class ConnectionController {
     @ObservationIgnored private var inboundTask: Task<Void, Never>?
     @ObservationIgnored private var tickerTask: Task<Void, Never>?
     @ObservationIgnored private var activity: NSObjectProtocol?
+    @ObservationIgnored private var clockObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var terminationPending = false
     @ObservationIgnored private var terminationApproved = false
 
@@ -93,8 +95,13 @@ final class ConnectionController {
     var menuActions: ConnectionMenuActions { model.menuActions }
     /// One-line reason plus "Open Settings" when the icon shows an error.
     var attention: ConnectionAttention? { model.attention }
-    var plannedReconnectAt: Date? { model.nextPlannedReconnect }
+    /// Next proactive reconnect, unless the schedule holds or stopped automatic reconnects.
+    var plannedReconnectAt: Date? {
+        model.automaticReconnectAllowed(at: now) ? model.nextPlannedReconnect : nil
+    }
     var nextRetryAt: Date? { model.nextRetryAt }
+    /// What the schedule does next, or `nil` without a schedule.
+    var scheduleOutlook: ScheduleOutlook? { model.scheduleOutlook(now: now) }
 
     var connectedSince: Date? {
         guard case let .connected(context) = model.state else { return nil }
@@ -131,7 +138,8 @@ final class ConnectionController {
             tunnelIP: tunnelIP,
             plannedReconnectAt: plannedReconnectAt,
             nextRetryAt: nextRetryAt,
-            lastFailure: lastFailure
+            lastFailure: lastFailure,
+            scheduleOutlook: scheduleOutlook
         )
     }
 
@@ -140,7 +148,7 @@ final class ConnectionController {
         case .network: .network
         case let .authFailure(failure): failure
         case .authCooldown: model.ledger.lastAuthFailureReason
-        case .serverSessionEnded, .sleep: nil
+        case .serverSessionEnded, .sleep, .userAway: nil
         }
     }
 
@@ -202,7 +210,25 @@ final class ConnectionController {
                 self?.now = Date()
             }
         }
+        let center = NotificationCenter.default
+        clockObservers = [
+            // Timers sleep for a computed delay; a clock step makes that delay wrong.
+            center.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.timers.rearmAll() }
+            },
+            center.addObserver(forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.systemTimeZoneDidChange() }
+            },
+        ]
         send(.appLaunched(autoConnect: autoConnect, restoredLedger: restoredLedger))
+    }
+
+    /// Schedule times are local wall-clock times: re-read them in the new time zone.
+    private func systemTimeZoneDidChange() {
+        NSTimeZone.resetSystemTimeZone()
+        logger.notice("time zone changed to \(TimeZone.current.identifier, privacy: .public)")
+        send(.calendarChanged(Calendar.current))
+        timers.rearmAll()
     }
 
     /// `ConfigStore.onChange`: account and options apply to the next attempt; session limits apply now.
@@ -246,11 +272,40 @@ final class ConnectionController {
                 if updated.state != model.state {
                     logger.info("state: \(String(describing: updated.state), privacy: .public)")
                 }
+                noteScheduleDecisions(from: model, to: updated)
                 model = updated
             }
             effects.forEach(perform)
         }
         now = Date()
+    }
+
+    /// Leaves a `▸` line in the Log tab when the schedule connects, holds or stops reconnects, so
+    /// a quiet evening can be told apart from a failure.
+    private func noteScheduleDecisions(from old: ConnectionModel, to new: ConnectionModel) {
+        guard let schedule = new.settings.schedule else { return }
+        var notes: [String] = []
+        if case let .connecting(context) = new.state, context.reason == .scheduled,
+           !Self.isConnecting(old.state, attemptID: context.attemptID) {
+            notes.append("‹schedule: scheduled hours started, connecting›")
+        }
+        if Self.isHolding(new.state), !Self.isHolding(old.state) {
+            notes.append("‹schedule: outside the scheduled hours and away, the reconnect waits until you return›")
+        }
+        if new.reconnectSuspended, !old.reconnectSuspended {
+            notes.append("‹schedule: away for \(schedule.awayMinutes) min outside the scheduled hours, automatic reconnects stopped›")
+        }
+        guard !notes.isEmpty else { return }
+        let date = Date()
+        logStore.append(notes.map { OutputLine(seq: 0, date: date, attemptID: nil, source: .helper, text: $0) })
+    }
+
+    private static func isHolding(_ state: ConnectionState) -> Bool {
+        if case let .waitingRetry(wait) = state { wait.reason == .userAway } else { false }
+    }
+
+    private static func isConnecting(_ state: ConnectionState, attemptID: AttemptID) -> Bool {
+        if case let .connecting(context) = state { context.attemptID == attemptID } else { false }
     }
 
     private static func freshModel(_ config: AppConfig) -> ConnectionModel {

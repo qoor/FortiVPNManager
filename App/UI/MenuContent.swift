@@ -32,8 +32,8 @@ extension ConnectionIcon {
     }
 }
 
-/// The menu (DESIGN §5.6): status, the reason and "Open Settings" when attention is needed, the
-/// connection actions, "Settings…" and "Quit".
+/// The menu (DESIGN §5.6): status, the schedule's next step, the reason and "Open Settings" when
+/// attention is needed, the connection actions, "Settings…" and "Quit".
 struct MenuContent: View {
     let environment: AppEnvironment
     let clock: StatusClock
@@ -46,6 +46,9 @@ struct MenuContent: View {
         Text(StatusText.line(connection.statusInputs, now: clock.now, otpMethod: otpMethod))
         if let reason = StatusText.waitReason(connection.model.state, otpMethod: otpMethod) {
             Text(reason)
+        }
+        if let outlook = connection.scheduleOutlook {
+            Text("Schedule: \(outlook.summary(now: clock.now))")
         }
         if let attention = connection.attention {
             Text(attention.message(otpMethod: otpMethod))

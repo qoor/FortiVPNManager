@@ -233,9 +233,24 @@
   - `Date`로 저장하고, 깨어났을 때 다시 판단한다.
   - 기존 세션을 먼저 끊고(break-before-make) 새로 연결한다.
 - 연결 중에는 `beginActivity(.userInitiatedAllowingIdleSystemSleep)`를 유지한다.
+- **스케줄** (`connection.schedule`, 기본 꺼짐)
+  - 선택한 요일의 시작~종료 시각 하나(자정을 넘지 않음)를 스케줄 시간으로 본다. 계산은 `ConnectionSchedule`(순수 함수)이 사용자 캘린더/타임존으로 한다.
+  - 시작 시각에 [연결]을 누른 것과 같이 동작한다(`AttemptReason.scheduled`, 실패 카운터 초기화 포함).
+  - 종료 시각에 연결을 끊지 않는다. 앱은 스케줄 때문에 연결을 직접 끊는 일이 없고, 자동 재연결만 멈춘다.
+  - 스케줄 시간 밖의 자동 재연결(재시도, 선제 재연결, 네트워크 변경, 깨어난 뒤 재연결, 설정 완료 후 연결)은 사용자 상태에 따라 다르다.
+    - 사용 중이면 기존과 같다.
+    - 자리 비움(화면 잠금, 디스플레이 잠자기, 시스템 잠자기)이면 `waitingRetry(.userAway)`로 보류하고, 돌아오면 그때 재연결한다. 선제 재연결 타이머도 멈춘다.
+    - 자리 비움이 `away_minutes`(기본 120분, 스케줄 시간 안에서 시작된 자리 비움도 포함)에 이르면 `reconnectSuspended`가 된다. 보류 중이던 재연결은 버리고 desired를 끈다. 살아 있는 터널은 그대로 두고, 그 세션이 끝나면 다시 붙지 않는다.
+    - 중단 상태는 [연결]/[지금 재연결] 또는 다음 시작 시각에 풀린다.
+  - 직접 [연결]한 세션도 같은 규칙을 따른다. [연결 해제]는 기존과 같다.
+  - 깨어났을 때(`didWake`) 잠금 해제 전에 자리 비움 시간을 먼저 판단한다. 재연결이 허용되지 않으면 살아 있는 터널은 선제 재연결/잠자기 후 재연결 규칙으로 교체하지 않는다. 죽었거나 underlay가 바뀐 터널은 정리하고 재연결은 보류/중단한다.
+  - 잠든 사이 지나간 시작/종료 시각은 깨어난 뒤 가장 최근 것 하나만 적용한다.
+  - 앱 시작 시 자동 연결은 스케줄 시간 안일 때만 한다. 스케줄을 바꿔도 즉시 연결/해제하지 않고 다음 시각부터 적용한다(보류 중인 재연결만 새 규칙으로 다시 판단).
+  - 타임존이 바뀌면 시각을 새 타임존으로 다시 읽고, 시스템 시계가 바뀌면 모든 타이머를 다시 건다.
 
 ### 5.5 SystemMonitor
 - 감시 대상: `NSWorkspace.shared.notificationCenter`의 willSleep/didWake, `NWPathMonitor`, `getifaddrs`의 ppp* 인터페이스(10초 간격).
+- 자리 비움(스케줄용): 화면 잠금(`com.apple.screenIsLocked`/`Unlocked` 분산 알림, 비공식이지만 오래 쓰여 온 방식 + `CGSessionCopyCurrentDictionary`의 `CGSSessionScreenIsLocked`, 잠긴 동안 15초 간격 확인), 디스플레이 잠자기(`screensDidSleep`/`screensDidWake`), 시스템 잠자기 중 하나라도 해당하면 자리 비움이다. 바뀔 때만 `.presenceChanged`를 보내고, 잠자기 전에는 `.willSleep`보다 먼저 보낸다.
 - underlay는 tunnelUp 시점의 `route -n get <gatewayIP>` 결과(인터페이스, source IP)로 정한다. ppp*, utun*, `.other`는 제외한다.
 - 연결 중이거나 해제 중일 때 들어온 경로 이벤트는 무시한다.
 
@@ -280,7 +295,8 @@
   - 안내 문구: "Gmail 필터 `subject:AuthCode` → 스팸으로 보내지 않음"을 권장한다.
   - 인증서 관련 항목은 없다(자동 신뢰).
 - **탭 ② 연결 관리**
-  - **상태**: 현재 상태, 연결된 시각과 IP, 다음 선제 재연결 시각, 버튼 [연결]/[연결 해제]/[지금 재연결].
+  - **상태**: 현재 상태, 연결된 시각과 IP, 다음 선제 재연결 시각(스케줄로 멈췄으면 "스케줄로 보류"), 버튼 [연결]/[연결 해제]/[지금 재연결].
+  - **스케줄**: 스케줄에 따라 연결 켜기/끄기, 요일 버튼 7개(월요일부터), 시작/종료 시각(시:분, 종료가 시작보다 늦을 때만 저장), 자리 비우면 재연결 중단(분), 다음 동작 한 줄. 꺼져 있으면 항목을 비활성화한다. 메뉴에도 "스케줄: …" 한 줄을 보여준다.
   - **옵션**: 앱 시작 시 자동 연결, 로그인 시 실행(SMAppService 상태를 직접 읽고 씀), 세션 최대시간(분), 선제 재연결 켜기/끄기 + 여유분(분), 잠자기 후 재연결 켜기/끄기 + 최소 잠자기 시간(분).
   - **Helper**: 상태(미등록 / 승인 필요 / 실행 중 / 버전 불일치), [시스템 설정 열기](일반 > 로그인 항목 및 확장 프로그램 > 앱 백그라운드 활동), openfortivpn 경로와 버전(1.24.x가 아니면 경고).
   - **설정 파일**: config.yaml 경로, [Finder에서 보기], 파싱 오류가 있으면 줄/열과 함께 표시. 파일에서 계정 정보가 바뀌었으면 "다음 연결부터 적용" 배너를 띄운다.
@@ -334,6 +350,8 @@
     session_max_minutes: 180
     proactive_reconnect: { enabled: true, margin_minutes: 5 }
     reconnect_after_sleep: { enabled: false, min_sleep_minutes: 30 }
+    # 시각은 "HH:mm" 문자열(따옴표 없이 써도 60진수가 아니라 문자열로 읽는다). start < end.
+    schedule: { enabled: false, days: [mon, tue, wed, thu, fri], start: "09:00", end: "18:00", away_minutes: 120 }
   ```
 - **로드와 검증** (`FortiConfig.ConfigCodec`, 순수 함수, Yams 6.2.x)
   1. 파일이 64KiB 이하이고 UTF-8인지 확인한다.

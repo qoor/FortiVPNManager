@@ -342,11 +342,18 @@ private struct FieldReader {
                                           session: connection.sessionMaxMinutes),
                 at: marginLocation ?? sessionLocation)
         }
+        let schedule = connection.schedule
+        if schedule.start >= schedule.end {
+            throw ConfigLoadError(.scheduleEndNotAfterStart(start: schedule.start, end: schedule.end),
+                                  at: scheduleEndLocation ?? scheduleStartLocation)
+        }
         return config
     }
 
     private var marginLocation: LineColumn?
     private var sessionLocation: LineColumn?
+    private var scheduleStartLocation: LineColumn?
+    private var scheduleEndLocation: LineColumn?
 
     private mutating func readVPN(_ node: Node, into vpn: inout AppConfig.VPN) throws(ConfigLoadError) {
         guard let mapping = try section(node, path: ConfigPath.vpn) else { return }
@@ -407,6 +414,8 @@ private struct FieldReader {
                 try readProactive(entry.value, into: &connection.proactiveReconnect)
             case .reconnectAfterSleep:
                 try readAfterSleep(entry.value, into: &connection.reconnectAfterSleep)
+            case .schedule:
+                try readSchedule(entry.value, into: &connection.schedule)
             case nil:
                 unknownKey(entry, parent: ConfigPath.connection)
             }
@@ -451,6 +460,69 @@ private struct FieldReader {
                 unknownKey(entry, parent: ConfigPath.reconnectAfterSleep)
             }
         }
+    }
+
+    private mutating func readSchedule(
+        _ node: Node, into value: inout AppConfig.Connection.Schedule
+    ) throws(ConfigLoadError) {
+        guard let mapping = try section(node, path: ConfigPath.schedule) else { return }
+        for entry in try entries(of: mapping) {
+            switch AppConfig.Connection.Schedule.CodingKeys(rawValue: entry.key) {
+            case .enabled:
+                value.enabled = try ConfigCodec.readBoolean(entry.value, path: ConfigPath.scheduleEnabled)
+                    ?? value.enabled
+            case .days:
+                value.days = try readDays(entry.value) ?? value.days
+            case .start:
+                if let time = try readTime(entry.value, path: ConfigPath.scheduleStart) {
+                    value.start = time
+                    scheduleStartLocation = ConfigCodec.location(of: entry.value)
+                }
+            case .end:
+                if let time = try readTime(entry.value, path: ConfigPath.scheduleEnd) {
+                    value.end = time
+                    scheduleEndLocation = ConfigCodec.location(of: entry.value)
+                }
+            case .awayMinutes:
+                value.awayMinutes = try ConfigCodec.readInteger(
+                    entry.value, path: ConfigPath.awayMinutes, range: ConfigLimits.awayMinutes)
+                    ?? value.awayMinutes
+            case nil:
+                unknownKey(entry, parent: ConfigPath.schedule)
+            }
+        }
+    }
+
+    /// `schedule.days`: a list of `mon` … `sun`; repeats are dropped and the order is normalized.
+    /// `nil` for a null value (use the default).
+    private func readDays(_ node: Node) throws(ConfigLoadError) -> [AppConfig.Connection.Schedule.Day]? {
+        if ConfigCodec.isNull(node) { return nil }
+        guard case let .sequence(sequence) = node else {
+            throw ConfigLoadError(.typeMismatch(path: ConfigPath.scheduleDays, expected: .sequence),
+                                  at: ConfigCodec.location(of: node))
+        }
+        var days: [AppConfig.Connection.Schedule.Day] = []
+        for item in sequence {
+            guard let day = try ConfigCodec.readChoice(
+                item, path: ConfigPath.scheduleDays, as: AppConfig.Connection.Schedule.Day.self) else {
+                throw ConfigLoadError(
+                    .invalidChoice(path: ConfigPath.scheduleDays, raw: "",
+                                   allowed: AppConfig.Connection.Schedule.Day.allCases.map(\.rawValue)),
+                    at: ConfigCodec.location(of: item))
+            }
+            days.append(day)
+        }
+        return AppConfig.Connection.Schedule.normalizedDays(days)
+    }
+
+    /// `HH:mm` time, quoted or plain (a plain `18:00` is read as text, never as a YAML 1.1 base-60
+    /// number). `nil` for a null value (use the default).
+    private func readTime(_ node: Node, path: String) throws(ConfigLoadError) -> TimeOfDay? {
+        guard let raw = try ConfigCodec.readString(node, path: path) else { return nil }
+        guard let time = TimeOfDay(parsing: raw) else {
+            throw ConfigLoadError(.invalidTime(path: path, raw: raw), at: ConfigCodec.location(of: node))
+        }
+        return time
     }
 
     /// `trusted_certs`: entries are normalized to lowercase; anything that is not a 64-hex digest,

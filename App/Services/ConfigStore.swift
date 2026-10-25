@@ -176,7 +176,20 @@ extension ConnectionSettings {
             proactiveReconnectEnabled: connection.proactiveReconnect.enabled,
             proactiveMarginMinutes: connection.proactiveReconnect.marginMinutes,
             reconnectAfterSleepEnabled: connection.reconnectAfterSleep.enabled,
-            minSleepMinutes: connection.reconnectAfterSleep.minSleepMinutes
+            minSleepMinutes: connection.reconnectAfterSleep.minSleepMinutes,
+            schedule: connection.schedule.enabled ? ConnectionSchedule(connection.schedule) : nil
+        )
+    }
+}
+
+extension ConnectionSchedule {
+    /// The reducer's view of an enabled `connection.schedule`.
+    init(_ schedule: AppConfig.Connection.Schedule) {
+        self.init(
+            weekdays: Set(schedule.days.map(\.calendarWeekday)),
+            startMinute: schedule.start.minutes,
+            endMinute: schedule.end.minutes,
+            awayMinutes: schedule.awayMinutes
         )
     }
 }

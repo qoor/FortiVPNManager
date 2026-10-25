@@ -54,6 +54,15 @@ import Testing
               reconnect_after_sleep:
                 enabled: true
                 min_sleep_minutes: 45
+              schedule:
+                enabled: true
+                days:
+                  - sat
+                  - mon
+                  - wed
+                start: "08:30"
+                end: 19:05
+                away_minutes: 90
             """
         let result = try decodeYAML(yaml)
         #expect(result.config == nonDefaultConfig)
@@ -67,7 +76,8 @@ import Testing
              otp: {gmail_address: otp@example.com, method: "gmail_api", google_client_id: '\(googleClientID)'},
              connection: {auto_connect_on_launch: false, session_max_minutes: 175,
              proactive_reconnect: {enabled: false, margin_minutes: 7},
-             reconnect_after_sleep: {enabled: true, min_sleep_minutes: 45}}}
+             reconnect_after_sleep: {enabled: true, min_sleep_minutes: 45},
+             schedule: {enabled: true, days: [mon, wed, sat, wed], start: 8:30, end: '19:05', away_minutes: 90}}}
             """
         #expect(try decodeYAML(yaml).config == nonDefaultConfig)
     }
@@ -232,6 +242,10 @@ import Testing
          "connection.reconnect_after_sleep.min_sleep_minutes", true),
         ("connection:\n  reconnect_after_sleep: { min_sleep_minutes: 1441 }\n",
          "connection.reconnect_after_sleep.min_sleep_minutes", false),
+        ("connection:\n  schedule: { away_minutes: 0 }\n", "connection.schedule.away_minutes", false),
+        ("connection:\n  schedule: { away_minutes: 1 }\n", "connection.schedule.away_minutes", true),
+        ("connection:\n  schedule: { away_minutes: 1440 }\n", "connection.schedule.away_minutes", true),
+        ("connection:\n  schedule: { away_minutes: 1441 }\n", "connection.schedule.away_minutes", false),
     ])
     func ranges(yaml: String, path: String, valid: Bool) throws {
         let error = loadError(yaml)

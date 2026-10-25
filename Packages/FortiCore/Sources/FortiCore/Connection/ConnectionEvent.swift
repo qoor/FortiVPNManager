@@ -33,6 +33,11 @@ public enum ConnectionEvent: Sendable, Equatable {
     /// Sent once after every `didWake`, when the path and Router settled or after 30 s.
     case wakeSettled(WakeObservation)
     case pathChanged(PathSnapshot)
+    /// The user left (screen locked, display or system asleep) or returned. Sent on changes only;
+    /// `away: true` comes before `.willSleep`.
+    case presenceChanged(away: Bool)
+    /// The time zone (or another calendar setting) changed; schedule times are re-read in it.
+    case calendarChanged(Calendar)
 }
 
 /// Outputs of `ConnectionReducer`, executed by the app in order.

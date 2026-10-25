@@ -1,12 +1,17 @@
 import AppKit
+import CoreGraphics
 import FortiCore
+import FortiShared
 import Network
+import os
 
-/// Sleep/wake and network path observation for the connection reducer (DESIGN §5.5, §6.3).
+/// Sleep/wake, presence and network path observation for the connection reducer (DESIGN §5.5, §6.3).
 ///
 /// Emits `.willSleep`, `.didWake`, exactly one `.wakeSettled` per completed wake, and `.pathChanged`
 /// 3 s after the last `NWPathMonitor` update. The underlay is the interface (and its IPv4 source
 /// address) the kernel routes the gateway through, excluding ppp*/utun*/`.other`.
+/// Emits `.presenceChanged` when the user leaves or returns: away means the screen is locked, the
+/// displays are asleep or the system sleeps (schedule, §5.4).
 /// System callbacks are delivered on the main queue and handled synchronously on the main actor.
 final class SystemMonitor {
     /// Receives the reducer events, on the main actor.
@@ -23,8 +28,18 @@ final class SystemMonitor {
     private var pathTask: Task<Void, Never>?
     private var wakeTask: Task<Void, Never>?
     private var started = false
+    private var screenLocked = false
+    private var displaysAsleep = false
+    private var systemAsleep = false
+    /// Last presence sent to the reducer (it starts out assuming a present user).
+    private var reportedAway = false
+    private var lockPollTask: Task<Void, Never>?
+    private var distributedObservers: [NSObjectProtocol] = []
+    private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "system")
 
     static let pathDebounce: Duration = .seconds(3)
+    /// While locked, the lock state is also polled, in case an unlock notification is missed.
+    static let lockPollInterval: Duration = .seconds(15)
     static let settlePollInterval: Duration = .seconds(1)
     static let lateSettlePollInterval: Duration = .seconds(2)
 
@@ -46,7 +61,26 @@ final class SystemMonitor {
             center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { @Sendable [weak self] _ in
                 MainActor.assumeIsolated { self?.systemDidWake() }
             },
+            center.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.displaysChanged(asleep: true) }
+            },
+            center.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.displaysChanged(asleep: false) }
+            },
         ]
+        // Not documented API, but posted by loginwindow on every lock and unlock for many releases.
+        let distributed = DistributedNotificationCenter.default()
+        distributedObservers = [
+            distributed.addObserver(forName: Self.screenLockedNotification, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.lockChanged(locked: true) }
+            },
+            distributed.addObserver(forName: Self.screenUnlockedNotification, object: nil, queue: .main) { @Sendable [weak self] _ in
+                MainActor.assumeIsolated { self?.lockChanged(locked: false) }
+            },
+        ]
+        screenLocked = Self.isScreenLocked()
+        displaysAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+        updatePresence()
         pathMonitor.pathUpdateHandler = { @Sendable [weak self] path in
             MainActor.assumeIsolated { self?.pathUpdated(path) }
         }
@@ -58,6 +92,8 @@ final class SystemMonitor {
     private func systemWillSleep() {
         sleptAt = Date()
         wakeTask?.cancel()
+        systemAsleep = true
+        updatePresence()
         onEvent?(.willSleep)
     }
 
@@ -65,6 +101,9 @@ final class SystemMonitor {
         let sleptFor = sleptAt.map { max(0, Date().timeIntervalSince($0)) } ?? 0
         sleptAt = nil
         onEvent?(.didWake(sleptFor: sleptFor))
+        systemAsleep = false
+        screenLocked = Self.isScreenLocked()
+        updatePresence()
         wakeTask?.cancel()
         wakeTask = Task { [weak self] in await self?.settleAfterWake() }
     }
@@ -97,6 +136,67 @@ final class SystemMonitor {
 
     private func networkSettled() -> Bool {
         latestPath?.status == .satisfied && NetworkProbe.hasIPv4Router()
+    }
+
+    // MARK: - Presence
+
+    static let screenLockedNotification = Notification.Name("com.apple.screenIsLocked")
+    static let screenUnlockedNotification = Notification.Name("com.apple.screenIsUnlocked")
+
+    /// Re-reads the lock and display state (e.g. when the app becomes active).
+    func refreshPresence() {
+        guard started else { return }
+        screenLocked = Self.isScreenLocked()
+        displaysAsleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+        updatePresence()
+    }
+
+    private func lockChanged(locked: Bool) {
+        screenLocked = locked
+        updatePresence()
+    }
+
+    private func displaysChanged(asleep: Bool) {
+        displaysAsleep = asleep
+        if !asleep {
+            screenLocked = Self.isScreenLocked()
+        }
+        updatePresence()
+    }
+
+    private func updatePresence() {
+        if screenLocked {
+            startLockPolling()
+        } else {
+            lockPollTask?.cancel()
+            lockPollTask = nil
+        }
+        let away = screenLocked || displaysAsleep || systemAsleep
+        guard away != reportedAway else { return }
+        reportedAway = away
+        logger.info("presence: \(away ? "away" : "present", privacy: .public) (locked \(self.screenLocked), displays asleep \(self.displaysAsleep), system asleep \(self.systemAsleep))")
+        onEvent?(.presenceChanged(away: away))
+    }
+
+    private func startLockPolling() {
+        guard lockPollTask == nil else { return }
+        lockPollTask = Task { [weak self] in
+            while true {
+                do { try await Task.sleep(for: Self.lockPollInterval) } catch { return }
+                guard let self, self.screenLocked else { return }
+                if !Self.isScreenLocked() {
+                    self.lockPollTask = nil
+                    self.lockChanged(locked: false)
+                    return
+                }
+            }
+        }
+    }
+
+    /// `CGSSessionScreenIsLocked` is only present in the session dictionary while the screen is locked.
+    private static func isScreenLocked() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return (session["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
 
     // MARK: - Path

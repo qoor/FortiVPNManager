@@ -108,10 +108,11 @@ final class AppEnvironment {
         }
     }
 
-    /// Re-reads config.yaml and re-checks readiness and the login item (§5.4, §5.7).
+    /// Re-reads config.yaml and re-checks readiness, the login item and presence (§5.4, §5.7).
     func applicationDidBecomeActive() {
         configStore.poll()
         loginItems.refresh()
+        systemMonitor.refreshPresence()
         connection.recheckReadiness()
     }
 

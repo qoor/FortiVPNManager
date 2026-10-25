@@ -46,7 +46,10 @@ let nonDefaultConfig = AppConfig(
     connection: AppConfig.Connection(
         autoConnectOnLaunch: false, sessionMaxMinutes: 175,
         proactiveReconnect: .init(enabled: false, marginMinutes: 7),
-        reconnectAfterSleep: .init(enabled: true, minSleepMinutes: 45)))
+        reconnectAfterSleep: .init(enabled: true, minSleepMinutes: 45),
+        schedule: .init(
+            enabled: true, days: [.mon, .wed, .sat],
+            start: TimeOfDay(hour: 8, minute: 30), end: TimeOfDay(hour: 19, minute: 5), awayMinutes: 90)))
 
 /// Fresh directory under the system temp dir, resolved with realpath (`/var` → `/private/var`).
 func makeTempDirectory() throws -> URL {

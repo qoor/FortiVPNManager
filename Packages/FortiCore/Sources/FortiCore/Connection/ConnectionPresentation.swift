@@ -24,6 +24,22 @@ public struct ConnectionMenuActions: Sendable, Equatable {
     }
 }
 
+/// What the schedule does next (menu and Connection tab).
+public enum ScheduleOutlook: Sendable, Equatable {
+    /// Not connecting now: the next scheduled start connects.
+    case connects(at: Date)
+    /// Not connecting now, and no weekday is selected.
+    case noStart
+    /// Inside the scheduled hours; after `end`, reconnects wait while the user is away.
+    case withinHours(end: Date)
+    /// Outside the scheduled hours with the user present: reconnects continue until the user leaves.
+    case outsideHoursPresent
+    /// Outside the scheduled hours with the user away: reconnects wait, and stop for good at `until`.
+    case holdingWhileAway(until: Date)
+    /// Reconnects stopped after the user was away too long; the current connection is kept until it ends.
+    case suspended
+}
+
 /// The one-line reason shown with "Open Settings" when the icon is in the error state.
 public enum ConnectionAttention: Sendable, Equatable {
     case needsSetup([SetupItem])
@@ -35,6 +51,8 @@ extension ConnectionState {
         switch self {
         case .connected: .connected
         case .idle: .disconnected
+        // Waiting for an away user (schedule) is not a reconnect in progress.
+        case let .waitingRetry(wait) where wait.reason == .userAway: .disconnected
         case .connecting, .waitingRetry, .waitingNetwork, .disconnecting: .inProgress
         case .failed, .needsSetup: .error
         }
@@ -75,5 +93,24 @@ extension ConnectionModel {
     public var nextRetryAt: Date? {
         guard case let .waitingRetry(wait) = state else { return nil }
         return wait.until
+    }
+
+    /// `nil` when there is no schedule.
+    public func scheduleOutlook(now: Date) -> ScheduleOutlook? {
+        guard let schedule = settings.schedule else { return nil }
+        let wantsConnection = switch state {
+        case .failed: false
+        default: desired == .connected
+        }
+        guard wantsConnection else {
+            return schedule.nextStart(after: now, calendar: calendar).map(ScheduleOutlook.connects(at:)) ?? .noStart
+        }
+        if schedule.isActive(at: now, calendar: calendar),
+           let next = schedule.nextBoundary(after: now, calendar: calendar), next.edge == .end {
+            return .withinHours(end: next.date)
+        }
+        if reconnectSuspended { return .suspended }
+        if let awaySince { return .holdingWhileAway(until: awaySince.addingTimeInterval(schedule.awayLimit)) }
+        return .outsideHoursPresent
     }
 }

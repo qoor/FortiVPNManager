@@ -68,6 +68,8 @@ private struct ConnectionTransition {
         case let .didWake(sleptFor): didWake(sleptFor: sleptFor)
         case let .wakeSettled(observation): wakeSettled(observation)
         case let .pathChanged(snapshot): pathChanged(snapshot)
+        case let .presenceChanged(away): presenceChanged(away: away)
+        case let .calendarChanged(calendar): calendarChanged(calendar)
         }
     }
 
@@ -89,7 +91,7 @@ private struct ConnectionTransition {
     }
 
     private mutating func reconcileTimers() {
-        let wanted = model.isTerminated ? [:] : model.wantedTimers()
+        let wanted = model.isTerminated ? [:] : model.wantedTimers(now: now)
         for timer in ConnectionTimer.allCases {
             let slot = model.timers[timer]
             switch (slot, wanted[timer]) {
@@ -119,8 +121,10 @@ private struct ConnectionTransition {
             ledgerBefore = restoredLedger
         }
         model.ledger.prune(asOf: now)
+        resetScheduleBoundary()
 
-        guard autoConnect else {
+        // With a schedule, launch connects only inside the scheduled hours.
+        guard autoConnect, model.isWithinSchedule(at: now) else {
             model.desired = .disconnected
             emit(.checkReadiness)
             return
@@ -190,6 +194,9 @@ private struct ConnectionTransition {
     private mutating func settingsChanged(_ settings: ConnectionSettings) {
         let old = model.settings
         model.settings = settings
+        if settings.schedule != old.schedule {
+            scheduleChanged()
+        }
         guard settings.affectsPlannedReconnect(comparedTo: old), case var .connected(context) = model.state else { return }
         context.plannedReconnectAt = RetryPolicy.plannedReconnect(connectedAt: context.since, settings: settings, now: now)
         model.state = .connected(context)
@@ -198,20 +205,28 @@ private struct ConnectionTransition {
     // MARK: - User actions
 
     private mutating func userConnect() {
+        connectRequested(.user)
+    }
+
+    /// "Connect", or the start of the scheduled hours, which acts the same way.
+    private mutating func connectRequested(_ reason: AttemptReason) {
         switch model.state {
         case .idle, .needsSetup, .failed:
             model.desired = .connected
             resetForManualAction()
-            beginAttempt(.user)
+            beginAttempt(reason)
         case var .disconnecting(context):
             model.desired = .connected
             if context.after == .idle {
                 resetForManualAction()
-                context.after = .reconnect(.user)
+                context.after = .reconnect(reason)
                 model.state = .disconnecting(context)
             }
+        case let .waitingRetry(wait) where wait.reason == .userAway:
+            model.reconnectSuspended = false
+            beginAttempt(reason)
         case .connecting, .connected, .waitingRetry, .waitingNetwork:
-            break
+            model.reconnectSuspended = false
         }
     }
 
@@ -270,6 +285,7 @@ private struct ConnectionTransition {
     private mutating func resetForManualAction() {
         model.ledger.resetForManualAction()
         model.networkFailureStreak = 0
+        model.reconnectSuspended = false
     }
 
     // MARK: - Gmail OTP session
@@ -491,6 +507,8 @@ private struct ConnectionTransition {
         case .retry: retryDue()
         case .proactiveReconnect: proactiveReconnectDue()
         case .quitDeadline: terminate()
+        case .schedule: scheduleBoundaryDue()
+        case .awayLimit: checkAwayLimit()
         }
     }
 
@@ -523,7 +541,7 @@ private struct ConnectionTransition {
     }
 
     private mutating func proactiveReconnectDue() {
-        guard case let .connected(context) = model.state else { return }
+        guard case let .connected(context) = model.state, model.automaticReconnectAllowed(at: now) else { return }
         stopSession(context, reason: .proactiveReconnect, then: .reconnect(.proactive))
     }
 
@@ -534,6 +552,9 @@ private struct ConnectionTransition {
         switch model.state {
         case let .connecting(context):
             abortAttempt(context, stop: .sleep, then: .resumeAfterSleep)
+        case let .waitingRetry(wait) where wait.reason == .userAway:
+            // Already waiting for the user, who is away while the Mac sleeps.
+            break
         case .waitingRetry, .waitingNetwork:
             waitForNetwork(.sleep, delay: 0)
         case var .disconnecting(context):
@@ -551,6 +572,8 @@ private struct ConnectionTransition {
         model.isSleeping = false
         model.lastWakeAt = now
         model.pendingWake = PendingWake(sleptFor: sleptFor)
+        // The away time may have run out while asleep; decide before the user unlocks.
+        checkAwayLimit()
     }
 
     private mutating func wakeSettled(_ observation: WakeObservation) {
@@ -571,9 +594,12 @@ private struct ConnectionTransition {
         }
     }
 
-    /// §6.3 rules for a tunnel that survived sleep, evaluated in order.
+    /// §6.3 rules for a tunnel that survived sleep, evaluated in order. When automatic reconnects
+    /// are not allowed (schedule), a working tunnel is kept instead of being replaced; a dead or
+    /// stranded one is still stopped, and the reconnect after it waits or is given up.
     private mutating func evaluateWake(_ context: ConnectedContext, _ observation: WakeObservation, sleptFor: TimeInterval) {
         var context = context
+        let mayReconnect = model.automaticReconnectAllowed(at: now)
         guard observation.pathSatisfied else {
             // The network did not settle within 30 s: keep the tunnel, decide later.
             context.plannedReconnectAt = context.plannedReconnectAt.map {
@@ -583,13 +609,13 @@ private struct ConnectionTransition {
             rearmProactiveTimer()
             return
         }
-        if let planned = context.plannedReconnectAt, planned <= now {
+        if mayReconnect, let planned = context.plannedReconnectAt, planned <= now {
             restartSession(context, reason: .proactive)
         } else if !observation.processAlive || !observation.pppUp {
             restartSession(context, reason: .tunnelLost)
         } else if let old = context.underlay, let new = observation.underlay, old != new {
             restartSession(context, reason: .networkChanged)
-        } else if model.settings.reconnectAfterSleepEnabled,
+        } else if mayReconnect, model.settings.reconnectAfterSleepEnabled,
                   sleptFor >= TimeInterval(model.settings.minSleepMinutes) * 60 {
             restartSession(context, reason: .afterSleep)
         } else {
@@ -646,6 +672,88 @@ private struct ConnectionTransition {
         model.timers[.proactiveReconnect]?.date = .distantPast
     }
 
+    // MARK: - Schedule and presence
+
+    private mutating func presenceChanged(away: Bool) {
+        if away {
+            if model.awaySince == nil {
+                model.awaySince = now
+            }
+            return
+        }
+        // The away time may have run out before the app could act on it (e.g. right after a wake).
+        checkAwayLimit()
+        model.awaySince = nil
+        rejudgeHeldReconnect()
+    }
+
+    private mutating func calendarChanged(_ calendar: Calendar) {
+        model.calendar = calendar
+        resetScheduleBoundary()
+        rejudgeHeldReconnect()
+    }
+
+    /// A new, changed or removed schedule applies from its next start or end; nothing connects
+    /// right away. A held reconnect is re-judged under the new rules.
+    private mutating func scheduleChanged() {
+        resetScheduleBoundary()
+        if model.settings.schedule == nil {
+            model.reconnectSuspended = false
+        } else {
+            checkAwayLimit()
+        }
+        rejudgeHeldReconnect()
+    }
+
+    /// A reconnect held for an away user goes through the gate again (it may now proceed, wait
+    /// with a new limit, or be given up).
+    private mutating func rejudgeHeldReconnect() {
+        if case let .waitingRetry(wait) = model.state, wait.reason == .userAway {
+            beginAttempt(.retry(.userAway))
+        }
+    }
+
+    /// Marks the latest start or end at or before now as handled, so only later ones act.
+    private mutating func resetScheduleBoundary() {
+        model.scheduleBoundary = model.settings.schedule?.latestBoundary(atOrBefore: now, calendar: model.calendar)?.date
+    }
+
+    /// The `.schedule` timer: acts on the latest boundary only (earlier ones were missed in sleep).
+    private mutating func scheduleBoundaryDue() {
+        guard let schedule = model.settings.schedule,
+              let latest = schedule.latestBoundary(atOrBefore: now, calendar: model.calendar) else { return }
+        if let handled = model.scheduleBoundary, latest.date <= handled { return }
+        model.scheduleBoundary = latest.date
+        switch latest.edge {
+        case .start:
+            model.reconnectSuspended = false
+            connectRequested(.scheduled)
+        case .end:
+            // The end never disconnects; from now on an away user stops automatic reconnects.
+            checkAwayLimit()
+        }
+    }
+
+    /// Outside the scheduled hours, once the user has been away for `awayMinutes`: no more
+    /// automatic reconnects. A pending one is dropped; a connected tunnel is kept until it ends.
+    private mutating func checkAwayLimit() {
+        guard !model.reconnectSuspended, model.awayLimitReached(at: now) else { return }
+        model.reconnectSuspended = true
+        switch model.state {
+        case .waitingRetry, .waitingNetwork:
+            giveUpReconnecting()
+        case .idle, .needsSetup, .connecting, .connected, .disconnecting, .failed:
+            break
+        }
+    }
+
+    /// Like "Disconnect" without stopping anything: the next connection waits for the user or the schedule.
+    private mutating func giveUpReconnecting() {
+        model.reconnectSuspended = true
+        model.desired = .disconnected
+        model.state = .idle
+    }
+
     // MARK: - Attempts
 
     /// Starts a new attempt unless a gate applies: desire, sleep, the rolling cap, the 90 s gap after an
@@ -658,6 +766,17 @@ private struct ConnectionTransition {
         guard model.desired == .connected else {
             model.state = .idle
             return
+        }
+        if reason.isAutomaticReconnect, let schedule = model.settings.schedule,
+           !schedule.isActive(at: now, calendar: model.calendar) {
+            if model.reconnectSuspended || model.awayLimitReached(at: now) {
+                giveUpReconnecting()
+                return
+            }
+            if let awaySince = model.awaySince {
+                model.state = .waitingRetry(RetryWait(until: awaySince.addingTimeInterval(schedule.awayLimit), reason: .userAway))
+                return
+            }
         }
         if model.isSleeping {
             waitForNetwork(.sleep, delay: 0)

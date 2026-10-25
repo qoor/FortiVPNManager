@@ -69,6 +69,10 @@ public struct ConfigLoadError: Error, Sendable, Equatable, LocalizedError, Custo
         case invalidChoice(path: String, raw: String, allowed: [String])
         case outOfRange(path: String, raw: String, range: ClosedRange<Int>)
         case marginNotLessThanSession(margin: Int, session: Int)
+        /// A time that is not `HH:mm` (`00:00`-`23:59`), e.g. `start: "9am"`.
+        case invalidTime(path: String, raw: String)
+        /// `connection.schedule.end` is not later than `start`.
+        case scheduleEndNotAfterStart(start: TimeOfDay, end: TimeOfDay)
         /// A string field contains a control character, line/paragraph separator, BOM or noncharacter.
         case invalidCharacter(path: String, scalar: UInt32)
         /// `schema_version` is newer than this build understands. The file must be treated as read-only.
@@ -142,6 +146,10 @@ public struct ConfigLoadError: Error, Sendable, Equatable, LocalizedError, Custo
             return String(localized: "\(path) is set to \(ConfigText.preview(raw)), which is outside the allowed range (\(range.lowerBound)–\(range.upperBound)).", bundle: .main)
         case let .marginNotLessThanSession(margin, session):
             return String(localized: "\(ConfigPath.marginMinutes) (\(margin)) must be less than \(ConfigPath.sessionMaxMinutes) (\(session)).", bundle: .main)
+        case let .invalidTime(path, raw):
+            return String(localized: "\(path) is set to '\(ConfigText.preview(raw))', which is not a time. Write it as \"HH:mm\" between 00:00 and 23:59 (e.g. \(ConfigText.leaf(path)): \"09:00\").", bundle: .main)
+        case let .scheduleEndNotAfterStart(start, end):
+            return String(localized: "\(ConfigPath.scheduleEnd) (\(end.description)) must be later than \(ConfigPath.scheduleStart) (\(start.description)).", bundle: .main)
         case let .invalidCharacter(path, scalar):
             return [
                 String(localized: "\(path) contains a character that is not allowed (\(ConfigText.codePoint(scalar))).", bundle: .main),

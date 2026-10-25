@@ -1,8 +1,8 @@
 import FortiConfig
 import SwiftUI
 
-/// Tab 2, Connection (DESIGN §5.6): status and actions, connection options (saved to config.yaml right
-/// away), the Helper, and the settings file.
+/// Tab 2, Connection (DESIGN §5.6): status and actions, the schedule and connection options (saved to
+/// config.yaml right away), the Helper, and the settings file.
 struct ConnectionTab: View {
     let environment: AppEnvironment
     let clock: StatusClock
@@ -19,6 +19,7 @@ struct ConnectionTab: View {
     var body: some View {
         Form {
             statusSection
+            scheduleSection
             optionsSection
             helperSection
             configFileSection
@@ -47,7 +48,9 @@ struct ConnectionTab: View {
                 LabeledContent("Tunnel IP", value: connection.tunnelIP ?? String(localized: "Unknown"))
                 LabeledContent("Next proactive reconnect", value: connection.plannedReconnectAt.map {
                     "\(StatusText.clockTime($0, now: now)) (\(StatusText.plannedReconnect($0, now: now)))"
-                } ?? String(localized: "Off"))
+                } ?? (connection.model.nextPlannedReconnect != nil
+                    ? String(localized: "Paused by the schedule")
+                    : String(localized: "Off")))
             }
             if let retryAt = connection.nextRetryAt {
                 LabeledContent("Next attempt", value: StatusText.clockTime(retryAt, now: now))
@@ -66,11 +69,75 @@ struct ConnectionTab: View {
         }
     }
 
+    // MARK: - Schedule
+
+    private var scheduleSection: some View {
+        let schedule = configStore.config.connection.schedule
+        return Section {
+            Toggle("Connect on a schedule", isOn: option(\.schedule.enabled))
+            LabeledContent("Days") {
+                HStack(spacing: 4) {
+                    ForEach(AppConfig.Connection.Schedule.Day.allCases, id: \.self) { day in
+                        Toggle(day.shortName, isOn: scheduleDay(day))
+                            .toggleStyle(.button)
+                    }
+                }
+            }
+            .disabled(!schedule.enabled)
+            ScheduleHoursFields(start: schedule.start, end: schedule.end) { start, end in
+                do throws(ConfigStoreError) {
+                    try configStore.update {
+                        $0.connection.schedule.start = start
+                        $0.connection.schedule.end = end
+                    }
+                    return nil
+                } catch {
+                    return error.message
+                }
+            }
+            .disabled(!schedule.enabled)
+            MinutesField(
+                title: "Stop reconnecting after being away",
+                value: schedule.awayMinutes,
+                range: ConfigLimits.awayMinutes
+            ) { minutes in
+                saveOption { $0.schedule.awayMinutes = minutes }
+            }
+            .disabled(!schedule.enabled)
+            if schedule.enabled, let outlook = connection.scheduleOutlook {
+                LabeledContent("Next", value: outlook.summary(now: clock.now))
+            }
+        } header: {
+            Text("Schedule")
+        } footer: {
+            Text("Connects at the start time on the selected days. The end time never disconnects: after it, reconnects wait while you're away (screen locked or off, or the Mac asleep) and stop once you've been away for the time above. The same applies when you connect yourself.")
+                .footnoteStyle()
+        }
+    }
+
+    /// One weekday button; the list is saved in Monday-first order without repeats.
+    private func scheduleDay(_ day: AppConfig.Connection.Schedule.Day) -> Binding<Bool> {
+        Binding(
+            get: { configStore.config.connection.schedule.days.contains(day) },
+            set: { selected in
+                saveOption { connection in
+                    var days = Set(connection.schedule.days)
+                    if selected { days.insert(day) } else { days.remove(day) }
+                    connection.schedule.days = AppConfig.Connection.Schedule.normalizedDays(days)
+                }
+            }
+        )
+    }
+
     // MARK: - Options
 
     private var optionsSection: some View {
         Section {
             Toggle("Connect automatically at launch", isOn: option(\.autoConnectOnLaunch))
+            if configStore.config.connection.schedule.enabled {
+                Text("With the schedule on, this connects only during the scheduled hours.")
+                    .footnoteStyle()
+            }
             Toggle("Open at login", isOn: loginItemEnabled)
                 .disabled(!loginItems.isInstalledCopy)
             if !loginItems.isInstalledCopy {
@@ -228,6 +295,61 @@ struct ConnectionTab: View {
                 NoticeRow(text: String(localized: "Account details changed. They apply from the next connection."), style: .info)
             }
         }
+    }
+}
+
+/// Start and end of the scheduled hours. Edits are kept as drafts and saved together only while
+/// the end is later than the start, so typing a time digit by digit never trips the check.
+private struct ScheduleHoursFields: View {
+    let start: TimeOfDay
+    let end: TimeOfDay
+    /// Saves both times; returns an error message when the save was refused.
+    let commit: (TimeOfDay, TimeOfDay) -> String?
+
+    @State private var draftStart = Date()
+    @State private var draftEnd = Date()
+    @State private var error: String?
+
+    var body: some View {
+        Group {
+            DatePicker("Start time", selection: $draftStart, displayedComponents: .hourAndMinute)
+            DatePicker("End time", selection: $draftEnd, displayedComponents: .hourAndMinute)
+            if let error {
+                NoticeRow(text: error, style: .error)
+            }
+        }
+        .onAppear(perform: load)
+        .onChange(of: start, load)
+        .onChange(of: end, load)
+        .onChange(of: draftStart, save)
+        .onChange(of: draftEnd, save)
+    }
+
+    private func load() {
+        draftStart = Self.date(start)
+        draftEnd = Self.date(end)
+    }
+
+    private func save() {
+        let newStart = Self.time(draftStart)
+        let newEnd = Self.time(draftEnd)
+        guard newStart < newEnd else {
+            error = String(localized: "The end time must be later than the start time.")
+            return
+        }
+        error = nil
+        if newStart != start || newEnd != end {
+            error = commit(newStart, newEnd)
+        }
+    }
+
+    private static func date(_ time: TimeOfDay) -> Date {
+        Calendar.current.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: Date()) ?? Date()
+    }
+
+    private static func time(_ date: Date) -> TimeOfDay {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return TimeOfDay(hour: parts.hour ?? 0, minute: parts.minute ?? 0)
     }
 }
 

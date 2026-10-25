@@ -31,6 +31,7 @@ import Testing
               session_max_minutes: 180
               proactive_reconnect: { enabled: true, margin_minutes: 5 }
               reconnect_after_sleep: { enabled: false, min_sleep_minutes: 30 }
+              schedule: { enabled: false, days: [mon, tue, wed, thu, fri], start: "09:00", end: "18:00", away_minutes: 120 }
 
             """)
         #expect(text.hasSuffix("\n"))
@@ -58,7 +59,7 @@ import Testing
         let lines = text.split(separator: "\n").map(String.init)
         for key in ["host:", "port:", "username:", "realm:", "gmail_address:", "method:", "google_client_id:",
                     "auto_connect_on_launch:",
-                    "session_max_minutes:", "proactive_reconnect:", "reconnect_after_sleep:"] {
+                    "session_max_minutes:", "proactive_reconnect:", "reconnect_after_sleep:", "schedule:"] {
             let index = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix(key) }
             #expect(index.map { lines[$0 - 1].trimmingCharacters(in: .whitespaces).hasPrefix("#") } == true, "\(key)")
         }
@@ -128,12 +129,24 @@ import Testing
                         marginMinutes: Int.random(in: 1...min(60, session - 1), using: &rng)),
                     reconnectAfterSleep: .init(
                         enabled: Bool.random(using: &rng),
-                        minSleepMinutes: Int.random(in: ConfigLimits.minSleepMinutes, using: &rng))))
+                        minSleepMinutes: Int.random(in: ConfigLimits.minSleepMinutes, using: &rng)),
+                    schedule: randomSchedule(using: &rng)))
             try config.validate()
             let result = try ConfigCodec.decode(ConfigCodec.encode(config))
             #expect(result.config == config)
             #expect(result.warnings.isEmpty)
         }
+    }
+
+    private func randomSchedule(using rng: inout SeededGenerator) -> AppConfig.Connection.Schedule {
+        let start = Int.random(in: 0..<(24 * 60 - 1), using: &rng)
+        let end = Int.random(in: (start + 1)..<(24 * 60), using: &rng)
+        return AppConfig.Connection.Schedule(
+            enabled: Bool.random(using: &rng),
+            days: AppConfig.Connection.Schedule.Day.allCases.filter { _ in Bool.random(using: &rng) },
+            start: TimeOfDay(hour: start / 60, minute: start % 60),
+            end: TimeOfDay(hour: end / 60, minute: end % 60),
+            awayMinutes: Int.random(in: ConfigLimits.awayMinutes, using: &rng))
     }
 
     @Test("Invalid strings still render as well-formed YAML and are rejected by the codec", arguments: [

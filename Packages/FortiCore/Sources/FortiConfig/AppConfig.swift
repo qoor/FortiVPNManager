@@ -150,17 +150,20 @@ public struct AppConfig: Codable, Sendable, Equatable {
         public var sessionMaxMinutes: Int
         public var proactiveReconnect: ProactiveReconnect
         public var reconnectAfterSleep: ReconnectAfterSleep
+        public var schedule: Schedule
 
         public init(
             autoConnectOnLaunch: Bool = true,
             sessionMaxMinutes: Int = 180,
             proactiveReconnect: ProactiveReconnect = ProactiveReconnect(),
-            reconnectAfterSleep: ReconnectAfterSleep = ReconnectAfterSleep()
+            reconnectAfterSleep: ReconnectAfterSleep = ReconnectAfterSleep(),
+            schedule: Schedule = Schedule()
         ) {
             self.autoConnectOnLaunch = autoConnectOnLaunch
             self.sessionMaxMinutes = sessionMaxMinutes
             self.proactiveReconnect = proactiveReconnect
             self.reconnectAfterSleep = reconnectAfterSleep
+            self.schedule = schedule
         }
 
         enum CodingKeys: String, CodingKey, CaseIterable {
@@ -168,6 +171,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
             case sessionMaxMinutes = "session_max_minutes"
             case proactiveReconnect = "proactive_reconnect"
             case reconnectAfterSleep = "reconnect_after_sleep"
+            case schedule
         }
 
         public init(from decoder: any Decoder) throws {
@@ -181,6 +185,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 ?? defaults.proactiveReconnect
             reconnectAfterSleep = try container.decodeIfPresent(ReconnectAfterSleep.self, forKey: .reconnectAfterSleep)
                 ?? defaults.reconnectAfterSleep
+            schedule = try container.decodeIfPresent(Schedule.self, forKey: .schedule) ?? defaults.schedule
         }
 
         /// `connection.proactive_reconnect`: reconnect `marginMinutes` before the session limit.
@@ -229,6 +234,124 @@ public struct AppConfig: Codable, Sendable, Equatable {
                     ?? defaults.minSleepMinutes
             }
         }
+
+        /// `connection.schedule`: when `enabled`, connect at `start` on `days`. The end never
+        /// disconnects; after it, reconnects wait while the user is away and stop once the user
+        /// has been away for `awayMinutes`.
+        public struct Schedule: Codable, Sendable, Equatable {
+            /// Weekday spelling in the file, in display order (Monday first).
+            public enum Day: String, Codable, Sendable, CaseIterable {
+                case mon, tue, wed, thu, fri, sat, sun
+
+                /// `Calendar` weekday number (1 = Sunday … 7 = Saturday).
+                public var calendarWeekday: Int {
+                    switch self {
+                    case .sun: 1
+                    case .mon: 2
+                    case .tue: 3
+                    case .wed: 4
+                    case .thu: 5
+                    case .fri: 6
+                    case .sat: 7
+                    }
+                }
+            }
+
+            public var enabled: Bool
+            /// Selected weekdays without repeats, in ``Day/allCases`` order (see ``normalizedDays(_:)``).
+            public var days: [Day]
+            /// Must be earlier than `end`.
+            public var start: TimeOfDay
+            public var end: TimeOfDay
+            public var awayMinutes: Int
+
+            public init(
+                enabled: Bool = false,
+                days: [Day] = [.mon, .tue, .wed, .thu, .fri],
+                start: TimeOfDay = TimeOfDay(hour: 9, minute: 0),
+                end: TimeOfDay = TimeOfDay(hour: 18, minute: 0),
+                awayMinutes: Int = 120
+            ) {
+                self.enabled = enabled
+                self.days = Self.normalizedDays(days)
+                self.start = start
+                self.end = end
+                self.awayMinutes = awayMinutes
+            }
+
+            /// Removes repeats and sorts into ``Day/allCases`` order.
+            public static func normalizedDays(_ days: some Sequence<Day>) -> [Day] {
+                let set = Set(days)
+                return Day.allCases.filter(set.contains)
+            }
+
+            enum CodingKeys: String, CodingKey, CaseIterable {
+                case enabled
+                case days
+                case start
+                case end
+                case awayMinutes = "away_minutes"
+            }
+
+            public init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                let defaults = Schedule()
+                enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
+                days = Self.normalizedDays(try container.decodeIfPresent([Day].self, forKey: .days) ?? defaults.days)
+                start = try container.decodeIfPresent(TimeOfDay.self, forKey: .start) ?? defaults.start
+                end = try container.decodeIfPresent(TimeOfDay.self, forKey: .end) ?? defaults.end
+                awayMinutes = try container.decodeIfPresent(Int.self, forKey: .awayMinutes) ?? defaults.awayMinutes
+            }
+        }
+    }
+}
+
+/// A wall-clock time of day with minute precision, written `HH:mm` (`00:00`-`23:59`).
+public struct TimeOfDay: Codable, Sendable, Hashable, Comparable, CustomStringConvertible {
+    /// Minutes after midnight, `0..<1440`.
+    public let minutes: Int
+
+    /// Clamps to `00:00`-`23:59`.
+    public init(hour: Int, minute: Int) {
+        minutes = min(max(hour * 60 + minute, 0), 24 * 60 - 1)
+    }
+
+    /// `H:mm` or `HH:mm`, hour `0`-`23`, minute `00`-`59`; `nil` for anything else.
+    public init?(parsing text: String) {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, (1...2).contains(parts[0].count), parts[1].count == 2,
+              parts.allSatisfy({ $0.utf8.allSatisfy { (0x30...0x39).contains($0) } }),
+              let hour = Int(parts[0]), let minute = Int(parts[1]), hour < 24, minute < 60
+        else { return nil }
+        minutes = hour * 60 + minute
+    }
+
+    public var hour: Int { minutes / 60 }
+    public var minute: Int { minutes % 60 }
+
+    /// `HH:mm`.
+    public var description: String {
+        let hh = hour < 10 ? "0\(hour)" : "\(hour)"
+        let mm = minute < 10 ? "0\(minute)" : "\(minute)"
+        return "\(hh):\(mm)"
+    }
+
+    public static func < (lhs: TimeOfDay, rhs: TimeOfDay) -> Bool {
+        lhs.minutes < rhs.minutes
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let text = try container.decode(String.self)
+        guard let time = TimeOfDay(parsing: text) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "expected HH:mm, got \(text)")
+        }
+        self = time
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(description)
     }
 }
 
@@ -241,6 +364,8 @@ public enum ConfigLimits {
     /// Also must be strictly less than `session_max_minutes`.
     public static let marginMinutes: ClosedRange<Int> = 1...60
     public static let minSleepMinutes: ClosedRange<Int> = 1...1440
+    /// `connection.schedule.away_minutes`.
+    public static let awayMinutes: ClosedRange<Int> = 1...1440
     /// Number of pinned certificate digests kept by ``AppConfig/VPN/pinTrustedCert(_:)``.
     public static let maxTrustedCerts = 4
 }
@@ -302,6 +427,7 @@ extension AppConfig {
             (ConfigPath.sessionMaxMinutes, connection.sessionMaxMinutes, ConfigLimits.sessionMaxMinutes),
             (ConfigPath.marginMinutes, connection.proactiveReconnect.marginMinutes, ConfigLimits.marginMinutes),
             (ConfigPath.minSleepMinutes, connection.reconnectAfterSleep.minSleepMinutes, ConfigLimits.minSleepMinutes),
+            (ConfigPath.awayMinutes, connection.schedule.awayMinutes, ConfigLimits.awayMinutes),
         ]
         for (path, value, range) in ranges where !range.contains(value) {
             throw ConfigLoadError(.outOfRange(path: path, raw: String(value), range: range))
@@ -310,6 +436,10 @@ extension AppConfig {
         let session = connection.sessionMaxMinutes
         if margin >= session {
             throw ConfigLoadError(.marginNotLessThanSession(margin: margin, session: session))
+        }
+        let schedule = connection.schedule
+        if schedule.start >= schedule.end {
+            throw ConfigLoadError(.scheduleEndNotAfterStart(start: schedule.start, end: schedule.end))
         }
         // Last: rendering is the most expensive check. `encode` only renders the template (no validation).
         let byteCount = ConfigCodec.encode(self).count
@@ -341,4 +471,10 @@ enum ConfigPath {
     static let reconnectAfterSleep = "connection.reconnect_after_sleep"
     static let sleepEnabled = "connection.reconnect_after_sleep.enabled"
     static let minSleepMinutes = "connection.reconnect_after_sleep.min_sleep_minutes"
+    static let schedule = "connection.schedule"
+    static let scheduleEnabled = "connection.schedule.enabled"
+    static let scheduleDays = "connection.schedule.days"
+    static let scheduleStart = "connection.schedule.start"
+    static let scheduleEnd = "connection.schedule.end"
+    static let awayMinutes = "connection.schedule.away_minutes"
 }

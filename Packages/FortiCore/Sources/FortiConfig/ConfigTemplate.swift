@@ -11,6 +11,8 @@ public enum ConfigTemplate {
         let connection = config.connection
         let proactive = connection.proactiveReconnect
         let afterSleep = connection.reconnectAfterSleep
+        let schedule = connection.schedule
+        let days = AppConfig.Connection.Schedule.normalizedDays(schedule.days).map(\.rawValue).joined(separator: ", ")
         return """
             # FortiVPNManager configuration file
             #
@@ -48,6 +50,9 @@ public enum ConfigTemplate {
               proactive_reconnect: { enabled: \(proactive.enabled), margin_minutes: \(proactive.marginMinutes) }
               # When enabled is true, reconnect on wake after sleeping for at least min_sleep_minutes minutes (\(range(ConfigLimits.minSleepMinutes))) while connected.
               reconnect_after_sleep: { enabled: \(afterSleep.enabled), min_sleep_minutes: \(afterSleep.minSleepMinutes) }
+              # Scheduled hours. When enabled is true, connect at start ("HH:mm") on the listed days (mon, tue, wed, thu, fri, sat, sun); start must be earlier than end.
+              # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the Mac asleep) and stop once you have been away for away_minutes minutes (\(range(ConfigLimits.awayMinutes))).
+              schedule: { enabled: \(schedule.enabled), days: [\(days)], start: \(quoted(schedule.start.description)), end: \(quoted(schedule.end.description)), away_minutes: \(schedule.awayMinutes) }
 
             """
     }

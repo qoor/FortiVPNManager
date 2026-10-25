@@ -93,6 +93,42 @@ extension RetryReason {
             String(localized: "Authentication failed (\(reason.summary(otpMethod: otpMethod))), retrying once")
         case .authCooldown: String(localized: "Waiting 90 seconds after authentication failure")
         case .sleep: String(localized: "Resuming after sleep")
+        case .userAway: String(localized: "Outside the scheduled hours, reconnects when you're back")
+        }
+    }
+}
+
+extension ScheduleOutlook {
+    /// One line for the menu ("Schedule: …") and the Connection tab.
+    func summary(now: Date) -> String {
+        switch self {
+        case let .connects(date):
+            String(localized: "Connects \(StatusText.dayTime(date, now: now))")
+        case .noStart:
+            String(localized: "No days selected")
+        case let .withinHours(end):
+            String(localized: "After \(StatusText.clockTime(end, now: now)), reconnects wait while you're away")
+        case .outsideHoursPresent:
+            String(localized: "Reconnects wait while you're away")
+        case let .holdingWhileAway(until):
+            String(localized: "Reconnects stop if you're still away at \(StatusText.clockTime(until, now: now))")
+        case .suspended:
+            String(localized: "Won't reconnect after this connection ends")
+        }
+    }
+}
+
+extension AppConfig.Connection.Schedule.Day {
+    /// Short weekday name for the day buttons, in the app's language.
+    var shortName: String {
+        switch self {
+        case .mon: String(localized: "Mon")
+        case .tue: String(localized: "Tue")
+        case .wed: String(localized: "Wed")
+        case .thu: String(localized: "Thu")
+        case .fri: String(localized: "Fri")
+        case .sat: String(localized: "Sat")
+        case .sun: String(localized: "Sun")
         }
     }
 }
@@ -156,7 +192,7 @@ extension AttemptContext {
     /// "Connecting" for a fresh connection, "Reconnecting" when replacing or retrying one.
     var verb: String {
         switch reason {
-        case .launch, .user, .setupCompleted, .certificateRetry: String(localized: "Connecting")
+        case .launch, .user, .setupCompleted, .certificateRetry, .scheduled: String(localized: "Connecting")
         case .manualReconnect, .retry, .proactive, .networkChanged, .tunnelLost, .afterSleep: String(localized: "Reconnecting")
         }
     }
@@ -191,10 +227,16 @@ enum StatusText {
             return "\(context.verb) · \(context.progress)"
         case let .connected(context):
             var parts = [String(localized: "Connected"), duration(now.timeIntervalSince(context.since))]
-            if let planned = context.plannedReconnectAt {
+            if let planned = inputs.plannedReconnectAt {
                 parts.append(plannedReconnect(planned, now: now))
+            } else if inputs.scheduleOutlook == .suspended {
+                parts.append(String(localized: "Won't reconnect"))
+            } else if case .holdingWhileAway = inputs.scheduleOutlook {
+                parts.append(String(localized: "Reconnect on hold"))
             }
             return parts.joined(separator: " · ")
+        case let .waitingRetry(wait) where wait.reason == .userAway:
+            return String(localized: "Reconnect on hold")
         case let .waitingRetry(wait):
             let remaining = wait.until.timeIntervalSince(now)
             return remaining > 0
@@ -244,6 +286,14 @@ enum StatusText {
         let seconds = max(0, Int(interval.rounded(.up)))
         let (minutes, rest) = seconds.quotientAndRemainder(dividingBy: 60)
         return rest < 10 ? "\(minutes):0\(rest)" : "\(minutes):\(rest)"
+    }
+
+    /// "2:03 PM" today, otherwise with the weekday ("Mon 9:00 AM"); used for times within a week.
+    static func dayTime(_ date: Date, now: Date) -> String {
+        if Calendar.current.isDate(date, inSameDayAs: now) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
     }
 
     /// "2:03 PM", with the date when it is not today ("Oct 14, 2026 at 11:58 PM"), in the current locale.

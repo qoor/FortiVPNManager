@@ -22,6 +22,18 @@ enum ReducerFixture {
     static let offline = PathSnapshot(isSatisfied: false, underlay: nil)
 
     static let profile = VPNProfile(host: "vpn.example.com", port: 8443, username: "alice", trustedCerts: [pinOld])
+
+    /// Gregorian calendar in Seoul (no DST), the time zone the schedule tests are written in.
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        return calendar
+    }()
+
+    /// Wall-clock time in `calendar`'s time zone (t0 is Monday 2030-03-18 02:46:40 there).
+    static func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int = 0, calendar: Calendar = calendar) -> Date {
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
+    }
     static let profileKey = "alice@vpn.example.com"
 
     /// The `n`-th attempt ID (1-based) issued by a model seeded with `seed`.
@@ -64,9 +76,10 @@ struct ReducerHarness {
     init(
         profile: VPNProfile = ReducerFixture.profile,
         settings: ConnectionSettings = ConnectionSettings(),
-        path: PathSnapshot? = ReducerFixture.online
+        path: PathSnapshot? = ReducerFixture.online,
+        calendar: Calendar = ReducerFixture.calendar
     ) {
-        model = ConnectionModel(profile: profile, settings: settings, attemptIDSeed: ReducerFixture.seed)
+        model = ConnectionModel(profile: profile, settings: settings, attemptIDSeed: ReducerFixture.seed, calendar: calendar)
         if let path { send(.pathChanged(path)) }
     }
 
