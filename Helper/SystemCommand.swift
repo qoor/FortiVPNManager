@@ -1,9 +1,11 @@
 import Darwin
+import Dispatch
 import FortiHelperCore
 import FortiShared
+import os
 
-/// Runs a system tool (`/sbin/route`) synchronously with a fixed argv and `PATH` as its only
-/// environment variable. No shell is involved.
+/// Runs a system tool (`/sbin/route`, `/usr/sbin/networksetup`) synchronously with a fixed argv and
+/// `PATH` as its only environment variable. No shell is involved.
 enum SystemCommand {
     struct Result: Sendable {
         var status: ProcessExitStatus
@@ -13,8 +15,9 @@ enum SystemCommand {
         var succeeded: Bool { status == .exited(code: 0) }
     }
 
-    /// Spawns `executable` (argv[0] is the path itself), waits for it and collects its output.
-    static func run(_ executable: String, _ arguments: [String]) -> Result {
+    /// Spawns `executable` (argv[0] is the path itself), waits for it and collects its output. A tool
+    /// still running after `timeout` is killed (SIGKILL), so a hung tool cannot block the caller.
+    static func run(_ executable: String, _ arguments: [String], timeout: DispatchTimeInterval = .seconds(10)) -> Result {
         let process: SpawnedProcess
         do {
             process = try ProcessRunner.spawn(
@@ -26,13 +29,33 @@ enum SystemCommand {
             return Result(status: error.exitStatus, output: "", errorOutput: error.description)
         }
         close(process.stdinWrite)
+        let pid = process.pid
+        // Set once the child has exited but before it is reaped (its pid cannot be reused until then),
+        // so the killer never signals another process.
+        let exited = OSAllocatedUnfairLock(initialState: false)
+        let killer = DispatchWorkItem {
+            exited.withLock { exited in
+                if !exited { _ = kill(pid, SIGKILL) }
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
         // The tools used here print a few lines at most, far below the pipe buffer, so reading the
         // two pipes one after the other cannot block the child.
         let output = readToEnd(process.stdoutRead)
         let errorOutput = readToEnd(process.stderrRead)
         close(process.stdoutRead)
         close(process.stderrRead)
-        return Result(status: ProcessRunner.reap(process.pid), output: output, errorOutput: errorOutput)
+        // A tool that closed its pipes but still runs is killed while this waits.
+        waitForExit(pid)
+        exited.withLock { $0 = true }
+        killer.cancel()
+        return Result(status: ProcessRunner.reap(pid), output: output, errorOutput: errorOutput)
+    }
+
+    /// Blocks until `pid` has exited, leaving it unreaped (`WNOWAIT`).
+    private static func waitForExit(_ pid: pid_t) {
+        var info = siginfo_t()
+        while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) == -1, errno == EINTR {}
     }
 
     /// Reads `fd` until EOF, keeping at most `limit` bytes (the rest is drained and dropped).

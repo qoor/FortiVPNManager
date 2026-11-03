@@ -19,6 +19,11 @@ import Foundation
     func status(reply: @escaping @Sendable (Data) -> Void)
     /// Asks an idle helper to exit so launchd relaunches the (updated) embedded binary.
     func exitWhenIdle(reply: @escaping @Sendable (Bool) -> Void)
+    /// Reads the additional routes of the primary network service. Reply: encoded `BypassRoutesReply`.
+    func bypassRoutes(reply: @escaping @Sendable (Data) -> Void)
+    /// Request: encoded `BypassRoutesRequest`. Replaces the additional routes of the primary network
+    /// service. Reply: encoded `BypassRoutesReply` with the routes read back afterwards.
+    func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void)
 }
 
 /// Methods the helper calls back on the app. Both travel on the same connection in FIFO order.

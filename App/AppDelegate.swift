@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        environment.notifier.onOpen = { [weak self] in self?.settings.show(.connection) }
         environment.start()
         let connection = environment.connection
         Task { [clock] in await clock.run(following: connection) }

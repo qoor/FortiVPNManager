@@ -49,8 +49,27 @@ final class HelperService: NSObject, HelperXPCProtocol {
         reply(controller.exitWhenIdle())
     }
 
+    func bypassRoutes(reply: @escaping @Sendable (Data) -> Void) {
+        BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.read())) }
+    }
+
+    func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        let decoded: BypassRoutesRequest
+        do {
+            decoded = try XPCCoding.decode(BypassRoutesRequest.self, from: request)
+        } catch {
+            reply(Self.encode(.failure(HelperError(.invalidRequest, "could not decode the route list"))))
+            return
+        }
+        BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.write(decoded))) }
+    }
+
     /// Never `nil`: a `nil` reply means success.
     private static func encode(_ error: HelperError) -> Data {
         (try? XPCCoding.encode(error)) ?? Data(#"{"code":"internalError","message":""}"#.utf8)
+    }
+
+    private static func encode(_ reply: BypassRoutesReply) -> Data {
+        (try? XPCCoding.encode(reply)) ?? Data(#"{"failure":{"_0":{"code":"internalError","message":""}}}"#.utf8)
     }
 }

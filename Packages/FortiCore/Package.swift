@@ -19,12 +19,12 @@ let package = Package(
         // Pure logic: reducer, parsers, renderers, IMAP/OTP matching.
         .target(name: "FortiCore", dependencies: ["FortiShared"]),
         // config.yaml model and codec. Only the app links this (the helper never parses user YAML).
-        .target(name: "FortiConfig", dependencies: [.product(name: "Yams", package: "Yams")]),
+        .target(name: "FortiConfig", dependencies: ["FortiShared", .product(name: "Yams", package: "Yams")]),
         // Process supervision used by the root helper.
         .target(name: "FortiHelperCore", dependencies: ["FortiShared", "FortiCore"]),
 
         .testTarget(name: "FortiCoreTests", dependencies: ["FortiCore", "FortiShared"], resources: [.copy("Fixtures")]),
-        .testTarget(name: "FortiConfigTests", dependencies: ["FortiConfig"]),
+        .testTarget(name: "FortiConfigTests", dependencies: ["FortiConfig", "FortiShared"]),
         .testTarget(name: "FortiHelperCoreTests", dependencies: ["FortiHelperCore", "FortiCore", "FortiShared"], resources: [.copy("Fixtures")]),
     ]
 )

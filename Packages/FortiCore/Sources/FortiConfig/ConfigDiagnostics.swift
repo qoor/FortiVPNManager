@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 
 /// 1-based position in `config.yaml`. Columns count Unicode scalars (the libyaml convention);
@@ -79,6 +80,15 @@ public struct ConfigLoadError: Error, Sendable, Equatable, LocalizedError, Custo
         case newerSchemaVersion(Int)
         /// Only from ``AppConfig/validate()``: a `trusted_certs` entry is not a normalized digest.
         case invalidTrustedCert(index: Int)
+        /// Entry `index` of the `routes.networks` or `routes.bypass_vpn` list at `path` is not a usable
+        /// host or network (`raw` as written).
+        case invalidRouteEntry(path: String, index: Int, raw: String, reason: IPv4Network.ParseError)
+        /// The list at `path` has more than `limit` entries.
+        case tooManyRouteEntries(path: String, count: Int, limit: Int)
+        /// Only from ``AppConfig/validate()``: entry `index` of the list at `path` repeats an earlier one.
+        case duplicateRouteEntry(path: String, index: Int)
+        /// Entry `index` of the list at `path` overlaps the earlier entry `other` (one contains the other).
+        case overlappingRouteEntry(path: String, index: Int, other: IPv4Network)
     }
 
     public var kind: Kind
@@ -162,6 +172,14 @@ public struct ConfigLoadError: Error, Sendable, Equatable, LocalizedError, Custo
             ].joined(separator: " ")
         case let .invalidTrustedCert(index):
             return String(localized: "In \(ConfigPath.trustedCerts), entry \(index + 1) is not a SHA-256 digest (64 lowercase hex digits).", bundle: .main)
+        case let .invalidRouteEntry(path, index, raw, reason):
+            return String(localized: "In \(path), entry \(index + 1): \(reason.message(for: raw))", bundle: .main)
+        case let .tooManyRouteEntries(path, count, limit):
+            return String(localized: "\(path) has \(count) entries. It can have at most \(limit).", bundle: .main)
+        case let .duplicateRouteEntry(path, index):
+            return String(localized: "In \(path), entry \(index + 1) repeats an earlier entry.", bundle: .main)
+        case let .overlappingRouteEntry(path, index, other):
+            return String(localized: "In \(path), entry \(index + 1) overlaps \(other.description), which is already listed. Entries in one list must not overlap.", bundle: .main)
         }
     }
 
@@ -194,6 +212,8 @@ public struct ConfigWarning: Sendable, Equatable, CustomStringConvertible {
         case invalidTrustedCert(index: Int)
         /// `trusted_certs[index]` repeats an earlier entry and was dropped.
         case duplicateTrustedCert(index: Int)
+        /// Entry `index` of the `routes.*` list at `path` repeats an earlier entry and was dropped.
+        case duplicateRouteEntry(path: String, index: Int)
         /// The file has `count` hard links; an atomic save replaces only this name.
         case multipleHardLinks(count: Int)
         /// File permissions are not 0600 (fixed on the next save).
@@ -219,6 +239,8 @@ public struct ConfigWarning: Sendable, Equatable, CustomStringConvertible {
             return String(localized: "In \(ConfigPath.trustedCerts), entry \(index + 1) is not a SHA-256 digest (64 hex digits) and is ignored.", bundle: .main)
         case let .duplicateTrustedCert(index):
             return String(localized: "In \(ConfigPath.trustedCerts), entry \(index + 1) duplicates an earlier entry and is ignored.", bundle: .main)
+        case let .duplicateRouteEntry(path, index):
+            return String(localized: "In \(path), entry \(index + 1) duplicates an earlier entry and is ignored.", bundle: .main)
         case let .multipleHardLinks(count):
             return String(localized: "The config file has \(count) hard links. When the app saves, only this path is replaced with a new file; the other links keep the old contents.", bundle: .main)
         case let .insecurePermissions(mode):
@@ -235,4 +257,24 @@ public struct ConfigWarning: Sendable, Equatable, CustomStringConvertible {
     }
 
     public var description: String { displayMessage }
+}
+
+extension IPv4Network.ParseError {
+    /// Localized explanation for the entry `raw` (as typed or written in the file).
+    public func message(for raw: String) -> String {
+        let text = ConfigText.preview(raw)
+        switch self {
+        case .malformed:
+            return String(localized: "'\(text)' is not an IPv4 address or network. Write it like 10.77.161.16 or 10.77.170.0/24.", bundle: .main)
+        case let .prefixOutOfRange(length):
+            let range = IPv4Network.prefixLengths
+            return String(localized: "'\(text)' has the prefix length /\(length). Use /\(range.lowerBound) to /\(range.upperBound).", bundle: .main)
+        case .nonContiguousMask:
+            return String(localized: "'\(text)' has a subnet mask that is not contiguous.", bundle: .main)
+        case .unroutable:
+            return String(localized: "'\(text)' is a loopback, multicast or reserved address and can't be routed.", bundle: .main)
+        case let .hostBitsSet(network):
+            return String(localized: "'\(text)' has bits set after the prefix. Did you mean \(network.description)?", bundle: .main)
+        }
+    }
 }

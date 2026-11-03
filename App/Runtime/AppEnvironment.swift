@@ -24,6 +24,10 @@ final class AppEnvironment {
     let googleOAuth: GoogleOAuthService
     /// "Test Gmail API" (profile check with the stored authorization).
     let gmailAPITester: any GmailAPIConnectionTesting
+    /// Exception Rules: `routes.bypass_vpn` kept as the primary network service's additional routes (§5.8).
+    let bypassRoutes: BypassRouteService
+    /// macOS notifications (exception routes that keep failing to apply).
+    let notifier: UserNotifier
 
     /// Outcome of the automatic import on the very first launch (`nil` when nothing was imported).
     /// The UI opens the Account tab to show it.
@@ -66,14 +70,19 @@ final class AppEnvironment {
             otpSession: otpSession,
             logStore: logStore
         )
+        let notifier = UserNotifier()
+        self.notifier = notifier
+        bypassRoutes = BypassRouteService(
+            configStore: configStore, stateStore: stateStore, helper: helperClient, notifier: notifier)
     }
 
-    /// First-run import → load config → login item → monitors → `appLaunched`. Call once at launch.
+    /// First-run import → load config → login item → monitors → `appLaunched` → exception rules. Call once at launch.
     func start() {
         guard !started else { return }
         started = true
 
         firstLaunchImport = importer.importOnFirstLaunch()
+        notifier.start()
         configStore.start()
         googleOAuth.dropImportMatchingBuiltIn()
         loginItems.registerOnFirstInstalledLaunch(state: stateStore)
@@ -85,6 +94,7 @@ final class AppEnvironment {
         configStore.onChange = { [weak self] change in
             self?.systemMonitor.setGatewayHost(change.new.vpn.host)
             self?.connection.configDidChange(change)
+            self?.bypassRoutes.configDidChange(change)
         }
         systemMonitor.setGatewayHost(configStore.config.vpn.host)
         systemMonitor.onEvent = { [weak self] event in
@@ -100,6 +110,7 @@ final class AppEnvironment {
             restoredLedger: stateStore.ledger
         )
         systemMonitor.start()
+        bypassRoutes.start(following: readinessChecker)
 
         activationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main

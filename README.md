@@ -4,6 +4,7 @@ openfortivpn으로 FortiGate SSL VPN에 자동 접속하고, 끊기면 자동으
 
 - Gmail(Google Workspace) IMAP에서 FortiGate 이메일 OTP를 자동으로 읽어 입력합니다.
 - 서버가 세션을 강제로 끊으면 즉시 재연결하고, 만료 직전에는 미리 재연결합니다.
+- 예외 규칙: 지정한 사내 대역에 연결돼 있을 때 예외 대상 호스트·대역은 VPN을 거치지 않고 그 네트워크로 바로 나갑니다(macOS 추가 경로, 재부팅 후에도 유지). 다른 네트워크에서는 모두 VPN을 거칩니다.
 - 설정은 `~/.config/FortiVPNManager/config.yaml`에, 비밀번호는 Keychain에 저장합니다.
 
 설계 문서: [docs/DESIGN.md](docs/DESIGN.md)

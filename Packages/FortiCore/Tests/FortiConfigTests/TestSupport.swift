@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 import Testing
 @testable import FortiConfig
@@ -49,7 +50,13 @@ let nonDefaultConfig = AppConfig(
         reconnectAfterSleep: .init(enabled: true, minSleepMinutes: 45),
         schedule: .init(
             enabled: true, days: [.mon, .wed, .sat],
-            start: TimeOfDay(hour: 8, minute: 30), end: TimeOfDay(hour: 19, minute: 5), awayMinutes: 90)))
+            start: TimeOfDay(hour: 8, minute: 30), end: TimeOfDay(hour: 19, minute: 5), awayMinutes: 90)),
+    routes: AppConfig.Routes(networks: [officeNetwork], bypassVPN: [bypassHost, bypassNetwork]))
+
+let officeNetwork = try! IPv4Network(parsing: "10.71.161.0/24")
+
+let bypassHost = try! IPv4Network(parsing: "10.77.161.16")
+let bypassNetwork = try! IPv4Network(parsing: "10.77.170.0/24")
 
 /// Fresh directory under the system temp dir, resolved with realpath (`/var` → `/private/var`).
 func makeTempDirectory() throws -> URL {

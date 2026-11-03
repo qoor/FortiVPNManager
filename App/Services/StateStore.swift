@@ -4,7 +4,8 @@ import FortiShared
 import os
 
 /// Per-device transient state in `~/Library/Application Support/FortiVPNManager/state.json`
-/// (DESIGN §5.7): the failure ledger and whether the login item was registered once.
+/// (DESIGN §5.7): the failure ledger, whether the login item was registered once, and the routes the
+/// exception rules last wrote to each network service.
 /// Written atomically with mode 0600; kept out of the dotfiles-synced `config.yaml`.
 final class StateStore {
     struct State: Codable, Equatable {
@@ -13,6 +14,9 @@ final class StateStore {
         var ledger: FailureLedger?
         /// The login item was registered on the first launch from /Applications.
         var loginItemRegistered = false
+        /// The additional routes the exception rules last wrote, by SCPreferences service ID (DESIGN §5.8).
+        /// Plain strings without validation, so no change to the address rules can make the file unreadable.
+        var appliedExceptionRoutes: [String: [AdditionalRoute]]?
     }
 
     let fileURL: URL
@@ -49,6 +53,19 @@ final class StateStore {
 
     func setLoginItemRegistered(_ registered: Bool) {
         update { $0.loginItemRegistered = registered }
+    }
+
+    /// The routes the exception rules last wrote to the service `serviceID` (empty if never).
+    func appliedExceptionRoutes(serviceID: String) -> [AdditionalRoute] {
+        state.appliedExceptionRoutes?[serviceID] ?? []
+    }
+
+    func setAppliedExceptionRoutes(_ routes: [AdditionalRoute], serviceID: String) {
+        update { state in
+            var applied = state.appliedExceptionRoutes ?? [:]
+            applied[serviceID] = routes.isEmpty ? nil : routes
+            state.appliedExceptionRoutes = applied.isEmpty ? nil : applied
+        }
     }
 
     private func update(_ mutate: (inout State) -> Void) {

@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 
 /// Non-secret settings stored in `~/.config/FortiVPNManager/config.yaml` (DESIGN §5.7).
@@ -14,17 +15,20 @@ public struct AppConfig: Codable, Sendable, Equatable {
     public var vpn: VPN
     public var otp: OTP
     public var connection: Connection
+    public var routes: Routes
 
     public init(
         schemaVersion: Int = AppConfig.currentSchemaVersion,
         vpn: VPN = VPN(),
         otp: OTP = OTP(),
-        connection: Connection = Connection()
+        connection: Connection = Connection(),
+        routes: Routes = Routes()
     ) {
         self.schemaVersion = schemaVersion
         self.vpn = vpn
         self.otp = otp
         self.connection = connection
+        self.routes = routes
     }
 
     enum CodingKeys: String, CodingKey, CaseIterable {
@@ -32,6 +36,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         case vpn
         case otp
         case connection
+        case routes
     }
 
     public init(from decoder: any Decoder) throws {
@@ -41,6 +46,7 @@ public struct AppConfig: Codable, Sendable, Equatable {
         vpn = try container.decodeIfPresent(VPN.self, forKey: .vpn) ?? defaults.vpn
         otp = try container.decodeIfPresent(OTP.self, forKey: .otp) ?? defaults.otp
         connection = try container.decodeIfPresent(Connection.self, forKey: .connection) ?? defaults.connection
+        routes = try container.decodeIfPresent(Routes.self, forKey: .routes) ?? defaults.routes
     }
 
     /// `vpn:` section.
@@ -304,6 +310,32 @@ public struct AppConfig: Codable, Sendable, Equatable {
             }
         }
     }
+
+    /// `routes:` section, the exception rules (DESIGN §5.8). Entries of one list never overlap.
+    public struct Routes: Codable, Sendable, Equatable {
+        /// Networks where the rules apply: only while this Mac's IPv4 address is inside one of them.
+        /// Elsewhere everything goes through the VPN. Never filled in by the app.
+        public var networks: [IPv4Network]
+        /// Exception targets, hosts and networks that skip the VPN there: kept as the additional
+        /// routes of the primary network service, through its router, whether or not the VPN is connected.
+        public var bypassVPN: [IPv4Network]
+
+        public init(networks: [IPv4Network] = [], bypassVPN: [IPv4Network] = []) {
+            self.networks = networks
+            self.bypassVPN = bypassVPN
+        }
+
+        enum CodingKeys: String, CodingKey, CaseIterable {
+            case networks
+            case bypassVPN = "bypass_vpn"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            networks = try container.decodeIfPresent([IPv4Network].self, forKey: .networks) ?? []
+            bypassVPN = try container.decodeIfPresent([IPv4Network].self, forKey: .bypassVPN) ?? []
+        }
+    }
 }
 
 /// A wall-clock time of day with minute precision, written `HH:mm` (`00:00`-`23:59`).
@@ -368,6 +400,8 @@ public enum ConfigLimits {
     public static let awayMinutes: ClosedRange<Int> = 1...1440
     /// Number of pinned certificate digests kept by ``AppConfig/VPN/pinTrustedCert(_:)``.
     public static let maxTrustedCerts = 4
+    /// Entries in each of `routes.networks` and `routes.bypass_vpn`.
+    public static let maxRouteEntries = IPv4Network.maxCount
 }
 
 /// SHA-256 digest format used by openfortivpn's `trusted-cert` (64 lowercase hex characters).
@@ -441,6 +475,19 @@ extension AppConfig {
         if schedule.start >= schedule.end {
             throw ConfigLoadError(.scheduleEndNotAfterStart(start: schedule.start, end: schedule.end))
         }
+        for (path, list) in [(ConfigPath.routeNetworks, routes.networks), (ConfigPath.bypassVPN, routes.bypassVPN)] {
+            if list.count > ConfigLimits.maxRouteEntries {
+                throw ConfigLoadError(.tooManyRouteEntries(path: path, count: list.count, limit: ConfigLimits.maxRouteEntries))
+            }
+            for (index, entry) in list.enumerated() {
+                if list[..<index].contains(entry) {
+                    throw ConfigLoadError(.duplicateRouteEntry(path: path, index: index))
+                }
+                if let other = list[..<index].first(where: { $0.overlaps(entry) }) {
+                    throw ConfigLoadError(.overlappingRouteEntry(path: path, index: index, other: other))
+                }
+            }
+        }
         // Last: rendering is the most expensive check. `encode` only renders the template (no validation).
         let byteCount = ConfigCodec.encode(self).count
         if byteCount > ConfigLimits.maxFileSize {
@@ -477,4 +524,7 @@ enum ConfigPath {
     static let scheduleStart = "connection.schedule.start"
     static let scheduleEnd = "connection.schedule.end"
     static let awayMinutes = "connection.schedule.away_minutes"
+    static let routes = "routes"
+    static let routeNetworks = "routes.networks"
+    static let bypassVPN = "routes.bypass_vpn"
 }

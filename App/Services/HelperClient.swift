@@ -73,12 +73,7 @@ final class HelperClient {
     func connect(_ request: ConnectRequest) async throws(HelperError) {
         try await perform {
             let link = try self.currentLink()
-            if self.verifiedLinkID != link.id {
-                let build = try await self.version(on: link)
-                guard build == self.appBuild else {
-                    throw HelperError(.internalError, "Helper build \(build) differs from app build \(self.appBuild)")
-                }
-            }
+            try await self.requireBuild(on: link)
             guard self.channel.isActive(link.id) else {
                 throw HelperError(.internalError, "the Helper connection dropped; the connect request was not sent")
             }
@@ -111,6 +106,26 @@ final class HelperClient {
         }
     }
 
+    /// The additional routes of the primary network service (DESIGN §5.8).
+    func bypassRoutes() async throws -> BypassRoutesSnapshot {
+        try await retryingOnce { link in
+            try await self.requireBuild(on: link)
+            let data: Data = try await self.call(link) { proxy, reply in proxy.bypassRoutes(reply: reply) }
+            return try Self.snapshot(from: data)
+        }
+    }
+
+    /// Replaces the primary network service's additional routes and returns them as read back.
+    /// Idempotent (the whole list is written), so a lost connection is retried once.
+    func setBypassRoutes(_ request: BypassRoutesRequest) async throws -> BypassRoutesSnapshot {
+        let payload = try XPCCoding.encode(request)
+        return try await retryingOnce { link in
+            try await self.requireBuild(on: link)
+            let data: Data = try await self.call(link) { proxy, reply in proxy.setBypassRoutes(payload, reply: reply) }
+            return try Self.snapshot(from: data)
+        }
+    }
+
     /// Asks an idle helper to exit so launchd starts the updated embedded binary on the next call.
     func exitWhenIdle() async throws -> Bool {
         let link = try currentLink()
@@ -120,6 +135,16 @@ final class HelperClient {
     }
 
     // MARK: - Plumbing
+
+    /// Asks `link` for its build unless it already answered with this app's build. An older helper
+    /// lacks newer methods, and only this build may receive the password.
+    private func requireBuild(on link: Link) async throws {
+        guard verifiedLinkID != link.id else { return }
+        let build = try await version(on: link)
+        guard build == appBuild else {
+            throw HelperError(.internalError, "Helper build \(build) differs from app build \(appBuild)")
+        }
+    }
 
     /// `getVersion` on one specific connection; marks it verified when the build matches.
     private func version(on link: Link) async throws -> BuildID {
@@ -227,6 +252,14 @@ final class HelperClient {
             return try XPCCoding.decode(type, from: data)
         } catch {
             throw ClientError.decoding(error.localizedDescription)
+        }
+    }
+
+    /// The snapshot of a `BypassRoutesReply`, or its `HelperError`.
+    private static func snapshot(from data: Data) throws -> BypassRoutesSnapshot {
+        switch try decode(BypassRoutesReply.self, from: data) {
+        case .success(let snapshot): return snapshot
+        case .failure(let error): throw error
         }
     }
 

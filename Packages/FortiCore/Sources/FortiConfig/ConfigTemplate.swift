@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 
 /// Renders the fixed, commented `config.yaml` template (DESIGN §5.7, config.yaml schema).
@@ -17,10 +18,10 @@ public enum ConfigTemplate {
             # FortiVPNManager configuration file
             #
             # - Passwords (VPN password, Gmail app password) and the Google sign-in live in the macOS login Keychain, not in this file.
-            # - Saving in Settings makes the app rewrite this file. Comments you added and unknown keys are removed then.
+            # - The app rewrites this file when you save in Settings, when it records a new server certificate, and when it adds routes found on the network service to routes.bypass_vpn. Comments you added and unknown keys are removed then.
             # - Do not write leading zeros in numbers (0443 is an error). Write numbers and true/false without quotes.
             # - This file contains the server and account details, so do not commit it to a public repository (dotfiles etc.).
-            # - Changes take effect from the next connection. The session max time and proactive reconnect margin are recalculated immediately.
+            # - Changes take effect from the next connection. The session max time and proactive reconnect margin are recalculated immediately, and the routes section is applied right away.
             schema_version: \(AppConfig.currentSchemaVersion)
             vpn:
               # VPN gateway address (host name or IPv4 address).
@@ -53,6 +54,12 @@ public enum ConfigTemplate {
               # Scheduled hours. When enabled is true, connect at start ("HH:mm") on the listed days (mon, tue, wed, thu, fri, sat, sun); start must be earlier than end.
               # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the Mac asleep) and stop once you have been away for away_minutes minutes (\(range(ConfigLimits.awayMinutes))).
               schedule: { enabled: \(schedule.enabled), days: [\(days)], start: \(quoted(schedule.start.description)), end: \(quoted(schedule.end.description)), away_minutes: \(schedule.awayMinutes) }
+            routes:
+              # Networks where the exception rules apply (e.g. "10.71.161.0/24", /\(IPv4Network.prefixLengths.lowerBound)-/32, up to \(ConfigLimits.maxRouteEntries) entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
+              networks:\(routeList(config.routes.networks))
+              # Exception targets: IPv4 hosts (e.g. "10.77.161.16") or networks (e.g. "10.77.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to \(ConfigLimits.maxRouteEntries) entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
+              # The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.
+              bypass_vpn:\(routeList(config.routes.bypassVPN))
 
             """
     }
@@ -64,6 +71,11 @@ public enum ConfigTemplate {
     private static func trustedCerts(_ digests: [String]) -> String {
         if digests.isEmpty { return " []" }
         return digests.map { "\n    - \(quoted($0))" }.joined()
+    }
+
+    private static func routeList(_ entries: [IPv4Network]) -> String {
+        if entries.isEmpty { return " []" }
+        return entries.map { "\n    - \(quoted($0.description))" }.joined()
     }
 
     /// YAML double-quoted scalar. Escapes `"` and `\`, every character the decoder rejects in string

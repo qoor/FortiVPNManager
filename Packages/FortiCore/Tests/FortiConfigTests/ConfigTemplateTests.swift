@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 import Testing
 @testable import FortiConfig
@@ -32,6 +33,9 @@ import Testing
               proactive_reconnect: { enabled: true, margin_minutes: 5 }
               reconnect_after_sleep: { enabled: false, min_sleep_minutes: 30 }
               schedule: { enabled: false, days: [mon, tue, wed, thu, fri], start: "09:00", end: "18:00", away_minutes: 120 }
+            routes:
+              networks: []
+              bypass_vpn: []
 
             """)
         #expect(text.hasSuffix("\n"))
@@ -59,7 +63,7 @@ import Testing
         let lines = text.split(separator: "\n").map(String.init)
         for key in ["host:", "port:", "username:", "realm:", "gmail_address:", "method:", "google_client_id:",
                     "auto_connect_on_launch:",
-                    "session_max_minutes:", "proactive_reconnect:", "reconnect_after_sleep:", "schedule:"] {
+                    "session_max_minutes:", "proactive_reconnect:", "reconnect_after_sleep:", "schedule:", "networks:", "bypass_vpn:"] {
             let index = lines.firstIndex { $0.trimmingCharacters(in: .whitespaces).hasPrefix(key) }
             #expect(index.map { lines[$0 - 1].trimmingCharacters(in: .whitespaces).hasPrefix("#") } == true, "\(key)")
         }
@@ -71,6 +75,12 @@ import Testing
         let result = try ConfigCodec.decode(Data(text.utf8))
         #expect(result.config == nonDefaultConfig)
         #expect(result.warnings.isEmpty)
+    }
+
+    @Test func routeListsAreBlockLists() {
+        let text = ConfigTemplate.render(nonDefaultConfig)
+        #expect(text.contains("  networks:\n    - \"10.71.161.0/24\"\n  #"))
+        #expect(text.hasSuffix("  bypass_vpn:\n    - \"10.77.161.16\"\n    - \"10.77.170.0/24\"\n"))
     }
 
     static let trickyStrings: [String] = [
@@ -130,12 +140,29 @@ import Testing
                     reconnectAfterSleep: .init(
                         enabled: Bool.random(using: &rng),
                         minSleepMinutes: Int.random(in: ConfigLimits.minSleepMinutes, using: &rng)),
-                    schedule: randomSchedule(using: &rng)))
+                    schedule: randomSchedule(using: &rng)),
+                routes: AppConfig.Routes(
+                    networks: randomNetworks(using: &rng), bypassVPN: randomNetworks(using: &rng)))
             try config.validate()
             let result = try ConfigCodec.decode(ConfigCodec.encode(config))
             #expect(result.config == config)
             #expect(result.warnings.isEmpty)
         }
+    }
+
+    /// Up to 10 hosts and networks that do not overlap.
+    private func randomNetworks(using rng: inout SeededGenerator) -> [IPv4Network] {
+        var destinations: [IPv4Network] = []
+        for _ in 0..<Int.random(in: 0...10, using: &rng) {
+            let prefixLength = Int.random(in: IPv4Network.prefixLengths, using: &rng)
+            let address = UInt32(Int.random(in: 1...223, using: &rng)) << 24 | UInt32.random(in: 0...0xFF_FFFF, using: &rng)
+            let network = address & (UInt32.max << (32 - prefixLength))
+            guard let destination = try? IPv4Network(parsing: "\(IPv4Network.dottedQuad(network))/\(prefixLength)"),
+                  !destinations.contains(where: { $0.overlaps(destination) })
+            else { continue }
+            destinations.append(destination)
+        }
+        return destinations
     }
 
     private func randomSchedule(using rng: inout SeededGenerator) -> AppConfig.Connection.Schedule {

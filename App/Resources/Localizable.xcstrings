@@ -81,12 +81,32 @@
         }
       }
     },
+    "%@ has %lld entries. It can have at most %lld.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 항목이 %lld개 있습니다. 최대 %lld개까지 쓸 수 있습니다."
+          }
+        }
+      }
+    },
     "%@ has a quoted value \"%@\".": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ 값 \"%@\"이(가) 따옴표로 감싸져 있습니다."
+          }
+        }
+      }
+    },
+    "%@ is already in the list.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@은(는) 이미 목록에 있습니다."
           }
         }
       }
@@ -181,6 +201,106 @@
         }
       }
     },
+    "%@ — in %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — 적용 대역 %@ 안"
+          }
+        }
+      }
+    },
+    "%@ — outside the networks below": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — 적용 대역 밖"
+          }
+        }
+      }
+    },
+    "%lld route(s) through other gateways are left as they are.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 게이트웨이를 거치는 경로 %lld개는 그대로 두었습니다."
+          }
+        }
+      }
+    },
+    "%lld target(s) are on this network and need no route.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld개 대상은 이 Mac과 같은 네트워크에 있어 경로 없이 바로 연결됩니다."
+          }
+        }
+      }
+    },
+    "'%@' has a subnet mask that is not contiguous.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'의 서브넷 마스크가 연속되지 않습니다."
+          }
+        }
+      }
+    },
+    "'%@' has bits set after the prefix. Did you mean %@?": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'은(는) 프리픽스 뒤의 비트가 0이 아닙니다. %@을(를) 의도하셨나요?"
+          }
+        }
+      }
+    },
+    "'%@' has the prefix length /%lld. Use /%lld to /%lld.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'의 프리픽스 길이는 /%lld입니다. /%lld~/%lld 사이로 적어 주세요."
+          }
+        }
+      }
+    },
+    "'%@' is a loopback, multicast or reserved address and can't be routed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'은(는) 루프백, 멀티캐스트 또는 예약된 주소라서 경로로 쓸 수 없습니다."
+          }
+        }
+      }
+    },
+    "'%@' is not an IPv4 address or network. Write it like 10.77.161.16 or 10.77.170.0/24.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'은(는) IPv4 주소나 대역이 아닙니다. 10.77.161.16 또는 10.77.170.0/24처럼 적어 주세요."
+          }
+        }
+      }
+    },
+    "'%@' overlaps %@, which is already in the list.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'%@'은(는) 목록에 이미 있는 %@와(과) 범위가 겹칩니다."
+          }
+        }
+      }
+    },
     "2-Step Verification (Gmail)": {
       "localizations": {
         "ko": {
@@ -227,6 +347,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "계정 정보가 바뀌었습니다. 다음 연결부터 적용됩니다."
+          }
+        }
+      }
+    },
+    "Add Current Network": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 대역 추가"
+          }
+        }
+      }
+    },
+    "Add a host or network": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "호스트나 대역 추가"
+          }
+        }
+      }
+    },
+    "Add a network": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대역 추가"
           }
         }
       }
@@ -307,6 +457,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "앱 비밀번호 (IMAP)"
+          }
+        }
+      }
+    },
+    "Applied to %@ (router %@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 적용했습니다(라우터 %@)."
+          }
+        }
+      }
+    },
+    "Apply": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용"
           }
         }
       }
@@ -417,6 +587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "준비 확인"
+          }
+        }
+      }
+    },
+    "Checking the routes…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로를 확인하는 중…"
           }
         }
       }
@@ -741,6 +921,26 @@
         }
       }
     },
+    "Couldn't apply the routes: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로를 적용하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't change the macOS network settings (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 네트워크 설정을 바꾸지 못했습니다(%@)."
+          }
+        }
+      }
+    },
     "Couldn't connect to the VPN server.": {
       "localizations": {
         "ko": {
@@ -811,6 +1011,16 @@
         }
       }
     },
+    "Couldn't save the imported routes to the settings file: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져온 경로를 설정 파일에 저장하지 못했습니다: %@"
+          }
+        }
+      }
+    },
     "Couldn't save the password to Keychain: %@": {
       "localizations": {
         "ko": {
@@ -841,6 +1051,16 @@
         }
       }
     },
+    "Current network": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "현재 네트워크"
+          }
+        }
+      }
+    },
     "Current status": {
       "localizations": {
         "ko": {
@@ -857,6 +1077,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "요일"
+          }
+        }
+      }
+    },
+    "Discard Changes": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "변경 취소"
           }
         }
       }
@@ -887,6 +1117,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "잠자기 전 연결 종료 중"
+          }
+        }
+      }
+    },
+    "Double-click here or click + to add a host or network.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기를 더블클릭하거나 +를 눌러 호스트나 대역을 추가하세요."
+          }
+        }
+      }
+    },
+    "Double-click here or click + to add a network such as 10.71.161.0/24.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여기를 더블클릭하거나 +를 눌러 10.71.161.0/24 같은 대역을 추가하세요."
           }
         }
       }
@@ -977,6 +1227,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "오류: %@"
+          }
+        }
+      }
+    },
+    "Exception Rules": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예외 규칙"
+          }
+        }
+      }
+    },
+    "Exception rules aren't being applied": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예외 규칙을 적용하지 못하고 있습니다"
+          }
+        }
+      }
+    },
+    "Exception targets": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예외 대상"
           }
         }
       }
@@ -1501,6 +1781,36 @@
         }
       }
     },
+    "In %@, entry %lld overlaps %@, which is already listed. Entries in one list must not overlap.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목이 이미 있는 %@와(과) 범위가 겹칩니다. 한 목록의 항목끼리는 겹칠 수 없습니다."
+          }
+        }
+      }
+    },
+    "In %@, entry %lld repeats an earlier entry.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목이 앞의 항목과 같습니다."
+          }
+        }
+      }
+    },
+    "In %@, entry %lld: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@의 %lld번째 항목: %@"
+          }
+        }
+      }
+    },
     "Invalid connection request": {
       "localizations": {
         "ko": {
@@ -1741,6 +2051,16 @@
         }
       }
     },
+    "Networks where the rules apply": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용 대역"
+          }
+        }
+      }
+    },
     "Next": {
       "localizations": {
         "ko": {
@@ -1781,12 +2101,32 @@
         }
       }
     },
+    "No active network with an IPv4 router. The rules are applied once one is connected.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IPv4 라우터가 있는 활성 네트워크가 없습니다. 네트워크가 연결되면 적용합니다."
+          }
+        }
+      }
+    },
     "No days selected": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "선택한 요일 없음"
+          }
+        }
+      }
+    },
+    "No networks are listed, so the exception rules apply nowhere.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용 대역이 없어 어디서도 예외 규칙을 적용하지 않습니다."
           }
         }
       }
@@ -1827,6 +2167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "일반 파일이 아닙니다."
+          }
+        }
+      }
+    },
+    "Not applied here: this Mac is outside the networks above, so everything goes through the VPN.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 Mac이 적용 대역 밖에 있어 예외 규칙을 적용하지 않았습니다. 모든 트래픽이 VPN을 거칩니다."
           }
         }
       }
@@ -2241,6 +2591,16 @@
         }
       }
     },
+    "Remove the selected rows": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "선택한 행 삭제"
+          }
+        }
+      }
+    },
     "Required": {
       "localizations": {
         "ko": {
@@ -2601,6 +2961,16 @@
         }
       }
     },
+    "The Helper refused the route list (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 경로 목록을 거부했습니다(%@)."
+          }
+        }
+      }
+    },
     "The OAuth client JSON has a missing or invalid %@ field.": {
       "localizations": {
         "ko": {
@@ -2871,6 +3241,26 @@
         }
       }
     },
+    "The list is full, so %lld route(s) added elsewhere were not added to it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목록이 가득 차서 다른 곳에서 추가된 경로 %lld개는 가져오지 않았습니다."
+          }
+        }
+      }
+    },
+    "The network or its routes changed while the routes were being written.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로를 쓰는 동안 네트워크나 경로가 바뀌었습니다."
+          }
+        }
+      }
+    },
     "The openfortivpn config file has no host: %@": {
       "localizations": {
         "ko": {
@@ -2967,6 +3357,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "서버가 로그인을 거부했습니다. 사용자명과 비밀번호를 확인하세요."
+          }
+        }
+      }
+    },
+    "The settings file doesn't exist yet. Apply creates it.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일이 아직 없습니다. 적용을 누르면 만들어집니다."
+          }
+        }
+      }
+    },
+    "The settings file has an error, so the routes are left as they are.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설정 파일에 오류가 있어 경로를 바꾸지 않았습니다."
           }
         }
       }
@@ -3097,6 +3507,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "휴지통(\\Trash)"
+          }
+        }
+      }
+    },
+    "Trying again in 10 seconds.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10초 후 다시 시도합니다."
           }
         }
       }
@@ -3341,6 +3761,16 @@
         }
       }
     },
+    "While this Mac's address is in one of the networks above, the exception targets skip the VPN and go out directly through that network's router; on any other network everything goes through the VPN. The routes are saved in the macOS network settings, so they stay after a restart. Edits take effect when you click Apply. On a listed network, routes added elsewhere through the same router appear here; routes through other gateways are left alone.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 Mac의 주소가 위 적용 대역 중 하나에 있으면 예외 대상은 VPN을 거치지 않고 그 네트워크의 라우터로 바로 나갑니다. 다른 네트워크에서는 모든 트래픽이 VPN을 거칩니다. 경로는 macOS 네트워크 설정에 저장되므로 재시동 후에도 유지됩니다. 변경 내용은 적용을 눌러야 반영됩니다. 적용 대역 안에서 다른 곳에서 같은 라우터로 추가한 경로는 여기에 나타나고, 다른 게이트웨이를 거치는 경로는 건드리지 않습니다."
+          }
+        }
+      }
+    },
     "With the schedule on, this connects only during the scheduled hours.": {
       "localizations": {
         "ko": {
@@ -3401,6 +3831,26 @@
         }
       }
     },
+    "Writing the routes still failed after %lld retries, so the app stopped trying. It tries again when the network or the exception rules change.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로 쓰기를 %lld번 다시 시도했지만 실패해 재시도를 멈췄습니다. 네트워크나 예외 규칙이 바뀌면 다시 시도합니다."
+          }
+        }
+      }
+    },
+    "Writing the routes still failed after %lld retries: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로 쓰기를 %lld번 다시 시도했지만 실패했습니다: %@"
+          }
+        }
+      }
+    },
     "YAML syntax error (%@).": {
       "localizations": {
         "ko": {
@@ -3421,6 +3871,16 @@
         }
       }
     },
+    "You have changes that aren't applied yet.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "적용하지 않은 변경이 있습니다."
+          }
+        }
+      }
+    },
     "You signed in as %@, but the Gmail address is %@. Sign in with that account.": {
       "localizations": {
         "ko": {
@@ -3431,12 +3891,42 @@
         }
       }
     },
+    "e.g. 10.71.161.0/24": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예: 10.71.161.0/24"
+          }
+        }
+      }
+    },
+    "e.g. 10.77.161.16 or 10.77.170.0/24": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예: 10.77.161.16 또는 10.77.170.0/24"
+          }
+        }
+      }
+    },
     "less than a minute": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "1분 미만"
+          }
+        }
+      }
+    },
+    "macOS did not keep the routes that were written.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기록한 경로가 macOS 네트워크 설정에 남아 있지 않습니다."
           }
         }
       }

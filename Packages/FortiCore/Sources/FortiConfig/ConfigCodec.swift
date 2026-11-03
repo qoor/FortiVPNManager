@@ -1,3 +1,4 @@
+import FortiShared
 import Foundation
 import Yams
 
@@ -331,6 +332,8 @@ private struct FieldReader {
                 try readOTP(entry.value, into: &config.otp)
             case .connection:
                 try readConnection(entry.value, into: &config.connection)
+            case .routes:
+                try readRoutes(entry.value, into: &config.routes)
             case nil:
                 unknownKey(entry, parent: nil)
             }
@@ -491,6 +494,55 @@ private struct FieldReader {
                 unknownKey(entry, parent: ConfigPath.schedule)
             }
         }
+    }
+
+    private mutating func readRoutes(_ node: Node, into routes: inout AppConfig.Routes) throws(ConfigLoadError) {
+        guard let mapping = try section(node, path: ConfigPath.routes) else { return }
+        for entry in try entries(of: mapping) {
+            switch AppConfig.Routes.CodingKeys(rawValue: entry.key) {
+            case .networks:
+                routes.networks = try readRouteList(entry.value, path: ConfigPath.routeNetworks)
+            case .bypassVPN:
+                routes.bypassVPN = try readRouteList(entry.value, path: ConfigPath.bypassVPN)
+            case nil:
+                unknownKey(entry, parent: ConfigPath.routes)
+            }
+        }
+    }
+
+    /// `routes.networks` and `routes.bypass_vpn`: hosts and networks, read into their canonical
+    /// spelling (`10.0.0.1/32` is `10.0.0.1`). A malformed entry, or one that overlaps an earlier entry,
+    /// fails the file, since it would change what is routed around the VPN; a repeat is dropped with a warning.
+    private mutating func readRouteList(_ node: Node, path: String) throws(ConfigLoadError) -> [IPv4Network] {
+        if ConfigCodec.isNull(node) { return [] }
+        guard case let .sequence(sequence) = node else {
+            throw ConfigLoadError(.typeMismatch(path: path, expected: .sequence), at: ConfigCodec.location(of: node))
+        }
+        var entries: [IPv4Network] = []
+        for (index, item) in sequence.enumerated() {
+            let itemLocation = ConfigCodec.location(of: item)
+            let raw = try ConfigCodec.readString(item, path: path) ?? ""
+            let entry: IPv4Network
+            do throws(IPv4Network.ParseError) {
+                entry = try IPv4Network(parsing: raw)
+            } catch {
+                throw ConfigLoadError(.invalidRouteEntry(path: path, index: index, raw: raw, reason: error), at: itemLocation)
+            }
+            if entries.contains(entry) {
+                warnings.append(ConfigWarning(.duplicateRouteEntry(path: path, index: index), at: itemLocation))
+                continue
+            }
+            if let other = entries.first(where: { $0.overlaps(entry) }) {
+                throw ConfigLoadError(.overlappingRouteEntry(path: path, index: index, other: other), at: itemLocation)
+            }
+            entries.append(entry)
+        }
+        if entries.count > ConfigLimits.maxRouteEntries {
+            throw ConfigLoadError(
+                .tooManyRouteEntries(path: path, count: entries.count, limit: ConfigLimits.maxRouteEntries),
+                at: ConfigCodec.location(of: node))
+        }
+        return entries
     }
 
     /// `schedule.days`: a list of `mon` … `sun`; repeats are dropped and the order is normalized.

@@ -1,14 +1,19 @@
+import AppKit
 import FortiConfig
+import FortiShared
 import SwiftUI
 
 /// Tab 2, Connection (DESIGN §5.6): status and actions, the schedule and connection options (saved to
-/// config.yaml right away), the Helper, and the settings file.
+/// config.yaml right away), the Helper, the settings file, and the exception rules (saved by Apply).
 struct ConnectionTab: View {
     let environment: AppEnvironment
     let clock: StatusClock
     let accountNotice: AccountChangeNotice
 
     @State private var optionsError: String?
+    /// A row of an exception rules list is being typed: Apply and Discard Changes finish it first.
+    @State private var isEditingNetworkRow = false
+    @State private var isEditingTargetRow = false
     @State private var loginItemError: String?
     @State private var helperError: String?
 
@@ -23,6 +28,7 @@ struct ConnectionTab: View {
             optionsSection
             helperSection
             configFileSection
+            exceptionRulesSection
         }
         .formStyle(.grouped)
     }
@@ -294,6 +300,144 @@ struct ConnectionTab: View {
             if accountNotice.isPending {
                 NoticeRow(text: String(localized: "Account details changed. They apply from the next connection."), style: .info)
             }
+        }
+    }
+}
+
+extension ConnectionTab {
+    // MARK: - Exception rules
+
+    private var exceptionRulesSection: some View {
+        let routes = environment.bypassRoutes
+        let networks = routes.networksDraft
+        let targets = routes.targetsDraft
+        let isEditing = isEditingNetworkRow || isEditingTargetRow
+        return Section {
+            LabeledContent("Current network", value: currentNetworkText(routes.currentNetwork))
+            LabeledContent("Networks where the rules apply") {
+                Button("Add Current Network") { routes.addCurrentNetwork() }
+                    .disabled(!routes.canAddCurrentNetwork)
+            }
+            AddressListEditor(
+                rows: networks.rows,
+                problemRows: Set(networks.problems.keys),
+                emptyText: String(localized: "Double-click here or click + to add a network such as 10.71.161.0/24."),
+                placeholder: String(localized: "e.g. 10.71.161.0/24"),
+                addHelp: String(localized: "Add a network"),
+                onChange: { rows in routes.setNetworkRows(rows) },
+                onEditingChanged: { isEditingNetworkRow = $0 }
+            )
+            .frame(height: 96)
+            Text("Exception targets")
+            AddressListEditor(
+                rows: targets.rows,
+                problemRows: Set(targets.problems.keys),
+                emptyText: String(localized: "Double-click here or click + to add a host or network."),
+                placeholder: String(localized: "e.g. 10.77.161.16 or 10.77.170.0/24"),
+                addHelp: String(localized: "Add a host or network"),
+                onChange: { rows in routes.setTargetRows(rows) },
+                onEditingChanged: { isEditingTargetRow = $0 }
+            )
+            .frame(height: 160)
+            if let message = networks.firstProblemMessage ?? targets.firstProblemMessage ?? routes.applyError {
+                NoticeRow(text: message, style: .error)
+            }
+            LabeledContent("Status") {
+                let status = ExceptionRulesStatus(
+                    routes.status, hasNetworks: !configStore.config.routes.networks.isEmpty,
+                    retryPending: routes.retryPending)
+                NoticeRow(text: status.text, style: status.style)
+            }
+            if case .failed = routes.status, routes.stoppedRetrying {
+                NoticeRow(
+                    text: String(localized: "Writing the routes still failed after \(BypassRouteService.maxWriteRetries) retries, so the app stopped trying. It tries again when the network or the exception rules change."),
+                    style: .error)
+            }
+            HStack {
+                if routes.hasChanges {
+                    Text("You have changes that aren't applied yet.")
+                        .footnoteStyle()
+                }
+                Spacer()
+                Button("Discard Changes") {
+                    endTextEditing()
+                    routes.discardChanges()
+                }
+                .disabled(!routes.hasChanges && !isEditing)
+                Button("Apply") {
+                    endTextEditing()
+                    routes.apply()
+                }
+                .disabled(!routes.canApply && !isEditing)
+            }
+        } header: {
+            Text("Exception Rules")
+        } footer: {
+            Text("While this Mac's address is in one of the networks above, the exception targets skip the VPN and go out directly through that network's router; on any other network everything goes through the VPN. The routes are saved in the macOS network settings, so they stay after a restart. Edits take effect when you click Apply. On a listed network, routes added elsewhere through the same router appear here; routes through other gateways are left alone.")
+                .footnoteStyle()
+        }
+    }
+
+    /// e.g. "Ethernet · 10.71.161.20/24 — in 10.71.161.0/24", against the saved networks.
+    private func currentNetworkText(_ snapshot: BypassRoutesSnapshot?) -> String {
+        guard let snapshot else { return String(localized: "Unknown") }
+        let prefix = snapshot.localNetwork.map { "/\($0.prefixLength)" } ?? ""
+        let place = "\(snapshot.serviceName) · \(snapshot.address)\(prefix)"
+        let address = IPv4Network.parseDottedQuad(Substring(snapshot.address))
+        if let address, let network = configStore.config.routes.networks.first(where: { $0.contains(address) }) {
+            return String(localized: "\(place) — in \(network.description)")
+        }
+        return String(localized: "\(place) — outside the networks below")
+    }
+
+    /// Finishes a row being typed so Apply and Discard Changes see it (buttons do not take focus).
+    private func endTextEditing() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+    }
+}
+
+/// The status line of the exception rules.
+private struct ExceptionRulesStatus {
+    let text: String
+    let style: NoticeRow.Style
+
+    init(_ status: BypassRouteService.Status, hasNetworks: Bool, retryPending: Bool) {
+        switch status {
+        case .unknown, .checking:
+            text = String(localized: "Checking the routes…")
+            style = .info
+        case .noConfigFile:
+            text = String(localized: "The settings file doesn't exist yet. Apply creates it.")
+            style = .info
+        case let .synced(result):
+            var parts: [String]
+            if result.matchedNetwork != nil {
+                parts = [String(localized: "Applied to \(result.snapshot.serviceName) (router \(result.snapshot.router)).")]
+                if result.onLinkCount > 0 {
+                    parts.append(String(localized: "\(result.onLinkCount) target(s) are on this network and need no route."))
+                }
+                if result.notImported > 0 {
+                    parts.append(String(localized: "The list is full, so \(result.notImported) route(s) added elsewhere were not added to it."))
+                }
+            } else if hasNetworks {
+                parts = [String(localized: "Not applied here: this Mac is outside the networks above, so everything goes through the VPN.")]
+            } else {
+                parts = [String(localized: "No networks are listed, so the exception rules apply nowhere.")]
+            }
+            if result.keptCount > 0 {
+                parts.append(String(localized: "\(result.keptCount) route(s) through other gateways are left as they are."))
+            }
+            text = parts.joined(separator: " ")
+            style = result.matchedNetwork != nil ? .success : .info
+        case .configInvalid:
+            text = String(localized: "The settings file has an error, so the routes are left as they are.")
+            style = .warning
+        case .noNetwork:
+            text = String(localized: "No active network with an IPv4 router. The rules are applied once one is connected.")
+            style = .warning
+        case let .failed(message):
+            text = retryPending ? message + " " + String(localized: "Trying again in 10 seconds.") : message
+            style = .error
         }
     }
 }
