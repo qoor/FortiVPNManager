@@ -2,9 +2,9 @@
 
 openfortivpn으로 FortiGate SSL VPN에 자동 접속하고, 끊기면 자동으로 다시 접속하는 macOS 메뉴바 앱입니다.
 
-- Gmail(Google Workspace) IMAP에서 FortiGate 이메일 OTP를 자동으로 읽어 입력합니다.
+- Gmail(Google Workspace)로 온 FortiGate 이메일 OTP를 자동으로 읽어 입력합니다. Gmail API(Google 계정 연결)를 쓰고, 안 되면 IMAP(앱 비밀번호)으로 전환합니다.
 - 서버가 세션을 강제로 끊으면 즉시 재연결하고, 만료 직전에는 미리 재연결합니다.
-- 예외 규칙: 지정한 사내 대역에 연결돼 있을 때 예외 대상 호스트·대역은 VPN을 거치지 않고 그 네트워크로 바로 나갑니다(macOS 추가 경로, 재부팅 후에도 유지). 다른 네트워크에서는 모두 VPN을 거칩니다.
+- 예외 규칙: 지정한 사내 대역에 연결돼 있을 때 예외 대상 호스트·대역은 VPN을 거치지 않고 그 네트워크로 바로 나갑니다(macOS 추가 라우트, 재부팅 후에도 유지). 다른 네트워크에서는 모두 VPN을 거칩니다.
 - 설정은 `~/.config/FortiVPNManager/config.yaml`에, 비밀번호는 Keychain에 저장합니다.
 
 설계 문서: [docs/DESIGN.md](docs/DESIGN.md)
@@ -27,6 +27,7 @@ brew install xcodegen
 
 1. Xcode > Settings > Accounts에서 Apple ID를 추가합니다.
 2. 같은 화면의 Manage Certificates… > `+` > **Apple Development**를 선택해 인증서를 만듭니다.
+   인증서가 유효하지 않다고 나오면 Apple WWDR G3 중간 인증서를 로그인 Keychain에 추가합니다.
 3. `make local-config`를 실행하면 인증서에서 Team ID를 읽어 `Config/Local.xcconfig`를 만듭니다.
 
 ## Google OAuth 클라이언트 (Gmail API용, 선택)
