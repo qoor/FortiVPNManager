@@ -491,12 +491,12 @@
         }
       }
     },
-    "Automatic reconnection stopped after too many sign-in attempts within an hour.": {
+    "Automatic reconnection stopped after too many sign-in attempts within %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "1시간 동안 인증 시도가 너무 많아 자동 재연결을 멈췄습니다."
+            "value": "%@ 동안 인증 시도가 너무 많아 자동 재연결을 멈췄습니다."
           }
         }
       }
@@ -1501,12 +1501,12 @@
         }
       }
     },
-    "Google sign-in timed out after 5 minutes.": {
+    "Google sign-in timed out after %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "5분 안에 Google 로그인이 끝나지 않아 중단했습니다."
+            "value": "%@ 안에 Google 로그인이 끝나지 않아 중단했습니다."
           }
         }
       }
@@ -2071,12 +2071,12 @@
         }
       }
     },
-    "No OTP email was found within 50 seconds.": {
+    "No OTP email was found within %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "50초 안에 OTP 메일을 찾지 못했습니다."
+            "value": "%@ 안에 OTP 메일을 찾지 못했습니다."
           }
         }
       }
@@ -3101,12 +3101,12 @@
         }
       }
     },
-    "The connection dropped within 2 minutes.": {
+    "The connection dropped within %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "연결된 지 2분 안에 끊겼습니다."
+            "value": "연결된 지 %@ 안에 끊겼습니다."
           }
         }
       }
@@ -3451,12 +3451,12 @@
         }
       }
     },
-    "This isn't a tested version (1.24.x). Its output may differ and connections may fail.": {
+    "This isn't a tested version (%@.x). Its output may differ and connections may fail.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "검증된 버전(1.24.x)이 아닙니다. 출력 형식이 달라 연결이 실패할 수 있습니다."
+            "value": "검증된 버전(%@.x)이 아닙니다. 출력 형식이 달라 연결이 실패할 수 있습니다."
           }
         }
       }
@@ -3491,12 +3491,12 @@
         }
       }
     },
-    "Trying again in 10 seconds.": {
+    "Trying again in %@.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "10초 후 다시 시도합니다."
+            "value": "%@ 후 다시 시도합니다."
           }
         }
       }
@@ -3671,12 +3671,12 @@
         }
       }
     },
-    "Waiting 90 seconds after authentication failure": {
+    "Waiting %@ after authentication failure": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "인증 실패 후 90초 대기"
+            "value": "인증 실패 후 %@ 대기"
           }
         }
       }

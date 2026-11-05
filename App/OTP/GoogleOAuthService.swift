@@ -107,7 +107,7 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
         case .browserUnavailable:
             String(localized: "Couldn't open the web browser for Google sign-in.")
         case .timedOut:
-            String(localized: "Google sign-in timed out after 5 minutes.")
+            String(localized: "Google sign-in timed out after \(Duration.seconds(GoogleOAuthService.flowTimeout).formatted(.units(width: .wide))).")
         case .cancelled:
             String(localized: "Google sign-in was cancelled.")
         case .denied("access_denied"):
@@ -144,7 +144,7 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
 @Observable
 final class GoogleOAuthService: GoogleAccessTokenProviding {
     /// How long `connect` waits for the browser to come back.
-    static let flowTimeout: TimeInterval = 5 * 60
+    nonisolated static let flowTimeout: TimeInterval = 5 * 60
     static let maxClientFileBytes = 64 * 1024
     /// Cached access tokens closer than this to expiry are refreshed first.
     static let expiryMargin: TimeInterval = 60

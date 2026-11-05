@@ -255,7 +255,7 @@ struct ConnectionTab: View {
                 LabeledContent("Version", value: status.openfortivpnVersion ?? String(localized: "Unknown"))
                 if let version = status.openfortivpnVersion, !Self.isTestedVersion(version) {
                     NoticeRow(
-                        text: String(localized: "This isn't a tested version (1.24.x). Its output may differ and connections may fail."),
+                        text: String(localized: "This isn't a tested version (\(Self.testedVersion).x). Its output may differ and connections may fail."),
                         style: .warning
                     )
                 }
@@ -274,8 +274,10 @@ struct ConnectionTab: View {
         }
     }
 
+    private static let testedVersion = "1.24"
+
     private static func isTestedVersion(_ version: String) -> Bool {
-        version == "1.24" || version.hasPrefix("1.24.")
+        version == testedVersion || version.hasPrefix(testedVersion + ".")
     }
 
     // MARK: - Settings file
@@ -436,7 +438,7 @@ private struct ExceptionRulesStatus {
             text = String(localized: "No active network with an IPv4 router. The rules are applied once one is connected.")
             style = .warning
         case let .failed(message):
-            text = retryPending ? message + " " + String(localized: "Trying again in 10 seconds.") : message
+            text = retryPending ? message + " " + String(localized: "Trying again in \(BypassRouteService.writeRetryDelay.formatted(.units(width: .wide))).") : message
             style = .error
         }
     }

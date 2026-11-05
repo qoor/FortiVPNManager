@@ -39,7 +39,7 @@ extension ConnectionFailureReason {
         case .otpNotReceived(inJunk: true):
             String(localized: "The OTP email is in Spam. Check your Gmail filter.")
         case .otpNotReceived(inJunk: false):
-            String(localized: "No OTP email was found within 50 seconds.")
+            String(localized: "No OTP email was found within \(Duration.seconds(RetryPolicy.otpDeadline).formatted(.units(width: .wide))).")
         case .otpRejected:
             String(localized: "The server did not accept the OTP.")
         case .tunnelSetupFailed:
@@ -47,7 +47,7 @@ extension ConnectionFailureReason {
         case .tunnelModeRejected:
             String(localized: "The gateway doesn't allow SSL VPN tunnel mode.")
         case .sessionDroppedEarly:
-            String(localized: "The connection dropped within 2 minutes.")
+            String(localized: "The connection dropped within \(Duration.seconds(RetryPolicy.stableSessionDuration).formatted(.units(width: .wide))).")
         case .certificateRejectedAfterLogin:
             String(localized: "The server certificate was rejected after login.")
         case .gmailAppPassword:
@@ -59,7 +59,7 @@ extension ConnectionFailureReason {
                 String(localized: "Couldn't read Gmail with the Google account. Connect the Google account again, or check the fallback app password.")
             }
         case .tooManyReconnects:
-            String(localized: "Automatic reconnection stopped after too many sign-in attempts within an hour.")
+            String(localized: "Automatic reconnection stopped after too many sign-in attempts within \(Duration.seconds(RetryPolicy.authAttemptWindow).formatted(.units(width: .wide))).")
         case .network:
             String(localized: "Couldn't connect to the VPN server.")
         case .helper(.invalidRequest):
@@ -90,7 +90,7 @@ extension RetryReason {
         case .serverSessionEnded: String(localized: "Server ended the session")
         case let .authFailure(reason):
             String(localized: "Authentication failed (\(reason.summary(otpMethod: otpMethod))), retrying once")
-        case .authCooldown: String(localized: "Waiting 90 seconds after authentication failure")
+        case .authCooldown: String(localized: "Waiting \(Duration.seconds(RetryPolicy.authFailureRetryDelay).formatted(.units(width: .wide))) after authentication failure")
         case .sleep: String(localized: "Resuming after sleep")
         case .userAway: String(localized: "Outside the scheduled hours, reconnects when you're back")
         }
