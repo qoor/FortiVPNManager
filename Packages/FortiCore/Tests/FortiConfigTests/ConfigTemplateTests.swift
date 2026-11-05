@@ -79,8 +79,8 @@ import Testing
 
     @Test func routeListsAreBlockLists() {
         let text = ConfigTemplate.render(nonDefaultConfig)
-        #expect(text.contains("  networks:\n    - \"10.71.161.0/24\"\n  #"))
-        #expect(text.hasSuffix("  bypass_vpn:\n    - \"10.77.161.16\"\n    - \"10.77.170.0/24\"\n"))
+        #expect(text.contains("  networks:\n    - \"10.20.161.0/24\"\n  #"))
+        #expect(text.hasSuffix("  bypass_vpn:\n    - \"10.30.161.16\"\n    - \"10.30.170.0/24\"\n"))
     }
 
     static let trickyStrings: [String] = [

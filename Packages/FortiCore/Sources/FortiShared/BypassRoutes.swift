@@ -1,7 +1,7 @@
 import Foundation
 
 /// An IPv4 host or network in CIDR form, as the exception rules use it: written
-/// `10.77.161.16` (one host, /32) or `10.77.170.0/24` (a network, no bits set after the prefix).
+/// `10.30.161.16` (one host, /32) or `10.30.170.0/24` (a network, no bits set after the prefix).
 /// Exception targets (`routes.bypass_vpn`) and the networks where they apply (`routes.networks`)
 /// are both lists of these. Encoded as that text; decoding re-validates it.
 public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible {
@@ -44,7 +44,7 @@ public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible 
         try self.init(address: address, prefixLength: prefixLength)
     }
 
-    /// The network an interface address belongs to, e.g. `10.71.161.0/24` for `10.71.161.20` with
+    /// The network an interface address belongs to, e.g. `10.20.161.0/24` for `10.20.161.20` with
     /// `255.255.255.0` (the host bits are cleared instead of rejected).
     public init(enclosing text: String, subnetMask: String) throws(ParseError) {
         let (address, prefixLength) = try Self.parse(address: text, subnetMask: subnetMask)
@@ -68,12 +68,12 @@ public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible 
         self.prefixLength = prefixLength
     }
 
-    /// Dotted-quad address, e.g. `10.77.170.0`.
+    /// Dotted-quad address, e.g. `10.30.170.0`.
     public var addressText: String { Self.dottedQuad(address) }
     /// Dotted subnet mask, e.g. `255.255.255.0`.
     public var subnetMask: String { Self.dottedQuad(Self.mask(prefixLength)) }
 
-    /// `10.77.161.16` for a host, `10.77.170.0/24` for a network.
+    /// `10.30.161.16` for a host, `10.30.170.0/24` for a network.
     public var description: String {
         prefixLength == 32 ? addressText : "\(addressText)/\(prefixLength)"
     }
@@ -200,7 +200,7 @@ public struct BypassRoutesSnapshot: Codable, Sendable, Equatable {
         self.routes = routes
     }
 
-    /// The network this Mac is on, e.g. `10.71.161.0/24`.
+    /// The network this Mac is on, e.g. `10.20.161.0/24`.
     public var localNetwork: IPv4Network? {
         try? IPv4Network(enclosing: address, subnetMask: subnetMask)
     }

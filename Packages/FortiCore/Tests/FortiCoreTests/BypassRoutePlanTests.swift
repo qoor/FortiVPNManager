@@ -4,16 +4,16 @@ import Testing
 @testable import FortiCore
 
 @Suite struct BypassRoutePlanTests {
-    let router = "10.71.161.254"
-    let office = try! IPv4Network(parsing: "10.71.161.0/24")
-    let servers = try! IPv4Network(parsing: "10.77.161.0/24")
-    let host = try! IPv4Network(parsing: "10.77.161.16")
-    let network = try! IPv4Network(parsing: "10.77.170.0/24")
-    let other = try! IPv4Network(parsing: "10.88.100.10")
+    let router = "10.20.161.254"
+    let office = try! IPv4Network(parsing: "10.20.161.0/24")
+    let servers = try! IPv4Network(parsing: "10.30.161.0/24")
+    let host = try! IPv4Network(parsing: "10.30.161.16")
+    let network = try! IPv4Network(parsing: "10.30.170.0/24")
+    let other = try! IPv4Network(parsing: "10.50.100.10")
 
-    /// The Mac at the office desk (10.71.161.20/24) unless told otherwise.
+    /// The Mac at the office desk (10.20.161.20/24) unless told otherwise.
     private func snapshot(
-        _ routes: [AdditionalRoute], router: String? = nil, address: String = "10.71.161.20",
+        _ routes: [AdditionalRoute], router: String? = nil, address: String = "10.20.161.20",
         subnetMask: String = "255.255.255.0"
     ) -> BypassRoutesSnapshot {
         BypassRoutesSnapshot(
@@ -72,20 +72,20 @@ import Testing
     }
 
     @Test func anotherListedNetworkUsesItsOwnRouterAndSkipsTargetsOnTheSameLAN() {
-        let lanRouter = "10.77.161.1"
+        let lanRouter = "10.30.161.1"
         let outcome = plan(
             networks: [office, servers], targets: [host, network],
-            snapshot([], router: lanRouter, address: "10.77.161.50"))
+            snapshot([], router: lanRouter, address: "10.30.161.50"))
         #expect(outcome.matchedNetwork == servers)
         #expect(outcome.onLink == [host])
         #expect(outcome.routes == [via(network, lanRouter)])
     }
 
     @Test func aTargetThatBecameOnLinkIsRemoved() {
-        let lanRouter = "10.77.161.1"
+        let lanRouter = "10.30.161.1"
         let outcome = plan(
             networks: [servers], targets: [host], applied: [via(host, lanRouter)],
-            snapshot([via(host, lanRouter)], router: lanRouter, address: "10.77.161.50"))
+            snapshot([via(host, lanRouter)], router: lanRouter, address: "10.30.161.50"))
         #expect(outcome.onLink == [host])
         #expect(outcome.routes.isEmpty)
         #expect(outcome.needsWrite)
@@ -93,7 +93,7 @@ import Testing
 
     @Test func aRouteOnThisMacsNetworkTheAppNeverWroteIsKept() {
         // An admin's VLAN behind the router, more specific than the Mac's /16.
-        let vlan = AdditionalRoute(destination: "10.71.200.0", subnetMask: "255.255.255.0", gateway: router)
+        let vlan = AdditionalRoute(destination: "10.20.200.0", subnetMask: "255.255.255.0", gateway: router)
         let outcome = plan(targets: [host], snapshot([vlan], subnetMask: "255.255.0.0"))
         #expect(outcome.imported.isEmpty)
         #expect(outcome.kept == [vlan])
@@ -102,7 +102,7 @@ import Testing
     }
 
     @Test func aListedTargetOnThisMacsNetworkKeepsARouteTheAppNeverWrote() {
-        let deskNeighbour = try! IPv4Network(parsing: "10.71.161.16")
+        let deskNeighbour = try! IPv4Network(parsing: "10.20.161.16")
         let outcome = plan(targets: [deskNeighbour], snapshot([via(deskNeighbour)]))
         #expect(outcome.onLink == [deskNeighbour])
         #expect(outcome.kept == [via(deskNeighbour)])
@@ -145,16 +145,16 @@ import Testing
     }
 
     @Test func routesOverlappingATargetAreNotImported() {
-        let inside = AdditionalRoute(destination: "10.77.170.5", subnetMask: "255.255.255.255", gateway: router)
-        let wider = AdditionalRoute(destination: "10.77.0.0", subnetMask: "255.255.0.0", gateway: router)
-        let outcome = plan(targets: [network], snapshot([inside, wider, via(other), via(other, "10.88.0.0")]))
+        let inside = AdditionalRoute(destination: "10.30.170.5", subnetMask: "255.255.255.255", gateway: router)
+        let wider = AdditionalRoute(destination: "10.30.0.0", subnetMask: "255.255.0.0", gateway: router)
+        let outcome = plan(targets: [network], snapshot([inside, wider, via(other), via(other, "10.50.0.0")]))
         #expect(outcome.imported == [other])
-        #expect(outcome.kept == [inside, wider, via(other, "10.88.0.0")])
+        #expect(outcome.kept == [inside, wider, via(other, "10.50.0.0")])
         #expect(outcome.keptThroughOtherGateways == 1)
     }
 
     @Test func ofOverlappingRoutesAddedOutsideTheWiderJoinsWhateverTheOrder() throws {
-        let wide = try IPv4Network(parsing: "10.77.0.0/16")
+        let wide = try IPv4Network(parsing: "10.30.0.0/16")
         for routes in [[via(host), via(wide), via(other)], [via(wide), via(other), via(host)]] {
             let outcome = plan(targets: [], snapshot(routes))
             #expect(outcome.imported == [wide, other])
@@ -181,7 +181,7 @@ import Testing
     }
 
     @Test func aNewRouterRewritesTheAppsRoutesOnly() {
-        let oldRouter = "10.71.161.1"
+        let oldRouter = "10.20.161.1"
         let foreign = via(other, "192.168.0.1")
         let outcome = plan(
             targets: [host], applied: [via(host, oldRouter), via(network, oldRouter)],
@@ -205,7 +205,7 @@ import Testing
     // MARK: - XPC payloads
 
     @Test func overlaps() throws {
-        let wide = try IPv4Network(parsing: "10.77.0.0/16")
+        let wide = try IPv4Network(parsing: "10.30.0.0/16")
         #expect(wide.overlaps(network) && network.overlaps(wide))
         #expect(network.overlaps(network))
         #expect(!network.overlaps(other))
@@ -213,10 +213,10 @@ import Testing
 
     @Test func networksTravelAsValidatedText() throws {
         let data = try XPCCoding.encode([host, network])
-        #expect(String(decoding: data, as: UTF8.self) == #"["10.77.161.16","10.77.170.0\/24"]"#)
+        #expect(String(decoding: data, as: UTF8.self) == #"["10.30.161.16","10.30.170.0\/24"]"#)
         #expect(try XPCCoding.decode([IPv4Network].self, from: data) == [host, network])
         #expect(throws: DecodingError.self) {
-            try XPCCoding.decode([IPv4Network].self, from: Data(#"["10.77.161.16 -x"]"#.utf8))
+            try XPCCoding.decode([IPv4Network].self, from: Data(#"["10.30.161.16 -x"]"#.utf8))
         }
         #expect(throws: DecodingError.self) {
             try XPCCoding.decode([IPv4Network].self, from: Data(#"["127.0.0.1"]"#.utf8))

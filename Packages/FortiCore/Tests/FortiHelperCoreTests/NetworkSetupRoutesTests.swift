@@ -10,13 +10,13 @@ import Testing
 
     @Test func oneRoutePerLine() throws {
         let output = """
-            10.77.161.16 255.255.255.255 10.71.161.254
-            10.77.170.0  255.255.255.0   10.71.161.254
+            10.30.161.16 255.255.255.255 10.20.161.254
+            10.30.170.0  255.255.255.0   10.20.161.254
 
             """
         #expect(try NetworkSetupRoutes.parse(output) == [
-            AdditionalRoute(destination: "10.77.161.16", subnetMask: "255.255.255.255", gateway: "10.71.161.254"),
-            AdditionalRoute(destination: "10.77.170.0", subnetMask: "255.255.255.0", gateway: "10.71.161.254"),
+            AdditionalRoute(destination: "10.30.161.16", subnetMask: "255.255.255.255", gateway: "10.20.161.254"),
+            AdditionalRoute(destination: "10.30.170.0", subnetMask: "255.255.255.0", gateway: "10.20.161.254"),
         ])
     }
 
@@ -34,13 +34,13 @@ import Testing
 
     @Test func setArguments() {
         let routes = [
-            AdditionalRoute(destination: "10.77.161.16", subnetMask: "255.255.255.255", gateway: "10.71.161.254"),
-            AdditionalRoute(destination: "10.77.170.0", subnetMask: "255.255.255.0", gateway: "10.71.161.254"),
+            AdditionalRoute(destination: "10.30.161.16", subnetMask: "255.255.255.255", gateway: "10.20.161.254"),
+            AdditionalRoute(destination: "10.30.170.0", subnetMask: "255.255.255.0", gateway: "10.20.161.254"),
         ]
         #expect(NetworkSetupRoutes.setArguments(service: "USB 10/100/1G/2.5G LAN", routes: routes) == [
             "-setadditionalroutes", "USB 10/100/1G/2.5G LAN",
-            "10.77.161.16", "255.255.255.255", "10.71.161.254",
-            "10.77.170.0", "255.255.255.0", "10.71.161.254",
+            "10.30.161.16", "255.255.255.255", "10.20.161.254",
+            "10.30.170.0", "255.255.255.0", "10.20.161.254",
         ])
         #expect(NetworkSetupRoutes.setArguments(service: "Ethernet", routes: []) == ["-setadditionalroutes", "Ethernet"])
     }

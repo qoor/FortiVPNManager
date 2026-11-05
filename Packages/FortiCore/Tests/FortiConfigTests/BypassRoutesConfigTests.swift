@@ -6,9 +6,9 @@ import Testing
 @Suite("routes.networks and routes.bypass_vpn in config.yaml")
 struct BypassRoutesConfigTests {
     @Test("Hosts and networks in canonical spelling", arguments: [
-        ("10.77.161.16", "10.77.161.16", 32), ("10.77.161.16/32", "10.77.161.16", 32),
-        ("10.77.170.0/24", "10.77.170.0/24", 24), ("10.0.0.0/8", "10.0.0.0/8", 8),
-        ("192.168.10.128/25", "192.168.10.128/25", 25), ("223.255.255.255", "223.255.255.255", 32),
+        ("10.30.161.16", "10.30.161.16", 32), ("10.30.161.16/32", "10.30.161.16", 32),
+        ("10.30.170.0/24", "10.30.170.0/24", 24), ("10.0.0.0/8", "10.0.0.0/8", 8),
+        ("192.168.50.128/25", "192.168.50.128/25", 25), ("223.255.255.255", "223.255.255.255", 32),
         ("1.0.0.0/8", "1.0.0.0/8", 8),
     ])
     func accepted(raw: String, canonical: String, prefixLength: Int) throws {
@@ -41,26 +41,26 @@ struct BypassRoutesConfigTests {
 
     @Test func hostBitsAfterThePrefixSuggestTheNetwork() throws {
         let error = try #require(throws: IPv4Network.ParseError.self) {
-            try IPv4Network(parsing: "10.77.170.5/24")
+            try IPv4Network(parsing: "10.30.170.5/24")
         }
         guard case .hostBitsSet(let network) = error else {
             Issue.record("expected hostBitsSet, got \(error)")
             return
         }
-        #expect(network.description == "10.77.170.0/24")
-        #expect(error.message(for: "10.77.170.5/24").contains("10.77.170.0/24"))
+        #expect(network.description == "10.30.170.0/24")
+        #expect(error.message(for: "10.30.170.5/24").contains("10.30.170.0/24"))
     }
 
     @Test func networksetupMasks() throws {
-        #expect(try IPv4Network(address: "10.77.161.16", subnetMask: "255.255.255.255").description == "10.77.161.16")
-        #expect(try IPv4Network(address: "10.77.170.0", subnetMask: "255.255.255.0").description == "10.77.170.0/24")
+        #expect(try IPv4Network(address: "10.30.161.16", subnetMask: "255.255.255.255").description == "10.30.161.16")
+        #expect(try IPv4Network(address: "10.30.170.0", subnetMask: "255.255.255.0").description == "10.30.170.0/24")
         #expect(throws: IPv4Network.ParseError.nonContiguousMask) {
             try IPv4Network(address: "10.0.0.0", subnetMask: "255.0.255.0")
         }
         #expect(throws: IPv4Network.ParseError.prefixOutOfRange(0)) {
             try IPv4Network(address: "10.0.0.0", subnetMask: "0.0.0.0")
         }
-        #expect(try IPv4Network(parsing: "10.77.170.0/24").subnetMask == "255.255.255.0")
+        #expect(try IPv4Network(parsing: "10.30.170.0/24").subnetMask == "255.255.255.0")
     }
 
     @Test func defaultIsEmpty() throws {
@@ -73,17 +73,17 @@ struct BypassRoutesConfigTests {
         let result = try decodeYAML("""
             routes:
               bypass_vpn:
-                - 10.77.161.16/32
-                - '10.77.170.0/24'
-                - "10.77.161.16"
+                - 10.30.161.16/32
+                - '10.30.170.0/24'
+                - "10.30.161.16"
             """)
-        #expect(result.config.routes.bypassVPN.map(\.description) == ["10.77.161.16", "10.77.170.0/24"])
+        #expect(result.config.routes.bypassVPN.map(\.description) == ["10.30.161.16", "10.30.170.0/24"])
         #expect(result.warnings == [ConfigWarning(.duplicateRouteEntry(path: "routes.bypass_vpn", index: 2), at: loc(5, 7))])
     }
 
     @Test func aMalformedEntryFailsTheFileAtTheEntry() throws {
-        let error = try #require(loadError("routes:\n  bypass_vpn:\n    - 10.77.161.16\n    - 10.77.161\n"))
-        #expect(error.kind == .invalidRouteEntry(path: "routes.bypass_vpn", index: 1, raw: "10.77.161", reason: .malformed))
+        let error = try #require(loadError("routes:\n  bypass_vpn:\n    - 10.30.161.16\n    - 10.30.161\n"))
+        #expect(error.kind == .invalidRouteEntry(path: "routes.bypass_vpn", index: 1, raw: "10.30.161", reason: .malformed))
         #expect(error.location == loc(4, 7))
         #expect(error.message.contains("routes.bypass_vpn"))
         #expect(error.message.contains("entry 2"))
@@ -120,7 +120,7 @@ struct BypassRoutesConfigTests {
     }
 
     @Test func messages() {
-        #expect(IPv4Network.ParseError.malformed.message(for: "10.0.0").contains("10.77.170.0/24"))
+        #expect(IPv4Network.ParseError.malformed.message(for: "10.0.0").contains("10.30.170.0/24"))
         #expect(IPv4Network.ParseError.prefixOutOfRange(4).message(for: "10.0.0.0/4").contains("/8"))
         #expect(IPv4Network.ParseError.unroutable.message(for: "127.0.0.1").contains("127.0.0.1"))
     }
@@ -128,13 +128,13 @@ struct BypassRoutesConfigTests {
     @Test func networksAreReadLikeTargets() throws {
         let result = try decodeYAML("""
             routes:
-              networks: [10.71.161.0/24, "10.77.161.0/24", 10.71.161.0/24]
-              bypass_vpn: [10.77.161.16]
+              networks: [10.20.161.0/24, "10.30.161.0/24", 10.20.161.0/24]
+              bypass_vpn: [10.30.161.16]
             """)
-        #expect(result.config.routes.networks.map(\.description) == ["10.71.161.0/24", "10.77.161.0/24"])
+        #expect(result.config.routes.networks.map(\.description) == ["10.20.161.0/24", "10.30.161.0/24"])
         #expect(result.warnings.map(\.kind) == [.duplicateRouteEntry(path: "routes.networks", index: 2)])
-        let error = try #require(loadError("routes:\n  networks: [10.71.161.5/24]\n"))
-        guard case .invalidRouteEntry(let path, 0, "10.71.161.5/24", .hostBitsSet) = error.kind else {
+        let error = try #require(loadError("routes:\n  networks: [10.20.161.5/24]\n"))
+        guard case .invalidRouteEntry(let path, 0, "10.20.161.5/24", .hostBitsSet) = error.kind else {
             Issue.record("expected invalidRouteEntry, got \(error.kind)")
             return
         }
@@ -146,32 +146,32 @@ struct BypassRoutesConfigTests {
     }
 
     @Test func overlappingEntriesFailTheFile() throws {
-        let error = try #require(loadError("routes:\n  bypass_vpn:\n    - 10.77.161.0/24\n    - 10.77.161.16\n"))
-        #expect(error.kind == .overlappingRouteEntry(path: "routes.bypass_vpn", index: 1, other: try IPv4Network(parsing: "10.77.161.0/24")))
+        let error = try #require(loadError("routes:\n  bypass_vpn:\n    - 10.30.161.0/24\n    - 10.30.161.16\n"))
+        #expect(error.kind == .overlappingRouteEntry(path: "routes.bypass_vpn", index: 1, other: try IPv4Network(parsing: "10.30.161.0/24")))
         #expect(error.location == loc(4, 7))
-        #expect(error.message.contains("10.77.161.0/24"))
-        let wider = try #require(loadError("routes:\n  networks: [10.71.161.0/24, 10.71.0.0/16]\n"))
+        #expect(error.message.contains("10.30.161.0/24"))
+        let wider = try #require(loadError("routes:\n  networks: [10.20.161.0/24, 10.20.0.0/16]\n"))
         #expect(wider.kind == .overlappingRouteEntry(path: "routes.networks", index: 1, other: officeNetwork))
         var config = AppConfig()
-        config.routes.bypassVPN = [bypassNetwork, try IPv4Network(parsing: "10.77.0.0/16")]
+        config.routes.bypassVPN = [bypassNetwork, try IPv4Network(parsing: "10.30.0.0/16")]
         #expect(throws: ConfigLoadError(.overlappingRouteEntry(path: "routes.bypass_vpn", index: 1, other: bypassNetwork))) {
             try config.validate()
         }
         // The two lists may overlap each other.
         config.routes.bypassVPN = [bypassHost]
-        config.routes.networks = [try IPv4Network(parsing: "10.77.161.0/24")]
+        config.routes.networks = [try IPv4Network(parsing: "10.30.161.0/24")]
         try config.validate()
     }
 
     @Test func containment() throws {
-        #expect(officeNetwork.contains(IPv4Network.parseDottedQuad("10.71.161.20")!))
-        #expect(!officeNetwork.contains(IPv4Network.parseDottedQuad("10.71.162.20")!))
-        #expect(officeNetwork.contains(try IPv4Network(parsing: "10.71.161.16")))
+        #expect(officeNetwork.contains(IPv4Network.parseDottedQuad("10.20.161.20")!))
+        #expect(!officeNetwork.contains(IPv4Network.parseDottedQuad("10.20.162.20")!))
+        #expect(officeNetwork.contains(try IPv4Network(parsing: "10.20.161.16")))
         #expect(officeNetwork.contains(officeNetwork))
-        #expect(!officeNetwork.contains(try IPv4Network(parsing: "10.71.0.0/16")))
-        #expect(try IPv4Network(enclosing: "10.71.161.20", subnetMask: "255.255.255.0") == officeNetwork)
+        #expect(!officeNetwork.contains(try IPv4Network(parsing: "10.20.0.0/16")))
+        #expect(try IPv4Network(enclosing: "10.20.161.20", subnetMask: "255.255.255.0") == officeNetwork)
         #expect(throws: IPv4Network.ParseError.nonContiguousMask) {
-            try IPv4Network(enclosing: "10.71.161.20", subnetMask: "255.0.255.0")
+            try IPv4Network(enclosing: "10.20.161.20", subnetMask: "255.0.255.0")
         }
     }
 }

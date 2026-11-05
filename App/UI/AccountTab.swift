@@ -253,7 +253,7 @@ struct AccountTab: View {
         }
     }
 
-    /// The end of a client ID without the `.apps.googleusercontent.com` suffix, e.g. `…pe2vcd6960`.
+    /// The end of a client ID without the `.apps.googleusercontent.com` suffix, e.g. `…a1b2c3d4e5`.
     private static func clientIDTail(_ clientID: String) -> String {
         let suffix = ".apps.googleusercontent.com"
         let stem = clientID.hasSuffix(suffix) ? String(clientID.dropLast(suffix.count)) : clientID

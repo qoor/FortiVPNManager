@@ -265,7 +265,7 @@ extension IPv4Network.ParseError {
         let text = ConfigText.preview(raw)
         switch self {
         case .malformed:
-            return String(localized: "'\(text)' is not an IPv4 address or network. Write it like 10.77.161.16 or 10.77.170.0/24.", bundle: .main)
+            return String(localized: "'\(text)' is not an IPv4 address or network. Write it like 10.30.161.16 or 10.30.170.0/24.", bundle: .main)
         case let .prefixOutOfRange(length):
             let range = IPv4Network.prefixLengths
             return String(localized: "'\(text)' has the prefix length /\(length). Use /\(range.lowerBound) to /\(range.upperBound).", bundle: .main)

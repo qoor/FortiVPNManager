@@ -321,8 +321,8 @@ extension ConnectionTab {
             AddressListEditor(
                 rows: networks.rows,
                 problemRows: Set(networks.problems.keys),
-                emptyText: String(localized: "Double-click here or click + to add a network such as 10.71.161.0/24."),
-                placeholder: String(localized: "e.g. 10.71.161.0/24"),
+                emptyText: String(localized: "Double-click here or click + to add a network such as 10.20.161.0/24."),
+                placeholder: String(localized: "e.g. 10.20.161.0/24"),
                 addHelp: String(localized: "Add a network"),
                 onChange: { rows in routes.setNetworkRows(rows) },
                 onEditingChanged: { isEditingNetworkRow = $0 }
@@ -333,7 +333,7 @@ extension ConnectionTab {
                 rows: targets.rows,
                 problemRows: Set(targets.problems.keys),
                 emptyText: String(localized: "Double-click here or click + to add a host or network."),
-                placeholder: String(localized: "e.g. 10.77.161.16 or 10.77.170.0/24"),
+                placeholder: String(localized: "e.g. 10.30.161.16 or 10.30.170.0/24"),
                 addHelp: String(localized: "Add a host or network"),
                 onChange: { rows in routes.setTargetRows(rows) },
                 onEditingChanged: { isEditingTargetRow = $0 }
@@ -378,7 +378,7 @@ extension ConnectionTab {
         }
     }
 
-    /// e.g. "Ethernet · 10.71.161.20/24 — in 10.71.161.0/24", against the saved networks.
+    /// e.g. "Ethernet · 10.20.161.20/24 — in 10.20.161.0/24", against the saved networks.
     private func currentNetworkText(_ snapshot: BypassRoutesSnapshot?) -> String {
         guard let snapshot else { return String(localized: "Unknown") }
         let prefix = snapshot.localNetwork.map { "/\($0.prefixLength)" } ?? ""

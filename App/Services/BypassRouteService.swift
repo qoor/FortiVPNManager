@@ -127,7 +127,7 @@ final class BypassRouteService {
         applyError = nil
     }
 
-    /// Adds the network this Mac is on now (e.g. `10.71.161.0/24`) to the networks draft.
+    /// Adds the network this Mac is on now (e.g. `10.20.161.0/24`) to the networks draft.
     func addCurrentNetwork() {
         guard canAddCurrentNetwork, let network = currentNetwork?.localNetwork else { return }
         networksDraft.add(network)

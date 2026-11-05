@@ -281,12 +281,12 @@
         }
       }
     },
-    "'%@' is not an IPv4 address or network. Write it like 10.77.161.16 or 10.77.170.0/24.": {
+    "'%@' is not an IPv4 address or network. Write it like 10.30.161.16 or 10.30.170.0/24.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "'%@'은(는) IPv4 주소나 대역이 아닙니다. 10.77.161.16 또는 10.77.170.0/24처럼 적어 주세요."
+            "value": "'%@'은(는) IPv4 주소나 대역이 아닙니다. 10.30.161.16 또는 10.30.170.0/24처럼 적어 주세요."
           }
         }
       }
@@ -1111,12 +1111,12 @@
         }
       }
     },
-    "Double-click here or click + to add a network such as 10.71.161.0/24.": {
+    "Double-click here or click + to add a network such as 10.20.161.0/24.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "여기를 더블클릭하거나 +를 눌러 10.71.161.0/24 같은 대역을 추가하세요."
+            "value": "여기를 더블클릭하거나 +를 눌러 10.20.161.0/24 같은 대역을 추가하세요."
           }
         }
       }
@@ -3871,22 +3871,22 @@
         }
       }
     },
-    "e.g. 10.71.161.0/24": {
+    "e.g. 10.20.161.0/24": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "예: 10.71.161.0/24"
+            "value": "예: 10.20.161.0/24"
           }
         }
       }
     },
-    "e.g. 10.77.161.16 or 10.77.170.0/24": {
+    "e.g. 10.30.161.16 or 10.30.170.0/24": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "예: 10.77.161.16 또는 10.77.170.0/24"
+            "value": "예: 10.30.161.16 또는 10.30.170.0/24"
           }
         }
       }

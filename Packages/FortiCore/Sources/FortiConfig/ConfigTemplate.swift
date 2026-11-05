@@ -55,9 +55,9 @@ public enum ConfigTemplate {
               # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the Mac asleep) and stop once you have been away for away_minutes minutes (\(range(ConfigLimits.awayMinutes))).
               schedule: { enabled: \(schedule.enabled), days: [\(days)], start: \(quoted(schedule.start.description)), end: \(quoted(schedule.end.description)), away_minutes: \(schedule.awayMinutes) }
             routes:
-              # Networks where the exception rules apply (e.g. "10.71.161.0/24", /\(IPv4Network.prefixLengths.lowerBound)-/32, up to \(ConfigLimits.maxRouteEntries) entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
+              # Networks where the exception rules apply (e.g. "10.20.161.0/24", /\(IPv4Network.prefixLengths.lowerBound)-/32, up to \(ConfigLimits.maxRouteEntries) entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
               networks:\(routeList(config.routes.networks))
-              # Exception targets: IPv4 hosts (e.g. "10.77.161.16") or networks (e.g. "10.77.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to \(ConfigLimits.maxRouteEntries) entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
+              # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to \(ConfigLimits.maxRouteEntries) entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
               # The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.
               bypass_vpn:\(routeList(config.routes.bypassVPN))
 

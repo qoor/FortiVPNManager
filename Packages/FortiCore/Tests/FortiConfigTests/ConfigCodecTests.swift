@@ -65,10 +65,10 @@ import Testing
                 away_minutes: 90
             routes:
               networks:
-                - 10.71.161.0/24
+                - 10.20.161.0/24
               bypass_vpn:
-                - 10.77.161.16
-                - "10.77.170.0/24"
+                - 10.30.161.16
+                - "10.30.170.0/24"
             """
         let result = try decodeYAML(yaml)
         #expect(result.config == nonDefaultConfig)
@@ -84,7 +84,7 @@ import Testing
              proactive_reconnect: {enabled: false, margin_minutes: 7},
              reconnect_after_sleep: {enabled: true, min_sleep_minutes: 45},
              schedule: {enabled: true, days: [mon, wed, sat, wed], start: 8:30, end: '19:05', away_minutes: 90}},
-             routes: {networks: ["10.71.161.0/24"], bypass_vpn: [10.77.161.16/32, '10.77.170.0/24']}}
+             routes: {networks: ["10.20.161.0/24"], bypass_vpn: [10.30.161.16/32, '10.30.170.0/24']}}
             """
         #expect(try decodeYAML(yaml).config == nonDefaultConfig)
     }
