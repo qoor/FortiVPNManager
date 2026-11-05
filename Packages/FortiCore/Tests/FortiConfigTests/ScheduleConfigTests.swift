@@ -4,15 +4,6 @@ import Testing
 
 @Suite("connection.schedule in config.yaml")
 struct ScheduleConfigTests {
-    @Test func defaultsAreOffOnWeekdaysNineToSix() {
-        let schedule = AppConfig().connection.schedule
-        #expect(!schedule.enabled)
-        #expect(schedule.days == [.mon, .tue, .wed, .thu, .fri])
-        #expect(schedule.start.description == "09:00")
-        #expect(schedule.end.description == "18:00")
-        #expect(schedule.awayMinutes == 120)
-    }
-
     @Test("Times are text in H:mm or HH:mm, quoted or plain", arguments: [
         ("\"09:00\"", 540), ("'9:00'", 540), ("9:05", 545), ("18:00", 1080), ("0:00", 0), ("\"23:58\"", 1438),
     ])

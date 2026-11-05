@@ -176,9 +176,6 @@ final class TunnelController: @unchecked Sendable {
         case .success(let located): binary = located
         case .failure(let problem): return HelperError(.binaryUnavailable, problem.message)
         }
-        if !binary.isTestedVersion {
-            HelperLog.helper.warning("openfortivpn \(binary.version ?? "unknown", privacy: .public) is not 1.24.x; its output may not be parsed correctly")
-        }
 
         let config: String
         do {
@@ -198,26 +195,20 @@ final class TunnelController: @unchecked Sendable {
         runSerial &+= 1
         let serial = runSerial
         let gateway = GatewayAddress()
-        let supervisor: TunnelSupervisor
-        do {
-            supervisor = try TunnelSupervisor(
-                attemptID: request.attemptID,
-                executable: .openfortivpn(path: binary.path, configPath: configPath),
-                password: request.password,
-                routeRepair: { RouteRepair.repair(gatewayIP: gateway.ip) },
-                onEvent: { [weak self] event in
-                    guard let self else { return }
-                    queue.async { self.handle(event, serial: serial) }
-                },
-                onOutput: { [weak self] lines in
-                    guard let self else { return }
-                    queue.async { self.forward(lines, serial: serial) }
-                }
-            )
-        } catch {
-            RunDirectory.remove(configPath)
-            return error
-        }
+        let supervisor = TunnelSupervisor(
+            attemptID: request.attemptID,
+            executable: .openfortivpn(path: binary.path, configPath: configPath),
+            password: request.password,
+            routeRepair: { RouteRepair.repair(gatewayIP: gateway.ip) },
+            onEvent: { [weak self] event in
+                guard let self else { return }
+                queue.async { self.handle(event, serial: serial) }
+            },
+            onOutput: { [weak self] lines in
+                guard let self else { return }
+                queue.async { self.forward(lines, serial: serial) }
+            }
+        )
 
         run = Run(
             serial: serial,
@@ -290,8 +281,7 @@ final class TunnelController: @unchecked Sendable {
         HelperLog.helper.notice("""
             run \(finished.attemptID, privacy: .public) exited: \(String(describing: facts.exitStatus), privacy: .public), \
             initiator \(String(describing: facts.stopInitiator), privacy: .public), \
-            furthest \(String(describing: facts.furthestMilestone), privacy: .public), \
-            route repair \(facts.routeRepairPerformed)
+            furthest \(String(describing: facts.furthestMilestone), privacy: .public)
             """)
         if isExiting {
             exitAfterFlushing()

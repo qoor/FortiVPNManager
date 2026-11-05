@@ -14,16 +14,6 @@ public enum OpenFortiVPNSignal: Equatable, Sendable {
     case tunnelUp
 }
 
-/// Addresses from `"Got addresses: [ip], ns [ns1, ns2](, ns_suffix [suffix])"` (io.c:500-515).
-public struct TunnelAddresses: Equatable, Sendable {
-    /// Local IPv4 address of the ppp interface.
-    public var ip: String
-
-    public init(ip: String) {
-        self.ip = ip
-    }
-}
-
 /// Turns assembled output lines into `OpenFortiVPNSignal`s.
 ///
 /// Feed every `LineAssembler` line with the stream it came from (partial lines are harmless: prompts
@@ -41,8 +31,9 @@ public struct OpenFortiVPNOutputParser: Sendable {
     public private(set) var routesTouched = false
     /// Route restoration completed after the last `routesTouched`.
     public private(set) var routesRestored = false
-    /// Addresses from the most recent `"Got addresses: ..."` line.
-    public private(set) var tunnelAddresses: TunnelAddresses?
+    /// Local IPv4 address of the ppp interface from the most recent
+    /// `"Got addresses: [ip], ns [ns1, ns2](, ns_suffix [suffix])"` line (io.c:500-515).
+    public private(set) var tunnelIP: String?
 
     /// `"Restoring routes..."` seen; waiting for the next INFO/ERROR line to confirm it returned.
     private var restoringRoutes = false
@@ -104,10 +95,10 @@ public struct OpenFortiVPNOutputParser: Sendable {
             break
         }
         if body.hasPrefix(Self.addressesPrefix) {  // io.c:500-515
-            guard !afterUntrustedDump, let addresses = Self.parseAddresses(body.dropFirst(Self.addressesPrefix.count)) else {
+            guard !afterUntrustedDump, let ip = Self.parseAddresses(body.dropFirst(Self.addressesPrefix.count)) else {
                 return nil
             }
-            tunnelAddresses = addresses
+            tunnelIP = ip
             return nil
         }
         if body.hasPrefix("Could not authenticate to ") {
@@ -151,7 +142,7 @@ public struct OpenFortiVPNOutputParser: Sendable {
     private static let trustedCertPrefix = "    trusted-cert = "
 
     /// Parses `[ip], ns [ns1, ns2]` optionally followed by `, ns_suffix [suffix]`; keeps only the IP.
-    private static func parseAddresses(_ text: Substring) -> TunnelAddresses? {
+    private static func parseAddresses(_ text: Substring) -> String? {
         guard text.hasPrefix("["), let ipEnd = text.firstIndex(of: "]") else { return nil }
         let ip = text[text.index(after: text.startIndex)..<ipEnd]
         guard isIPv4(ip) else { return nil }
@@ -165,7 +156,7 @@ public struct OpenFortiVPNOutputParser: Sendable {
         if !rest.isEmpty {
             guard rest.hasPrefix(", ns_suffix ["), rest.hasSuffix("]") else { return nil }
         }
-        return TunnelAddresses(ip: String(ip))
+        return String(ip)
     }
 
     private static func isIPv4(_ text: Substring) -> Bool {

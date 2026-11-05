@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// What a restarted helper must clean up if the previous one died during a run (the pidfile).
-struct RunRecord: Codable, Sendable, Equatable {
+struct RunRecord: Codable, Sendable {
     /// openfortivpn, plus its pppd child(ren) once the tunnel is up.
     var processes: [ProcessIdentity]
     /// For removing the gateway host route (`RouteRepair`).

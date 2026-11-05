@@ -5,7 +5,7 @@ import Foundation
 /// The window's start connects (like "Connect"); its end never disconnects. Outside the window,
 /// automatic reconnects wait while the user is away and stop for good once the user has been away
 /// for `awayMinutes`.
-public struct ConnectionSchedule: Sendable, Equatable, Codable {
+public struct ConnectionSchedule: Sendable, Equatable {
     /// `Calendar` weekday numbers: 1 = Sunday … 7 = Saturday.
     public var weekdays: Set<Int>
     /// Minutes after local midnight, `0..<endMinute`.

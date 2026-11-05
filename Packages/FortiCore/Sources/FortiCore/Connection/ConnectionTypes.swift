@@ -2,13 +2,13 @@ import Foundation
 import FortiShared
 
 /// What the user wants, tracked separately from what is currently happening.
-public enum DesiredState: String, Sendable, Equatable, Codable {
+public enum DesiredState: Sendable, Equatable {
     case connected
     case disconnected
 }
 
 /// The `connection.*` options of `config.yaml` that the reducer acts on.
-public struct ConnectionSettings: Sendable, Equatable, Codable {
+public struct ConnectionSettings: Sendable, Equatable {
     public var sessionMaxMinutes: Int
     public var proactiveReconnectEnabled: Bool
     public var proactiveMarginMinutes: Int
@@ -18,12 +18,12 @@ public struct ConnectionSettings: Sendable, Equatable, Codable {
     public var schedule: ConnectionSchedule?
 
     public init(
-        sessionMaxMinutes: Int = 180,
-        proactiveReconnectEnabled: Bool = true,
-        proactiveMarginMinutes: Int = 5,
-        reconnectAfterSleepEnabled: Bool = false,
-        minSleepMinutes: Int = 30,
-        schedule: ConnectionSchedule? = nil
+        sessionMaxMinutes: Int,
+        proactiveReconnectEnabled: Bool,
+        proactiveMarginMinutes: Int,
+        reconnectAfterSleepEnabled: Bool,
+        minSleepMinutes: Int,
+        schedule: ConnectionSchedule?
     ) {
         self.sessionMaxMinutes = sessionMaxMinutes
         self.proactiveReconnectEnabled = proactiveReconnectEnabled
@@ -45,7 +45,7 @@ public struct ConnectionSettings: Sendable, Equatable, Codable {
 ///
 /// The reducer owns the in-memory copy of `trustedCerts` so that a digest learned from a rejection is
 /// carried by the very next connect request even before `config.yaml` has been rewritten.
-public struct VPNProfile: Sendable, Equatable, Codable {
+public struct VPNProfile: Sendable, Equatable {
     public var host: String
     public var port: Int
     public var username: String
@@ -61,17 +61,17 @@ public struct VPNProfile: Sendable, Equatable, Codable {
         self.trustedCerts = trustedCerts
     }
 
-    /// Key for the VPN password in the Keychain and for the failure ledger (`username@host`).
+    /// Key for the failure ledger (`username@host`).
     public var profileKey: String { "\(username)@\(host)" }
 
-    /// Builds the XPC request for one attempt. An empty realm is sent as "no realm".
+    /// Builds the XPC request for one attempt.
     public func connectRequest(attemptID: AttemptID, password: String) -> ConnectRequest {
         ConnectRequest(
             attemptID: attemptID,
             host: host,
             port: port,
             username: username,
-            realm: (realm?.isEmpty ?? true) ? nil : realm,
+            realm: realm,
             trustedCerts: trustedCerts,
             password: password
         )
@@ -89,7 +89,7 @@ public struct VPNProfile: Sendable, Equatable, Codable {
 }
 
 /// Something that must be fixed in the settings before a connection can be attempted.
-public enum SetupItem: String, Sendable, Codable, CaseIterable, Hashable {
+public enum SetupItem: Sendable, Hashable {
     /// `config.yaml` failed to load or validate.
     case invalidConfig
     /// Host, username or Gmail address is empty, or host/username/realm break the helper's rules
@@ -113,11 +113,9 @@ public enum Readiness: Sendable, Equatable {
     case ready
     case needsSetup([SetupItem])
 
-    /// `.ready` when nothing is missing, otherwise `.needsSetup` with the items in canonical order.
-    public init(missing: some Sequence<SetupItem>) {
-        let set = Set(missing)
-        let ordered = SetupItem.allCases.filter(set.contains)
-        self = ordered.isEmpty ? .ready : .needsSetup(ordered)
+    /// `.ready` when nothing is missing, otherwise `.needsSetup` with the items as given.
+    public init(missing: [SetupItem]) {
+        self = missing.isEmpty ? .ready : .needsSetup(missing)
     }
 }
 
@@ -163,7 +161,7 @@ public struct ReadinessInputs: Sendable, Equatable {
 }
 
 /// The physical route to the gateway: result of `route -n get <gatewayIP>`, excluding ppp*/utun*/other.
-public struct Underlay: Sendable, Equatable, Codable, Hashable {
+public struct Underlay: Sendable, Equatable {
     public var interfaceName: String
     public var sourceAddress: String?
 
@@ -202,7 +200,7 @@ public struct WakeObservation: Sendable, Equatable {
 }
 
 /// How a Gmail OTP session (IMAP or Gmail API) failed.
-public enum OTPSessionFailure: String, Sendable, Equatable, Codable {
+public enum OTPSessionFailure: String, Sendable, Equatable {
     /// Login rejected: the Gmail app password is wrong or revoked, or the Google authorization was
     /// revoked or refused (Gmail API).
     case authentication
@@ -237,7 +235,7 @@ public enum ConnectionFailureReason: Sendable, Equatable, Codable {
 }
 
 /// Why the connection is waiting before the next attempt.
-public enum RetryReason: Sendable, Equatable, Codable {
+public enum RetryReason: Sendable, Equatable {
     /// Network error backoff.
     case network
     /// The server ended a stable session.
@@ -299,16 +297,13 @@ public enum AttemptReason: Sendable, Equatable {
 
 /// Timers owned by the reducer. The app keeps at most one pending timer per ID; scheduling an ID again
 /// replaces the previous one. A fire is only honoured when its generation is the current one.
-public enum ConnectionTimer: String, Sendable, Equatable, Hashable, CaseIterable, Codable {
-    /// Whole-attempt deadline.
+public enum ConnectionTimer: Sendable, Equatable, Hashable, CaseIterable {
     case attemptDeadline
-    /// OTP prompt to submission deadline.
     case otpDeadline
     /// End of `waitingRetry`.
     case retry
     /// `plannedReconnectAt` while connected.
     case proactiveReconnect
-    /// Upper bound for a graceful quit.
     case quitDeadline
     /// Next start or end of the scheduled hours.
     case schedule

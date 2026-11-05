@@ -5,7 +5,6 @@ import Testing
 @Suite("OTP matcher")
 struct OTPMatcherTests {
     static let promptedAt = Date(timeIntervalSince1970: 1_791_940_740) // 14-Oct-2026 10:19:00 +0900
-    static let snapshot = MailboxSnapshot(uidValidity: 11, uidNext: 500)
 
     static func message(
         uid: UInt32,
@@ -19,11 +18,8 @@ struct OTPMatcherTests {
         )
     }
 
-    private func select(
-        _ messages: [FetchedHeaderMessage],
-        uidValidity: UInt32 = 11
-    ) -> OTPSelection? {
-        OTPMatcher.select(snapshot: Self.snapshot, currentUIDValidity: uidValidity, otpPromptedAt: Self.promptedAt, messages: messages)
+    private func select(_ messages: [FetchedHeaderMessage]) -> OTPSelection? {
+        OTPMatcher.select(otpPromptedAt: Self.promptedAt, messages: messages)
     }
 
     // MARK: Subject pattern
@@ -58,15 +54,8 @@ struct OTPMatcherTests {
 
     // MARK: select
 
-    @Test func selectsFreshMessageAtOrAfterSnapshot() {
+    @Test func selectsFreshMessage() {
         #expect(select([Self.message(uid: 500)]) == OTPSelection(code: "482913", uid: 500, allCandidateUIDs: [500]))
-    }
-
-    @Test func uidBelowSnapshotIsExcluded() {
-        // `UID SEARCH UID 500:*` returns the newest message even when its UID is 499.
-        #expect(select([Self.message(uid: 499)]) == nil)
-        #expect(select([Self.message(uid: 499), Self.message(uid: 500, subject: "AuthCode: 111111")])
-            == OTPSelection(code: "111111", uid: 500, allCandidateUIDs: [500]))
     }
 
     @Test(arguments: [
@@ -82,14 +71,9 @@ struct OTPMatcherTests {
         #expect((result?.uid == 501) == included)
     }
 
-    @Test func uidValidityChangeYieldsNil() {
-        #expect(select([Self.message(uid: 501)], uidValidity: 12) == nil)
-    }
-
     @Test func highestQualifyingUIDWinsAndAllCandidatesAreReported() {
         let messages = [
             Self.message(uid: 503, subject: "AuthCode: 333333"),
-            Self.message(uid: 499, subject: "AuthCode: 999999"),                         // below snapshot
             Self.message(uid: 505, secondsAfterPrompt: -60, subject: "AuthCode: 555555"), // stale, still trashed
             Self.message(uid: 504, subject: "Lunch on Friday?"),                         // not an OTP
             Self.message(uid: 502, subject: "AuthCode: 222222"),
@@ -124,21 +108,6 @@ struct OTPMatcherTests {
         #expect(select([message])?.code == "24680135")
     }
 
-    // MARK: staleAuthCodeUIDs
-
-    @Test func staleCleanupIgnoresDateButNotSnapshotOrSubject() {
-        let messages = [
-            Self.message(uid: 499),
-            Self.message(uid: 500, secondsAfterPrompt: -3600),
-            Self.message(uid: 502, secondsAfterPrompt: 3600),
-            Self.message(uid: 501, subject: "Newsletter"),
-            Self.message(uid: 502),
-        ]
-        #expect(OTPMatcher.staleAuthCodeUIDs(snapshot: Self.snapshot, currentUIDValidity: 11, messages: messages) == [500, 502])
-        #expect(OTPMatcher.staleAuthCodeUIDs(snapshot: Self.snapshot, currentUIDValidity: 12, messages: messages) == [])
-        #expect(OTPMatcher.staleAuthCodeUIDs(snapshot: Self.snapshot, currentUIDValidity: 11, messages: []) == [])
-    }
-
     // MARK: Junk check
 
     @Test func freshAuthCodeInJunk() {
@@ -152,9 +121,7 @@ struct OTPMatcherTests {
     @Test func fetchRepliesFeedTheMatcher() throws {
         let header = "Subject: AuthCode: 482913\r\nDate: Wed, 14 Oct 2026 10:19:02 +0900\r\n\r\n"
         let stale = "Subject: AuthCode: 111111\r\nDate: Wed, 14 Oct 2026 10:00:00 +0900\r\n\r\n"
-        let transcript = IMAPFixture.lines("* SEARCH 499 500 501")
-            + #"* 10 FETCH (UID 499 INTERNALDATE "14-Oct-2026 10:19:01 +0900" BODY[HEADER.FIELDS (SUBJECT DATE)] "#
-            + IMAPFixture.literal(header) + ")\r\n"
+        let transcript = IMAPFixture.lines("* SEARCH 500 501")
             + #"* 11 FETCH (UID 500 INTERNALDATE "14-Oct-2026 10:00:00 +0900" BODY[HEADER.FIELDS (SUBJECT DATE)] "#
             + IMAPFixture.literal(stale) + ")\r\n"
             + #"* 12 FETCH (UID 501 INTERNALDATE "14-Oct-2026 10:19:02 +0900" BODY[HEADER.FIELDS (SUBJECT DATE)] "#
@@ -165,7 +132,7 @@ struct OTPMatcherTests {
         let messages = responses.compactMap { response -> FetchedHeaderMessage? in
             if case .fetch(let fetch) = response { FetchedHeaderMessage(fetch) } else { nil }
         }
-        #expect(messages.map(\.uid) == [499, 500, 501])
+        #expect(messages.map(\.uid) == [500, 501])
         let selection = select(messages)
         #expect(selection == OTPSelection(code: "482913", uid: 501, allCandidateUIDs: [500, 501]))
         let move = try IMAPCommand.uidMove(try #require(IMAPUIDSet(selection?.allCandidateUIDs ?? [])), mailbox: "[Gmail]/&1zTJwNG1-")
@@ -175,10 +142,10 @@ struct OTPMatcherTests {
 
     @Test func fetchedHeaderMessageRequiresAllParts() {
         let header = Data("Subject: AuthCode: 1\r\n\r\n".utf8)
-        #expect(FetchedHeaderMessage(IMAPFetchResponse(sequenceNumber: 1, uid: 5, internalDate: Self.promptedAt, headerBytes: header))
+        #expect(FetchedHeaderMessage(IMAPFetchResponse(uid: 5, internalDate: Self.promptedAt, headerBytes: header))
             == FetchedHeaderMessage(uid: 5, internalDate: Self.promptedAt, headerBlock: header))
-        #expect(FetchedHeaderMessage(IMAPFetchResponse(sequenceNumber: 1, internalDate: Self.promptedAt, headerBytes: header)) == nil)
-        #expect(FetchedHeaderMessage(IMAPFetchResponse(sequenceNumber: 1, uid: 5, headerBytes: header)) == nil)
-        #expect(FetchedHeaderMessage(IMAPFetchResponse(sequenceNumber: 1, uid: 5, internalDate: Self.promptedAt)) == nil)
+        #expect(FetchedHeaderMessage(IMAPFetchResponse(internalDate: Self.promptedAt, headerBytes: header)) == nil)
+        #expect(FetchedHeaderMessage(IMAPFetchResponse(uid: 5, headerBytes: header)) == nil)
+        #expect(FetchedHeaderMessage(IMAPFetchResponse(uid: 5, internalDate: Self.promptedAt)) == nil)
     }
 }

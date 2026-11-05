@@ -4,17 +4,14 @@ import FortiCore
 /// The Gmail REST API calls the OTP session and the Account tab use. Each call takes a fresh access
 /// token (see `GoogleOAuthService.accessToken(for:)`) and fails with a typed `GmailAPIError`.
 nonisolated struct GmailAPIClient: Sendable {
-    var http: GoogleHTTP = .shared
-
     /// `users.getProfile`: the signed-in address and the current history ID.
     func profile(accessToken: String) async throws(GmailAPIError) -> GmailProfile {
         try await getJSON(GmailProfile.self, path: "profile", query: [], accessToken: accessToken)
     }
 
-    /// `users.history.list` of `messageAdded` records after `startHistoryID`. A too-old or invalid
-    /// history ID fails with `.notFound`.
-    func history(accessToken: String, startHistoryID: String, pageToken: String? = nil) async throws(GmailAPIError) -> GmailHistoryList {
-        guard GmailAPI.isValidHistoryID(startHistoryID) else { throw .notFound }
+    /// `users.history.list` of `messageAdded` records after `startHistoryID`. A too-old history ID
+    /// fails with `.notFound`.
+    func history(accessToken: String, startHistoryID: String, pageToken: String?) async throws(GmailAPIError) -> GmailHistoryList {
         var query = [("startHistoryId", startHistoryID), ("historyTypes", "messageAdded"), ("maxResults", "100")]
         if let pageToken { query.append(("pageToken", pageToken)) }
         return try await getJSON(GmailHistoryList.self, path: "history", query: query, accessToken: accessToken)
@@ -32,7 +29,7 @@ nonisolated struct GmailAPIClient: Sendable {
         guard GmailAPI.isSafeIdentifier(id) else { throw .notFound }
         let response: GoogleHTTP.Response
         do {
-            response = try await http.post(url(path: "messages/\(id)/trash", query: []), bearer: accessToken)
+            response = try await GoogleHTTP.shared.post(url(path: "messages/\(id)/trash", query: []), bearer: accessToken)
         } catch {
             throw .network(error.detail)
         }
@@ -41,7 +38,7 @@ nonisolated struct GmailAPIClient: Sendable {
 
     /// `users.messages.list` for a Gmail search query (newest first).
     func listMessages(
-        accessToken: String, query searchQuery: String, includeSpamTrash: Bool = false, maxResults: Int = 10
+        accessToken: String, query searchQuery: String, includeSpamTrash: Bool = false, maxResults: Int
     ) async throws(GmailAPIError) -> GmailMessageList {
         let query = [
             ("q", searchQuery),
@@ -58,7 +55,7 @@ nonisolated struct GmailAPIClient: Sendable {
     ) async throws(GmailAPIError) -> T {
         let response: GoogleHTTP.Response
         do {
-            response = try await http.get(url(path: path, query: query), bearer: accessToken)
+            response = try await GoogleHTTP.shared.get(url(path: path, query: query), bearer: accessToken)
         } catch {
             throw .network(error.detail)
         }

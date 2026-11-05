@@ -19,7 +19,7 @@ enum GmailAPIAvailability: Equatable {
 nonisolated enum GoogleAccessTokenError: Error, Sendable, Equatable {
     /// No client ID, client secret or refresh token for the address.
     case notAuthorized
-    /// Google refused the refresh token (`invalid_grant`); it was deleted from the Keychain.
+    /// Google refused the refresh token (`invalid_grant`).
     case revoked
     /// Google refused the client ID or secret (`invalid_client` / `unauthorized_client`).
     case clientRejected
@@ -46,15 +46,6 @@ nonisolated enum GoogleAccessTokenError: Error, Sendable, Equatable {
         case let .server(detail): "token endpoint error: \(detail)"
         }
     }
-}
-
-/// Supplies Gmail API access tokens for an address.
-@MainActor
-protocol GoogleAccessTokenProviding: AnyObject {
-    /// A token that is not about to expire, refreshed with the stored refresh token when needed.
-    func accessToken(for address: String) async throws(GoogleAccessTokenError) -> String
-    /// Forget the cached token (after a 401) so the next call refreshes.
-    func invalidateAccessToken(for address: String)
 }
 
 /// User-facing failures of the Google sign-in and the client JSON import.
@@ -142,7 +133,7 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
 /// kept in memory only; a refresh answered with `invalid_grant` deletes the stored refresh token
 /// (authorization revoked).
 @Observable
-final class GoogleOAuthService: GoogleAccessTokenProviding {
+final class GoogleOAuthService {
     /// How long `connect` waits for the browser to come back.
     nonisolated static let flowTimeout: TimeInterval = 5 * 60
     static let maxClientFileBytes = 64 * 1024
@@ -160,8 +151,6 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
 
     @ObservationIgnored private let configStore: ConfigStore
     @ObservationIgnored private let credentials: CredentialStore
-    @ObservationIgnored private let http: GoogleHTTP
-    @ObservationIgnored private let gmail: GmailAPIClient
     @ObservationIgnored private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "oauth")
     @ObservationIgnored private var cachedTokens: [String: CachedToken] = [:]
     @ObservationIgnored private var refreshes: [String: Task<Result<String, GoogleAccessTokenError>, Never>] = [:]
@@ -172,11 +161,9 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         var expiresAt: Date
     }
 
-    init(configStore: ConfigStore, credentials: CredentialStore, http: GoogleHTTP = .shared) {
+    init(configStore: ConfigStore, credentials: CredentialStore) {
         self.configStore = configStore
         self.credentials = credentials
-        self.http = http
-        gmail = GmailAPIClient(http: http)
     }
 
     // MARK: - Client
@@ -402,7 +389,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         }
         let profile: GmailProfile
         do {
-            profile = try await gmail.profile(accessToken: grant.accessToken)
+            profile = try await GmailAPIClient().profile(accessToken: grant.accessToken)
         } catch {
             await revoke(refreshToken)
             throw Self.map(error)
@@ -450,6 +437,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
 
     // MARK: - Access tokens
 
+    /// A token that is not about to expire, refreshed with the stored refresh token when needed.
     func accessToken(for rawAddress: String) async throws(GoogleAccessTokenError) -> String {
         let address = Self.normalized(rawAddress)
         let clientID = clientID
@@ -468,11 +456,12 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         return try result.get()
     }
 
+    /// Forget the cached token (after a 401) so the next call refreshes.
     func invalidateAccessToken(for address: String) {
         cachedTokens[Self.cacheKey(address: Self.normalized(address), clientID: clientID)] = nil
     }
 
-    /// `grant_type=refresh_token`. `invalid_grant` deletes the refresh token that was used.
+    /// `grant_type=refresh_token`.
     private func refresh(address: String, clientID: String) async -> Result<String, GoogleAccessTokenError> {
         let secret: String?
         let refreshToken: String?
@@ -487,7 +476,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         }
         let response: GoogleHTTP.Response
         do {
-            response = try await http.postForm(
+            response = try await GoogleHTTP.shared.postForm(
                 GoogleOAuth.tokenEndpoint,
                 body: GoogleOAuth.refreshRequestBody(refreshToken: refreshToken, clientID: clientID, clientSecret: secret)
             )
@@ -535,7 +524,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         )
         let response: GoogleHTTP.Response
         do {
-            response = try await http.postForm(GoogleOAuth.tokenEndpoint, body: body)
+            response = try await GoogleHTTP.shared.postForm(GoogleOAuth.tokenEndpoint, body: body)
         } catch {
             throw .network(error.detail)
         }
@@ -554,7 +543,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
     /// Best-effort revocation (also removes the app's grant for that account).
     private func revoke(_ token: String) async {
         do {
-            let response = try await http.postForm(
+            let response = try await GoogleHTTP.shared.postForm(
                 GoogleOAuth.revocationEndpoint, body: GoogleOAuth.revocationRequestBody(token: token)
             )
             logger.notice("Google token revocation answered HTTP \(response.status, privacy: .public)")

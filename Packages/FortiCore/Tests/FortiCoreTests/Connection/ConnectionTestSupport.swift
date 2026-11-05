@@ -22,6 +22,11 @@ enum ReducerFixture {
     static let offline = PathSnapshot(isSatisfied: false, underlay: nil)
 
     static let profile = VPNProfile(host: "vpn.example.com", port: 8443, username: "alice", trustedCerts: [pinOld])
+    /// The `connection.*` defaults of `config.yaml` (schedule off).
+    static let settings = ConnectionSettings(
+        sessionMaxMinutes: 180, proactiveReconnectEnabled: true, proactiveMarginMinutes: 5,
+        reconnectAfterSleepEnabled: false, minSleepMinutes: 30, schedule: nil
+    )
 
     /// Gregorian calendar in Seoul (no DST), the time zone the schedule tests are written in.
     static let calendar: Calendar = {
@@ -62,6 +67,14 @@ enum ReducerFixture {
     }
 }
 
+/// Monday to Friday, 09:00-18:00, reconnects stop after 120 minutes away.
+let weekdayHours = ConnectionSchedule(weekdays: [2, 3, 4, 5, 6], startMinute: 9 * 60, endMinute: 18 * 60, awayMinutes: 120)
+
+/// March 2030 in `ReducerFixture.calendar`: the 18th is a Monday, the 22nd a Friday, the 23rd a Saturday.
+func at(_ day: Int, _ hour: Int, _ minute: Int = 0, _ second: Int = 0) -> Date {
+    ReducerFixture.date(2030, 3, day, hour, minute).addingTimeInterval(TimeInterval(second))
+}
+
 func observe(alive: Bool = true, ppp: Bool = true, underlay: Underlay? = ReducerFixture.wifi, settled: Bool = true) -> WakeObservation {
     WakeObservation(processAlive: alive, pppUp: ppp, underlay: underlay, pathSatisfied: settled)
 }
@@ -75,7 +88,7 @@ struct ReducerHarness {
 
     init(
         profile: VPNProfile = ReducerFixture.profile,
-        settings: ConnectionSettings = ConnectionSettings(),
+        settings: ConnectionSettings = ReducerFixture.settings,
         path: PathSnapshot? = ReducerFixture.online,
         calendar: Calendar = ReducerFixture.calendar
     ) {
@@ -189,7 +202,8 @@ struct ReducerHarness {
 
     /// Reports milestones (and submits an OTP when prompted) up to and including `last`.
     mutating func runMilestones(id: AttemptID, through last: Milestone, sourceLocation: SourceLocation = #_sourceLocation) throws {
-        for milestone in Milestone.allCases where milestone <= last {
+        let milestones: [Milestone] = [.spawned, .connectedToGateway, .otpPrompted, .otpSubmitted, .authenticated, .tunnelUp]
+        for milestone in milestones where milestone <= last {
             switch milestone {
             case .spawned, .connectedToGateway, .otpPrompted:
                 advance(1)

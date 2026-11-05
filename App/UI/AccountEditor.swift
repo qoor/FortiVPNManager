@@ -33,7 +33,7 @@ final class AccountEditor {
         }
     }
 
-    enum Feedback: Equatable {
+    enum Feedback {
         case saved
         case error(String)
     }
@@ -63,7 +63,7 @@ final class AccountEditor {
     private(set) var methodError: String?
     /// Last OAuth client import, Google sign-in or disconnect failure.
     private(set) var googleError: String?
-    /// The imported OAuth client's secret is in the Keychain.
+    /// A usable OAuth client exists (built-in or imported).
     private(set) var googleClientStored = false
     /// The saved Gmail address has a Google authorization (client secret + refresh token).
     private(set) var googleAuthorized = false
@@ -313,7 +313,7 @@ final class AccountEditor {
 
     // MARK: - OTP method and Google account
 
-    /// The Gmail address in config.yaml. Sign-in and disconnect use it rather than the draft.
+    /// The Gmail address in config.yaml.
     var savedGmailAddress: String { environment.configStore.config.otp.gmailAddress }
 
     /// Why "Connect Google Account" can't run now (shown under the row), or `nil`.
@@ -327,7 +327,7 @@ final class AccountEditor {
         return nil
     }
 
-    /// Picker "Connection method": writes `otp.method` to config.yaml right away.
+    /// Picker "Connection method".
     func setOTPMethod(_ method: AppConfig.OTP.Method) {
         guard method != environment.configStore.otpMethod else { return }
         do throws(ConfigStoreError) {
@@ -384,8 +384,6 @@ final class AccountEditor {
         } catch {
             googleError = error.localizedDescription
         }
-        refreshGoogleState()
-        environment.connection.recheckReadiness()
     }
 
     /// "Use Built-in Client": forgets the imported OAuth client.
@@ -393,8 +391,6 @@ final class AccountEditor {
         googleError = nil
         gmailTest = .idle
         environment.googleOAuth.removeImportedClient()
-        refreshGoogleState()
-        environment.connection.recheckReadiness()
     }
 
     func cancelGoogleConnect() {
@@ -414,8 +410,6 @@ final class AccountEditor {
         } catch {
             googleError = error.localizedDescription
         }
-        refreshGoogleState()
-        environment.connection.recheckReadiness()
     }
 
     /// The most recently modified `client_secret_*.json` in `directory`, if any. Runs off the main
@@ -464,9 +458,13 @@ final class AccountEditor {
     // MARK: - Import
 
     /// "Import openfortivpn Settings": the default file, or one the user picks when there is none.
-    func importOpenFortiVPN() {
+    func importOpenFortiVPN() async {
         let importer = environment.importer
-        guard let source = importer.defaultSource() ?? Self.chooseSourceFile() else { return }
+        var source = importer.defaultSource()
+        if source == nil {
+            source = await Self.chooseSourceFile()
+        }
+        guard let source else { return }
         do throws(OpenFortiVPNImportError) {
             importOutcome = .success(try importer.import(from: source))
         } catch {
@@ -487,7 +485,8 @@ final class AccountEditor {
         importOutcome = nil
     }
 
-    private static func chooseSourceFile() -> URL? {
+    /// A sheet on the settings window, like `chooseGoogleClientFile` (never `runModal()`).
+    private static func chooseSourceFile() async -> URL? {
         let panel = NSOpenPanel()
         panel.message = String(localized: "Choose an openfortivpn config file.")
         panel.prompt = String(localized: "Import")
@@ -495,7 +494,13 @@ final class AccountEditor {
         panel.allowsMultipleSelection = false
         panel.showsHiddenFiles = true
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config")
-        return panel.runModal() == .OK ? panel.url : nil
+        let host = NSApp.windows.first { $0 is SettingsWindow && $0.isVisible && $0.attachedSheet == nil }
+        let response = if let host {
+            await panel.beginSheetModal(for: host)
+        } else {
+            await panel.begin()
+        }
+        return response == .OK ? panel.url : nil
     }
 
     // MARK: -

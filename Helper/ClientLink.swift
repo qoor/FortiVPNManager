@@ -2,7 +2,7 @@ import Foundation
 import FortiShared
 
 /// One accepted app connection: who is calling, and the callback channel (`event`/`output`) for
-/// the runs it starts. Callbacks travel in FIFO order on the connection.
+/// the runs it starts.
 final class ClientLink: @unchecked Sendable {
     // @unchecked: `uid`/`pid` are immutable and the weak reference is only changed by ARC.
 

@@ -3,16 +3,10 @@ import Testing
 import FortiShared
 @testable import FortiCore
 
-/// Monday to Friday, 09:00-18:00, reconnects stop after 120 minutes away.
-private let weekdayHours = ConnectionSchedule(weekdays: [2, 3, 4, 5, 6], startMinute: 9 * 60, endMinute: 18 * 60, awayMinutes: 120)
-
-/// March 2030 in Seoul: the 18th is a Monday, the 22nd a Friday, the 23rd a Saturday.
-private func at(_ day: Int, _ hour: Int, _ minute: Int = 0, _ second: Int = 0) -> Date {
-    ReducerFixture.date(2030, 3, day, hour, minute).addingTimeInterval(TimeInterval(second))
-}
-
 private func harness(at date: Date, schedule: ConnectionSchedule? = weekdayHours) -> ReducerHarness {
-    var h = ReducerHarness(settings: ConnectionSettings(schedule: schedule))
+    var settings = ReducerFixture.settings
+    settings.schedule = schedule
+    var h = ReducerHarness(settings: settings)
     h.now = date
     return h
 }
@@ -297,8 +291,9 @@ struct ScheduleTests {
         var h = harness(at: at(18, 20))
         h.launch()
         #expect(h.model.state == .idle)
-        let later = ConnectionSchedule(weekdays: weekdayHours.weekdays, startMinute: 9 * 60, endMinute: 21 * 60, awayMinutes: 120)
-        let effects = h.send(.settingsChanged(ConnectionSettings(schedule: later)))
+        var settings = ReducerFixture.settings
+        settings.schedule = ConnectionSchedule(weekdays: weekdayHours.weekdays, startMinute: 9 * 60, endMinute: 21 * 60, awayMinutes: 120)
+        let effects = h.send(.settingsChanged(settings))
         #expect(h.model.state == .idle)
         #expect(effects.scheduled(.schedule) == at(18, 21))
     }
@@ -312,7 +307,7 @@ struct ScheduleTests {
         try h.fire(.retry)
         #expect(h.retryWait?.reason == .userAway)
 
-        let effects = h.send(.settingsChanged(ConnectionSettings()))
+        let effects = h.send(.settingsChanged(ReducerFixture.settings))
         #expect(h.attempt?.reason == .retry(.userAway))
         #expect(effects.cancels(.schedule))
         #expect(effects.cancels(.awayLimit))
@@ -324,8 +319,9 @@ struct ScheduleTests {
         try h.fire(.schedule)
         h.send(.presenceChanged(away: true))
         h.advance(3600)
-        let shorter = ConnectionSchedule(weekdays: weekdayHours.weekdays, startMinute: 9 * 60, endMinute: 18 * 60, awayMinutes: 30)
-        h.send(.settingsChanged(ConnectionSettings(schedule: shorter)))
+        var settings = ReducerFixture.settings
+        settings.schedule = ConnectionSchedule(weekdays: weekdayHours.weekdays, startMinute: 9 * 60, endMinute: 18 * 60, awayMinutes: 30)
+        h.send(.settingsChanged(settings))
         #expect(h.model.reconnectSuspended)
         #expect(h.connected != nil)
     }

@@ -1,16 +1,5 @@
 import Foundation
 
-/// `UIDVALIDITY`/`UIDNEXT` of the `\All` mailbox, taken right after SELECT and before connecting.
-public struct MailboxSnapshot: Sendable, Hashable, Codable {
-    public var uidValidity: UInt32
-    public var uidNext: UInt32
-
-    public init(uidValidity: UInt32, uidNext: UInt32) {
-        self.uidValidity = uidValidity
-        self.uidNext = uidNext
-    }
-}
-
 /// A message fetched with `UID INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)]`.
 public struct FetchedHeaderMessage: Sendable, Hashable {
     public var uid: UInt32
@@ -42,8 +31,8 @@ public struct OTPSelection: Sendable, Hashable {
     public var code: String
     /// UID of the message the code came from.
     public var uid: UInt32
-    /// Ascending UIDs of every message at/after the snapshot whose subject carries a code
-    /// (including stale ones outside the date window).
+    /// Ascending UIDs of every given message whose subject carries a code (including stale ones
+    /// outside the date window).
     public var allCandidateUIDs: [UInt32]
 
     public init(code: String, uid: UInt32, allCandidateUIDs: [UInt32]) {
@@ -58,7 +47,7 @@ public enum OTPMatcher {
     /// Subject marker. Equivalent to `AuthCode:\s*(\d{6,8})` with ASCII digits and no further digit
     /// after the code.
     public static let subjectMarker = "AuthCode:"
-    public static let codeLengths = 6...8
+    private static let codeLengths = 6...8
     /// A message counts if `INTERNALDATE >= otpPromptedAt - arrivalTolerance`
     /// (INTERNALDATE has one-second resolution and server/client clocks differ slightly).
     public static let arrivalTolerance: TimeInterval = 5
@@ -81,24 +70,15 @@ public enum OTPMatcher {
     }
 
     /// Chooses the OTP once `otpPrompted` arrives. A message qualifies when all of these hold:
-    /// - `uid >= snapshot.uidNext` (checked here because `UID SEARCH UID n:*` also returns the
-    ///   newest message even when its UID is below `n`),
-    /// - `currentUIDValidity == snapshot.uidValidity` (otherwise UIDs are meaningless → `nil`),
     /// - `internalDate >= otpPromptedAt - arrivalTolerance`,
     /// - the subject carries a code.
     ///
     /// The highest qualifying UID wins. Returns `nil` when nothing qualifies.
-    public static func select(
-        snapshot: MailboxSnapshot,
-        currentUIDValidity: UInt32,
-        otpPromptedAt: Date,
-        messages: [FetchedHeaderMessage]
-    ) -> OTPSelection? {
-        guard currentUIDValidity == snapshot.uidValidity else { return nil }
+    public static func select(otpPromptedAt: Date, messages: [FetchedHeaderMessage]) -> OTPSelection? {
         let earliest = otpPromptedAt.addingTimeInterval(-arrivalTolerance)
         var candidates = Set<UInt32>()
         var best: (uid: UInt32, code: String)?
-        for message in messages where message.uid >= snapshot.uidNext {
+        for message in messages {
             guard let subject = message.subject, let code = code(inSubject: subject) else { continue }
             candidates.insert(message.uid)
             if message.internalDate >= earliest, message.uid > (best?.uid ?? 0) {
@@ -107,21 +87,6 @@ public enum OTPMatcher {
         }
         guard let best else { return nil }
         return OTPSelection(code: best.code, uid: best.uid, allCandidateUIDs: candidates.sorted())
-    }
-
-    /// UIDs to move to `\Trash` before connecting: every message at/after the snapshot whose subject
-    /// carries a code, regardless of date. Empty if `UIDVALIDITY` changed.
-    public static func staleAuthCodeUIDs(
-        snapshot: MailboxSnapshot,
-        currentUIDValidity: UInt32,
-        messages: [FetchedHeaderMessage]
-    ) -> [UInt32] {
-        guard currentUIDValidity == snapshot.uidValidity else { return [] }
-        let uids = messages.lazy
-            .filter { $0.uid >= snapshot.uidNext }
-            .filter { $0.subject.flatMap(code(inSubject:)) != nil }
-            .map(\.uid)
-        return Set(uids).sorted()
     }
 
     /// Whether any message carries a code and arrived inside the window — used for the one-off

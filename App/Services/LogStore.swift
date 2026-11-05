@@ -31,7 +31,8 @@ final class LogStore {
         case flush(CheckedContinuation<Void, Never>)
     }
 
-    init(writer: LogFileWriter = LogFileWriter()) {
+    init() {
+        let writer = LogFileWriter()
         fileURL = writer.fileURL
         let (stream, continuation) = AsyncStream.makeStream(of: FileCommand.self, bufferingPolicy: .unbounded)
         fileQueue = continuation

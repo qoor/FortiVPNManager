@@ -1,5 +1,6 @@
 import Foundation
 import FortiHelperCore
+import FortiShared
 import SystemConfiguration
 
 /// Repairs the IPv4 routing table after openfortivpn exited without restoring it: restores the
@@ -35,7 +36,6 @@ enum RouteRepair {
             return .failed
         }
         RouteTable.change(["add", "default", primary.router])
-        // /sbin/route reports kernel errors only as text, so judge by the resulting table.
         guard let restored = RouteTable.lookup("default"), !isPPPDefault(restored) else {
             HelperLog.routes.error("default route via \(primary.router, privacy: .public) is still missing after route add")
             return .failed
@@ -69,7 +69,7 @@ enum RouteRepair {
     /// `Router` and `PrimaryInterface` of `State:/Network/Global/IPv4`, unless the router is not
     /// IPv4 or the primary interface is a ppp tunnel.
     private static func primaryIPv4() -> (router: String, interface: String)? {
-        guard let store = SCDynamicStoreCreate(nil, "com.qoor.FortiVPNManager.Helper" as CFString, nil, nil),
+        guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil),
               let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
               let router = global[kSCPropNetIPv4Router as String] as? String,
               let interface = global[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
@@ -82,7 +82,7 @@ enum RouteRepair {
 
 /// `/sbin/route -n` lookups and changes.
 enum RouteTable {
-    struct Entry: Equatable, Sendable {
+    struct Entry: Sendable {
         var destination: String
         var interface: String?
         /// `UP`, `GATEWAY`, `HOST`, `STATIC`, ...

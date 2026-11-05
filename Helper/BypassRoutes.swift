@@ -23,10 +23,7 @@ enum BypassRoutes {
         }
     }
 
-    /// Writes `request.routes` as the complete list of the primary service, only while the service,
-    /// its router, this Mac's address and the service's routes are still what the app planned from,
-    /// and only with routes to exception targets through the router or routes the service already
-    /// has. Replies with the routes read back. Call on ``queue``.
+    /// Applies `request` (see `BypassRoutesRequest`) and replies with the routes read back. Call on ``queue``.
     static func write(_ request: BypassRoutesRequest) -> BypassRoutesReply {
         dispatchPrecondition(condition: .onQueue(queue))
         let service: PrimaryService
@@ -109,7 +106,7 @@ enum BypassRoutes {
     /// and mask on it, and its name in the network settings (what networksetup takes). A tunnel
     /// interface never counts as primary.
     private static func primaryService() -> Result<PrimaryService, HelperError> {
-        guard let store = SCDynamicStoreCreate(nil, "com.qoor.FortiVPNManager.Helper" as CFString, nil, nil),
+        guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil),
               let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
               let serviceID = global[kSCDynamicStorePropNetPrimaryService as String] as? String,
               let interface = global[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
@@ -128,7 +125,7 @@ enum BypassRoutes {
         else {
             return .failure(HelperError(.wrongPhase, "the active network service has no IPv4 router or address"))
         }
-        guard let preferences = SCPreferencesCreate(nil, "com.qoor.FortiVPNManager.Helper" as CFString, nil),
+        guard let preferences = SCPreferencesCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil),
               let service = SCNetworkServiceCopy(preferences, serviceID as CFString),
               let name = SCNetworkServiceGetName(service) as String?,
               !name.isEmpty, !name.hasPrefix("-"), !name.unicodeScalars.contains(where: { $0.value < 0x20 })

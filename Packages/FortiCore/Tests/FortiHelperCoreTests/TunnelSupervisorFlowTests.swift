@@ -11,7 +11,7 @@ import Testing
 
     @Test func successThenUserDisconnect() async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.success, routeRepair: {
+        let harness = Harness(.success, routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return .repaired
         })
@@ -36,7 +36,6 @@ import Testing
         #expect(try #require(facts.upDuration) >= 0)
         #expect(facts.exitStatus == .exited(code: 0))
         // "Restoring routes..." completed, so no repair.
-        #expect(!facts.routeRepairPerformed)
         #expect(repairCalls.withLock { $0 } == 0)
         #expect(harness.supervisor.processID == nil)
 
@@ -80,7 +79,7 @@ import Testing
     }
 
     @Test func certificateRejectedBeforeLogin() async throws {
-        let harness = try Harness(.certRejected)
+        let harness = Harness(.certRejected)
         defer { harness.record.remove() }
         let facts = try await harness.run()
 
@@ -105,7 +104,7 @@ import Testing
         ("otp", .otpSubmitted, [.spawned, .connectedToGateway, .otpPrompted, .otpSubmitted]),
     ])
     func authenticationFailure(mode: String, furthest: Milestone, milestones: [Milestone]) async throws {
-        let harness = try Harness(.authFailed, [mode])
+        let harness = Harness(.authFailed, [mode])
         defer { harness.record.remove() }
         harness.submitOTPWhenPrompted()
         let facts = try await harness.run()
@@ -124,7 +123,7 @@ import Testing
 
     @Test func serverEndsTheSession() async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.serverCut, ["cut"], routeRepair: {
+        let harness = Harness(.serverCut, ["cut"], routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return .repaired
         })
@@ -139,7 +138,6 @@ import Testing
         // The script stays up for 0.3 s.
         let upDuration = try #require(facts.upDuration)
         #expect(upDuration >= 0.15 && upDuration < 5)
-        #expect(!facts.routeRepairPerformed)
         #expect(repairCalls.withLock { $0 } == 0)
         let lines = harness.recorder.lines
         #expect(lines.contains { $0.source == .stderr && $0.text == "Thu Oct 15 12:12:05 2026 : Connection terminated." })
@@ -149,11 +147,11 @@ import Testing
     }
 
     /// openfortivpn killed after "Setting new routes..." never restores them: the hook runs once
-    /// and its result becomes `routeRepairPerformed`.
+    /// and its result is logged after the exit line.
     @Test(arguments: [true, false])
     func crashAfterRoutesWereChangedTriggersRouteRepair(repairSucceeds: Bool) async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.serverCut, ["crash"], routeRepair: {
+        let harness = Harness(.serverCut, ["crash"], routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return repairSucceeds ? .repaired : .failed
         })
@@ -162,7 +160,6 @@ import Testing
         let facts = try await harness.run()
 
         #expect(repairCalls.withLock { $0 } == 1)
-        #expect(facts.routeRepairPerformed == repairSucceeds)
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
         #expect(facts.furthestMilestone == .tunnelUp)
         #expect(facts.stopInitiator == .none)
@@ -171,31 +168,22 @@ import Testing
         expectOutputInvariants(harness)
     }
 
-    @Test func crashWithoutRouteRepairHook() async throws {
-        let harness = try Harness(.serverCut, ["crash"])
-        defer { harness.record.remove() }
-        harness.submitOTPWhenPrompted()
-        let facts = try await harness.run()
-        #expect(!facts.routeRepairPerformed)
-        #expect(facts.exitStatus == .signaled(signal: SIGKILL))
-    }
-
     @Test func routeRepairIsNotCalledWhenRoutesWereNeverTouched() async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.authFailed, ["password"], routeRepair: {
+        let harness = Harness(.authFailed, ["password"], routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return .repaired
         })
         defer { harness.record.remove() }
-        let facts = try await harness.run()
+        _ = try await harness.run()
         #expect(repairCalls.withLock { $0 } == 0)
-        #expect(!facts.routeRepairPerformed)
+        #expect(!harness.recorder.texts.contains { $0.hasPrefix("‹route") })
     }
 
     /// The child closes stdin and exits right after printing the prompt: the password write
     /// fails with EPIPE, which is logged and otherwise treated as the child exiting.
     @Test func passwordWriteAfterChildClosedStdin() async throws {
-        let harness = try Harness(.earlyExit)
+        let harness = Harness(.earlyExit)
         defer { harness.record.remove() }
         let facts = try await harness.run()
 
@@ -210,7 +198,7 @@ import Testing
     }
 
     @Test func immediateExitBeforeAnyPrompt() async throws {
-        let harness = try Harness(script: "echo 'ERROR:  Specify a valid host:port couple.'; exit 1")
+        let harness = Harness(script: "echo 'ERROR:  Specify a valid host:port couple.'; exit 1")
         defer { harness.record.remove() }
         let facts = try await harness.run()
         #expect(harness.recorder.milestones == [.spawned])
@@ -220,7 +208,7 @@ import Testing
     }
 
     @Test func spawnFailureIsReportedAsExited() async throws {
-        let harness = try Harness(executable: ExecutableSpec(path: "/nonexistent/openfortivpn", arguments: ["openfortivpn", "-c", "/x"], environment: fixturePATH))
+        let harness = Harness(executable: ExecutableSpec(path: "/nonexistent/openfortivpn", arguments: ["openfortivpn", "-c", "/x"], environment: fixturePATH))
         try harness.supervisor.start()
         let facts = try #require(await harness.recorder.waitForExit())
 
@@ -247,7 +235,7 @@ import Testing
         exit 0
         """
         let timing = SupervisorTiming(outputBatchInterval: .milliseconds(20), pipeDrainLimit: .milliseconds(700))
-        let harness = try Harness(script: script, timing: timing)
+        let harness = Harness(script: script, timing: timing)
         defer { harness.record.remove() }
         let started = ContinuousClock.now
         let facts = try await harness.run()
@@ -264,7 +252,7 @@ import Testing
 
     /// Output is delivered in several batches (timer and before each event), never after `.exited`.
     @Test func outputIsBatchedAndFlushedBeforeEvents() async throws {
-        let harness = try Harness(.serverCut, ["cut"])
+        let harness = Harness(.serverCut, ["cut"])
         defer { harness.record.remove() }
         harness.submitOTPWhenPrompted()
         _ = try await harness.run()
@@ -297,7 +285,7 @@ import Testing
     }
 
     @Test func linesWithoutNewlineAreFlushedAtExit() async throws {
-        let harness = try Harness(script: "printf 'INFO:   complete\\nunfinished tail'; printf 'err tail' >&2; exit 0")
+        let harness = Harness(script: "printf 'INFO:   complete\\nunfinished tail'; printf 'err tail' >&2; exit 0")
         defer { harness.record.remove() }
         _ = try await harness.run()
         let lines = harness.recorder.lines.filter { $0.source != .helper }

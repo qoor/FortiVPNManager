@@ -17,12 +17,8 @@ actor LogFileWriter {
     private var reportedFailure = false
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "logfile")
 
-    nonisolated static var defaultDirectory: URL {
-        URL.libraryDirectory.appending(path: "Logs/FortiVPNManager", directoryHint: .isDirectory)
-    }
-
-    init(directory: URL = LogFileWriter.defaultDirectory) {
-        self.directory = directory
+    init() {
+        directory = URL.libraryDirectory.appending(path: "Logs/FortiVPNManager", directoryHint: .isDirectory)
         fileURL = directory.appending(path: "openfortivpn.log", directoryHint: .notDirectory)
     }
 

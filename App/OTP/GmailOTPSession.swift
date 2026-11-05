@@ -4,9 +4,6 @@ import FortiCore
 import FortiShared
 
 /// `OTPSessionService` over Gmail IMAP: one IMAP connection per connection attempt.
-///
-/// `start` hands any previous attempt a graceful close (it logs out in the background); every other
-/// call is ignored unless it names the current attempt.
 final class GmailOTPSession: OTPSessionService {
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)?
 
@@ -40,9 +37,6 @@ final class GmailOTPSession: OTPSessionService {
 }
 
 /// One attempt's IMAP connection.
-///
-/// Events: `.ready`, `.codeFound` and `.failed` only before `end`; `.failed` never after `.codeFound`;
-/// `.foundInJunk` only from the close-time junk check.
 private final class GmailOTPAttempt {
     enum Ending {
         case finish
@@ -128,7 +122,7 @@ private final class GmailOTPAttempt {
         await wrapUp()
     }
 
-    /// Snapshots `\All` and trashes AuthCode messages that already arrived after the snapshot.
+    /// Snapshots `\All`.
     private func prepare() async throws -> MailboxSnapshot {
         try await transport.logIn(account)
         let mailboxes = try await transport.specialMailboxes()
@@ -136,15 +130,6 @@ private final class GmailOTPAttempt {
         guard let all = mailboxes.all else { throw SessionError.allMailMissing }
         let selected = try await transport.execute(.select(mailbox: all.name))
         guard let snapshot = MailboxSnapshot(selectResponses: selected) else { throw SessionError.snapshotMissing }
-        let recent = try await messages(since: snapshot)
-        // An attempt that already ended (e.g. superseded) must not sweep: a newer attempt's code may be there.
-        if ending == nil {
-            try await moveToTrash(OTPMatcher.staleAuthCodeUIDs(
-                snapshot: snapshot,
-                currentUIDValidity: snapshot.uidValidity,
-                messages: recent
-            ))
-        }
         return snapshot
     }
 
@@ -182,12 +167,7 @@ private final class GmailOTPAttempt {
 
     private func search(_ snapshot: MailboxSnapshot, promptedAt: Date, trigger: SearchTrigger, stats: SearchStats) async throws {
         let messages = try await messages(since: snapshot)
-        guard let selection = OTPMatcher.select(
-            snapshot: snapshot,
-            currentUIDValidity: snapshot.uidValidity,
-            otpPromptedAt: promptedAt,
-            messages: messages
-        ) else { return }
+        guard let selection = OTPMatcher.select(otpPromptedAt: promptedAt, messages: messages) else { return }
         self.selection = selection
         logger.info("OTP message matched (UID \(selection.uid), \(selection.allCandidateUIDs.count) candidate(s))")
         if ending == nil {
@@ -209,7 +189,7 @@ private final class GmailOTPAttempt {
     }
 
     /// Headers of every message at/after the snapshot (`UID SEARCH UID n:*` also returns the newest
-    /// older message, so results are filtered here too). Fails if `\All`'s UIDVALIDITY changed.
+    /// older message, so results are filtered here). Fails if `\All`'s UIDVALIDITY changed.
     private func messages(since snapshot: MailboxSnapshot) async throws -> [FetchedHeaderMessage] {
         let search = try await transport.execute(.uidSearch(.from(snapshot.uidNext)))
         try verifyUIDValidity(search, snapshot)
@@ -259,8 +239,6 @@ private final class GmailOTPAttempt {
         await transport.logout()
     }
 
-    /// After the OTP deadline: looks at the newest AuthCode messages in `\Junk` once and reports
-    /// `.foundInJunk` when one arrived after the prompt.
     private func checkJunk() async throws {
         guard let promptedAt, let junk = mailboxes?.junk else { return }
         _ = try await transport.execute(.examine(mailbox: junk.name))

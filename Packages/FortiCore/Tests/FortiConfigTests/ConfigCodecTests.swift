@@ -11,25 +11,6 @@ import Testing
         #expect(result.warnings.isEmpty)
     }
 
-    @Test func defaultsMatchSchema() {
-        let config = AppConfig()
-        #expect(config.schemaVersion == 1)
-        #expect(config.vpn.host == "")
-        #expect(config.vpn.port == 443)
-        #expect(config.vpn.username == "")
-        #expect(config.vpn.realm == "")
-        #expect(config.vpn.trustedCerts == [])
-        #expect(config.otp.gmailAddress == "")
-        #expect(config.otp.method == .imap)
-        #expect(config.otp.googleClientID == "")
-        #expect(config.connection.autoConnectOnLaunch == true)
-        #expect(config.connection.sessionMaxMinutes == 180)
-        #expect(config.connection.proactiveReconnect.enabled == true)
-        #expect(config.connection.proactiveReconnect.marginMinutes == 5)
-        #expect(config.connection.reconnectAfterSleep.enabled == false)
-        #expect(config.connection.reconnectAfterSleep.minSleepMinutes == 30)
-    }
-
     @Test func fullDocumentInBlockStyle() throws {
         let yaml = """
             schema_version: 1
@@ -516,8 +497,8 @@ import Testing
 
 @Suite struct ConfigCodecSchemaVersionTests {
     @Test func missingVersionMeansOne() throws {
-        #expect(try decodeYAML("vpn: {}\n").config.schemaVersion == 1)
-        #expect(try decodeYAML("schema_version: 1\n").config.schemaVersion == 1)
+        #expect(try decodeYAML("vpn: {}\n").config == AppConfig())
+        #expect(try decodeYAML("schema_version: 1\n").config == AppConfig())
     }
 
     @Test func newerVersionIsReadOnlyError() throws {

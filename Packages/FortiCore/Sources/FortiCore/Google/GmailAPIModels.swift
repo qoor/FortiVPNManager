@@ -26,33 +26,20 @@ public struct GmailProfile: Decodable, Sendable, Equatable {
     public var emailAddress: String
     /// Current mailbox history ID; `history.list` from here reports only later changes.
     public var historyId: String
-
-    public init(emailAddress: String, historyId: String) {
-        self.emailAddress = emailAddress
-        self.historyId = historyId
-    }
 }
 
 /// A message reference as it appears in `history.list` and `messages.list`.
 public struct GmailMessageRef: Decodable, Sendable, Equatable, Hashable {
     public var id: String
-    public var threadId: String?
     public var labelIds: [String]
 
-    public init(id: String, threadId: String? = nil, labelIds: [String] = []) {
-        self.id = id
-        self.threadId = threadId
-        self.labelIds = labelIds
-    }
-
     enum CodingKeys: String, CodingKey {
-        case id, threadId, labelIds
+        case id, labelIds
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
-        threadId = try container.decodeIfPresent(String.self, forKey: .threadId)
         labelIds = try container.decodeIfPresent([String].self, forKey: .labelIds) ?? []
     }
 }
@@ -60,25 +47,18 @@ public struct GmailMessageRef: Decodable, Sendable, Equatable, Hashable {
 /// `users.history.list` with `historyTypes=messageAdded`.
 public struct GmailHistoryList: Decodable, Sendable, Equatable {
     public struct Record: Decodable, Sendable, Equatable {
-        public var id: String?
         public var messagesAdded: [GmailMessageRef]
-
-        public init(id: String? = nil, messagesAdded: [GmailMessageRef]) {
-            self.id = id
-            self.messagesAdded = messagesAdded
-        }
 
         private struct Added: Decodable {
             var message: GmailMessageRef
         }
 
         enum CodingKeys: String, CodingKey {
-            case id, messagesAdded
+            case messagesAdded
         }
 
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            id = try container.decodeIfPresent(String.self, forKey: .id)
             messagesAdded = try container.decodeIfPresent([Added].self, forKey: .messagesAdded)?.map(\.message) ?? []
         }
     }
@@ -87,12 +67,6 @@ public struct GmailHistoryList: Decodable, Sendable, Equatable {
     /// The mailbox's current history ID (the next `startHistoryId`).
     public var historyId: String?
     public var nextPageToken: String?
-
-    public init(history: [Record] = [], historyId: String? = nil, nextPageToken: String? = nil) {
-        self.history = history
-        self.historyId = historyId
-        self.nextPageToken = nextPageToken
-    }
 
     enum CodingKeys: String, CodingKey {
         case history, historyId, nextPageToken
@@ -115,21 +89,14 @@ public struct GmailHistoryList: Decodable, Sendable, Equatable {
 /// `users.messages.list`.
 public struct GmailMessageList: Decodable, Sendable, Equatable {
     public var messages: [GmailMessageRef]
-    public var nextPageToken: String?
-
-    public init(messages: [GmailMessageRef] = [], nextPageToken: String? = nil) {
-        self.messages = messages
-        self.nextPageToken = nextPageToken
-    }
 
     enum CodingKeys: String, CodingKey {
-        case messages, nextPageToken
+        case messages
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         messages = try container.decodeIfPresent([GmailMessageRef].self, forKey: .messages) ?? []
-        nextPageToken = try container.decodeIfPresent(String.self, forKey: .nextPageToken)
     }
 }
 
@@ -138,11 +105,6 @@ public struct GmailMessageMetadata: Decodable, Sendable, Equatable {
     public struct Header: Decodable, Sendable, Equatable {
         public var name: String
         public var value: String
-
-        public init(name: String, value: String) {
-            self.name = name
-            self.value = value
-        }
     }
 
     public var id: String
@@ -150,13 +112,6 @@ public struct GmailMessageMetadata: Decodable, Sendable, Equatable {
     /// When Gmail received the message (`internalDate`, milliseconds since the epoch).
     public var internalDate: Date?
     public var headers: [Header]
-
-    public init(id: String, labelIds: [String] = [], internalDate: Date?, headers: [Header]) {
-        self.id = id
-        self.labelIds = labelIds
-        self.internalDate = internalDate
-        self.headers = headers
-    }
 
     private struct Payload: Decodable {
         var headers: [Header]?
@@ -219,17 +174,14 @@ public enum GmailAPIError: Error, Sendable, Equatable {
 
     private struct ErrorBody: Decodable {
         struct Inner: Decodable {
+            /// An entry of `errors` or `details`.
             struct Item: Decodable {
-                var reason: String?
-            }
-
-            struct Detail: Decodable {
                 var reason: String?
             }
 
             var status: String?
             var errors: [Item]?
-            var details: [Detail]?
+            var details: [Item]?
         }
 
         var error: Inner?

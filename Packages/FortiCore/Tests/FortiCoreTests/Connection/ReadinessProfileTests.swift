@@ -85,7 +85,6 @@ struct ReadinessProfileTests {
 
         let effects = h.send(.profileChanged(Self.bob))
         #expect(effects == [.checkReadiness, .persistLedger(FailureLedger(profileKey: "bob@vpn.example.com"))])
-        #expect(h.model.readiness == .unknown)
         #expect(h.model.profile == Self.bob)
 
         h.send(.readinessChanged(.needsSetup([.vpnPassword])))
@@ -204,18 +203,13 @@ struct ReadinessProfileTests {
     func readinessInputsMapToSetupItems(inputs: ReadinessInputs, expected: Readiness) {
         #expect(inputs.readiness == expected)
     }
-
-    @Test func readinessFromMissingItemsIsCanonical() {
-        #expect(Readiness(missing: []) == .ready)
-        #expect(Readiness(missing: [.helperNotEnabled, .vpnPassword, .vpnPassword]) == .needsSetup([.vpnPassword, .helperNotEnabled]))
-    }
 }
 
 @Suite("Presentation")
 struct PresentationTests {
     static let attempt = AttemptContext(
         attemptID: ReducerFixture.id(1), reason: .user, certRetryUsed: false,
-        startedAt: ReducerFixture.t0, stage: .tunnel
+        startedAt: ReducerFixture.t0, stage: .tunnel, profile: ReducerFixture.profile
     )
     static let session = ConnectedContext(
         attemptID: ReducerFixture.id(1), since: ReducerFixture.t0, tunnelIP: "10.0.0.1",
@@ -254,14 +248,14 @@ struct PresentationTests {
 
     @Test(arguments: menuCases)
     func menuActionsFollowTheSpec(desired: DesiredState, state: ConnectionState, expected: ConnectionMenuActions) {
-        var model = ConnectionModel(profile: ReducerFixture.profile, attemptIDSeed: ReducerFixture.seed)
+        var model = ConnectionModel(profile: ReducerFixture.profile, settings: ReducerFixture.settings, attemptIDSeed: ReducerFixture.seed)
         model.desired = desired
         model.state = state
         #expect(model.menuActions == expected)
     }
 
     @Test func plannedAndRetryDatesAreExposed() {
-        var model = ConnectionModel(profile: ReducerFixture.profile, attemptIDSeed: ReducerFixture.seed)
+        var model = ConnectionModel(profile: ReducerFixture.profile, settings: ReducerFixture.settings, attemptIDSeed: ReducerFixture.seed)
         model.state = .connected(Self.session)
         #expect(model.nextPlannedReconnect == ReducerFixture.t0 + 10_500)
         #expect(model.nextRetryAt == nil)

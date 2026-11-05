@@ -4,7 +4,7 @@ import FortiCore
 import FortiShared
 
 /// "Test Gmail Connection" in the Account tab: logs in, resolves `\All`/`\Trash`/`\Junk` and logs out.
-struct GmailConnectionTester: GmailConnectionTesting {
+struct GmailConnectionTester {
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "otp")
 
     func test(account: GmailAccount) async -> GmailTestResult {

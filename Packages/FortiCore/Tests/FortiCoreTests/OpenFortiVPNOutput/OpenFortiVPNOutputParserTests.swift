@@ -88,29 +88,29 @@ import Testing
     @Test(arguments: [
         (
             "[10.212.134.200], ns [10.0.0.53, 10.0.0.54]",
-            TunnelAddresses(ip: "10.212.134.200")
+            "10.212.134.200"
         ),
         (
             "[10.212.134.200], ns [10.0.0.53, 10.0.0.54], ns_suffix [corp.example.com]",
-            TunnelAddresses(ip: "10.212.134.200")
+            "10.212.134.200"
         ),
         (
             "[10.1.2.3], ns [10.0.0.53, 0.0.0.0]",
-            TunnelAddresses(ip: "10.1.2.3")
+            "10.1.2.3"
         ),
         (
             "[10.1.2.3], ns [0.0.0.0, 0.0.0.0], ns_suffix [a.example;b.example]",
-            TunnelAddresses(ip: "10.1.2.3")
+            "10.1.2.3"
         ),
         (
             "[10.1.2.3], ns [0.0.0.0, 0.0.0.0], ns_suffix []",
-            TunnelAddresses(ip: "10.1.2.3")
+            "10.1.2.3"
         ),
     ])
-    func parsesGotAddresses(payload: String, expected: TunnelAddresses) {
+    func parsesGotAddresses(payload: String, expected: String) {
         var parser = OpenFortiVPNOutputParser()
         _ = parser.parse("INFO:   Got addresses: \(payload)", source: .stdout)
-        #expect(parser.tunnelAddresses == expected)
+        #expect(parser.tunnelIP == expected)
     }
 
     @Test(arguments: [
@@ -125,14 +125,14 @@ import Testing
     func rejectsMalformedGotAddresses(payload: String) {
         var parser = OpenFortiVPNOutputParser()
         #expect(parser.parse("INFO:   Got addresses: \(payload)", source: .stdout) == nil)
-        #expect(parser.tunnelAddresses == nil)
+        #expect(parser.tunnelIP == nil)
     }
 
     @Test func keepsTheLatestAddresses() {
         var parser = OpenFortiVPNOutputParser()
         _ = parser.parse("INFO:   Got addresses: [10.1.2.3], ns [0.0.0.0, 0.0.0.0]", source: .stdout)
         _ = parser.parse("INFO:   Got addresses: [10.1.2.4], ns [0.0.0.0, 0.0.0.0]", source: .stdout)
-        #expect(parser.tunnelAddresses?.ip == "10.1.2.4")
+        #expect(parser.tunnelIP == "10.1.2.4")
     }
 
     // MARK: Certificate rejection
@@ -266,7 +266,7 @@ import Testing
         ]
         #expect(dump.compactMap { parser.parse($0, source: .stdout) }.isEmpty)
         #expect(parser.rejectedCertificateDigests.isEmpty)
-        #expect(parser.tunnelAddresses == nil)
+        #expect(parser.tunnelIP == nil)
         let teardown = [
             "INFO:   Cancelling threads...",
             "INFO:   Setting ppp0 interface down.",

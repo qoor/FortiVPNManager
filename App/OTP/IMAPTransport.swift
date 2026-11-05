@@ -132,7 +132,6 @@ actor IMAPTransport {
 
     /// Opens the connection and waits for the server greeting.
     func connect(timeout: Duration) async throws {
-        guard case .initial = phase else { throw IMAPTransportError.protocolViolation(String(localized: "The connection was already started")) }
         phase = .connecting
         connection.stateUpdateHandler = { @Sendable [weak self] state in
             self?.assumeIsolated { $0.stateChanged(state) }
@@ -233,7 +232,6 @@ actor IMAPTransport {
         case .uidFetchHeaders: "UID FETCH"
         case .idle: "IDLE"
         case .uidMove: "UID MOVE"
-        case .noop: "NOOP"
         case .logout: "LOGOUT"
         }
     }

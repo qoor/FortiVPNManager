@@ -1,7 +1,6 @@
 import Darwin
 import Synchronization
 
-/// Dotted-quad IPv4 helpers.
 enum IPv4 {
     /// True for a dotted-quad address `inet_pton` accepts (never an option-like or shorthand string).
     static func isAddress(_ text: String) -> Bool {

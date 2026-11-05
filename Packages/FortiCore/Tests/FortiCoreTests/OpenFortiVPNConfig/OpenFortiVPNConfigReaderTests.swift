@@ -24,7 +24,7 @@ import Testing
     }
 
     @Test func importsEveryValueFromUserFileShape() {
-        let config = OpenFortiVPNConfigReader.parse(Self.userFileShape)
+        let config = OpenFortiVPNConfigReader.parse(data: Data(Self.userFileShape.utf8))
         #expect(config == ImportedOpenFortiVPNConfig(
             host: "203.0.113.10",
             port: 8443,
@@ -38,14 +38,14 @@ import Testing
     }
 
     @Test func unknownKeyBeforeOtherKeysDoesNotStopReading() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             insecure-cert = 1
             host = 203.0.113.10
             port = 8443
             username = alice
             password = s3cr3t
             trusted-cert = \(Self.digestA)
-            """)
+            """.utf8))
         #expect(config.host == "203.0.113.10")
         #expect(config.port == 8443)
         #expect(config.username == "alice")
@@ -55,14 +55,14 @@ import Testing
     }
 
     @Test func unknownKeysInTheMiddleAreReportedOnceInOrder() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             host = vpn.example.com
             insecure-cert = 1
             port = 10443
             bogus = x
             insecure-cert = 0
             username = alice
-            """)
+            """.utf8))
         #expect(config.host == "vpn.example.com")
         #expect(config.port == 10443)
         #expect(config.username == "alice")
@@ -71,20 +71,20 @@ import Testing
     }
 
     @Test func missingPortIsNilAndDefaultsTo443() {
-        let config = OpenFortiVPNConfigReader.parse("host = vpn.example.com\nusername = alice\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("host = vpn.example.com\nusername = alice\n".utf8))
         #expect(config.port == nil)
         #expect(config.effectivePort == 443)
         #expect(ImportedOpenFortiVPNConfig.defaultPort == 443)
     }
 
     @Test func uppercaseDigestIsNormalizedToLowercase() {
-        let config = OpenFortiVPNConfigReader.parse("trusted-cert = \(Self.digestA.uppercased())\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("trusted-cert = \(Self.digestA.uppercased())\n".utf8))
         #expect(config.trustedCerts == [Self.digestA])
         #expect(config.invalidLines.isEmpty)
     }
 
     @Test func multipleDigestsAreKeptInOrderDeduplicatedAndInvalidOnesReported() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             trusted-cert = \(Self.digestB)
             trusted-cert = \(Self.digestA)
             trusted-cert = \(Self.digestB.uppercased())
@@ -93,7 +93,7 @@ import Testing
             trusted-cert = \(Self.digestA.dropLast())g
             trusted-cert = \(Self.digestA.prefix(32)) \(Self.digestA.suffix(31))
             trusted-cert =
-            """)
+            """.utf8))
         #expect(config.trustedCerts == [Self.digestB, Self.digestA])
         #expect(config.invalidLines == [4, 5, 6, 7, 8])
     }
@@ -107,12 +107,12 @@ import Testing
         "\u{FEFF}host = vpn.example.com\nport = 8443\nusername = alice\n",
     ])
     func acceptsSpacingVariantsCRLFAndBOM(_ text: String) {
-        let config = OpenFortiVPNConfigReader.parse(text)
+        let config = OpenFortiVPNConfigReader.parse(data: Data(text.utf8))
         #expect(config == ImportedOpenFortiVPNConfig(host: "vpn.example.com", port: 8443, username: "alice"))
     }
 
     @Test func skipsCommentsAndBlankLinesButKeepsHashInsideValues() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             # openfortivpn config
             #host = commented.example.com
 
@@ -121,7 +121,7 @@ import Testing
             host = vpn.example.com
             password = p#ss # not a comment
             realm = staff
-            """)
+            """.utf8))
         #expect(config.host == "vpn.example.com")
         #expect(config.password == "p#ss # not a comment")
         #expect(config.realm == "staff")
@@ -130,32 +130,32 @@ import Testing
     }
 
     @Test func splitsAtFirstEqualsSign() {
-        let config = OpenFortiVPNConfigReader.parse("password = a=b==\nusername==alice\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("password = a=b==\nusername==alice\n".utf8))
         #expect(config.password == "a=b==")
         #expect(config.username == "=alice")
     }
 
     @Test func reportsMalformedLinesWithOneBasedNumbers() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             host = vpn.example.com
             this line has no equals sign
             = value without key
             port = 8443
-            """)
+            """.utf8))
         #expect(config.host == "vpn.example.com")
         #expect(config.port == 8443)
         #expect(config.invalidLines == [2, 3])
     }
 
     @Test func laterLinesOverrideEarlierOnesAndEmptyValuesClear() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             host = first.example.com
             host = second.example.com
             username = alice
             username =
             realm =
             password =\t
-            """)
+            """.utf8))
         #expect(config.host == "second.example.com")
         #expect(config.username == nil)
         #expect(config.realm == nil)
@@ -164,7 +164,7 @@ import Testing
     }
 
     @Test func rejectedPortKeepsThePreviousValue() {
-        let config = OpenFortiVPNConfigReader.parse("port = 8443\nport = 0\nport = 70000\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("port = 8443\nport = 0\nport = 70000\n".utf8))
         #expect(config.port == 8443)
         #expect(config.invalidLines == [2, 3])
     }
@@ -183,26 +183,26 @@ import Testing
         ("0443", 291),
     ] as [(String, Int)])
     func parsesPortLikeStrtolBase0(value: String, expected: Int) {
-        let config = OpenFortiVPNConfigReader.parse("port = \(value)\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("port = \(value)\n".utf8))
         #expect(config.port == expected)
         #expect(config.invalidLines.isEmpty)
     }
 
     @Test(arguments: ["0", "-1", "-8443", "65536", "99999999999999999999999", "abc", "0x", "08443"])
     func rejectsPortsOpenFortiVPNRejects(_ value: String) {
-        let config = OpenFortiVPNConfigReader.parse("port = \(value)\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("port = \(value)\n".utf8))
         #expect(config.port == nil)
         #expect(config.invalidLines == [1])
     }
 
     @Test func emptyPortValueIsInvalid() {
-        let config = OpenFortiVPNConfigReader.parse("port =\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("port =\n".utf8))
         #expect(config.port == nil)
         #expect(config.invalidLines == [1])
     }
 
     @Test func distinguishesIgnoredOpenFortiVPNOptionsFromUnknownKeys() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             set-dns = 0
             pppd-use-peerdns = 1
             otp = 123456
@@ -210,7 +210,7 @@ import Testing
             Host = upper.example.com
             set-dns = 1
             host = vpn.example.com
-            """)
+            """.utf8))
         #expect(config.ignoredKeys == ["set-dns", "pppd-use-peerdns", "otp"])
         // `pppd` only exists in non-pppd builds; keys are case-sensitive (strcmp).
         #expect(config.unknownKeys == ["pppd", "Host"])
@@ -218,12 +218,12 @@ import Testing
     }
 
     @Test func controlCharactersInImportedValuesAreReportedNotImported() {
-        let config = OpenFortiVPNConfigReader.parse("""
+        let config = OpenFortiVPNConfigReader.parse(data: Data("""
             host = vpn\u{1B}[31m.example.com
             username = ali\u{85}ce
             realm = st\u{2028}aff
             password = tab\tinside
-            """)
+            """.utf8))
         #expect(config.host == nil)
         #expect(config.username == nil)
         #expect(config.realm == nil)
@@ -232,14 +232,14 @@ import Testing
     }
 
     @Test func classicMacLineEndingsDoNotProduceAHostWithCarriageReturns() {
-        let config = OpenFortiVPNConfigReader.parse("host = vpn.example.com\rport = 8443\r")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("host = vpn.example.com\rport = 8443\r".utf8))
         #expect(config.host == nil)
         #expect(config.port == nil)
         #expect(config.invalidLines == [1])
     }
 
     @Test func nulByteMakesTheLineInvalid() {
-        let config = OpenFortiVPNConfigReader.parse("host = vpn\0.example.com\nport = 8443\n")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("host = vpn\0.example.com\nport = 8443\n".utf8))
         #expect(config.host == nil)
         #expect(config.port == 8443)
         #expect(config.invalidLines == [1])
@@ -260,22 +260,18 @@ import Testing
         #expect(config.invalidLines == [2, 4])
     }
 
-    @Test func dataAndStringParsingAgree() {
-        #expect(OpenFortiVPNConfigReader.parse(data: Data(Self.userFileShape.utf8)) == OpenFortiVPNConfigReader.parse(Self.userFileShape))
-    }
-
     @Test(arguments: ["", "\n", "\n\n\n", "# only a comment\n", "   "])
     func emptyOrCommentOnlyFilesImportNothing(_ text: String) {
-        #expect(OpenFortiVPNConfigReader.parse(text) == ImportedOpenFortiVPNConfig())
+        #expect(OpenFortiVPNConfigReader.parse(data: Data(text.utf8)) == ImportedOpenFortiVPNConfig())
     }
 
     @Test func lastLineWithoutNewlineIsRead() {
-        let config = OpenFortiVPNConfigReader.parse("host = vpn.example.com\nrealm = staff")
+        let config = OpenFortiVPNConfigReader.parse(data: Data("host = vpn.example.com\nrealm = staff".utf8))
         #expect(config.realm == "staff")
     }
 
     @Test func descriptionRedactsThePassword() {
-        let config = OpenFortiVPNConfigReader.parse(Self.userFileShape)
+        let config = OpenFortiVPNConfigReader.parse(data: Data(Self.userFileShape.utf8))
         #expect(!config.description.contains("s3cr3t"))
         #expect(!String(reflecting: config).contains("s3cr3t"))
         #expect(!"\(config)".contains("s3cr3t"))

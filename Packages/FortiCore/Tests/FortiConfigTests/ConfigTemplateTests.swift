@@ -41,24 +41,8 @@ import Testing
         #expect(text.hasSuffix("\n"))
     }
 
-    @Test func headerAndFieldComments() {
+    @Test func everyKeyHasAComment() {
         let text = ConfigTemplate.render(AppConfig())
-        let header = text.split(separator: "\n").prefix { $0.hasPrefix("#") }.joined(separator: "\n")
-        #expect(header.contains("Keychain"))
-        #expect(text.contains(
-            "  # How the app reads the OTP emails: \"imap\" (Gmail app password) or \"gmail_api\" (Gmail API with Google "
-                + "sign-in; falls back to IMAP when the sign-in fails and an app password is stored).\n  method: \"imap\"\n"))
-        #expect(header.contains("Comments you added and unknown keys are removed then"))
-        #expect(header.contains("Do not write leading zeros in numbers"))
-        #expect(header.contains("public repository"))
-        #expect(text.contains(
-            "  # Filled in on first launch from an existing openfortivpn config, if any (e.g. 8443). "
-                + "443 is the default when the file has no value.\n  port: 443\n"))
-        #expect(text.contains(
-            "  # SHA-256 digests of the server certificate. The app fills these in on the first connection "
-                + "and manages them; no need to edit by hand.\n"
-                + "  # When the certificate changes, the app automatically adds the new value at the front "
-                + "(up to 4 entries).\n  trusted_certs: []\n"))
         // Every key has a comment line right above it except the schema version and nested flow keys.
         let lines = text.split(separator: "\n").map(String.init)
         for key in ["host:", "port:", "username:", "realm:", "gmail_address:", "method:", "google_client_id:",
@@ -157,7 +141,8 @@ import Testing
             let prefixLength = Int.random(in: IPv4Network.prefixLengths, using: &rng)
             let address = UInt32(Int.random(in: 1...223, using: &rng)) << 24 | UInt32.random(in: 0...0xFF_FFFF, using: &rng)
             let network = address & (UInt32.max << (32 - prefixLength))
-            guard let destination = try? IPv4Network(parsing: "\(IPv4Network.dottedQuad(network))/\(prefixLength)"),
+            let text = "\(network >> 24).\(network >> 16 & 0xFF).\(network >> 8 & 0xFF).\(network & 0xFF)/\(prefixLength)"
+            guard let destination = try? IPv4Network(parsing: text),
                   !destinations.contains(where: { $0.overlaps(destination) })
             else { continue }
             destinations.append(destination)

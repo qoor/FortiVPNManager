@@ -16,8 +16,8 @@ enum SystemCommand {
     }
 
     /// Spawns `executable` (argv[0] is the path itself), waits for it and collects its output. A tool
-    /// still running after `timeout` is killed (SIGKILL), so a hung tool cannot block the caller.
-    static func run(_ executable: String, _ arguments: [String], timeout: DispatchTimeInterval = .seconds(10)) -> Result {
+    /// still running after 10 seconds is killed (SIGKILL), so a hung tool cannot block the caller.
+    static func run(_ executable: String, _ arguments: [String]) -> Result {
         let process: SpawnedProcess
         do {
             process = try ProcessRunner.spawn(
@@ -38,7 +38,7 @@ enum SystemCommand {
                 if !exited { _ = kill(pid, SIGKILL) }
             }
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
+        DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(10), execute: killer)
         // The tools used here print a few lines at most, far below the pipe buffer, so reading the
         // two pipes one after the other cannot block the child.
         let output = readToEnd(process.stdoutRead)
@@ -58,8 +58,9 @@ enum SystemCommand {
         while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) == -1, errno == EINTR {}
     }
 
-    /// Reads `fd` until EOF, keeping at most `limit` bytes (the rest is drained and dropped).
-    private static func readToEnd(_ fd: Int32, limit: Int = 64 * 1024) -> String {
+    /// Reads `fd` until EOF, keeping at most 64 KiB (the rest is drained and dropped).
+    private static func readToEnd(_ fd: Int32) -> String {
+        let limit = 64 * 1024
         var data: [UInt8] = []
         var buffer = [UInt8](repeating: 0, count: 4096)
         while true {

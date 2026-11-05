@@ -6,6 +6,8 @@ import os
 /// Per-device transient state in `state.json`, kept out of the dotfiles-synced `config.yaml`.
 final class StateStore {
     struct State: Codable, Equatable {
+        /// Never read, but builds before 2026-11-05 require the key and would otherwise drop the whole
+        /// file, including the failure ledger.
         var schemaVersion = 1
         /// Authentication failure bookkeeping for one `username@host`.
         var ledger: FailureLedger?
@@ -16,19 +18,14 @@ final class StateStore {
         var appliedExceptionRoutes: [String: [AdditionalRoute]]?
     }
 
-    let fileURL: URL
+    let fileURL = URL.applicationSupportDirectory
+        .appending(path: "FortiVPNManager", directoryHint: .isDirectory)
+        .appending(path: "state.json", directoryHint: .notDirectory)
     private(set) var state: State
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "state")
 
-    static var defaultFileURL: URL {
-        URL.applicationSupportDirectory
-            .appending(path: "FortiVPNManager", directoryHint: .isDirectory)
-            .appending(path: "state.json", directoryHint: .notDirectory)
-    }
-
     /// Loads the file; a missing or unreadable file starts from an empty state (overwritten on the next save).
-    init(fileURL: URL = StateStore.defaultFileURL) {
-        self.fileURL = fileURL
+    init() {
         state = State()
         do {
             let data = try FileIO.readRegularFile(fileURL, limit: 1 << 20)

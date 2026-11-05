@@ -3131,16 +3131,6 @@
         }
       }
     },
-    "The connection was already started": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "이미 연결을 시작했습니다"
-          }
-        }
-      }
-    },
     "The connection was closed": {
       "localizations": {
         "ko": {

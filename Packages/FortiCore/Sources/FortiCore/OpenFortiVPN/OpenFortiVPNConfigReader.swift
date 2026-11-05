@@ -75,10 +75,6 @@ public enum OpenFortiVPNConfigReader {
         ]
     }
 
-    public static func parse(_ text: String) -> ImportedOpenFortiVPNConfig {
-        parse(bytes: Array(text.utf8))
-    }
-
     /// Parses raw file contents. Lines whose imported value is not valid UTF-8 are reported in
     /// `invalidLines` instead of being decoded lossily (a mangled password would cause lockouts).
     public static func parse(data: Data) -> ImportedOpenFortiVPNConfig {
@@ -168,8 +164,7 @@ public enum OpenFortiVPNConfigReader {
     /// Control characters (other than TAB) cannot be part of a usable host, username, realm or
     /// password, so lines containing them are reported instead of imported.
     private static func isDisallowedInValue(_ scalar: Unicode.Scalar) -> Bool {
-        scalar != "\t" && (scalar.properties.generalCategory == .control
-            || scalar == "\u{2028}" || scalar == "\u{2029}" || scalar == "\u{FEFF}")
+        scalar != "\t" && ConfigRenderer.isForbidden(scalar)
     }
 }
 

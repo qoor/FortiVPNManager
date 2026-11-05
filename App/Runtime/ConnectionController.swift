@@ -151,7 +151,7 @@ final class ConnectionController {
 
     /// Starts consuming helper messages and the ticker, then sends `appLaunched`.
     /// `ConfigStore` must have loaded the file already.
-    func launch(autoConnect: Bool, restoredLedger: FailureLedger?) {
+    func launch() {
         model = Self.freshModel(configStore.config)
 
         inboundTask = Task { [weak self, helper] in
@@ -167,7 +167,6 @@ final class ConnectionController {
         }
         let center = NotificationCenter.default
         clockObservers = [
-            // Timers sleep for a computed delay; a clock step makes that delay wrong.
             center.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { @Sendable [weak self] _ in
                 MainActor.assumeIsolated { self?.timers.rearmAll() }
             },
@@ -175,7 +174,10 @@ final class ConnectionController {
                 MainActor.assumeIsolated { self?.systemTimeZoneDidChange() }
             },
         ]
-        send(.appLaunched(autoConnect: autoConnect, restoredLedger: restoredLedger))
+        send(.appLaunched(
+            autoConnect: configStore.config.connection.autoConnectOnLaunch,
+            restoredLedger: stateStore.ledger
+        ))
     }
 
     /// Schedule times are local wall-clock times: re-read them in the new time zone.
@@ -208,12 +210,10 @@ final class ConnectionController {
     func handleSystemEvent(_ event: ConnectionEvent) {
         send(event)
         if case .didWake = event {
-            // Task sleeps may be skewed by system sleep; recompute every deadline from the wall clock.
             timers.rearmAll()
         }
     }
 
-    /// Feeds one event through the reducer and runs its effects. Re-entrant calls are queued.
     func send(_ event: ConnectionEvent) {
         pendingEvents.append(event)
         guard !isDispatching else { return }
@@ -343,10 +343,6 @@ final class ConnectionController {
     /// along when one is stored (empty otherwise) for IMAP and the API session's IMAP fallback.
     private func startOTPSession(_ attemptID: AttemptID) {
         let address = configStore.config.otp.gmailAddress
-        guard !address.isEmpty else {
-            send(.otpSessionFailed(attemptID, .authentication))
-            return
-        }
         var appPassword = ""
         do {
             appPassword = try credentials.gmailAccount(address: address)?.appPassword ?? ""

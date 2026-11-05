@@ -26,7 +26,7 @@ final class ConfigStore {
     /// Non-fatal findings: unknown keys, dropped digests, permissions, hard links.
     private(set) var warnings: [ConfigWarning] = []
 
-    /// Localized message with line/column when known, e.g. "Could not read the config file (…). Line 3, column 9: …".
+    /// Localized message with line/column when known.
     var loadErrorMessage: String? { loadError?.message }
     var isValid: Bool { loadError == nil }
 
@@ -40,8 +40,8 @@ final class ConfigStore {
 
     static let pollInterval: Duration = .seconds(2)
 
-    init(fileURL: URL = ConfigFileStore.defaultFileURL(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)) {
-        self.fileURL = fileURL
+    init() {
+        fileURL = ConfigFileStore.defaultFileURL(homeDirectory: FileManager.default.homeDirectoryForCurrentUser)
         watcher = ConfigFileWatcher(url: fileURL)
     }
 

@@ -22,7 +22,7 @@ final class LoginItemService {
 
     @ObservationIgnored private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "login-item")
 
-    init(installer: HelperInstaller = HelperInstaller()) {
+    init(installer: HelperInstaller) {
         isInstalledCopy = installer.isInstalledCopy
         status = SMAppService.mainApp.status
     }

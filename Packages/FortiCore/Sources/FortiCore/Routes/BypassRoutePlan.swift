@@ -22,13 +22,11 @@ public enum BypassRoutePlan {
         public var notImported: Int
         /// Listed targets inside this Mac's own network: reached directly, so no route is written.
         public var onLink: [IPv4Network]
-        /// Routes left untouched.
-        public var kept: [AdditionalRoute]
-        /// How many of `kept` go through another gateway than the router.
+        /// How many routes left untouched go through another gateway than the router.
         public var keptThroughOtherGateways: Int
         /// The app's own routes after this plan (to record as applied).
         public var applied: [AdditionalRoute]
-        /// The complete list the service should have: `applied`, then `kept`.
+        /// The complete list the service should have: `applied`, then the routes left untouched.
         public var routes: [AdditionalRoute]
         /// Whether `routes` differs from what the service has now.
         public var needsWrite: Bool
@@ -94,7 +92,7 @@ public enum BypassRoutePlan {
         let needsWrite = routes.count != snapshot.routes.count || Set(routes) != Set(snapshot.routes)
         return Outcome(
             matchedNetwork: matchedNetwork, imported: imported, notImported: notImported, onLink: onLink,
-            kept: kept, keptThroughOtherGateways: kept.filter { $0.gateway != router }.count,
+            keptThroughOtherGateways: kept.filter { $0.gateway != router }.count,
             applied: applied, routes: routes, needsWrite: needsWrite)
     }
 }

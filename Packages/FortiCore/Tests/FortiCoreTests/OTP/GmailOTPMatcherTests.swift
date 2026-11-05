@@ -12,13 +12,14 @@ struct GmailOTPMatcherTests {
         subject: String? = "AuthCode: 482913",
         labels: [String] = ["UNREAD", "INBOX"]
     ) -> GmailMessageMetadata {
-        GmailMessageMetadata(
-            id: id,
-            labelIds: labels,
-            internalDate: offset.map { promptedAt.addingTimeInterval($0) },
-            headers: [GmailMessageMetadata.Header(name: "Date", value: "Wed, 14 Oct 2026 10:19:03 +0900")]
-                + (subject.map { [GmailMessageMetadata.Header(name: "Subject", value: $0)] } ?? [])
-        )
+        var headers = [["name": "Date", "value": "Wed, 14 Oct 2026 10:19:03 +0900"]]
+        if let subject { headers.append(["name": "Subject", "value": subject]) }
+        var json: [String: Any] = ["id": id, "labelIds": labels, "payload": ["headers": headers]]
+        if let offset {
+            // Gmail sends `internalDate` as milliseconds in a string.
+            json["internalDate"] = String(Int64(((promptedAt.timeIntervalSince1970 + offset) * 1000).rounded()))
+        }
+        return try! JSONDecoder().decode(GmailMessageMetadata.self, from: JSONSerialization.data(withJSONObject: json))
     }
 
     private func select(_ messages: [GmailMessageMetadata], notBefore: Date? = nil) -> GmailOTPSelection? {

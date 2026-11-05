@@ -1,6 +1,6 @@
+import FortiHelperCore
 import FortiShared
 import Testing
-@testable import FortiHelperCore
 
 @Suite struct NetworkSetupRoutesTests {
     @Test func noRoutes() throws {

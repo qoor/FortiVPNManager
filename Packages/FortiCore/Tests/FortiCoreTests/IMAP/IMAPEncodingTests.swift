@@ -73,7 +73,7 @@ struct ModifiedUTF7Tests {
     }
 
     @Test func displayNameFallsBackToWireForm() {
-        let entry = IMAPListEntry(attributes: [], delimiter: "/", name: "&broken")
+        let entry = IMAPListEntry(attributes: [], name: "&broken")
         #expect(entry.displayName == "&broken")
     }
 }

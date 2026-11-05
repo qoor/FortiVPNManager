@@ -60,7 +60,8 @@ struct BypassRoutesConfigTests {
         #expect(throws: IPv4Network.ParseError.prefixOutOfRange(0)) {
             try IPv4Network(address: "10.0.0.0", subnetMask: "0.0.0.0")
         }
-        #expect(try IPv4Network(parsing: "10.30.170.0/24").subnetMask == "255.255.255.0")
+        let route = try AdditionalRoute(IPv4Network(parsing: "10.30.170.0/24"), gateway: "10.20.161.254")
+        #expect(route == AdditionalRoute(destination: "10.30.170.0", subnetMask: "255.255.255.0", gateway: "10.20.161.254"))
     }
 
     @Test func defaultIsEmpty() throws {

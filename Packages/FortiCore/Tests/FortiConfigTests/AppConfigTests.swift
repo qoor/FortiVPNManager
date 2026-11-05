@@ -9,10 +9,7 @@ import Testing
     }
 
     @Test("Each rule", arguments: [
-        ({ @Sendable (c: inout AppConfig) in c.schemaVersion = 2 }, ConfigLoadError.Kind.newerSchemaVersion(2)),
-        ({ @Sendable (c: inout AppConfig) in c.schemaVersion = 0 },
-         .outOfRange(path: "schema_version", raw: "0", range: 1...1)),
-        ({ @Sendable (c: inout AppConfig) in c.vpn.port = 0 }, .outOfRange(path: "vpn.port", raw: "0", range: 1...65535)),
+        ({ @Sendable (c: inout AppConfig) in c.vpn.port = 0 }, ConfigLoadError.Kind.outOfRange(path: "vpn.port", raw: "0", range: 1...65535)),
         ({ @Sendable (c: inout AppConfig) in c.vpn.port = 70000 },
          .outOfRange(path: "vpn.port", raw: "70000", range: 1...65535)),
         ({ @Sendable (c: inout AppConfig) in c.vpn.host = "gw\n" }, .invalidCharacter(path: "vpn.host", scalar: 0x0A)),

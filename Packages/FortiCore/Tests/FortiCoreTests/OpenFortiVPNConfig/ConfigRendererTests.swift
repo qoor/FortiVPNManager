@@ -29,7 +29,6 @@ import FortiShared
     private func expectRejected(_ request: ConnectRequest, _ field: Field, _ problem: Problem, sourceLocation: SourceLocation = #_sourceLocation) {
         let expected = ConfigRenderer.ValidationError(field: field, problem: problem)
         #expect(throws: expected, sourceLocation: sourceLocation) { try ConfigRenderer.render(request) }
-        #expect(throws: expected, sourceLocation: sourceLocation) { try ConfigRenderer.validate(request) }
     }
 
     // MARK: - Output
@@ -98,7 +97,7 @@ import FortiShared
     func renderedFileReadsBackUnchanged(_ request: ConnectRequest) throws {
         let text = try ConfigRenderer.render(request)
 
-        let imported = OpenFortiVPNConfigReader.parse(text)
+        let imported = OpenFortiVPNConfigReader.parse(data: Data(text.utf8))
         #expect(imported == ImportedOpenFortiVPNConfig(
             host: request.host,
             port: request.port,
@@ -132,7 +131,7 @@ import FortiShared
         String(repeating: "a.", count: 126) + "a",  // 253 bytes
     ])
     func acceptsHost(_ host: String) throws {
-        try ConfigRenderer.validate(Self.request(host: host))
+        _ = try ConfigRenderer.render(Self.request(host: host))
         try ConfigRenderer.validateHost(host)
     }
 
@@ -196,7 +195,7 @@ import FortiShared
 
     @Test(arguments: [1, 443, 8443, 65535])
     func acceptsPort(_ port: Int) throws {
-        try ConfigRenderer.validate(Self.request(port: port))
+        _ = try ConfigRenderer.render(Self.request(port: port))
     }
 
     @Test(arguments: [0, -1, 65536, Int.max, Int.min])
@@ -211,7 +210,7 @@ import FortiShared
         "#bob", "bob#1", "alice@corp.example", "名前", "DOMAIN\\alice",
     ])
     func acceptsUsername(_ username: String) throws {
-        try ConfigRenderer.validate(Self.request(username: username))
+        _ = try ConfigRenderer.render(Self.request(username: username))
         try ConfigRenderer.validateUsername(username)
     }
 
@@ -264,7 +263,7 @@ import FortiShared
     @Test(arguments: [nil, "", "staff", String(repeating: "r", count: 63)] as [String?])
     func acceptsRealm(_ realm: String?) throws {
         try ConfigRenderer.validateRealm(realm)
-        try ConfigRenderer.validate(Self.request(realm: realm))
+        _ = try ConfigRenderer.render(Self.request(realm: realm))
     }
 
     // MARK: - Trusted certificates
@@ -295,7 +294,7 @@ import FortiShared
     ])
     func acceptsPassword(_ password: String) throws {
         try ConfigRenderer.validatePassword(password)
-        try ConfigRenderer.validate(Self.request(password: password))
+        _ = try ConfigRenderer.render(Self.request(password: password))
     }
 
     @Test(arguments: [

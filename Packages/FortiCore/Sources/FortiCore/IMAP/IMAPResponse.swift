@@ -7,21 +7,13 @@ public enum IMAPStatus: String, Sendable, Hashable {
     case bad = "BAD"
 }
 
-/// The bracketed response code of a status response (`[UIDVALIDITY 3]`, `[AUTHENTICATIONFAILED]`, ...).
+/// The bracketed response code of a status response (`[UIDVALIDITY 3]`, `[ALERT]`, ...).
 public enum IMAPResponseCode: Sendable, Hashable {
     case alert
-    /// Wrong username or (app) password (RFC 5530).
-    case authenticationFailed
-    case authorizationFailed
     case unavailable
     case limit
-    case readOnly
-    case readWrite
-    case tryCreate
-    case nonExistent
     case uidValidity(UInt32)
     case uidNext(UInt32)
-    case capability([String])
     /// Any other code. `name` is uppercased; `argument` is the raw text after the name, if any.
     case other(name: String, argument: String?)
 }
@@ -34,14 +26,10 @@ public enum IMAPResponse: Sendable, Hashable {
     case untaggedStatus(IMAPStatus, code: IMAPResponseCode?, text: String)
     /// `* BYE` — the server is closing the connection.
     case bye(code: IMAPResponseCode?, text: String)
-    /// `* CAPABILITY ...`, capability names as sent.
-    case capability([String])
     /// `* LIST (attributes) "delimiter" name`.
     case list(IMAPListEntry)
     /// `* n EXISTS`.
     case exists(UInt32)
-    /// `* n EXPUNGE` (a message sequence number, not a UID).
-    case expunge(UInt32)
     /// `* SEARCH uid uid ...`; empty when nothing matched.
     case search([UInt32])
     /// `* n FETCH (...)`.
@@ -63,14 +51,11 @@ public enum IMAPSpecialUse: String, Sendable, Hashable {
 public struct IMAPListEntry: Sendable, Hashable {
     /// Attributes exactly as sent, e.g. `["\\HasNoChildren", "\\All"]`.
     public var attributes: [String]
-    /// Hierarchy delimiter, `nil` for `NIL`.
-    public var delimiter: String?
     /// Mailbox name in wire form (modified UTF-7). Pass this unchanged to `SELECT`/`UID MOVE`.
     public var name: String
 
-    public init(attributes: [String], delimiter: String?, name: String) {
+    public init(attributes: [String], name: String) {
         self.attributes = attributes
-        self.delimiter = delimiter
         self.name = name
     }
 
@@ -117,26 +102,27 @@ public struct IMAPSpecialMailboxes: Sendable, Hashable {
 
 /// The parts of a `* n FETCH (...)` reply the OTP flow uses. Absent items are `nil`.
 public struct IMAPFetchResponse: Sendable, Hashable {
-    public var sequenceNumber: UInt32
     public var uid: UInt32?
     /// Parsed `INTERNALDATE` (server receive time).
     public var internalDate: Date?
-    public var flags: [String]?
     /// Contents of `BODY[HEADER...]` / `RFC822.HEADER` (the raw header block).
     public var headerBytes: Data?
 
-    public init(
-        sequenceNumber: UInt32,
-        uid: UInt32? = nil,
-        internalDate: Date? = nil,
-        flags: [String]? = nil,
-        headerBytes: Data? = nil
-    ) {
-        self.sequenceNumber = sequenceNumber
+    public init(uid: UInt32? = nil, internalDate: Date? = nil, headerBytes: Data? = nil) {
         self.uid = uid
         self.internalDate = internalDate
-        self.flags = flags
         self.headerBytes = headerBytes
+    }
+}
+
+/// `UIDVALIDITY`/`UIDNEXT` of the `\All` mailbox, taken right after SELECT and before connecting.
+public struct MailboxSnapshot: Sendable, Hashable {
+    public var uidValidity: UInt32
+    public var uidNext: UInt32
+
+    public init(uidValidity: UInt32, uidNext: UInt32) {
+        self.uidValidity = uidValidity
+        self.uidNext = uidNext
     }
 }
 

@@ -292,6 +292,8 @@ struct FailureHandlingTests {
         #expect(h.model.state == failed)
 
         h.advance(3600)
+        var shorterSession = ReducerFixture.settings
+        shorterSession.sessionMaxMinutes = 60
         let nonUserEvents: [ConnectionEvent] = [
             .pathChanged(ReducerFixture.offline),
             .pathChanged(ReducerFixture.online),
@@ -300,7 +302,7 @@ struct FailureHandlingTests {
             .willSleep,
             .didWake(sleptFor: 4000),
             .wakeSettled(WakeObservation(processAlive: false, pppUp: false, underlay: ReducerFixture.wifi, pathSatisfied: true)),
-            .settingsChanged(ConnectionSettings(sessionMaxMinutes: 60)),
+            .settingsChanged(shorterSession),
             .timerFired(.retry, generation: 1),
             .helperConnectionLost,
             .helperEvent(HelperEvent(attemptID: ReducerFixture.id(2), kind: .exited(ReducerFixture.facts(.spawned)))),

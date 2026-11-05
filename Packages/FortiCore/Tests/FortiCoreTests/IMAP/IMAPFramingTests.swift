@@ -93,7 +93,7 @@ struct IMAPFramingTests {
     @Test func literalSplitInsideCountAndCRLF() throws {
         // Splits right inside "{1", "}\r", "\r\n" and the payload.
         let line = Array(("* 1 FETCH (UID 2 BODY[HEADER] {12}\r\nSubject: x\r\n)\r\n").utf8)
-        let expected = [IMAPResponse.fetch(IMAPFetchResponse(sequenceNumber: 1, uid: 2, headerBytes: Data("Subject: x\r\n".utf8)))]
+        let expected = [IMAPResponse.fetch(IMAPFetchResponse(uid: 2, headerBytes: Data("Subject: x\r\n".utf8)))]
         for first in 0...line.count {
             for second in first...line.count {
                 var parser = IMAPResponseParser()

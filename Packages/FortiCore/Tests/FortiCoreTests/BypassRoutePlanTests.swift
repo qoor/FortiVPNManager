@@ -59,7 +59,6 @@ import Testing
         #expect(outcome.matchedNetwork == nil)
         #expect(outcome.imported.isEmpty)
         #expect(outcome.applied.isEmpty)
-        #expect(outcome.kept == [homeRoute, listedThroughHomeRouter])
         #expect(outcome.routes == [homeRoute, listedThroughHomeRouter])
         #expect(outcome.needsWrite)
     }
@@ -96,7 +95,7 @@ import Testing
         let vlan = AdditionalRoute(destination: "10.20.200.0", subnetMask: "255.255.255.0", gateway: router)
         let outcome = plan(targets: [host], snapshot([vlan], subnetMask: "255.255.0.0"))
         #expect(outcome.imported.isEmpty)
-        #expect(outcome.kept == [vlan])
+        #expect(outcome.applied == [via(host)])
         #expect(outcome.routes == [via(host), vlan])
         #expect(outcome.keptThroughOtherGateways == 0)
     }
@@ -105,7 +104,8 @@ import Testing
         let deskNeighbour = try! IPv4Network(parsing: "10.20.161.16")
         let outcome = plan(targets: [deskNeighbour], snapshot([via(deskNeighbour)]))
         #expect(outcome.onLink == [deskNeighbour])
-        #expect(outcome.kept == [via(deskNeighbour)])
+        #expect(outcome.applied.isEmpty)
+        #expect(outcome.routes == [via(deskNeighbour)])
         #expect(!outcome.needsWrite)
     }
 
@@ -139,7 +139,7 @@ import Testing
         for routes in [[via(other), foreign, wideRoute], [foreign, wideRoute, via(other)]] {
             let outcome = plan(targets: [host], snapshot(routes))
             #expect(outcome.imported == [other])
-            #expect(Set(outcome.kept) == [foreign, wideRoute])
+            #expect(Set(outcome.applied) == [via(host), via(other)])
             #expect(Set(outcome.routes) == [via(host), via(other), foreign, wideRoute])
         }
     }
@@ -149,7 +149,7 @@ import Testing
         let wider = AdditionalRoute(destination: "10.30.0.0", subnetMask: "255.255.0.0", gateway: router)
         let outcome = plan(targets: [network], snapshot([inside, wider, via(other), via(other, "10.50.0.0")]))
         #expect(outcome.imported == [other])
-        #expect(outcome.kept == [inside, wider, via(other, "10.50.0.0")])
+        #expect(outcome.routes == outcome.applied + [inside, wider, via(other, "10.50.0.0")])
         #expect(outcome.keptThroughOtherGateways == 1)
     }
 
@@ -158,7 +158,7 @@ import Testing
         for routes in [[via(host), via(wide), via(other)], [via(wide), via(other), via(host)]] {
             let outcome = plan(targets: [], snapshot(routes))
             #expect(outcome.imported == [wide, other])
-            #expect(outcome.kept == [via(host)])
+            #expect(Set(outcome.applied) == [via(wide), via(other)])
             #expect(Set(outcome.routes) == [via(wide), via(other), via(host)])
             #expect(!outcome.needsWrite)
         }
@@ -169,14 +169,15 @@ import Testing
         let homeRoute = via(other, homeRouter)
         let foreign = via(network, "192.168.0.254")
         let outcome = plan(targets: [host], snapshot([homeRoute, foreign], router: homeRouter, address: "192.168.0.12"))
-        #expect(outcome.kept == [homeRoute, foreign])
+        #expect(outcome.applied.isEmpty)
+        #expect(outcome.routes == [homeRoute, foreign])
         #expect(outcome.keptThroughOtherGateways == 1)
     }
 
     @Test func aListedTargetThroughAnotherGatewayIsLeftAlone() {
         let foreign = via(host, "192.168.0.1")
         let outcome = plan(targets: [host], snapshot([foreign]))
-        #expect(outcome.kept == [foreign])
+        #expect(outcome.applied == [via(host)])
         #expect(outcome.routes == [via(host), foreign])
     }
 
@@ -197,7 +198,7 @@ import Testing
         let outcome = plan(targets: targets, applied: targets.map { via($0) }, snapshot((targets + outside).map { via($0) }))
         #expect(outcome.imported == [outside[0]])
         #expect(outcome.notImported == 2)
-        #expect(outcome.kept == [via(outside[1]), via(outside[2])])
+        #expect(outcome.routes == outcome.applied + [via(outside[1]), via(outside[2])])
         #expect(outcome.keptThroughOtherGateways == 0)
         #expect(!outcome.needsWrite)
     }

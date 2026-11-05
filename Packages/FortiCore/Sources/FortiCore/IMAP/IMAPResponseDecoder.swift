@@ -226,10 +226,9 @@ enum IMAPResponseDecoder {
             }
             switch keyword {
             case "EXISTS": return s.isAtEnd ? .exists(number) : nil
-            case "EXPUNGE": return s.isAtEnd ? .expunge(number) : nil
             case "FETCH":
                 guard s.consumeSpaces() else { return nil }
-                return parseFetch(sequenceNumber: number, &s)
+                return parseFetch(&s)
             default: return nil
             }
         }
@@ -241,10 +240,6 @@ enum IMAPResponseDecoder {
         case "BYE":
             let (code, text) = parseResponseText(&s)
             return .bye(code: code, text: text)
-        case "CAPABILITY":
-            var names: [String] = []
-            while s.consumeSpaces(), let name = s.readAtom() { names.append(name) }
-            return s.isAtEnd ? .capability(names) : nil
         case "LIST", "XLIST":
             return parseList(&s)
         case "SEARCH":
@@ -282,20 +277,12 @@ enum IMAPResponseDecoder {
         let argument = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : nil
         switch name {
         case "ALERT": return .alert
-        case "AUTHENTICATIONFAILED": return .authenticationFailed
-        case "AUTHORIZATIONFAILED": return .authorizationFailed
         case "UNAVAILABLE": return .unavailable
         case "LIMIT": return .limit
-        case "READ-ONLY": return .readOnly
-        case "READ-WRITE": return .readWrite
-        case "TRYCREATE": return .tryCreate
-        case "NONEXISTENT": return .nonExistent
         case "UIDVALIDITY":
             if let value = argument.flatMap({ UInt32($0) }) { return .uidValidity(value) }
         case "UIDNEXT":
             if let value = argument.flatMap({ UInt32($0) }) { return .uidNext(value) }
-        case "CAPABILITY":
-            return .capability(argument.map { $0.split(separator: " ").map(String.init) } ?? [])
         default:
             break
         }
@@ -310,27 +297,22 @@ enum IMAPResponseDecoder {
             guard case .atom(let attribute) = value else { return nil }
             attributes.append(attribute)
         }
-        guard s.consumeSpaces(), let delimiterValue = s.readValue() else { return nil }
-        let delimiter: String?
-        switch delimiterValue {
-        case .nilValue: delimiter = nil
-        case .string(let bytes): delimiter = String(decoding: bytes, as: UTF8.self)
+        // The hierarchy delimiter (a string or NIL) is not needed.
+        guard s.consumeSpaces(), let delimiter = s.readValue() else { return nil }
+        switch delimiter {
+        case .nilValue, .string: break
         default: return nil
         }
         guard s.consumeSpaces(), let nameValue = s.readValue(), let nameBytes = nameValue.stringBytes else {
             return nil
         }
-        return .list(IMAPListEntry(
-            attributes: attributes,
-            delimiter: delimiter,
-            name: String(decoding: nameBytes, as: UTF8.self)
-        ))
+        return .list(IMAPListEntry(attributes: attributes, name: String(decoding: nameBytes, as: UTF8.self)))
     }
 
     /// `(name value name value ...)`. Unknown items are skipped; known items must be well-typed.
-    private static func parseFetch(sequenceNumber: UInt32, _ s: inout IMAPScanner) -> IMAPResponse? {
+    private static func parseFetch(_ s: inout IMAPScanner) -> IMAPResponse? {
         guard case .list(let items)? = s.readValue(), items.count.isMultiple(of: 2) else { return nil }
-        var fetch = IMAPFetchResponse(sequenceNumber: sequenceNumber)
+        var fetch = IMAPFetchResponse()
         for index in stride(from: 0, to: items.count, by: 2) {
             guard case .atom(let rawName) = items[index] else { return nil }
             let name = rawName.uppercased()
@@ -342,14 +324,6 @@ enum IMAPResponseDecoder {
             case "INTERNALDATE":
                 guard case .string(let bytes) = value else { return nil }
                 fetch.internalDate = IMAPInternalDate.parse(String(decoding: bytes, as: UTF8.self))
-            case "FLAGS":
-                guard case .list(let flagValues) = value else { return nil }
-                var flags: [String] = []
-                for flag in flagValues {
-                    guard case .atom(let atom) = flag else { return nil }
-                    flags.append(atom)
-                }
-                fetch.flags = flags
             case _ where name == "RFC822.HEADER" || (name.hasPrefix("BODY[") && name.dropFirst(5).hasPrefix("HEADER")):
                 switch value {
                 case .string(let bytes): fetch.headerBytes = Data(bytes)

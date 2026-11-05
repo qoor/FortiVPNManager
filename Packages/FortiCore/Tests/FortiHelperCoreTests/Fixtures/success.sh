@@ -22,5 +22,4 @@ on_term() {
 trap on_term TERM
 tunnel_up
 hang
-note 'hang_returned=yes'
 exit 3

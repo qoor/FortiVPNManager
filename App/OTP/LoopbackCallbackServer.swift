@@ -53,7 +53,6 @@ actor LoopbackCallbackServer {
 
     /// Starts listening on `127.0.0.1` and returns the port once the listener is ready.
     func start() async throws(LoopbackCallbackError) -> UInt16 {
-        guard listener == nil, outcome == nil else { throw .listenerFailed("already started") }
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         parameters.acceptLocalOnly = true

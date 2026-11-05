@@ -46,20 +46,22 @@ public struct AttemptContext: Sendable, Equatable {
     public var stopRequested: StopReason?
     /// `vpn.*` when the attempt began: the account its readiness check was issued for and the one
     /// `startTunnel` uses. A profile change while the attempt runs applies from the next attempt.
-    var profile: VPNProfile?
+    var profile: VPNProfile
 
     init(
         attemptID: AttemptID,
         reason: AttemptReason,
         certRetryUsed: Bool,
         startedAt: Date,
-        stage: AttemptStage
+        stage: AttemptStage,
+        profile: VPNProfile
     ) {
         self.attemptID = attemptID
         self.reason = reason
         self.certRetryUsed = certRetryUsed
         self.startedAt = startedAt
         self.stage = stage
+        self.profile = profile
     }
 }
 

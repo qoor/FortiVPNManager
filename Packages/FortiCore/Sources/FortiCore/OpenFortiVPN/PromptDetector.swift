@@ -14,8 +14,8 @@ public struct PromptDetector: Sendable {
         case otpPrompt
     }
 
-    public static let passwordPromptText = "VPN account password: "
-    public static let otpPromptText = "Two-factor authentication token: "
+    static let passwordPromptText = "VPN account password: "
+    static let otpPromptText = "Two-factor authentication token: "
 
     private static let suffixPrompts: [(bytes: [UInt8], prompt: Prompt)] = [
         (Array(passwordPromptText.utf8), .passwordPrompt),

@@ -234,11 +234,6 @@ struct GoogleOAuthClientFileTests {
         ("client_secret", "", .invalidField("client_secret")),
         ("client_secret", "has space", .invalidField("client_secret")),
         ("client_secret", "tab\t", .invalidField("client_secret")),
-        ("token_uri", "http://oauth2.googleapis.com/token", .invalidField("token_uri")),
-        ("token_uri", "https://oauth2.googleapis.com.evil.example/token", .invalidField("token_uri")),
-        ("token_uri", "https://user@oauth2.googleapis.com/token", .invalidField("token_uri")),
-        ("auth_uri", "https://evilgoogle.com/auth", .invalidField("auth_uri")),
-        ("auth_uri", "", .invalidField("auth_uri")),
     ] as [(String, String?, GoogleOAuthClientFileError)])
     func fieldProblems(key: String, value: String?, expected: GoogleOAuthClientFileError) {
         var fields = Self.complete

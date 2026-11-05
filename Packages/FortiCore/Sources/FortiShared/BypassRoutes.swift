@@ -69,9 +69,9 @@ public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible 
     }
 
     /// Dotted-quad address, e.g. `10.30.170.0`.
-    public var addressText: String { Self.dottedQuad(address) }
+    var addressText: String { Self.dottedQuad(address) }
     /// Dotted subnet mask, e.g. `255.255.255.0`.
-    public var subnetMask: String { Self.dottedQuad(Self.mask(prefixLength)) }
+    var subnetMask: String { Self.dottedQuad(Self.mask(prefixLength)) }
 
     /// `10.30.161.16` for a host, `10.30.170.0/24` for a network.
     public var description: String {
@@ -120,12 +120,12 @@ public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible 
         return value
     }
 
-    public static func dottedQuad(_ value: UInt32) -> String {
+    private static func dottedQuad(_ value: UInt32) -> String {
         "\(value >> 24).\(value >> 16 & 0xFF).\(value >> 8 & 0xFF).\(value & 0xFF)"
     }
 
     /// Number of leading ones when `mask` is contiguous (ones, then zeros); `nil` otherwise.
-    public static func prefixLength(ofMask mask: UInt32) -> Int? {
+    private static func prefixLength(ofMask mask: UInt32) -> Int? {
         let length = (~mask).leadingZeroBitCount
         return Self.mask(length) == mask ? length : nil
     }

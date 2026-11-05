@@ -19,14 +19,13 @@ public enum ConfigFileChange: Sendable, Equatable {
 /// when it becomes active.
 public struct ConfigFileWatcher: Sendable {
     public let url: URL
-    private let store: ConfigFileStore
+    private let store = ConfigFileStore()
     private var lastFingerprint: FileFingerprint?
     private var lastData: Data?
     private var hasPolled = false
 
-    public init(url: URL, store: ConfigFileStore = ConfigFileStore()) {
+    public init(url: URL) {
         self.url = url
-        self.store = store
     }
 
     /// Records bytes the app just wrote so the next ``poll()`` does not report them as a change.

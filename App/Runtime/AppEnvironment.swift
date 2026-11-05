@@ -1,5 +1,4 @@
 import AppKit
-import FortiCore
 import Observation
 import ServiceManagement
 
@@ -17,12 +16,11 @@ final class AppEnvironment {
     let loginItems: LoginItemService
     let importer: FirstRunImporter
     let connection: ConnectionController
-    let otpSession: any OTPSessionService
-    let gmailTester: any GmailConnectionTesting
+    let gmailTester: GmailConnectionTester
     /// Google OAuth for `otp.method: gmail_api`: client JSON import, browser sign-in, tokens.
     let googleOAuth: GoogleOAuthService
-    /// "Test Gmail API" (profile check with the stored authorization).
-    let gmailAPITester: any GmailAPIConnectionTesting
+    /// "Test Gmail Connection" with the Gmail API method (profile check with the stored authorization).
+    let gmailAPITester: GmailAPIConnectionTester
     /// Exception Rules: `routes.bypass_vpn` kept as the primary network service's additional routes.
     let bypassRoutes: BypassRouteService
     /// macOS notifications (exception routes that keep failing to apply).
@@ -32,7 +30,6 @@ final class AppEnvironment {
     /// The UI opens the Account tab to show it.
     private(set) var firstLaunchImport: Result<OpenFortiVPNImportReport, OpenFortiVPNImportError>?
 
-    @ObservationIgnored private var started = false
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
 
     init() {
@@ -42,7 +39,7 @@ final class AppEnvironment {
         self.configStore = configStore
         self.credentials = credentials
         self.googleOAuth = googleOAuth
-        otpSession = OTPSessionRouter(
+        let otpSession = OTPSessionRouter(
             imap: GmailOTPSession(),
             api: GmailAPIOTPSession(tokens: googleOAuth),
             availability: { [googleOAuth] address in googleOAuth.availability(address: address) }
@@ -77,9 +74,6 @@ final class AppEnvironment {
 
     /// Call once at launch.
     func start() {
-        guard !started else { return }
-        started = true
-
         firstLaunchImport = importer.importOnFirstLaunch()
         notifier.start()
         configStore.start()
@@ -103,10 +97,7 @@ final class AppEnvironment {
             return (try? await helperClient.status().childAlive) ?? false
         }
 
-        connection.launch(
-            autoConnect: configStore.config.connection.autoConnectOnLaunch,
-            restoredLedger: stateStore.ledger
-        )
+        connection.launch()
         systemMonitor.start()
         bypassRoutes.start(following: readinessChecker)
 
@@ -117,7 +108,6 @@ final class AppEnvironment {
         }
     }
 
-    /// Re-reads config.yaml and re-checks readiness, the login item and presence.
     func applicationDidBecomeActive() {
         configStore.poll()
         loginItems.refresh()

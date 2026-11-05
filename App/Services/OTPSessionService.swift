@@ -11,8 +11,10 @@ struct GmailAccount: Sendable, Equatable {
 }
 
 /// Reports from an OTP session, mapped to `ConnectionEvent`s by the ConnectionController.
+/// `.ready`, `.codeFound` and `.failed` come only before the session ends, and `.failed` never after
+/// `.codeFound`.
 enum OTPSessionEvent: Sendable, Equatable {
-    /// Signed in and snapshot taken (IMAP also swept stale AuthCode mail), waiting (→ `.otpSessionReady`).
+    /// Signed in and snapshot taken, waiting (→ `.otpSessionReady`).
     case ready(AttemptID)
     /// Login or Google authorization rejected (`.authentication`) or connection/protocol failure
     /// (`.network`) (→ `.otpSessionFailed`).
@@ -34,6 +36,7 @@ enum OTPSessionEvent: Sendable, Equatable {
 /// One Gmail session per connection attempt: IMAP (`GmailOTPSession`), the Gmail
 /// REST API (`GmailAPIOTPSession`), or `OTPSessionRouter` choosing between them per attempt.
 /// All methods are idempotent and ignore attempt IDs other than the current session's.
+/// Only messages that arrive after the session's snapshot are looked at, so stale codes need no sweep.
 @MainActor
 protocol OTPSessionService: AnyObject {
     /// Receives every `OTPSessionEvent`, on the main actor.
@@ -64,12 +67,6 @@ enum GmailTestResult: Sendable, Equatable {
     case networkError(String)
 }
 
-/// Stand-alone connectivity check used by the Account tab.
-@MainActor
-protocol GmailConnectionTesting {
-    func test(account: GmailAccount) async -> GmailTestResult
-}
-
 /// Result of the Account tab's Gmail API check (`GmailAPIConnectionTester`).
 enum GmailAPITestResult: Sendable, Equatable {
     /// The stored Google authorization works and belongs to the Gmail address.
@@ -79,10 +76,4 @@ enum GmailAPITestResult: Sendable, Equatable {
     /// Google refused the authorization (revoked, client rejected, other account, Gmail API refused).
     case authenticationFailed(String)
     case networkError(String)
-}
-
-/// Stand-alone Gmail API check used by the Account tab.
-@MainActor
-protocol GmailAPIConnectionTesting {
-    func test(address: String) async -> GmailAPITestResult
 }

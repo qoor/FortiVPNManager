@@ -1,7 +1,7 @@
 import Foundation
 
 /// Progress of one openfortivpn run, in the order it normally happens.
-public enum Milestone: Int, Codable, Sendable, Comparable, CaseIterable {
+public enum Milestone: Int, Codable, Sendable, Comparable {
     case spawned
     case connectedToGateway
     case otpPrompted
@@ -31,8 +31,8 @@ public struct ConnectRequest: Codable, Sendable, Equatable {
         host: String,
         port: Int,
         username: String,
-        realm: String? = nil,
-        trustedCerts: [String] = [],
+        realm: String?,
+        trustedCerts: [String],
         password: String
     ) {
         self.attemptID = attemptID
@@ -92,7 +92,6 @@ public struct ExitFacts: Codable, Sendable, Equatable {
     /// Seconds between `tunnelUp` and exit, if the tunnel came up.
     public var upDuration: TimeInterval?
     public var exitStatus: ProcessExitStatus
-    public var routeRepairPerformed: Bool
 
     public init(
         furthestMilestone: Milestone?,
@@ -101,8 +100,7 @@ public struct ExitFacts: Codable, Sendable, Equatable {
         certRejectedAt: Milestone? = nil,
         tunnelModeRejected: Bool = false,
         upDuration: TimeInterval? = nil,
-        exitStatus: ProcessExitStatus,
-        routeRepairPerformed: Bool = false
+        exitStatus: ProcessExitStatus
     ) {
         self.furthestMilestone = furthestMilestone
         self.stopInitiator = stopInitiator
@@ -111,7 +109,6 @@ public struct ExitFacts: Codable, Sendable, Equatable {
         self.tunnelModeRejected = tunnelModeRejected
         self.upDuration = upDuration
         self.exitStatus = exitStatus
-        self.routeRepairPerformed = routeRepairPerformed
     }
 }
 

@@ -42,11 +42,9 @@ final class SelfUpdateWatcher: @unchecked Sendable {
         timer.resume()
     }
 
+    /// The helper runs as root, so `ofRootProcess` finds its own process.
     private static func executablePath() -> String {
-        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
-        let length = proc_pidpath(getpid(), &buffer, UInt32(buffer.count))
-        guard length > 0 else { return Bundle.main.executablePath ?? CommandLine.arguments[0] }
-        return String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        ProcessIdentity.ofRootProcess(getpid())?.path ?? Bundle.main.executablePath ?? CommandLine.arguments[0]
     }
 
     private static func fingerprint(of path: String) -> Fingerprint? {

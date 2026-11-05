@@ -14,8 +14,8 @@ public enum IMAPParseError: Error, Sendable, Equatable {
 /// responses completed by that chunk. Literals (`{n}\r\n` + n bytes) may be split at any offset.
 /// Malformed but well-framed responses become `.other(raw)` instead of failing.
 public struct IMAPResponseParser: Sendable {
-    public let maxLiteralSize: Int
-    public let maxResponseSize: Int
+    static let maxLiteralSize = 1 << 20
+    static let maxResponseSize = 4 << 20
 
     /// Bytes of the response being assembled (lines and literal payloads, CRLFs included).
     private var buffer: [UInt8] = []
@@ -25,17 +25,14 @@ public struct IMAPResponseParser: Sendable {
     private var literalRemaining = 0
     private var failure: IMAPParseError?
 
-    public init(maxLiteralSize: Int = 1 << 20, maxResponseSize: Int = 4 << 20) {
-        self.maxLiteralSize = maxLiteralSize
-        self.maxResponseSize = maxResponseSize
-    }
+    public init() {}
 
     /// Consumes `bytes` and returns every response completed by them, in order.
     public mutating func feed(_ bytes: some Sequence<UInt8>) throws(IMAPParseError) -> [IMAPResponse] {
         if let failure { throw failure }
         var responses: [IMAPResponse] = []
         for byte in bytes {
-            guard buffer.count < maxResponseSize else { try fail(.responseTooLarge) }
+            guard buffer.count < Self.maxResponseSize else { try fail(.responseTooLarge) }
             buffer.append(byte)
             if literalRemaining > 0 {
                 literalRemaining -= 1
@@ -51,8 +48,8 @@ public struct IMAPResponseParser: Sendable {
                 buffer.removeAll(keepingCapacity: buffer.capacity <= 64 * 1024)
                 lineStart = 0
             case .some(let declared):
-                guard declared <= UInt64(maxLiteralSize) else { try fail(.literalTooLarge(declared: declared)) }
-                guard buffer.count + Int(declared) <= maxResponseSize else { try fail(.responseTooLarge) }
+                guard declared <= UInt64(Self.maxLiteralSize) else { try fail(.literalTooLarge(declared: declared)) }
+                guard buffer.count + Int(declared) <= Self.maxResponseSize else { try fail(.responseTooLarge) }
                 literalRemaining = Int(declared)
                 if literalRemaining == 0 { lineStart = buffer.count }
             }
@@ -92,7 +89,6 @@ enum IMAPByte {
     static let cr: UInt8 = 0x0D
     static let lf: UInt8 = 0x0A
     static let space: UInt8 = 0x20
-    static let tab: UInt8 = 0x09
     static let quote: UInt8 = 0x22
     static let backslash: UInt8 = 0x5C
     static let openParen: UInt8 = 0x28

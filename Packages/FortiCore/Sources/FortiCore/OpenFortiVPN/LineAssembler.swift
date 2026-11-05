@@ -16,7 +16,7 @@
 /// Time is injected: pass the reading time to `append(_:now:)`, and call `flushIfIdle(now:)`
 /// when `idleFlushDeadline` passes.
 public struct LineAssembler: Sendable {
-    public let maxLineBytes: Int
+    static let maxLineBytes = 16_384
     public let idleFlush: Duration
 
     /// Bytes of the current line that have not been emitted yet.
@@ -26,9 +26,7 @@ public struct LineAssembler: Sendable {
     /// Time of the last `append` that carried at least one byte.
     private var lastInputAt: ContinuousClock.Instant?
 
-    public init(maxLineBytes: Int = 16_384, idleFlush: Duration = .milliseconds(250)) {
-        precondition(maxLineBytes >= 4, "maxLineBytes must hold at least one UTF-8 scalar")
-        self.maxLineBytes = maxLineBytes
+    public init(idleFlush: Duration = .milliseconds(250)) {
         self.idleFlush = idleFlush
     }
 
@@ -97,7 +95,7 @@ public struct LineAssembler: Sendable {
     private mutating func appendWithinLine(_ segment: ArraySlice<UInt8>, into lines: inout [String]) {
         var index = segment.startIndex
         while index < segment.endIndex {
-            let room = maxLineBytes - pending.count
+            let room = Self.maxLineBytes - pending.count
             if room > 0 {
                 let end = min(segment.endIndex, index + room)
                 pending.append(contentsOf: segment[index..<end])
@@ -106,7 +104,7 @@ public struct LineAssembler: Sendable {
             }
             let byte = segment[index]
             // A CR right at the limit may still be the CR of a CRLF, so it may overhang by one.
-            let mayOverhang = byte == Self.cr && pending.count == maxLineBytes
+            let mayOverhang = byte == Self.cr && pending.count == Self.maxLineBytes
             if !mayOverhang {
                 lines.append(hardSplit(before: byte))
             }
@@ -135,7 +133,7 @@ public struct LineAssembler: Sendable {
     /// when the last is a CR) because `next` makes the line too long. The cut backs off to the
     /// start of a multi-byte scalar that continues past it.
     private mutating func hardSplit(before next: UInt8) -> String {
-        var cut = maxLineBytes
+        var cut = Self.maxLineBytes
         let firstAfterCut = cut < pending.count ? pending[cut] : next
         if Self.isContinuation(firstAfterCut) {
             let lowest = max(1, cut - 3)

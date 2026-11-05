@@ -1,8 +1,9 @@
-import FortiCore
+@testable import FortiCore
 import Testing
 
 @Suite struct LineAssemblerTests {
     private let t0 = ContinuousClock.now
+    private let limit = LineAssembler.maxLineBytes
 
     private func at(_ milliseconds: Int) -> ContinuousClock.Instant {
         t0 + .milliseconds(milliseconds)
@@ -160,46 +161,50 @@ import Testing
     // MARK: Hard split
 
     @Test func hardSplitsLinesLongerThanTheLimit() {
-        var assembler = LineAssembler(maxLineBytes: 8)
-        #expect(assembler.append(Array("0123456789ABCDEFGHIJ\n".utf8), now: t0) == [
-            "01234567",
-            "89ABCDEF",
-            "GHIJ",
-        ])
+        var assembler = LineAssembler()
+        let first = String(repeating: "a", count: limit)
+        let second = String(repeating: "b", count: limit)
+        #expect(assembler.append(Array((first + second + "GHIJ\n").utf8), now: t0) == [first, second, "GHIJ"])
     }
 
     @Test func doesNotSplitALineOfExactlyTheLimit() {
-        var assembler = LineAssembler(maxLineBytes: 8)
-        #expect(assembler.append(Array("01234567\n".utf8), now: t0) == ["01234567"])
-        #expect(assembler.append(Array("01234567\r\n".utf8), now: t0) == ["01234567"])
-        #expect(assembler.append(Array("01234567\rX\n".utf8), now: t0) == ["01234567", "^MX"])
+        var assembler = LineAssembler()
+        let line = String(repeating: "x", count: limit)
+        #expect(assembler.append(Array((line + "\n").utf8), now: t0) == [line])
+        #expect(assembler.append(Array((line + "\r\n").utf8), now: t0) == [line])
+        #expect(assembler.append(Array((line + "\rX\n").utf8), now: t0) == [line, "^MX"])
     }
 
     @Test func swallowsTheLFAfterAHardSplitThatConsumedTheWholeLine() {
-        var assembler = LineAssembler(maxLineBytes: 4)
-        #expect(assembler.append(Array("01234567".utf8), now: t0) == ["0123"])
-        #expect(assembler.append(Array("8\n".utf8), now: t0) == ["4567", "8"])
-        #expect(assembler.append(Array("abcde".utf8), now: t0) == ["abcd"])
+        var assembler = LineAssembler()
+        let a = String(repeating: "a", count: limit)
+        let b = String(repeating: "b", count: limit)
+        let c = String(repeating: "c", count: limit)
+        #expect(assembler.append(Array((a + b).utf8), now: t0) == [a])
+        #expect(assembler.append(Array("8\n".utf8), now: t0) == [b, "8"])
+        #expect(assembler.append(Array((c + "e").utf8), now: t0) == [c])
         #expect(assembler.flushIfIdle(now: at(300)) == ["e"])
         #expect(assembler.append(Array("\n".utf8), now: at(301)).isEmpty)
     }
 
-    @Test func usesA16KiBLimitByDefault() {
+    @Test func splitsLinesAt16KiB() {
         var assembler = LineAssembler()
         let lines = assembler.append(Array(repeating: UInt8(ascii: "x"), count: 40_000) + [0x0A], now: t0)
         #expect(lines.map(\.utf8.count) == [16_384, 16_384, 7_232])
     }
 
-    @Test(arguments: 4...13)
-    func hardSplitKeepsUTF8ScalarsIntact(maxLineBytes: Int) {
+    /// The limit falls `textBytesBeforeCut` bytes into a text of multi-byte scalars.
+    @Test(arguments: 0...36)
+    func hardSplitKeepsUTF8ScalarsIntact(textBytesBeforeCut: Int) {
         let text = "a\u{AC00}\u{B098}😀b€\u{B2E4}cd\u{B77C}\u{B9C8}😀😀\u{BC14}"
-        var assembler = LineAssembler(maxLineBytes: maxLineBytes)
-        var lines: [String] = []
+        let padding = String(repeating: "x", count: limit - textBytesBeforeCut)
+        var assembler = LineAssembler()
+        var lines = assembler.append(Array(padding.utf8), now: t0)
         for byte in Array(text.utf8) + [0x0A] {
             lines += assembler.append([byte], now: t0)
         }
-        #expect(lines.joined() == text)
-        #expect(lines.allSatisfy { !$0.contains("\u{FFFD}") && $0.utf8.count <= maxLineBytes })
+        #expect(lines.joined() == padding + text)
+        #expect(lines.allSatisfy { !$0.contains("\u{FFFD}") && $0.utf8.count <= limit })
     }
 
     // MARK: Rendering

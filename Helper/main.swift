@@ -13,8 +13,6 @@ final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
     }
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        // A replaced binary fails the app's signature check anyway: exit (when idle) so launchd
-        // starts the new one; the app retries once.
         guard controller.admitNewConnection() else {
             HelperLog.helper.notice("refusing a connection from pid \(connection.processIdentifier): helper is exiting")
             return false

@@ -10,27 +10,24 @@ public struct AppConfig: Sendable, Equatable {
     /// The `schema_version` this build reads and writes.
     public static let currentSchemaVersion = 1
 
-    public var schemaVersion: Int
     public var vpn: VPN
     public var otp: OTP
     public var connection: Connection
     public var routes: Routes
 
     public init(
-        schemaVersion: Int = AppConfig.currentSchemaVersion,
         vpn: VPN = VPN(),
         otp: OTP = OTP(),
         connection: Connection = Connection(),
         routes: Routes = Routes()
     ) {
-        self.schemaVersion = schemaVersion
         self.vpn = vpn
         self.otp = otp
         self.connection = connection
         self.routes = routes
     }
 
-    enum CodingKeys: String, CodingKey, CaseIterable {
+    enum CodingKeys: String {
         case schemaVersion = "schema_version"
         case vpn
         case otp
@@ -64,7 +61,7 @@ public struct AppConfig: Sendable, Equatable {
             self.trustedCerts = trustedCerts
         }
 
-        enum CodingKeys: String, CodingKey, CaseIterable {
+        enum CodingKeys: String {
             case host
             case port
             case username
@@ -99,7 +96,7 @@ public struct AppConfig: Sendable, Equatable {
             self.googleClientID = googleClientID
         }
 
-        enum CodingKeys: String, CodingKey, CaseIterable {
+        enum CodingKeys: String {
             case gmailAddress = "gmail_address"
             case method
             case googleClientID = "google_client_id"
@@ -129,7 +126,7 @@ public struct AppConfig: Sendable, Equatable {
             self.schedule = schedule
         }
 
-        enum CodingKeys: String, CodingKey, CaseIterable {
+        enum CodingKeys: String {
             case autoConnectOnLaunch = "auto_connect_on_launch"
             case sessionMaxMinutes = "session_max_minutes"
             case proactiveReconnect = "proactive_reconnect"
@@ -147,7 +144,7 @@ public struct AppConfig: Sendable, Equatable {
                 self.marginMinutes = marginMinutes
             }
 
-            enum CodingKeys: String, CodingKey, CaseIterable {
+            enum CodingKeys: String {
                 case enabled
                 case marginMinutes = "margin_minutes"
             }
@@ -163,7 +160,7 @@ public struct AppConfig: Sendable, Equatable {
                 self.minSleepMinutes = minSleepMinutes
             }
 
-            enum CodingKeys: String, CodingKey, CaseIterable {
+            enum CodingKeys: String {
                 case enabled
                 case minSleepMinutes = "min_sleep_minutes"
             }
@@ -219,7 +216,7 @@ public struct AppConfig: Sendable, Equatable {
                 return Day.allCases.filter(set.contains)
             }
 
-            enum CodingKeys: String, CodingKey, CaseIterable {
+            enum CodingKeys: String {
                 case enabled
                 case days
                 case start
@@ -243,7 +240,7 @@ public struct AppConfig: Sendable, Equatable {
             self.bypassVPN = bypassVPN
         }
 
-        enum CodingKeys: String, CodingKey, CaseIterable {
+        enum CodingKeys: String {
             case networks
             case bypassVPN = "bypass_vpn"
         }
@@ -255,9 +252,9 @@ public struct TimeOfDay: Sendable, Hashable, Comparable, CustomStringConvertible
     /// Minutes after midnight, `0..<1440`.
     public let minutes: Int
 
-    /// Clamps to `00:00`-`23:59`.
+    /// `hour` 0-23, `minute` 0-59.
     public init(hour: Int, minute: Int) {
-        minutes = min(max(hour * 60 + minute, 0), 24 * 60 - 1)
+        minutes = hour * 60 + minute
     }
 
     /// `H:mm` or `HH:mm`, hour `0`-`23`, minute `00`-`59`; `nil` for anything else.
@@ -333,13 +330,6 @@ extension AppConfig {
     /// rendered template. Unlike decoding, invalid `trusted_certs` entries are errors here (the app only
     /// stores normalized digests). Errors carry no location.
     public func validate() throws(ConfigLoadError) {
-        if schemaVersion > AppConfig.currentSchemaVersion {
-            throw ConfigLoadError(.newerSchemaVersion(schemaVersion))
-        }
-        if schemaVersion < 1 {
-            throw ConfigLoadError(.outOfRange(path: ConfigPath.schemaVersion, raw: String(schemaVersion),
-                                              range: 1...AppConfig.currentSchemaVersion))
-        }
         let strings: [(String, String)] = [
             (ConfigPath.host, vpn.host),
             (ConfigPath.username, vpn.username),

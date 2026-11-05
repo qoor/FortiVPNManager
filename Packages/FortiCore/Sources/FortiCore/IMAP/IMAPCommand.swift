@@ -70,8 +70,6 @@ public struct IMAPUIDSet: Sendable, Hashable, CustomStringConvertible {
 
 /// Reasons a command cannot be serialized.
 public enum IMAPCommandError: Error, Sendable, Equatable {
-    /// The tag is empty or contains characters outside `[A-Za-z0-9]`.
-    case invalidTag
     /// The username is empty, or the username/password contains NUL (forbidden by SASL PLAIN).
     case invalidCredentials
     /// The mailbox name contains CR, LF, NUL or non-ASCII characters. Names returned by LIST are
@@ -101,16 +99,14 @@ public enum IMAPCommand: Sendable, Equatable {
     case idle
     /// `UID MOVE <set> "<mailbox>"` (RFC 6851).
     case uidMove(IMAPUIDSet, mailbox: String)
-    case noop
     case logout
 
     /// The untagged line that terminates `IDLE`.
     public static let idleDone = Data("DONE\r\n".utf8)
 
-    /// Serializes the command with `tag`.
+    /// Serializes the command with `tag` (from `IMAPTagGenerator`).
     public func encoded(tag: String) throws(IMAPCommandError) -> Data {
-        guard !tag.isEmpty, tag.utf8.allSatisfy(Self.isTagByte) else { throw .invalidTag }
-        return Data("\(tag) \(try body())\r\n".utf8)
+        Data("\(tag) \(try body())\r\n".utf8)
     }
 
     /// The command line without tag and CRLF.
@@ -141,8 +137,6 @@ public enum IMAPCommand: Sendable, Equatable {
             return "IDLE"
         case let .uidMove(set, mailbox):
             return "UID MOVE \(set) " + (try Self.quoted(mailbox, error: .invalidMailboxName))
-        case .noop:
-            return "NOOP"
         case .logout:
             return "LOGOUT"
         }
@@ -158,10 +152,6 @@ public enum IMAPCommand: Sendable, Equatable {
         }
         result.append("\"")
         return result
-    }
-
-    static func isTagByte(_ byte: UInt8) -> Bool {
-        (0x30...0x39).contains(byte) || (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
     }
 }
 

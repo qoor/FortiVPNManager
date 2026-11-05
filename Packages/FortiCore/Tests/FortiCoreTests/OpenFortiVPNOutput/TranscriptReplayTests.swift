@@ -1,4 +1,4 @@
-import FortiCore
+@testable import FortiCore
 import FortiShared
 import Foundation
 import Testing
@@ -280,7 +280,7 @@ import Testing
             #expect(replay.promptsPerPause == scenario.expectedPrompts.map { [$0] } + [[]], "\(timing)")
             #expect(replay.stdoutSignals == scenario.expectedStdoutSignals, "\(timing)")
             #expect(replay.parser.rejectedCertificateDigests == scenario.expectedDigests)
-            #expect(replay.parser.tunnelAddresses?.ip == scenario.expectedTunnelIP)
+            #expect(replay.parser.tunnelIP == scenario.expectedTunnelIP)
             #expect(replay.parser.routesTouched == scenario.expectedRoutesTouched)
             #expect(replay.parser.routesRestored == scenario.expectedRoutesRestored)
 
@@ -304,7 +304,7 @@ import Testing
         for offset in stride(from: shard, through: transcript.stdout.count, by: 4) {
             let replay = Self.replay(transcript, stdoutCuts: [offset], stderrCuts: [], timing: .quick, streams: .stdout)
             if replay.prompts != expectedPrompts || replay.stdoutSignals != expectedStdout
-                || replay.parser.tunnelAddresses?.ip != scenario.expectedTunnelIP
+                || replay.parser.tunnelIP != scenario.expectedTunnelIP
                 || replay.parser.routesTouched != scenario.expectedRoutesTouched
                 || replay.parser.routesRestored != scenario.expectedRoutesRestored {
                 failingStdoutOffsets.append(offset)

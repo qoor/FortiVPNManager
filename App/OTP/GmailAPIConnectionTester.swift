@@ -3,33 +3,30 @@ import os
 import FortiCore
 import FortiShared
 
-/// "Test Gmail API" in the Account tab: gets an access token (refreshing it with the stored refresh
-/// token) and checks that `users.getProfile` reports the configured Gmail address.
-struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
+/// "Test Gmail Connection" in the Account tab with the Gmail API method: gets an access token
+/// (refreshing it with the stored refresh token) and checks that `users.getProfile` reports the
+/// configured Gmail address.
+struct GmailAPIConnectionTester {
     let oauth: GoogleOAuthService
-    let client: GmailAPIClient
 
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "otp")
 
-    init(oauth: GoogleOAuthService, client: GmailAPIClient = GmailAPIClient()) {
+    init(oauth: GoogleOAuthService) {
         self.oauth = oauth
-        self.client = client
     }
 
-    func test(address rawAddress: String) async -> GmailAPITestResult {
-        let address = rawAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+    func test(address: String) async -> GmailAPITestResult {
         let result = await run(address: address)
         logger.info("Gmail API connection test: \(Self.summary(of: result), privacy: .public)")
         return result
     }
 
     private func run(address: String) async -> GmailAPITestResult {
-        guard !address.isEmpty else { return .notAuthorized(String(localized: "Enter the Gmail address.")) }
-        guard !oauth.clientID.isEmpty, oauth.hasClientSecret else {
-            return .notAuthorized(String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced."))
+        guard oauth.hasClientSecret else {
+            return .notAuthorized(GoogleOAuthError.clientNotConfigured.localizedDescription)
         }
         guard oauth.isAuthorized(address: address) else {
-            return .notAuthorized(String(localized: "Sign in with Google first."))
+            return Self.result(for: GoogleAccessTokenError.notAuthorized)
         }
         for attempt in 1...2 {
             let token: String
@@ -39,7 +36,7 @@ struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
                 return Self.result(for: error)
             }
             do {
-                let profile = try await client.profile(accessToken: token)
+                let profile = try await GmailAPIClient().profile(accessToken: token)
                 guard profile.emailAddress.caseInsensitiveCompare(address) == .orderedSame else {
                     return .authenticationFailed(String(
                         localized: "The Google authorization belongs to \(profile.emailAddress), not \(address). Sign in with Google again."
@@ -52,7 +49,7 @@ struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
                 return Self.result(for: error)
             }
         }
-        return .authenticationFailed(String(localized: "Google rejected the access token. Sign in with Google again."))
+        return Self.result(for: GmailAPIError.unauthorized)
     }
 
     private static func result(for error: GoogleAccessTokenError) -> GmailAPITestResult {
@@ -62,11 +59,11 @@ struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
         case .revoked:
             .authenticationFailed(String(localized: "Google access was revoked or has expired. Sign in with Google again."))
         case .clientRejected:
-            .authenticationFailed(String(localized: "Google rejected the OAuth client. Import the client JSON again."))
+            .authenticationFailed(GoogleOAuthError.clientRejected.localizedDescription)
         case let .keychain(detail):
-            .authenticationFailed(String(localized: "Keychain error: \(detail)"))
+            .authenticationFailed(GoogleOAuthError.keychain(detail).localizedDescription)
         case let .network(detail):
-            .networkError(String(localized: "Couldn't reach Google: \(detail)"))
+            .networkError(GoogleOAuthError.network(detail).localizedDescription)
         case let .server(detail):
             serverError(detail)
         }
@@ -77,13 +74,11 @@ struct GmailAPIConnectionTester: GmailAPIConnectionTesting {
         case .unauthorized:
             .authenticationFailed(String(localized: "Google rejected the access token. Sign in with Google again."))
         case let .forbidden(reason):
-            .authenticationFailed(String(
-                localized: "The Gmail API refused access (\(reason)). Check that the Gmail API is enabled for the Google Cloud project."
-            ))
+            .authenticationFailed(GoogleOAuthError.gmailAPIRefused(reason).localizedDescription)
         case .rateLimited:
             .networkError(String(localized: "The Gmail API rate limit was reached. Try again in a minute."))
         case let .network(detail):
-            .networkError(String(localized: "Couldn't reach Google: \(detail)"))
+            .networkError(GoogleOAuthError.network(detail).localizedDescription)
         case .notFound:
             serverError("HTTP 404")
         case let .server(status):

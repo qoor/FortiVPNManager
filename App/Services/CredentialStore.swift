@@ -14,7 +14,7 @@ struct CredentialStore {
     private let gmail = KeychainStore(service: Self.gmailService)
     private let google = KeychainStore(service: Self.googleService)
 
-    /// Keychain account of a VPN password; identical to `VPNProfile.profileKey`.
+    /// Keychain account of a VPN password.
     static func vpnAccount(username: String, host: String) -> String {
         "\(username)@\(host)"
     }
@@ -28,7 +28,7 @@ struct CredentialStore {
     // MARK: VPN password
 
     func vpnPassword(for profile: VPNProfile) throws -> String? {
-        try vpn.read(account: profile.profileKey)
+        try vpn.read(account: Self.vpnAccount(username: profile.username, host: profile.host))
     }
 
     func hasVPNPassword(username: String, host: String) throws -> Bool {
@@ -65,12 +65,10 @@ struct CredentialStore {
         }
     }
 
-    /// Credentials for one OTP session, or `nil` when the address or the app password is missing.
+    /// Credentials for one OTP session, or `nil` when no app password is stored.
     func gmailAccount(address: String) throws -> GmailAccount? {
-        guard !address.isEmpty, let password = try gmailAppPassword(address: address), !password.isEmpty else {
-            return nil
-        }
-        return GmailAccount(address: address, appPassword: Self.normalizedAppPassword(password))
+        guard let password = try gmailAppPassword(address: address), !password.isEmpty else { return nil }
+        return GmailAccount(address: address, appPassword: password)
     }
 
     // MARK: Gmail API (Google OAuth)

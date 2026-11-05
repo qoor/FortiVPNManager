@@ -113,9 +113,8 @@ public enum ConfigRenderer {
         return text
     }
 
-    /// Runs every check `render` runs, without producing output. The app can use this to catch a
-    /// config the helper would reject before connecting.
-    public static func validate(_ request: ConnectRequest) throws(ValidationError) {
+    /// The field checks of `render`.
+    private static func validate(_ request: ConnectRequest) throws(ValidationError) {
         try validateHost(request.host)
 
         guard (1...65_535).contains(request.port) else { throw ValidationError(field: .port, problem: .outOfRange) }
@@ -182,7 +181,7 @@ public enum ConfigRenderer {
     }
 
     /// Cc controls (includes U+0085 NEL), the Unicode line/paragraph separators and the BOM.
-    private static func isForbidden(_ scalar: Unicode.Scalar) -> Bool {
+    static func isForbidden(_ scalar: Unicode.Scalar) -> Bool {
         scalar.properties.generalCategory == .control
             || scalar == "\u{2028}" || scalar == "\u{2029}" || scalar == "\u{FEFF}"
     }

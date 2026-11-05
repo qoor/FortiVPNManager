@@ -26,7 +26,7 @@ nonisolated enum NetworkProbe {
 
     /// The interface the kernel uses to reach `ip`, from `/sbin/route -n get <ip>` (fixed argv, no shell).
     static func routeInterface(to ip: String) async -> String? {
-        guard isIPv4Literal(ip), let output = await run("/sbin/route", ["-n", "get", ip]) else { return nil }
+        guard let output = await run("/sbin/route", ["-n", "get", ip]) else { return nil }
         return parseRouteInterface(output)
     }
 
@@ -112,7 +112,7 @@ nonisolated enum NetworkProbe {
 
     /// Runs a fixed command with a minimal environment and returns its stdout on exit status 0.
     /// The output is tiny (well below the pipe buffer), so it is read after the process exits.
-    private static func run(_ executable: String, _ arguments: [String], timeout: TimeInterval = 5) async -> String? {
+    private static func run(_ executable: String, _ arguments: [String]) async -> String? {
         await withCheckedContinuation { continuation in
             let process = Process()
             let stdout = Pipe()
@@ -133,7 +133,7 @@ nonisolated enum NetworkProbe {
                 continuation.resume(returning: nil)
                 return
             }
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { @Sendable in
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) { @Sendable in
                 if process.isRunning { process.terminate() }
             }
         }

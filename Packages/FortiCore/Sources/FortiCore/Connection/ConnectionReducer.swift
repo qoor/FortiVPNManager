@@ -114,8 +114,6 @@ private struct ConnectionTransition {
     // MARK: - Lifecycle and configuration
 
     private mutating func appLaunched(autoConnect: Bool, restoredLedger: FailureLedger?) {
-        guard !model.hasLaunched else { return }
-        model.hasLaunched = true
         if let restoredLedger, restoredLedger.profileKey == model.profile.profileKey {
             model.ledger = restoredLedger
             ledgerBefore = restoredLedger
@@ -138,7 +136,6 @@ private struct ConnectionTransition {
     }
 
     private mutating func readinessChanged(_ readiness: Readiness) {
-        model.readiness = readiness
         switch model.state {
         case var .connecting(context) where context.stage == .checkingReadiness:
             switch readiness {
@@ -185,7 +182,6 @@ private struct ConnectionTransition {
             model.ledger = FailureLedger(profileKey: profile.profileKey)
         }
         if profile.isDifferentAccount(from: old) {
-            model.readiness = .unknown
             emit(.checkReadiness)
         }
     }
@@ -295,9 +291,8 @@ private struct ConnectionTransition {
         context.stage = .tunnel
         model.state = .connecting(context)
         // The account this attempt checked readiness for; a profile change applies from the next attempt.
-        let profile = context.profile ?? model.profile
-        model.runProfile = profile
-        emit(.startTunnel(attemptID, profile))
+        model.runProfile = context.profile
+        emit(.startTunnel(attemptID, context.profile))
     }
 
     private mutating func otpSessionFailed(_ attemptID: AttemptID, _ failure: OTPSessionFailure) {
@@ -328,7 +323,7 @@ private struct ConnectionTransition {
     private mutating func otpCodeFound(_ attemptID: AttemptID, code: String) {
         guard case var .connecting(context) = model.state, context.attemptID == attemptID,
               context.stage == .tunnel, context.otpPromptedAt != nil, !context.otpSubmitted,
-              context.stopRequested == nil, Self.isPlausibleOTP(code) else { return }
+              context.stopRequested == nil else { return }
         context.otpSubmitted = true
         // The session trashes the used messages and logs out by itself after submission.
         context.otpSessionOpen = false
@@ -360,10 +355,6 @@ private struct ConnectionTransition {
         if model.ledger.lastAuthFailureReason == plain {
             model.ledger.lastAuthFailureReason = junk
         }
-    }
-
-    private static func isPlausibleOTP(_ code: String) -> Bool {
-        OTPMatcher.codeLengths.contains(code.utf8.count) && code.utf8.allSatisfy { (0x30...0x39).contains($0) }
     }
 
     // MARK: - Helper events
@@ -430,7 +421,7 @@ private struct ConnectionTransition {
                 pathChangedDuringAttempt: context.pathChanged,
                 withinWakeGrace: startedWithinWakeGrace(context)
             )
-            apply(ExitClassifier.classify(input), after: context)
+            apply(ExitClassifier.classify(input))
 
         case let .connected(context) where context.attemptID == attemptID:
             learnCertificates(from: facts)
@@ -445,7 +436,7 @@ private struct ConnectionTransition {
                 certRetryUsed: true,
                 observedUpDuration: upDuration
             )
-            apply(ExitClassifier.classify(input), after: nil)
+            apply(ExitClassifier.classify(input))
 
         case let .disconnecting(context) where context.attemptID == attemptID:
             learnCertificates(from: facts)
@@ -728,13 +719,11 @@ private struct ConnectionTransition {
             model.reconnectSuspended = false
             connectRequested(.scheduled)
         case .end:
-            // The end never disconnects; from now on an away user stops automatic reconnects.
             checkAwayLimit()
         }
     }
 
-    /// Outside the scheduled hours, once the user has been away for `awayMinutes`: no more
-    /// automatic reconnects. A pending one is dropped; a connected tunnel is kept until it ends.
+    /// Suspends automatic reconnects once the away limit is reached; a pending one is dropped.
     private mutating func checkAwayLimit() {
         guard !model.reconnectSuspended, model.awayLimitReached(at: now) else { return }
         model.reconnectSuspended = true
@@ -811,9 +800,9 @@ private struct ConnectionTransition {
             reason: reason,
             certRetryUsed: certRetryUsed,
             startedAt: now,
-            stage: .checkingReadiness
+            stage: .checkingReadiness,
+            profile: model.profile
         )
-        context.profile = model.profile
         if readinessVerified {
             context.stage = .preparingOTP
             context.otpSessionOpen = true
@@ -914,17 +903,12 @@ private struct ConnectionTransition {
 
     // MARK: - Outcomes
 
-    private mutating func apply(_ outcome: ExitClassifier.Outcome, after attempt: AttemptContext?) {
+    private mutating func apply(_ outcome: ExitClassifier.Outcome) {
         switch outcome {
         case .certificateRetry:
-            if attempt != nil {
-                // The chain's one immediate retry belongs to a gateway; a new one starts its own chain.
-                beginAttempt(.certificateRetry, certRetryUsed: runIsForCurrentGateway)
-            } else {
-                networkFailure()
-            }
+            // The chain's one immediate retry belongs to a gateway; a new one starts its own chain.
+            beginAttempt(.certificateRetry, certRetryUsed: runIsForCurrentGateway)
         case .serverSessionEnded:
-            model.ledger.resetConsecutiveFailures()
             scheduleRetry(.serverSessionEnded, after: RetryPolicy.serverSessionEndDelay)
         case .networkError:
             networkFailure()

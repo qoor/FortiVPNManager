@@ -50,7 +50,6 @@ struct FirstRunImporter {
 
     let configStore: ConfigStore
     let credentials: CredentialStore
-    var homeDirectory = FileManager.default.homeDirectoryForCurrentUser
 
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "import")
 
@@ -61,7 +60,7 @@ struct FirstRunImporter {
 
     /// The first existing file of `OpenFortiVPNConfigReader.defaultCandidatePaths`.
     func defaultSource() -> URL? {
-        OpenFortiVPNConfigReader.defaultCandidatePaths(home: homeDirectory)
+        OpenFortiVPNConfigReader.defaultCandidatePaths(home: FileManager.default.homeDirectoryForCurrentUser)
             .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 

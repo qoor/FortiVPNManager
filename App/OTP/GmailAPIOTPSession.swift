@@ -3,27 +3,22 @@ import os
 import FortiCore
 import FortiShared
 
-/// `OTPSessionService` over the Gmail REST API: one polling loop per connection attempt.
-///
-/// No stale-code sweep is needed because only messages added after the `users.getProfile` history ID
-/// snapshot are looked at. `start` hands a previous attempt a quiet close; every other call is
-/// ignored unless it names the current attempt.
+/// `OTPSessionService` over the Gmail REST API: one polling loop per connection attempt. Its snapshot
+/// is the `users.getProfile` history ID.
 final class GmailAPIOTPSession: OTPSessionService {
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)?
 
-    private let tokens: any GoogleAccessTokenProviding
-    private let client: GmailAPIClient
+    private let tokens: GoogleOAuthService
     private var current: GmailAPIOTPAttempt?
 
-    init(tokens: any GoogleAccessTokenProviding, client: GmailAPIClient = GmailAPIClient()) {
+    init(tokens: GoogleOAuthService) {
         self.tokens = tokens
-        self.client = client
     }
 
     func start(attemptID: AttemptID, account: GmailAccount) {
         guard current?.attemptID != attemptID else { return }
         current?.end(.close(checkJunk: false))
-        let attempt = GmailAPIOTPAttempt(attemptID: attemptID, address: account.address, tokens: tokens, client: client) {
+        let attempt = GmailAPIOTPAttempt(attemptID: attemptID, address: account.address, tokens: tokens) {
             [weak self] event in
             self?.onEvent?(event)
         }
@@ -54,9 +49,6 @@ final class GmailAPIOTPSession: OTPSessionService {
 }
 
 /// One attempt's polling loop.
-///
-/// Events: `.ready`, `.codeFound` and `.failed` only before `end`; `.failed` never after `.codeFound`;
-/// `.foundInJunk` only from the close-time spam check.
 private final class GmailAPIOTPAttempt {
     enum Ending {
         case finish
@@ -117,8 +109,8 @@ private final class GmailAPIOTPAttempt {
     let attemptID: AttemptID
     private(set) var failureReason: String?
     private let address: String
-    private let tokens: any GoogleAccessTokenProviding
-    private let client: GmailAPIClient
+    private let tokens: GoogleOAuthService
+    private let client = GmailAPIClient()
     private let emit: (OTPSessionEvent) -> Void
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "otp")
     private let wake = WakeSignal()
@@ -136,14 +128,10 @@ private final class GmailAPIOTPAttempt {
     private var messages: [GmailMessageMetadata] = []
     private var polls = 0
 
-    init(
-        attemptID: AttemptID, address: String, tokens: any GoogleAccessTokenProviding, client: GmailAPIClient,
-        emit: @escaping (OTPSessionEvent) -> Void
-    ) {
+    init(attemptID: AttemptID, address: String, tokens: GoogleOAuthService, emit: @escaping (OTPSessionEvent) -> Void) {
         self.attemptID = attemptID
         self.address = address
         self.tokens = tokens
-        self.client = client
         self.emit = emit
     }
 
@@ -166,7 +154,7 @@ private final class GmailAPIOTPAttempt {
     // MARK: - Flow
 
     private func run() async {
-        do {
+        do throws(SessionError) {
             let profile = try await call { [client] token async throws(GmailAPIError) in
                 try await client.profile(accessToken: token)
             }
@@ -184,7 +172,7 @@ private final class GmailAPIOTPAttempt {
                 emit(.ready(attemptID))
             }
             try await watch()
-        } catch let error as SessionError {
+        } catch {
             guard ending != nil || selection != nil else {
                 failureReason = error.logDescription
                 logger.error("Gmail API session failed (\(error.failure.rawValue, privacy: .public)): \(error.logDescription, privacy: .public)")
@@ -192,13 +180,6 @@ private final class GmailAPIOTPAttempt {
                 return
             }
             logger.notice("Gmail API session error after it was settled: \(error.logDescription, privacy: .public)")
-        } catch {
-            logger.error("Gmail API session: unexpected error \(String(describing: error), privacy: .public)")
-            if ending == nil, selection == nil {
-                failureReason = "unexpected error"
-                emit(.failed(attemptID, .network))
-                return
-            }
         }
         await wrapUp()
     }
@@ -401,8 +382,6 @@ private final class GmailAPIOTPAttempt {
         logger.info("Moved \(trashed) of \(ids.count) AuthCode message(s) to Trash")
     }
 
-    /// After the OTP deadline: looks at the newest AuthCode messages in Spam once and reports
-    /// `.foundInJunk` when one arrived after the prompt.
     private func checkJunk() async {
         guard let promptedAt else { return }
         do {

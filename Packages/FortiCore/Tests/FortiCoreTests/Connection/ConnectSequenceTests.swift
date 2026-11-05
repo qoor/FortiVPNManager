@@ -62,7 +62,9 @@ struct ConnectSequenceTests {
     }
 
     @Test func proactiveReconnectDisabledArmsNoTimer() throws {
-        var h = ReducerHarness(settings: ConnectionSettings(proactiveReconnectEnabled: false))
+        var settings = ReducerFixture.settings
+        settings.proactiveReconnectEnabled = false
+        var h = ReducerHarness(settings: settings)
         try h.launchConnected()
         #expect(h.effects.scheduled(.proactiveReconnect) == nil)
         #expect(h.connected?.plannedReconnectAt == nil)
@@ -70,7 +72,10 @@ struct ConnectSequenceTests {
     }
 
     @Test func customSessionSettingsDrivePlannedReconnect() throws {
-        var h = ReducerHarness(settings: ConnectionSettings(sessionMaxMinutes: 60, proactiveMarginMinutes: 10))
+        var settings = ReducerFixture.settings
+        settings.sessionMaxMinutes = 60
+        settings.proactiveMarginMinutes = 10
+        var h = ReducerHarness(settings: settings)
         try h.launchConnected()
         let connected = try #require(h.connected)
         #expect(connected.plannedReconnectAt == connected.since + 50 * 60)
@@ -191,24 +196,13 @@ struct ConnectSequenceTests {
         #expect(h.connected != nil)
     }
 
-    @Test(arguments: ["12345", "123456789", "12a456", "", " 123456", "１２３４５６"])
-    func implausibleCodesAreNotSubmitted(code: String) throws {
+    @Test func aCodeIsSubmittedOnce() throws {
         var h = ReducerHarness()
         h.launch()
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .otpPrompted)
-        #expect(h.send(.otpCodeFound(id, code: code)) == [])
-        #expect(h.attempt?.otpSubmitted == false)
-    }
-
-    @Test(arguments: ["123456", "1234567", "12345678"])
-    func plausibleCodesAreSubmittedOnce(code: String) throws {
-        var h = ReducerHarness()
-        h.launch()
-        let id = try h.startTunnel()
-        try h.runMilestones(id: id, through: .otpPrompted)
-        #expect(h.send(.otpCodeFound(id, code: code)).contains(.submitOTP(id, code: code)))
-        #expect(h.send(.otpCodeFound(id, code: code)) == [])
+        #expect(h.send(.otpCodeFound(id, code: "123456")).contains(.submitOTP(id, code: "123456")))
+        #expect(h.send(.otpCodeFound(id, code: "654321")) == [])
     }
 
     @Test func codeBeforeThePromptIsIgnored() throws {

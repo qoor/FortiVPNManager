@@ -5,7 +5,7 @@ import FortiShared
 
 struct WakeCase: Sendable, CustomTestStringConvertible {
     let name: String
-    var settings = ConnectionSettings()
+    var settings = ReducerFixture.settings
     let sleep: TimeInterval
     let observation: WakeObservation
     /// `nil` means the tunnel is kept.
@@ -16,7 +16,10 @@ struct WakeCase: Sendable, CustomTestStringConvertible {
 
 @Suite("Sleep and wake")
 struct SleepWakeTests {
-    static let afterSleepOn = ConnectionSettings(reconnectAfterSleepEnabled: true, minSleepMinutes: 30)
+    static let afterSleepOn = ConnectionSettings(
+        sessionMaxMinutes: 180, proactiveReconnectEnabled: true, proactiveMarginMinutes: 5,
+        reconnectAfterSleepEnabled: true, minSleepMinutes: 30, schedule: nil
+    )
 
     /// Connected at t0+12, planned reconnect at t0+12+175 min (10,512 s).
     static let wakeCases: [WakeCase] = [
@@ -143,7 +146,7 @@ struct SleepWakeTests {
     /// (path returned before `wakeSettled`) must survive a stale observation or a long sleep.
     @Test(arguments: [false, true])
     func wakeSettledLeavesASessionEstablishedAfterTheWakeAlone(afterSleepOn: Bool) throws {
-        var h = ReducerHarness(settings: afterSleepOn ? Self.afterSleepOn : ConnectionSettings())
+        var h = ReducerHarness(settings: afterSleepOn ? Self.afterSleepOn : ReducerFixture.settings)
         h.launch()
         try h.startTunnel()
         h.exit(ReducerFixture.facts(.spawned))

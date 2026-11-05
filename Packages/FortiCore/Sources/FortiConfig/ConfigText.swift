@@ -78,12 +78,12 @@ enum ConfigText {
         return tracker.location
     }
 
-    /// First scalar libyaml would refuse to read, with its location.
-    static func firstUnreadableScalar(in text: String) -> (Unicode.Scalar, LineColumn)? {
+    /// Location of the first scalar libyaml would refuse to read.
+    static func locationOfFirstUnreadableScalar(in text: String) -> LineColumn? {
         var tracker = LocationTracker()
         for scalar in text.unicodeScalars {
             if !isReadableByLibYAML(scalar) {
-                return (scalar, tracker.location)
+                return tracker.location
             }
             tracker.advance(over: scalar)
         }
@@ -143,8 +143,9 @@ enum ConfigText {
         path.split(separator: ".").last.map(String.init) ?? path
     }
 
-    /// Short, single-line rendering of user text for messages.
-    static func preview(_ raw: String, limit: Int = 40) -> String {
+    /// Short (at most 40 scalars), single-line rendering of user text for messages.
+    static func preview(_ raw: String) -> String {
+        let limit = 40
         var scalars = String.UnicodeScalarView()
         var count = 0
         for scalar in raw.unicodeScalars {

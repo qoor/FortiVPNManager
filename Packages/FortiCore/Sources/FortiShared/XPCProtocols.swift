@@ -18,6 +18,8 @@ import Foundation
     /// Reply: encoded `HelperStatus`.
     func status(reply: @escaping @Sendable (Data) -> Void)
     /// Asks an idle helper to exit so launchd relaunches the (updated) embedded binary.
+    /// Reply: `true` if it will exit. Sent to a helper of another build, like `getVersion`, so the
+    /// signatures of these two must never change.
     func exitWhenIdle(reply: @escaping @Sendable (Bool) -> Void)
     /// Reads the additional routes of the primary network service. Reply: encoded `BypassRoutesReply`.
     func bypassRoutes(reply: @escaping @Sendable (Data) -> Void)

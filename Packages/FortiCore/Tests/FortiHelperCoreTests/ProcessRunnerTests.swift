@@ -1,6 +1,6 @@
 import Darwin
 import Dispatch
-import FortiHelperCore
+@testable import FortiHelperCore
 import FortiShared
 import Foundation
 import Synchronization
@@ -132,18 +132,12 @@ import Testing
 
     @Test(arguments: [
         ("/nonexistent/openfortivpn", ["openfortivpn"], [String: String](), ENOENT),
-        ("/bin/sh", [], [:], EINVAL),
-        ("/bin/sh", ["sh", "a\0b"], [:], EINVAL),
-        ("/bin/sh", ["sh"], ["A=B": "x"], EINVAL),
-        ("/bin/sh", ["sh"], ["": "x"], EINVAL),
-        ("/bin/sh", ["sh"], ["PATH": "x\0y"], EINVAL),
         ("/dev/null", ["null"], [:], EACCES),
     ])
     func spawnFailures(executable: String, arguments: [String], environment: [String: String], expected: Int32) {
         #expect(throws: SpawnError(code: expected)) {
             try ProcessRunner.spawn(executable: executable, arguments: arguments, environment: environment)
         }
-        #expect(SpawnError(code: expected).exitStatus == .spawnFailed(errno: expected))
     }
 
     @Test func monitorExitReportsStatusAfterBeforeReap() async throws {
@@ -174,7 +168,7 @@ import Testing
         // Let it become a zombie before watching.
         try await Task.sleep(for: .milliseconds(100))
         let status = Mutex<ProcessExitStatus?>(nil)
-        let source = ProcessRunner.monitorExit(of: process.pid, on: DispatchQueue(label: "test.zombie")) { reaped in
+        let source = ProcessRunner.monitorExit(of: process.pid, on: DispatchQueue(label: "test.zombie"), beforeReap: {}) { reaped in
             status.withLock { $0 = reaped }
         }
         defer { source.cancel() }

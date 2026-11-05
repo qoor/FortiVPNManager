@@ -143,7 +143,7 @@ public enum ConfigCodec {
         case let .reader(problem, offset, value, _):
             // Reader errors only carry a Character offset; translate it to line/column.
             let location = offset.flatMap { ConfigText.location(ofCharacterOffset: $0, in: text) }
-                ?? ConfigText.firstUnreadableScalar(in: text)?.1
+                ?? ConfigText.locationOfFirstUnreadableScalar(in: text)
             if value >= 0, problem.contains("control characters") {
                 return ConfigLoadError(.disallowedCharacter(scalar: UInt32(value)), at: location)
             }

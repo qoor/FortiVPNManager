@@ -1,5 +1,5 @@
 import Darwin
-@testable import FortiHelperCore
+import FortiHelperCore
 import FortiShared
 import Foundation
 import Synchronization
@@ -7,37 +7,6 @@ import Testing
 
 /// Watchdogs, stop escalation and signal handling.
 @Suite struct TunnelSupervisorWatchdogTests {
-    @Test func defaultLimitsMatchTheDesignTable() {
-        let limits = WatchdogLimits()
-        #expect(limits.spawnToGateway == .seconds(30))
-        #expect(limits.gatewayToPromptOrAuth == .seconds(30))
-        #expect(limits.otpPromptToSubmit == .seconds(65))
-        #expect(limits.otpSubmitToAuth == .seconds(20))
-        #expect(limits.authToTunnel == .seconds(40))
-        #expect(limits.terminate == .seconds(10))
-        let timing = SupervisorTiming()
-        #expect(timing.outputBatchInterval == .milliseconds(100))
-        #expect(timing.pipeDrainLimit == .seconds(1))
-        #expect(timing.lineIdleFlush == .milliseconds(250))
-    }
-
-    @Test(arguments: [
-        (Milestone.spawned, WatchdogPhase.spawnToGateway, Duration.seconds(30)),
-        (.connectedToGateway, .gatewayToPromptOrAuth, .seconds(30)),
-        (.otpPrompted, .otpPromptToSubmit, .seconds(65)),
-        (.otpSubmitted, .otpSubmitToAuth, .seconds(20)),
-        (.authenticated, .authToTunnel, .seconds(40)),
-    ])
-    func watchdogAfterMilestone(milestone: Milestone, phase: WatchdogPhase, limit: Duration) {
-        let watchdog = WatchdogLimits().watchdog(after: milestone)
-        #expect(watchdog?.phase == phase)
-        #expect(watchdog?.limit == limit)
-    }
-
-    @Test func noWatchdogOnceTheTunnelIsUp() {
-        #expect(WatchdogLimits().watchdog(after: .tunnelUp) == nil)
-    }
-
     struct StallCase: Sendable, CustomTestStringConvertible {
         var stage: String
         var phase: WatchdogPhase
@@ -63,7 +32,7 @@ import Testing
         case .otpSubmitToAuth: limits.otpSubmitToAuth = tiny
         case .authToTunnel: limits.authToTunnel = tiny
         }
-        let harness = try Harness(.hang, [stall.stage], limits: limits)
+        let harness = Harness(.hang, [stall.stage], limits: limits)
         defer { harness.record.remove() }
         if stall.submitsOTP {
             harness.submitOTPWhenPrompted()
@@ -84,7 +53,7 @@ import Testing
     @Test func noWatchdogOnceTheTunnelIsUpWhileRunning() async throws {
         let tiny = Duration.milliseconds(300)
         let limits = WatchdogLimits(spawnToGateway: tiny, gatewayToPromptOrAuth: tiny, otpPromptToSubmit: tiny, otpSubmitToAuth: tiny, authToTunnel: tiny, terminate: .seconds(2))
-        let harness = try Harness(.hang, ["tunnel"], limits: limits)
+        let harness = Harness(.hang, ["tunnel"], limits: limits)
         defer { harness.record.remove() }
         harness.submitOTPWhenPrompted()
         try harness.supervisor.start()
@@ -103,7 +72,7 @@ import Testing
     /// the stop initiator.
     @Test func sigkillWhenSIGTERMIsIgnoredAfterAWatchdog() async throws {
         let limits = WatchdogLimits(spawnToGateway: .milliseconds(300), terminate: .milliseconds(200))
-        let harness = try Harness(.hang, ["spawned", "ignore-term"], limits: limits)
+        let harness = Harness(.hang, ["spawned", "ignore-term"], limits: limits)
         defer { harness.record.remove() }
         let facts = try await harness.run()
 
@@ -120,7 +89,7 @@ import Testing
     /// A user stop that needs SIGKILL keeps the user as the initiator; routes left changed are repaired.
     @Test func sigkillAfterUserStopOnAnUpTunnel() async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.hang, ["tunnel", "ignore-term"], limits: WatchdogLimits(terminate: .milliseconds(200)), routeRepair: {
+        let harness = Harness(.hang, ["tunnel", "ignore-term"], limits: WatchdogLimits(terminate: .milliseconds(200)), routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return .repaired
         })
@@ -135,7 +104,7 @@ import Testing
 
         #expect(facts.stopInitiator == .helper(.userDisconnect))
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
-        #expect(facts.routeRepairPerformed)
+        #expect(harness.recorder.texts.last == "‹routes repaired›")
         #expect(repairCalls.withLock { $0 } == 1)
         #expect(harness.recorder.texts.filter { $0.hasPrefix("‹sent SIGTERM") }.count == 1)
         #expect(harness.recorder.texts.contains("‹sent SIGKILL: still running 0.2s after SIGTERM›"))
@@ -143,7 +112,7 @@ import Testing
     }
 
     @Test func sigtermStopsAChildSpawnedFromABackgroundQueueWhileTheParentIgnoresSIGTERM() async throws {
-        let harness = try Harness(.hang, ["spawned"])
+        let harness = Harness(.hang, ["spawned"])
         defer { harness.record.remove() }
         try await withSIGTERMIgnored {
             let startError = Mutex<HelperError?>(nil)
@@ -169,7 +138,7 @@ import Testing
 
     @Test func watchdogFollowsTheInjectedClock() async throws {
         let clock = ManualClock()
-        let harness = try Harness(.hang, ["spawned"], limits: WatchdogLimits(), clock: clock)
+        let harness = Harness(.hang, ["spawned"], limits: WatchdogLimits(), clock: clock)
         defer { harness.record.remove() }
         try harness.supervisor.start()
         #expect(await harness.recorder.wait { $0.reached(.spawned) })
@@ -187,7 +156,7 @@ import Testing
 
     @Test func sigkillEscalationFollowsTheInjectedClock() async throws {
         let clock = ManualClock()
-        let harness = try Harness(.hang, ["spawned", "ignore-term"], limits: WatchdogLimits(), clock: clock)
+        let harness = Harness(.hang, ["spawned", "ignore-term"], limits: WatchdogLimits(), clock: clock)
         defer { harness.record.remove() }
         try harness.supervisor.start()
         #expect(await harness.recorder.wait { $0.reached(.spawned) })
@@ -207,7 +176,7 @@ import Testing
 
     @Test func upDurationIsMeasuredWithTheInjectedClock() async throws {
         let clock = ManualClock()
-        let harness = try Harness(.success, [], limits: WatchdogLimits(), clock: clock)
+        let harness = Harness(.success, [], limits: WatchdogLimits(), clock: clock)
         defer { harness.record.remove() }
         harness.submitOTPWhenPrompted()
         try harness.supervisor.start()
@@ -227,7 +196,7 @@ import Testing
     @Test func batchingAndIdleFlushFollowTheInjectedClock() async throws {
         let clock = ManualClock()
         let timing = SupervisorTiming(outputBatchInterval: .milliseconds(20), lineIdleFlush: .milliseconds(250))
-        let harness = try Harness(
+        let harness = Harness(
             executable: ExecutableSpec(path: "/bin/sh", arguments: ["/bin/sh", "-c", "echo 'INFO:   first'; printf 'partial tail'; exec /bin/sleep 30"], environment: fixturePATH),
             limits: WatchdogLimits(),
             timing: timing,
@@ -259,30 +228,5 @@ import Testing
         let facts = try #require(await harness.recorder.waitForExit())
         #expect(facts.exitStatus == .signaled(signal: SIGTERM))
         expectOutputInvariants(harness)
-    }
-
-    // MARK: - Formatting
-
-    @Test(arguments: [
-        (Duration.seconds(30), "30s"),
-        (.milliseconds(150), "0.15s"),
-        (.milliseconds(1_500), "1.5s"),
-        (.milliseconds(250), "0.25s"),
-        (.zero, "0s"),
-    ])
-    func durationFormatting(duration: Duration, expected: String) {
-        #expect(TunnelSupervisor.format(duration) == expected)
-    }
-
-    @Test(arguments: [
-        (ProcessExitStatus.exited(code: 0), "code 0"),
-        (.exited(code: 254), "code 254"),
-        (.signaled(signal: SIGTERM), "signal 15 (SIGTERM)"),
-        (.signaled(signal: SIGKILL), "signal 9 (SIGKILL)"),
-        (.signaled(signal: SIGUSR1), "signal 30"),
-        (.spawnFailed(errno: ENOENT), "spawn failed (No such file or directory (errno 2))"),
-    ])
-    func exitStatusDescription(status: ProcessExitStatus, expected: String) {
-        #expect(TunnelSupervisor.describe(status) == expected)
     }
 }

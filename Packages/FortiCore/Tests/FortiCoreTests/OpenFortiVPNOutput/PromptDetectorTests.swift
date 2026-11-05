@@ -15,11 +15,6 @@ import Testing
         return chunks.flatMap { detector.append(Array($0.utf8)) }
     }
 
-    @Test func exposesThePromptTextsFromTheSource() {
-        #expect(PromptDetector.passwordPromptText == "VPN account password: ")
-        #expect(PromptDetector.otpPromptText == "Two-factor authentication token: ")
-    }
-
     @Test(arguments: 0..<2)
     func reportsAnUnterminatedPromptImmediately(index: Int) {
         let (text, prompt) = Self.prompts[index]

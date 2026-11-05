@@ -7,7 +7,6 @@ public struct ConnectionModel: Sendable, Equatable {
     public internal(set) var state: ConnectionState = .idle
     public internal(set) var settings: ConnectionSettings
     public internal(set) var profile: VPNProfile
-    public internal(set) var readiness: Readiness = .unknown
     public internal(set) var ledger: FailureLedger
     public internal(set) var path: PathSnapshot?
     public internal(set) var isSleeping = false
@@ -19,12 +18,10 @@ public struct ConnectionModel: Sendable, Equatable {
     public internal(set) var calendar: Calendar
     /// Since when the user has been away (screen locked, display or system asleep); `nil` while present.
     public internal(set) var awaySince: Date?
-    /// Outside the scheduled hours the user was away for `schedule.awayMinutes`: no automatic
-    /// reconnect until "Connect", "Reconnect Now" or the next scheduled start. The current
-    /// connection is kept.
+    /// The away limit was reached (see `ConnectionSchedule`): no automatic reconnect until
+    /// "Connect", "Reconnect Now" or the next scheduled start.
     public internal(set) var reconnectSuspended = false
 
-    var hasLaunched = false
     /// Latest schedule start or end already acted on; the `.schedule` timer waits for the next one.
     var scheduleBoundary: Date?
     var pendingWake: PendingWake?
@@ -45,7 +42,7 @@ public struct ConnectionModel: Sendable, Equatable {
     ///   - calendar: the user's calendar and time zone for the schedule (fixed in tests).
     public init(
         profile: VPNProfile,
-        settings: ConnectionSettings = ConnectionSettings(),
+        settings: ConnectionSettings,
         attemptIDSeed: UUID,
         calendar: Calendar = .current
     ) {
@@ -103,7 +100,7 @@ public struct ConnectionModel: Sendable, Equatable {
         default:
             break
         }
-        if let quitRequestedAt, !isTerminated {
+        if let quitRequestedAt {
             wanted[.quitDeadline] = quitRequestedAt.addingTimeInterval(RetryPolicy.quitTimeout)
         }
         if let schedule = settings.schedule, quitRequestedAt == nil {

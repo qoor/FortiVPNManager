@@ -2,7 +2,7 @@ import FortiShared
 
 /// What `TunnelSupervisor` runs. Production uses `openfortivpn(path:configPath:)`; tests run
 /// `/bin/sh` with a fixture script.
-public struct ExecutableSpec: Sendable, Equatable {
+public struct ExecutableSpec: Sendable {
     /// Absolute path passed to `posix_spawn`.
     public var path: String
     /// The complete argv, including argv[0].
@@ -20,7 +20,6 @@ public struct ExecutableSpec: Sendable, Equatable {
     /// `all_proxy`, so nothing else may leak through.
     public static let helperPATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
-    /// `openfortivpn -c <configPath>` with `PATH` as the only environment variable.
     public static func openfortivpn(path: String, configPath: String) -> ExecutableSpec {
         ExecutableSpec(path: path, arguments: [path, "-c", configPath], environment: ["PATH": helperPATH])
     }
@@ -37,7 +36,7 @@ public enum WatchdogPhase: String, Sendable {
 
 /// Per-phase time limits enforced by the helper. The whole-attempt and OTP limits belong to the
 /// app; `otpPromptToSubmit` is only a backstop.
-public struct WatchdogLimits: Sendable, Equatable {
+public struct WatchdogLimits: Sendable {
     /// spawn → `Connected to gateway.`
     public var spawnToGateway: Duration
     /// `Connected to gateway.` → OTP prompt or `Authenticated.`
@@ -81,7 +80,7 @@ public struct WatchdogLimits: Sendable, Equatable {
 }
 
 /// Output handling intervals.
-public struct SupervisorTiming: Sendable, Equatable {
+public struct SupervisorTiming: Sendable {
     /// Output lines are delivered in batches at most this far apart. Pending lines are also
     /// delivered right before every event.
     public var outputBatchInterval: Duration

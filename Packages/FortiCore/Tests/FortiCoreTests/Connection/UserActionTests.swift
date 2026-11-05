@@ -309,26 +309,33 @@ struct UserActionTests {
         try h.launchConnected()
         let since = try #require(h.connected?.since)
 
-        let shorter = h.send(.settingsChanged(ConnectionSettings(sessionMaxMinutes: 60)))
+        var settings = ReducerFixture.settings
+        settings.sessionMaxMinutes = 60
+        let shorter = h.send(.settingsChanged(settings))
         #expect(shorter.scheduled(.proactiveReconnect) == since + 55 * 60)
         #expect(h.model.nextPlannedReconnect == since + 55 * 60)
 
         h.advance(400)
-        let past = h.send(.settingsChanged(ConnectionSettings(sessionMaxMinutes: 10, proactiveMarginMinutes: 5)))
+        settings.sessionMaxMinutes = 10
+        let past = h.send(.settingsChanged(settings))
         #expect(past.scheduled(.proactiveReconnect) == h.now + 60, "clamped to at least a minute from now")
 
-        #expect(h.send(.settingsChanged(ConnectionSettings(sessionMaxMinutes: 10, proactiveReconnectEnabled: false))) == [
+        settings.proactiveReconnectEnabled = false
+        #expect(h.send(.settingsChanged(settings)) == [
             .cancelTimer(.proactiveReconnect),
         ])
         #expect(h.model.nextPlannedReconnect == nil)
 
-        #expect(h.send(.settingsChanged(ConnectionSettings(sessionMaxMinutes: 10, proactiveReconnectEnabled: false, reconnectAfterSleepEnabled: true))) == [])
+        settings.reconnectAfterSleepEnabled = true
+        #expect(h.send(.settingsChanged(settings)) == [])
     }
 
     @Test func settingsChangeWhileNotConnectedAppliesToTheNextSession() throws {
         var h = ReducerHarness()
         h.launch(autoConnect: false)
-        #expect(h.send(.settingsChanged(ConnectionSettings(sessionMaxMinutes: 30))) == [])
+        var settings = ReducerFixture.settings
+        settings.sessionMaxMinutes = 30
+        #expect(h.send(.settingsChanged(settings)) == [])
         h.send(.userConnect)
         try h.runToConnected()
         let connected = try #require(h.connected)

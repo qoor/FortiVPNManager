@@ -83,7 +83,7 @@ final class ReadinessChecker {
             var build = try await helper.getVersion()
             if build != helper.appBuild, canRestartHelper() {
                 logger.notice("helper build \(build.value, privacy: .public) != app \(self.helper.appBuild.value, privacy: .public); restarting it")
-                _ = try await helper.exitWhenIdle()
+                try await helper.exitWhenIdle()
                 try await Task.sleep(for: .seconds(1))
                 build = try await helper.getVersion()
             }

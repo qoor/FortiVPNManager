@@ -5,7 +5,7 @@ import Synchronization
 
 /// A child started by `ProcessRunner.spawn`. The caller owns the three parent-side pipe ends
 /// (all `O_CLOEXEC`) and must close them, and must reap the child (`ProcessRunner.monitorExit`).
-public struct SpawnedProcess: Sendable, Equatable {
+public struct SpawnedProcess: Sendable {
     public let pid: pid_t
     /// Write end of the child's stdin. Blocking, with `F_SETNOSIGPIPE`: writing after the child
     /// closed its stdin fails with `EPIPE` instead of raising `SIGPIPE`.
@@ -55,13 +55,6 @@ public enum ProcessRunner {
         arguments: [String],
         environment: [String: String]
     ) throws(SpawnError) -> SpawnedProcess {
-        guard !arguments.isEmpty,
-              !executable.utf8.contains(0),
-              arguments.allSatisfy({ !$0.utf8.contains(0) }),
-              environment.allSatisfy({ key, value in
-                  !key.isEmpty && !key.utf8.contains(UInt8(ascii: "=")) && !key.utf8.contains(0) && !value.utf8.contains(0)
-              })
-        else { throw SpawnError(code: EINVAL) }
         let environmentStrings = environment.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
 
         var opened: [Int32] = []
@@ -119,7 +112,7 @@ public enum ProcessRunner {
     public static func monitorExit(
         of pid: pid_t,
         on queue: DispatchQueue,
-        beforeReap: @escaping @Sendable () -> Void = {},
+        beforeReap: @escaping @Sendable () -> Void,
         handler: @escaping @Sendable (ProcessExitStatus) -> Void
     ) -> any DispatchSourceProcess {
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
@@ -151,7 +144,7 @@ public enum ProcessRunner {
 
     /// Decodes a `waitpid` status (`WIFEXITED`/`WEXITSTATUS`, `WIFSIGNALED`/`WTERMSIG`; Swift does
     /// not import the macros).
-    public static func exitStatus(fromWaitStatus status: Int32) -> ProcessExitStatus {
+    static func exitStatus(fromWaitStatus status: Int32) -> ProcessExitStatus {
         let low = status & 0x7F
         if low == 0 {
             return .exited(code: (status >> 8) & 0xFF)

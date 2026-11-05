@@ -10,7 +10,9 @@ struct GmailAPIModelsTests {
 
     @Test func profile() throws {
         let json = #"{"emailAddress": "otp@example.com", "messagesTotal": 1234, "threadsTotal": 900, "historyId": "9876543"}"#
-        #expect(try decode(GmailProfile.self, json) == GmailProfile(emailAddress: "otp@example.com", historyId: "9876543"))
+        let profile = try decode(GmailProfile.self, json)
+        #expect(profile.emailAddress == "otp@example.com")
+        #expect(profile.historyId == "9876543")
     }
 
     @Test func historyList() throws {
@@ -33,15 +35,15 @@ struct GmailAPIModelsTests {
         #expect(list.historyId == "103")
         #expect(list.nextPageToken == "page2")
         #expect(list.history.count == 3)
-        #expect(list.addedMessages == [
-            GmailMessageRef(id: "19a0000000000001", threadId: "t1", labelIds: ["UNREAD", "INBOX"]),
-            GmailMessageRef(id: "19a0000000000002", threadId: "t2", labelIds: ["SPAM"]),
-        ])
+        #expect(list.addedMessages.map(\.id) == ["19a0000000000001", "19a0000000000002"])
+        #expect(list.addedMessages.map(\.labelIds) == [["UNREAD", "INBOX"], ["SPAM"]])
     }
 
     @Test func emptyHistoryList() throws {
         let list = try decode(GmailHistoryList.self, #"{"historyId": "555"}"#)
-        #expect(list == GmailHistoryList(history: [], historyId: "555", nextPageToken: nil))
+        #expect(list.history.isEmpty)
+        #expect(list.historyId == "555")
+        #expect(list.nextPageToken == nil)
         #expect(list.addedMessages.isEmpty)
         #expect(try decode(GmailHistoryList.self, "{}").historyId == nil)
     }
@@ -51,7 +53,6 @@ struct GmailAPIModelsTests {
             {"messages": [{"id": "m2", "threadId": "t"}, {"id": "m1", "threadId": "t"}], "resultSizeEstimate": 2}
             """)
         #expect(list.messages.map(\.id) == ["m2", "m1"])
-        #expect(list.nextPageToken == nil)
         #expect(try decode(GmailMessageList.self, #"{"resultSizeEstimate": 0}"#).messages.isEmpty)
     }
 

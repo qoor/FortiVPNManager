@@ -32,7 +32,6 @@ struct ProcessIdentity: Codable, Sendable, Equatable {
         let count = pids.withUnsafeMutableBytes { proc_listchildpids(parent, $0.baseAddress, Int32($0.count)) }
         guard count > 0 else { return [] }
         return pids.prefix(min(Int(count), pids.count))
-            .filter { $0 > 0 }
             .compactMap(ofRootProcess)
             .filter { $0.path == path }
     }

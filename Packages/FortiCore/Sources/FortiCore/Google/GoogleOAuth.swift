@@ -24,14 +24,13 @@ public enum GoogleOAuth {
         redirectURI: String,
         codeChallenge: String,
         state: String,
-        loginHint: String?,
-        scope: String = gmailModifyScope
+        loginHint: String?
     ) -> URL {
         var pairs: [(String, String)] = [
             ("client_id", clientID),
             ("redirect_uri", redirectURI),
             ("response_type", "code"),
-            ("scope", scope),
+            ("scope", gmailModifyScope),
             ("code_challenge", codeChallenge),
             ("code_challenge_method", PKCE.method),
             ("state", state),
@@ -83,10 +82,9 @@ public enum GoogleOAuth {
     public static func percentEncoded(_ text: String) -> String {
         var out = ""
         for byte in text.utf8 {
-            switch byte {
-            case 0x41...0x5A, 0x61...0x7A, 0x30...0x39, 0x2D, 0x2E, 0x5F, 0x7E:
+            if PKCE.isUnreserved(byte) {
                 out.unicodeScalars.append(Unicode.Scalar(byte))
-            default:
+            } else {
                 out += "%" + String(byte, radix: 16, uppercase: true).leftPadded(to: 2)
             }
         }
@@ -130,7 +128,7 @@ public struct PKCE: Sendable, Equatable {
         Base64URL.encode(Data(SHA256.hash(data: Data(verifier.utf8))))
     }
 
-    private static func isUnreserved(_ byte: UInt8) -> Bool {
+    static func isUnreserved(_ byte: UInt8) -> Bool {
         switch byte {
         case 0x41...0x5A, 0x61...0x7A, 0x30...0x39, 0x2D, 0x2E, 0x5F, 0x7E: true
         default: false
@@ -300,9 +298,6 @@ public enum GoogleOAuthClientFileError: Error, Sendable, Equatable {
 }
 
 public enum GoogleOAuthClientFile {
-    /// Hosts the file's `auth_uri`/`token_uri` may point at (the app always uses its own constants).
-    static let allowedHostSuffixes = ["google.com", "googleapis.com"]
-
     /// Parses the `"installed"` section of a client JSON downloaded from Google Cloud Console.
     public static func parse(_ data: Data) throws(GoogleOAuthClientFileError) -> GoogleOAuthClient {
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -316,10 +311,6 @@ public enum GoogleOAuthClientFile {
         guard GoogleOAuthClient.isValidClientID(clientID) else { throw .invalidField("client_id") }
         let secret = try field("client_secret", in: installed)
         guard GoogleOAuthClient.isValidSecret(secret) else { throw .invalidField("client_secret") }
-        for key in ["auth_uri", "token_uri"] {
-            guard let value = installed[key] else { continue }
-            guard let text = value as? String, isGoogleHTTPS(text) else { throw .invalidField(key) }
-        }
         return GoogleOAuthClient(clientID: clientID, clientSecret: secret)
     }
 
@@ -327,14 +318,6 @@ public enum GoogleOAuthClientFile {
         guard let value = section[key] else { throw .missingField(key) }
         guard let text = value as? String, !text.isEmpty else { throw .invalidField(key) }
         return text
-    }
-
-    /// `https://` on a Google host: a tampered file must not be able to point the flow elsewhere.
-    static func isGoogleHTTPS(_ text: String) -> Bool {
-        guard let components = URLComponents(string: text), components.scheme == "https",
-              let host = components.host?.lowercased(), components.user == nil, components.password == nil
-        else { return false }
-        return allowedHostSuffixes.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 }
 

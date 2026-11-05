@@ -64,7 +64,6 @@ struct IMAPCommandTests {
          "A0001 UID FETCH 300:* (UID INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])"),
         (.idle, "A0001 IDLE"),
         (.uidMove(IMAPUIDSet([9, 7])!, mailbox: "[Gmail]/&1zTJwNG1-"), #"A0001 UID MOVE 7,9 "[Gmail]/&1zTJwNG1-""#),
-        (.noop, "A0001 NOOP"),
         (.logout, "A0001 LOGOUT"),
     ])
     func commandsSerializeExactly(_ command: IMAPCommand, _ expected: String) throws {
@@ -87,11 +86,6 @@ struct IMAPCommandTests {
         #expect(throws: IMAPCommandError.invalidSearchString) {
             try IMAPCommand.uidSearchSubject("AuthCode\r\nA2 LOGOUT").encoded(tag: "A1")
         }
-    }
-
-    @Test(arguments: ["", "A 1", "A1\r\n", "A+1", "*", "\u{D0DC}\u{ADF8}"])
-    func invalidTagsAreRejected(_ tag: String) {
-        #expect(throws: IMAPCommandError.invalidTag) { try IMAPCommand.noop.encoded(tag: tag) }
     }
 }
 

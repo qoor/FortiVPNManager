@@ -1,17 +1,11 @@
 import Darwin
 
 /// The openfortivpn executable the helper may run as root.
-struct OpenFortiVPNBinary: Sendable, Equatable {
+struct OpenFortiVPNBinary: Sendable {
     /// Resolved path inside the Homebrew Cellar (no symlinks).
     let path: String
-    /// Version from the Cellar directory name without the Homebrew revision (`1.24.1_1` → `1.24.1`).
+    /// Version from the Cellar directory name without the Homebrew revision.
     let version: String?
-
-    /// The output parser was written against openfortivpn 1.24.x.
-    var isTestedVersion: Bool {
-        guard let version else { return false }
-        return version == "1.24" || version.hasPrefix("1.24.")
-    }
 }
 
 /// Finds Homebrew's openfortivpn: the link must resolve to a regular, executable file under the
@@ -21,7 +15,7 @@ enum BinaryLocator {
     static let cellarPrefix = "/opt/homebrew/Cellar/openfortivpn/"
 
     /// Why the binary cannot be used.
-    struct Problem: Error, Sendable, Equatable {
+    struct Problem: Error, Sendable {
         /// The resolved path, if the Homebrew link resolved at all.
         let path: String?
         /// English text shown as-is in the app's Connection tab, logged, and sent with the
@@ -67,7 +61,6 @@ enum BinaryLocator {
 
     /// `/opt/homebrew/Cellar/openfortivpn/1.24.1_1/bin/openfortivpn` → `1.24.1`.
     static func version(fromCellarPath path: String) -> String? {
-        guard path.hasPrefix(cellarPrefix) else { return nil }
         let directory = path.dropFirst(cellarPrefix.count).prefix { $0 != "/" }
         guard !directory.isEmpty else { return nil }
         if let underscore = directory.lastIndex(of: "_") {

@@ -159,10 +159,10 @@ struct Harness: Sendable {
         limits: WatchdogLimits = testLimits,
         timing: SupervisorTiming = testTiming,
         clock: any SupervisorClock = SystemSupervisorClock(),
-        routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil
-    ) throws {
+        routeRepair: @escaping @Sendable () -> RouteRepairOutcome = { .notNeeded }
+    ) {
         let record = RecordFile()
-        try self.init(
+        self.init(
             executable: ExecutableSpec(path: "/bin/sh", arguments: ["/bin/sh", fixture.path, record.path] + arguments, environment: fixturePATH),
             record: record,
             password: password,
@@ -174,9 +174,9 @@ struct Harness: Sendable {
     }
 
     /// Runs `/bin/sh -c script`; `$1` is the record file.
-    init(script: String, limits: WatchdogLimits = testLimits, timing: SupervisorTiming = testTiming) throws {
+    init(script: String, limits: WatchdogLimits = testLimits, timing: SupervisorTiming = testTiming) {
         let record = RecordFile()
-        try self.init(
+        self.init(
             executable: ExecutableSpec(path: "/bin/sh", arguments: ["/bin/sh", "-c", script, "sh", record.path], environment: fixturePATH),
             record: record,
             limits: limits,
@@ -191,12 +191,12 @@ struct Harness: Sendable {
         limits: WatchdogLimits = testLimits,
         timing: SupervisorTiming = testTiming,
         clock: any SupervisorClock = SystemSupervisorClock(),
-        routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil
-    ) throws {
+        routeRepair: @escaping @Sendable () -> RouteRepairOutcome = { .notNeeded }
+    ) {
         let recorder = Recorder()
         self.recorder = recorder
         self.record = record
-        supervisor = try TunnelSupervisor(
+        supervisor = TunnelSupervisor(
             attemptID: AttemptID(),
             executable: executable,
             password: password,

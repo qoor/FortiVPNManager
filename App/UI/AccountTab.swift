@@ -2,8 +2,7 @@ import FortiConfig
 import SwiftUI
 
 /// The Account tab: the VPN account and the Gmail account that receives the OTP, saved together.
-/// No certificate fields: gateway certificates are trusted automatically. The OTP method applies as
-/// soon as it is picked.
+/// No certificate fields: gateway certificates are trusted automatically.
 struct AccountTab: View {
     let environment: AppEnvironment
     @Bindable var editor: AccountEditor
@@ -134,7 +133,6 @@ struct AccountTab: View {
         }
     }
 
-    /// The picker writes `otp.method` to config.yaml as soon as it changes.
     private var otpMethodSelection: Binding<AppConfig.OTP.Method> {
         Binding(
             get: { otpMethod },
@@ -193,8 +191,6 @@ struct AccountTab: View {
         )
     }
 
-    /// Advanced: which OAuth client is used. Normally the one built into the app; a client JSON from
-    /// another Google Cloud project can be imported to override it.
     @ViewBuilder
     private var googleClientRows: some View {
         let busy = oauth.isConnecting || editor.isDisconnectingGoogle || editor.isChoosingGoogleClient
@@ -277,7 +273,9 @@ struct AccountTab: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Button("Import openfortivpn Settings…") { editor.importOpenFortiVPN() }
+            Button("Import openfortivpn Settings…") {
+                Task { await editor.importOpenFortiVPN() }
+            }
             Spacer()
             switch editor.feedback {
             case .saved?:

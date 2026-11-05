@@ -36,20 +36,19 @@ final class HelperClient {
     /// Helper events, output batches and connection loss, in delivery order. Consume it from one task.
     let inbound: AsyncStream<HelperInbound>
     /// BuildID of this app (`CFBundleVersion`); the helper must report the same one.
-    let appBuild: BuildID
+    let appBuild = BuildID(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")
 
     private let channel: HelperInboundChannel
     private var link: Link?
     private var nextLinkID: UInt64 = 0
-    /// Connection whose peer answered `getVersion` with `appBuild`; only it may receive the password.
+    /// Connection whose peer answered `getVersion` with `appBuild`.
     private var verifiedLinkID: UInt64?
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "helper-client")
 
     /// Replies normally arrive within milliseconds; this only guards against a hung helper.
     private static let replyTimeout = DispatchTimeInterval.seconds(20)
 
-    init(appBuild: BuildID = AppBuild.current) {
-        self.appBuild = appBuild
+    init() {
         channel = HelperInboundChannel()
         inbound = channel.stream
     }
@@ -127,17 +126,16 @@ final class HelperClient {
     }
 
     /// Asks an idle helper to exit so launchd starts the updated embedded binary on the next call.
-    func exitWhenIdle() async throws -> Bool {
+    func exitWhenIdle() async throws {
         let link = try currentLink()
-        let accepted: Bool = try await call(link) { proxy, reply in proxy.exitWhenIdle(reply: reply) }
+        let _: Bool = try await call(link) { proxy, reply in proxy.exitWhenIdle(reply: reply) }
         invalidate(link)
-        return accepted
     }
 
     // MARK: - Plumbing
 
     /// Asks `link` for its build unless it already answered with this app's build. An older helper
-    /// lacks newer methods, and only this build may receive the password.
+    /// lacks newer methods.
     private func requireBuild(on link: Link) async throws {
         guard verifiedLinkID != link.id else { return }
         let build = try await version(on: link)
@@ -235,7 +233,6 @@ final class HelperClient {
         connection.setCodeSigningRequirement(
             CodeSigningIdentity.requirement(identifier: FortiIdentifiers.helperBundleID, teamID: teamID)
         )
-        // Both run on XPC's queue: explicitly @Sendable so they do not inherit MainActor isolation.
         connection.interruptionHandler = { @Sendable [channel] in channel.end(id) }
         connection.invalidationHandler = { @Sendable [channel] in channel.end(id) }
         channel.activate(id)
@@ -269,11 +266,6 @@ final class HelperClient {
         throw (try? XPCCoding.decode(HelperError.self, from: reply))
             ?? HelperError(.internalError, "could not decode the Helper's error reply")
     }
-}
-
-/// This app's BuildID (`CFBundleVersion`), compared with the helper's.
-enum AppBuild {
-    static let current = BuildID(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")
 }
 
 /// The single ordered channel behind `HelperClient.inbound`.

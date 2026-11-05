@@ -12,21 +12,25 @@ struct RetryPolicyTests {
 
     @Test func plannedReconnectIsSessionMaxMinusMargin() {
         let connectedAt = ReducerFixture.t0
-        let planned = RetryPolicy.plannedReconnect(connectedAt: connectedAt, settings: ConnectionSettings(), now: connectedAt)
+        let planned = RetryPolicy.plannedReconnect(connectedAt: connectedAt, settings: ReducerFixture.settings, now: connectedAt)
         #expect(planned == connectedAt + 175 * 60)
     }
 
     @Test func plannedReconnectIsNilWhenDisabled() {
-        let settings = ConnectionSettings(proactiveReconnectEnabled: false)
+        var settings = ReducerFixture.settings
+        settings.proactiveReconnectEnabled = false
         #expect(RetryPolicy.plannedReconnect(connectedAt: ReducerFixture.t0, settings: settings, now: ReducerFixture.t0) == nil)
     }
 
     @Test func plannedReconnectIsClampedToAMinuteFromNow() {
-        let settings = ConnectionSettings(sessionMaxMinutes: 10, proactiveMarginMinutes: 5)
+        var settings = ReducerFixture.settings
+        settings.sessionMaxMinutes = 10
         let now = ReducerFixture.t0 + 20 * 60
         #expect(RetryPolicy.plannedReconnect(connectedAt: ReducerFixture.t0, settings: settings, now: now) == now + 60)
         // A margin larger than the session cannot produce a past date either.
-        let silly = ConnectionSettings(sessionMaxMinutes: 5, proactiveMarginMinutes: 10)
+        var silly = ReducerFixture.settings
+        silly.sessionMaxMinutes = 5
+        silly.proactiveMarginMinutes = 10
         #expect(RetryPolicy.plannedReconnect(connectedAt: ReducerFixture.t0, settings: silly, now: ReducerFixture.t0) == ReducerFixture.t0 + 60)
     }
 
@@ -132,7 +136,6 @@ struct RetryPolicyTests {
 
     @Test func connectRequestCarriesThePins() {
         var profile = ReducerFixture.profile
-        profile.realm = ""
         profile.trustedCerts = [ReducerFixture.digestA, ReducerFixture.pinOld]
         let request = profile.connectRequest(attemptID: ReducerFixture.id(1), password: "pw")
         #expect(request == ConnectRequest(

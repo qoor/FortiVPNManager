@@ -24,7 +24,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
     private let limits: WatchdogLimits
     private let timing: SupervisorTiming
     private let clock: any SupervisorClock
-    private let routeRepair: (@Sendable () -> RouteRepairOutcome)?
+    private let routeRepair: @Sendable () -> RouteRepairOutcome
     private let onEvent: @Sendable (HelperEvent) -> Void
     private let onOutput: @Sendable ([OutputLine]) -> Void
     private let queue: DispatchQueue
@@ -95,11 +95,10 @@ public final class TunnelSupervisor: @unchecked Sendable {
     private var deliveryScheduled = false
 
     /// - Parameters:
-    ///   - password: Validated with `ConfigRenderer.validatePassword`. The supervisor keeps only a
-    ///     byte copy that it zeroes after writing; the caller should drop its `String`.
+    ///   - password: Already validated by `ConfigRenderer`. The supervisor keeps only a byte copy
+    ///     that it zeroes after writing; the caller should drop its `String`.
     ///   - routeRepair: Called on exit when openfortivpn changed routes but did not finish
-    ///     restoring them; `.repaired` sets `ExitFacts.routeRepairPerformed`.
-    /// - Throws: `.invalidRequest` if the password or `executable.arguments` is unusable.
+    ///     restoring them.
     public init(
         attemptID: AttemptID,
         executable: ExecutableSpec,
@@ -107,18 +106,10 @@ public final class TunnelSupervisor: @unchecked Sendable {
         limits: WatchdogLimits = WatchdogLimits(),
         timing: SupervisorTiming = SupervisorTiming(),
         clock: any SupervisorClock = SystemSupervisorClock(),
-        routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil,
+        routeRepair: @escaping @Sendable () -> RouteRepairOutcome,
         onEvent: @escaping @Sendable (HelperEvent) -> Void,
         onOutput: @escaping @Sendable ([OutputLine]) -> Void
-    ) throws(HelperError) {
-        do {
-            try ConfigRenderer.validatePassword(password)
-        } catch {
-            throw HelperError(.invalidRequest, error.description)
-        }
-        guard !executable.arguments.isEmpty else {
-            throw HelperError(.invalidRequest, "missing argv[0]")
-        }
+    ) {
         self.attemptID = attemptID
         self.executable = executable
         self.limits = limits
@@ -145,11 +136,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     // MARK: - Public API
 
-    /// Whether `submitOTP` accepts `code`.
-    public static func isValidOTP(_ code: String) -> Bool {
-        (6...8).contains(code.utf8.count) && code.utf8.allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }
-    }
-
     /// Spawns the child. Events follow asynchronously: `.spawned`, or `.exited` if the spawn failed.
     /// - Throws: `.wrongPhase` if called more than once.
     public func start() throws(HelperError) {
@@ -164,10 +150,12 @@ public final class TunnelSupervisor: @unchecked Sendable {
     }
 
     /// Writes `code` and LF to openfortivpn's stdin and closes it.
-    /// - Throws: `.invalidRequest` unless `isValidOTP(code)`; `.wrongPhase` unless openfortivpn
-    ///   is waiting for the OTP and no OTP was submitted yet.
+    /// - Throws: `.invalidRequest` unless `code` is 6 to 8 ASCII digits; `.wrongPhase` unless
+    ///   openfortivpn is waiting for the OTP and no OTP was submitted yet.
     public func submitOTP(_ code: String) throws(HelperError) {
-        guard Self.isValidOTP(code) else {
+        guard (6...8).contains(code.utf8.count),
+              code.utf8.allSatisfy({ (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) })
+        else {
             throw HelperError(.invalidRequest, "OTP must be 6 to 8 ASCII digits")
         }
         let error: HelperError? = perform { writeOTP(code) }
@@ -336,7 +324,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
         }
     }
 
-    /// A helper meta line.
     private func meta(_ text: String) {
         appendOutput(text, source: .helper)
     }
@@ -385,7 +372,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
         var tunnelIP: String?
         if milestone == .tunnelUp {
             tunnelUpAt = clock.now
-            tunnelIP = parser.tunnelAddresses?.ip
+            tunnelIP = parser.tunnelIP
         }
         emit(.milestone(milestone, tunnelIP: tunnelIP))
         armWatchdog()
@@ -563,11 +550,8 @@ public final class TunnelSupervisor: @unchecked Sendable {
         }
         meta("‹exited: \(Self.describe(exitStatus))›")
 
-        var routeRepairPerformed = false
-        if parser.routesTouched, !parser.routesRestored, let routeRepair {
-            let outcome = routeRepair()
-            routeRepairPerformed = outcome == .repaired
-            switch outcome {
+        if parser.routesTouched, !parser.routesRestored {
+            switch routeRepair() {
             case .repaired: meta("‹routes repaired›")
             case .notNeeded: meta("‹routes checked: no repair needed›")
             case .failed: meta("‹route repair failed — see the Helper log›")
@@ -581,8 +565,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
             certRejectedAt: certRejectedAt,
             tunnelModeRejected: tunnelModeRejected,
             upDuration: tunnelUpAt.map { (exitedAt - $0).timeInterval },
-            exitStatus: exitStatus,
-            routeRepairPerformed: routeRepairPerformed
+            exitStatus: exitStatus
         )))
     }
 
@@ -632,7 +615,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
     }
 
     /// `30s`, `0.25s`.
-    static func format(_ duration: Duration) -> String {
+    private static func format(_ duration: Duration) -> String {
         let seconds = duration.timeInterval
         if seconds == seconds.rounded() {
             return "\(Int(seconds))s"
@@ -644,7 +627,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
         return "\(text)s"
     }
 
-    static func describe(_ status: ProcessExitStatus) -> String {
+    private static func describe(_ status: ProcessExitStatus) -> String {
         switch status {
         case .exited(let code):
             "code \(code)"

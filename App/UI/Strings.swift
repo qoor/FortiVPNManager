@@ -2,7 +2,6 @@ import Foundation
 import FortiConfig
 import FortiCore
 import FortiShared
-import ServiceManagement
 
 // Every user-facing phrase derived from connection state lives here, so the menu and the settings
 // window always describe the same state with the same words. Phrases about Gmail credentials depend
