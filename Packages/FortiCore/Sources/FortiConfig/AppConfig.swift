@@ -1,13 +1,12 @@
 import FortiShared
 import Foundation
 
-/// Non-secret settings stored in `~/.config/FortiVPNManager/config.yaml` (DESIGN §5.7).
+/// Non-secret settings stored in `~/.config/FortiVPNManager/config.yaml`.
 ///
 /// Passwords are never part of this model; they live in the login Keychain. Defaults match the
-/// fixed template written by ``ConfigTemplate``. The `Codable` conformance uses the same
-/// snake_case keys as the YAML file and fills missing keys with defaults, but the YAML file itself
-/// is always read through ``ConfigCodec`` (strict validation) and written through ``ConfigTemplate``.
-public struct AppConfig: Codable, Sendable, Equatable {
+/// fixed template written by ``ConfigTemplate``. The YAML file is always read through
+/// ``ConfigCodec`` (strict validation) and written through ``ConfigTemplate``.
+public struct AppConfig: Sendable, Equatable {
     /// The `schema_version` this build reads and writes.
     public static let currentSchemaVersion = 1
 
@@ -39,18 +38,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
         case routes
     }
 
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let defaults = AppConfig()
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? defaults.schemaVersion
-        vpn = try container.decodeIfPresent(VPN.self, forKey: .vpn) ?? defaults.vpn
-        otp = try container.decodeIfPresent(OTP.self, forKey: .otp) ?? defaults.otp
-        connection = try container.decodeIfPresent(Connection.self, forKey: .connection) ?? defaults.connection
-        routes = try container.decodeIfPresent(Routes.self, forKey: .routes) ?? defaults.routes
-    }
-
     /// `vpn:` section.
-    public struct VPN: Codable, Sendable, Equatable {
+    public struct VPN: Sendable, Equatable {
         /// Gateway host name or IPv4 address.
         public var host: String
         public var port: Int
@@ -82,36 +71,12 @@ public struct AppConfig: Codable, Sendable, Equatable {
             case realm
             case trustedCerts = "trusted_certs"
         }
-
-        public init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            let defaults = VPN()
-            host = try container.decodeIfPresent(String.self, forKey: .host) ?? defaults.host
-            port = try container.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
-            username = try container.decodeIfPresent(String.self, forKey: .username) ?? defaults.username
-            realm = try container.decodeIfPresent(String.self, forKey: .realm) ?? defaults.realm
-            trustedCerts = try container.decodeIfPresent([String].self, forKey: .trustedCerts) ?? defaults.trustedCerts
-        }
-
-        /// Pins a gateway certificate digest: normalizes it to lowercase, moves it to the front
-        /// (removing an older copy) and keeps at most ``ConfigLimits/maxTrustedCerts`` entries,
-        /// dropping the oldest. Returns `false` (and changes nothing) if `digest` is not a SHA-256 hex digest.
-        @discardableResult
-        public mutating func pinTrustedCert(_ digest: String) -> Bool {
-            guard let normalized = TrustedCertDigest.normalize(digest) else { return false }
-            trustedCerts.removeAll { $0 == normalized }
-            trustedCerts.insert(normalized, at: 0)
-            if trustedCerts.count > ConfigLimits.maxTrustedCerts {
-                trustedCerts.removeLast(trustedCerts.count - ConfigLimits.maxTrustedCerts)
-            }
-            return true
-        }
     }
 
     /// `otp:` section.
-    public struct OTP: Codable, Sendable, Equatable {
+    public struct OTP: Sendable, Equatable {
         /// How the app reads the OTP emails (`otp.method`).
-        public enum Method: String, Codable, Sendable, CaseIterable {
+        public enum Method: String, Sendable, CaseIterable {
             /// Gmail IMAP with an app password (Keychain service `.gmail`).
             case imap
             /// Gmail REST API with a Google OAuth authorization (Keychain service `.google`). Falls back
@@ -123,8 +88,9 @@ public struct AppConfig: Codable, Sendable, Equatable {
         /// authorization are in the Keychain.
         public var gmailAddress: String
         public var method: Method
-        /// OAuth client ID of the Google Cloud "Desktop app" client used by ``Method/gmailAPI``.
-        /// Not a secret; the client secret is in the Keychain. Empty when no client was imported.
+        /// OAuth client ID of an imported Google Cloud "Desktop app" client, used by ``Method/gmailAPI``
+        /// instead of the built-in one. Not a secret; its client secret is in the Keychain. Empty when no
+        /// client was imported.
         public var googleClientID: String
 
         public init(gmailAddress: String = "", method: Method = .imap, googleClientID: String = "") {
@@ -138,19 +104,10 @@ public struct AppConfig: Codable, Sendable, Equatable {
             case method
             case googleClientID = "google_client_id"
         }
-
-        public init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            let defaults = OTP()
-            gmailAddress = try container.decodeIfPresent(String.self, forKey: .gmailAddress) ?? defaults.gmailAddress
-            method = try container.decodeIfPresent(Method.self, forKey: .method) ?? defaults.method
-            googleClientID = try container.decodeIfPresent(String.self, forKey: .googleClientID)
-                ?? defaults.googleClientID
-        }
     }
 
     /// `connection:` section.
-    public struct Connection: Codable, Sendable, Equatable {
+    public struct Connection: Sendable, Equatable {
         public var autoConnectOnLaunch: Bool
         /// Server-enforced session lifetime in minutes.
         public var sessionMaxMinutes: Int
@@ -180,22 +137,8 @@ public struct AppConfig: Codable, Sendable, Equatable {
             case schedule
         }
 
-        public init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            let defaults = Connection()
-            autoConnectOnLaunch = try container.decodeIfPresent(Bool.self, forKey: .autoConnectOnLaunch)
-                ?? defaults.autoConnectOnLaunch
-            sessionMaxMinutes = try container.decodeIfPresent(Int.self, forKey: .sessionMaxMinutes)
-                ?? defaults.sessionMaxMinutes
-            proactiveReconnect = try container.decodeIfPresent(ProactiveReconnect.self, forKey: .proactiveReconnect)
-                ?? defaults.proactiveReconnect
-            reconnectAfterSleep = try container.decodeIfPresent(ReconnectAfterSleep.self, forKey: .reconnectAfterSleep)
-                ?? defaults.reconnectAfterSleep
-            schedule = try container.decodeIfPresent(Schedule.self, forKey: .schedule) ?? defaults.schedule
-        }
-
         /// `connection.proactive_reconnect`: reconnect `marginMinutes` before the session limit.
-        public struct ProactiveReconnect: Codable, Sendable, Equatable {
+        public struct ProactiveReconnect: Sendable, Equatable {
             public var enabled: Bool
             public var marginMinutes: Int
 
@@ -208,17 +151,10 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 case enabled
                 case marginMinutes = "margin_minutes"
             }
-
-            public init(from decoder: any Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                let defaults = ProactiveReconnect()
-                enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
-                marginMinutes = try container.decodeIfPresent(Int.self, forKey: .marginMinutes) ?? defaults.marginMinutes
-            }
         }
 
         /// `connection.reconnect_after_sleep`: reconnect after waking from a sleep of at least `minSleepMinutes`.
-        public struct ReconnectAfterSleep: Codable, Sendable, Equatable {
+        public struct ReconnectAfterSleep: Sendable, Equatable {
             public var enabled: Bool
             public var minSleepMinutes: Int
 
@@ -231,22 +167,14 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 case enabled
                 case minSleepMinutes = "min_sleep_minutes"
             }
-
-            public init(from decoder: any Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                let defaults = ReconnectAfterSleep()
-                enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
-                minSleepMinutes = try container.decodeIfPresent(Int.self, forKey: .minSleepMinutes)
-                    ?? defaults.minSleepMinutes
-            }
         }
 
         /// `connection.schedule`: when `enabled`, connect at `start` on `days`. The end never
         /// disconnects; after it, reconnects wait while the user is away and stop once the user
         /// has been away for `awayMinutes`.
-        public struct Schedule: Codable, Sendable, Equatable {
+        public struct Schedule: Sendable, Equatable {
             /// Weekday spelling in the file, in display order (Monday first).
-            public enum Day: String, Codable, Sendable, CaseIterable {
+            public enum Day: String, Sendable, CaseIterable {
                 case mon, tue, wed, thu, fri, sat, sun
 
                 /// `Calendar` weekday number (1 = Sunday … 7 = Saturday).
@@ -298,21 +226,11 @@ public struct AppConfig: Codable, Sendable, Equatable {
                 case end
                 case awayMinutes = "away_minutes"
             }
-
-            public init(from decoder: any Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                let defaults = Schedule()
-                enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled
-                days = Self.normalizedDays(try container.decodeIfPresent([Day].self, forKey: .days) ?? defaults.days)
-                start = try container.decodeIfPresent(TimeOfDay.self, forKey: .start) ?? defaults.start
-                end = try container.decodeIfPresent(TimeOfDay.self, forKey: .end) ?? defaults.end
-                awayMinutes = try container.decodeIfPresent(Int.self, forKey: .awayMinutes) ?? defaults.awayMinutes
-            }
         }
     }
 
-    /// `routes:` section, the exception rules (DESIGN §5.8). Entries of one list never overlap.
-    public struct Routes: Codable, Sendable, Equatable {
+    /// `routes:` section, the exception rules. Entries of one list never overlap.
+    public struct Routes: Sendable, Equatable {
         /// Networks where the rules apply: only while this Mac's IPv4 address is inside one of them.
         /// Elsewhere everything goes through the VPN. Never filled in by the app.
         public var networks: [IPv4Network]
@@ -329,17 +247,11 @@ public struct AppConfig: Codable, Sendable, Equatable {
             case networks
             case bypassVPN = "bypass_vpn"
         }
-
-        public init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            networks = try container.decodeIfPresent([IPv4Network].self, forKey: .networks) ?? []
-            bypassVPN = try container.decodeIfPresent([IPv4Network].self, forKey: .bypassVPN) ?? []
-        }
     }
 }
 
 /// A wall-clock time of day with minute precision, written `HH:mm` (`00:00`-`23:59`).
-public struct TimeOfDay: Codable, Sendable, Hashable, Comparable, CustomStringConvertible {
+public struct TimeOfDay: Sendable, Hashable, Comparable, CustomStringConvertible {
     /// Minutes after midnight, `0..<1440`.
     public let minutes: Int
 
@@ -371,25 +283,11 @@ public struct TimeOfDay: Codable, Sendable, Hashable, Comparable, CustomStringCo
     public static func < (lhs: TimeOfDay, rhs: TimeOfDay) -> Bool {
         lhs.minutes < rhs.minutes
     }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let text = try container.decode(String.self)
-        guard let time = TimeOfDay(parsing: text) else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "expected HH:mm, got \(text)")
-        }
-        self = time
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(description)
-    }
 }
 
-/// Limits enforced by ``ConfigCodec`` and ``AppConfig/validate()`` (DESIGN §5.7).
+/// Limits enforced by ``ConfigCodec`` and ``AppConfig/validate()``.
 public enum ConfigLimits {
-    /// Maximum size of `config.yaml` in bytes (64 KiB).
+    /// Maximum size of `config.yaml` in bytes.
     public static let maxFileSize = 64 * 1024
     public static let port: ClosedRange<Int> = 1...65535
     public static let sessionMaxMinutes: ClosedRange<Int> = 10...1440
@@ -398,7 +296,8 @@ public enum ConfigLimits {
     public static let minSleepMinutes: ClosedRange<Int> = 1...1440
     /// `connection.schedule.away_minutes`.
     public static let awayMinutes: ClosedRange<Int> = 1...1440
-    /// Number of pinned certificate digests kept by ``AppConfig/VPN/pinTrustedCert(_:)``.
+    /// Number of certificate digests the app keeps in `trusted_certs` (stated in the template;
+    /// FortiCore's `TrustedCertPins.limit` enforces it).
     public static let maxTrustedCerts = 4
     /// Entries in each of `routes.networks` and `routes.bypass_vpn`.
     public static let maxRouteEntries = IPv4Network.maxCount

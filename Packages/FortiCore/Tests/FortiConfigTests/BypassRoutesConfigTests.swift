@@ -164,13 +164,12 @@ struct BypassRoutesConfigTests {
     }
 
     @Test func containment() throws {
-        let office = try IPv4Network(parsing: "10.71.161.0/24")
-        #expect(office.contains(IPv4Network.parseDottedQuad("10.71.161.20")!))
-        #expect(!office.contains(IPv4Network.parseDottedQuad("10.71.162.20")!))
-        #expect(office.contains(try IPv4Network(parsing: "10.71.161.16")))
-        #expect(office.contains(office))
-        #expect(!office.contains(try IPv4Network(parsing: "10.71.0.0/16")))
-        #expect(try IPv4Network(enclosing: "10.71.161.20", subnetMask: "255.255.255.0") == office)
+        #expect(officeNetwork.contains(IPv4Network.parseDottedQuad("10.71.161.20")!))
+        #expect(!officeNetwork.contains(IPv4Network.parseDottedQuad("10.71.162.20")!))
+        #expect(officeNetwork.contains(try IPv4Network(parsing: "10.71.161.16")))
+        #expect(officeNetwork.contains(officeNetwork))
+        #expect(!officeNetwork.contains(try IPv4Network(parsing: "10.71.0.0/16")))
+        #expect(try IPv4Network(enclosing: "10.71.161.20", subnetMask: "255.255.255.0") == officeNetwork)
         #expect(throws: IPv4Network.ParseError.nonContiguousMask) {
             try IPv4Network(enclosing: "10.71.161.20", subnetMask: "255.0.255.0")
         }

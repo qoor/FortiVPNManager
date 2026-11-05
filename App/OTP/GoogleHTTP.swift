@@ -6,9 +6,8 @@ nonisolated struct GoogleTransportError: Error, Sendable, Equatable {
     var detail: String
 }
 
-/// HTTPS to Google's OAuth and Gmail endpoints with one ephemeral `URLSession` (no cookies, no cache)
-/// and a 10-second budget per request. Only the async URLSession API is used, so no completion
-/// closure crosses into the main-actor app code.
+/// HTTPS to Google's OAuth and Gmail endpoints with one ephemeral `URLSession` (no cookies, no cache).
+/// Only the async URLSession API is used, so no completion closure crosses into the main-actor app code.
 nonisolated struct GoogleHTTP: Sendable {
     static let requestTimeout: TimeInterval = 10
     static let shared = GoogleHTTP()

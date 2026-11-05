@@ -49,21 +49,21 @@ enum ReducerFixture {
         initiator: StopInitiator = .none,
         up: TimeInterval? = nil,
         certs: [String] = [],
-        certAt: Milestone? = nil,
-        watchdog: WatchdogPhase? = nil,
-        authFail: Bool = false
+        certAt: Milestone? = nil
     ) -> ExitFacts {
         ExitFacts(
             furthestMilestone: furthest,
             stopInitiator: initiator,
-            watchdogFired: watchdog,
             certRejectedDigests: certs,
             certRejectedAt: certAt,
-            authFailLineSeen: authFail,
             upDuration: up,
             exitStatus: furthest == nil ? .spawnFailed(errno: 2) : .exited(code: 1)
         )
     }
+}
+
+func observe(alive: Bool = true, ppp: Bool = true, underlay: Underlay? = ReducerFixture.wifi, settled: Bool = true) -> WakeObservation {
+    WakeObservation(processAlive: alive, pppUp: ppp, underlay: underlay, pathSatisfied: settled)
 }
 
 /// Drives the reducer with a controllable clock, as `ConnectionController` would.
@@ -149,7 +149,7 @@ struct ReducerHarness {
 
     @discardableResult
     mutating func helper(_ kind: HelperEvent.Kind, id: AttemptID? = nil) -> [ConnectionEffect] {
-        send(.helperEvent(HelperEvent(attemptID: id ?? currentID ?? ReducerFixture.stranger, date: now, kind: kind)))
+        send(.helperEvent(HelperEvent(attemptID: id ?? currentID ?? ReducerFixture.stranger, kind: kind)))
     }
 
     @discardableResult

@@ -3,9 +3,8 @@ import Foundation
 import FortiShared
 import os
 
-/// Appends raw helper output to `~/Library/Logs/FortiVPNManager/openfortivpn.log` (DESIGN §5.6):
-/// directory 0700, files 0600, rotated at 2 MB keeping five files (`openfortivpn.log`, `.1` … `.4`).
-/// The text is unmasked, like the Log tab; it holds no secrets at openfortivpn's default verbosity.
+/// Appends raw helper output to a size-rotated log file. The text is unmasked, like the Log tab; it
+/// holds no secrets at openfortivpn's default verbosity.
 actor LogFileWriter {
     nonisolated static let maxFileBytes = 2 * 1024 * 1024
     nonisolated static let keptFiles = 5
@@ -66,7 +65,6 @@ actor LogFileWriter {
         size = Int(info.st_size)
     }
 
-    /// `openfortivpn.log` → `.1` → … → `.4`; the oldest is dropped.
     private func rotate() throws(FileIOError) {
         closeFile()
         let path = fileURL.path

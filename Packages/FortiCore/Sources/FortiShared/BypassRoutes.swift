@@ -1,6 +1,6 @@
 import Foundation
 
-/// An IPv4 host or network in CIDR form, as the exception rules use it (DESIGN §5.8): written
+/// An IPv4 host or network in CIDR form, as the exception rules use it: written
 /// `10.77.161.16` (one host, /32) or `10.77.170.0/24` (a network, no bits set after the prefix).
 /// Exception targets (`routes.bypass_vpn`) and the networks where they apply (`routes.networks`)
 /// are both lists of these. Encoded as that text; decoding re-validates it.
@@ -18,7 +18,6 @@ public struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible 
         case hostBitsSet(network: IPv4Network)
     }
 
-    /// From a /8 (e.g. `10.0.0.0/8`) down to one host.
     public static let prefixLengths: ClosedRange<Int> = 8...32
     /// Most entries one list may hold.
     public static let maxCount = 100

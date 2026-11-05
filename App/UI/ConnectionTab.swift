@@ -3,8 +3,8 @@ import FortiConfig
 import FortiShared
 import SwiftUI
 
-/// Tab 2, Connection (DESIGN §5.6): status and actions, the schedule and connection options (saved to
-/// config.yaml right away), the Helper, the settings file, and the exception rules (saved by Apply).
+/// The Connection tab. The schedule and connection options are saved to config.yaml right away; the
+/// exception rules only by Apply.
 struct ConnectionTab: View {
     let environment: AppEnvironment
     let clock: StatusClock

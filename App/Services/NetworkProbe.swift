@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 import SystemConfiguration
 
-/// Point-in-time network facts for `SystemMonitor` (DESIGN §5.5, §6.3). No state, safe off the main actor.
+/// Point-in-time network facts for `SystemMonitor`. No state, safe off the main actor.
 nonisolated enum NetworkProbe {
     /// `true` for interfaces that carry tunnels rather than the physical underlay.
     static func isTunnelInterface(_ name: String) -> Bool {

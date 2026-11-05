@@ -5,7 +5,6 @@ import FortiCore
 /// token (see `GoogleOAuthService.accessToken(for:)`) and fails with a typed `GmailAPIError`.
 nonisolated struct GmailAPIClient: Sendable {
     var http: GoogleHTTP = .shared
-    var baseURL: URL = GmailAPI.baseURL
 
     /// `users.getProfile`: the signed-in address and the current history ID.
     func profile(accessToken: String) async throws(GmailAPIError) -> GmailProfile {
@@ -72,7 +71,7 @@ nonisolated struct GmailAPIClient: Sendable {
     }
 
     private func url(path: String, query: [(String, String)]) -> URL {
-        let base = baseURL.appending(path: path)
+        let base = GmailAPI.baseURL.appending(path: path)
         guard !query.isEmpty else { return base }
         return URL(string: base.absoluteString + "?" + GoogleOAuth.formEncoded(query)) ?? base
     }

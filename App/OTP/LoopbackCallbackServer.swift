@@ -17,10 +17,8 @@ nonisolated enum LoopbackCallbackError: Error, Sendable, Equatable {
 /// The OAuth redirect target of the Google sign-in (RFC 8252 §7.3): an HTTP listener on
 /// `127.0.0.1`, on a port the system picks, that accepts exactly one valid callback.
 ///
-/// A request with the expected `state` and a `code` (or an `error`) ends the wait and gets a small
-/// HTML page; other requests (wrong `state`, `/favicon.ico`, ...) are answered and ignored. The
-/// actor's executor is the listener's serial queue, so the `@Sendable` Network.framework callbacks
-/// enter it synchronously through `assumeIsolated`.
+/// The actor's executor is the listener's serial queue, so the `@Sendable` Network.framework
+/// callbacks enter it synchronously through `assumeIsolated`.
 actor LoopbackCallbackServer {
     /// Simultaneous browser connections served; more are refused.
     nonisolated static let maxConnections = 16

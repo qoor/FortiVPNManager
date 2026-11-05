@@ -159,7 +159,6 @@ struct Harness: Sendable {
         limits: WatchdogLimits = testLimits,
         timing: SupervisorTiming = testTiming,
         clock: any SupervisorClock = SystemSupervisorClock(),
-        firstOutputSeq: UInt64 = 1,
         routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil
     ) throws {
         let record = RecordFile()
@@ -170,7 +169,6 @@ struct Harness: Sendable {
             limits: limits,
             timing: timing,
             clock: clock,
-            firstOutputSeq: firstOutputSeq,
             routeRepair: routeRepair
         )
     }
@@ -193,7 +191,6 @@ struct Harness: Sendable {
         limits: WatchdogLimits = testLimits,
         timing: SupervisorTiming = testTiming,
         clock: any SupervisorClock = SystemSupervisorClock(),
-        firstOutputSeq: UInt64 = 1,
         routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil
     ) throws {
         let recorder = Recorder()
@@ -206,7 +203,6 @@ struct Harness: Sendable {
             limits: limits,
             timing: timing,
             clock: clock,
-            firstOutputSeq: firstOutputSeq,
             routeRepair: routeRepair,
             onEvent: { recorder.record($0) },
             onOutput: { recorder.record($0) }
@@ -232,22 +228,19 @@ struct Harness: Sendable {
 
 // MARK: - Output invariants
 
-/// Checks DESIGN §5.2 output rules for a finished run: consecutive seqs from `firstSeq`, every
-/// line tagged with the attempt, all output delivered before `.exited`, which is last, and
-/// `lastOutputSeq` matching the last delivered line.
-func expectOutputInvariants(_ harness: Harness, firstSeq: UInt64 = 1, sourceLocation: SourceLocation = #_sourceLocation) {
+/// Checks the output rules for a finished run: every event tagged with the attempt, all output
+/// (ending with the exit or route-repair meta line) delivered before `.exited`, which is last, and
+/// no secret in the output.
+func expectOutputInvariants(_ harness: Harness, sourceLocation: SourceLocation = #_sourceLocation) {
     let recorder = harness.recorder
     let lines = recorder.lines
-    #expect(lines.map(\.seq) == Array(firstSeq..<(firstSeq + UInt64(lines.count))), sourceLocation: sourceLocation)
-    #expect(lines.allSatisfy { $0.attemptID == harness.supervisor.attemptID }, sourceLocation: sourceLocation)
     #expect(recorder.events.allSatisfy { $0.attemptID == harness.supervisor.attemptID }, sourceLocation: sourceLocation)
     #expect(recorder.batches.allSatisfy { !$0.isEmpty }, sourceLocation: sourceLocation)
-    guard case .event(let last)? = recorder.delivered.last, case .exited(let facts) = last.kind else {
+    guard case .event(let last)? = recorder.delivered.last, case .exited = last.kind else {
         Issue.record("the last delivery is not .exited", sourceLocation: sourceLocation)
         return
     }
     #expect(recorder.events.filter { if case .exited = $0.kind { true } else { false } }.count == 1, sourceLocation: sourceLocation)
-    #expect(facts.lastOutputSeq == lines.last?.seq, sourceLocation: sourceLocation)
     #expect(lines.last?.source == .helper, sourceLocation: sourceLocation)
     #expect(lines.last?.text.hasPrefix("‹exited: ") == true || lines.last?.text.hasPrefix("‹route") == true, sourceLocation: sourceLocation)
     #expect(!lines.contains { $0.text.contains(testPassword) || $0.text.contains(testOTP) }, sourceLocation: sourceLocation)

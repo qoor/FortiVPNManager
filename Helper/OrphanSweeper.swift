@@ -1,9 +1,7 @@
 import Darwin
 
-/// Cleans up after a helper that died during a run (DESIGN §5.2 "orphan cleanup"). Runs once at startup,
-/// before any connection is accepted: stops the processes recorded in the pidfile that are
-/// provably still the same root processes, repairs routes, then deletes the pidfile and stale
-/// config files.
+/// Cleans up after a helper that died during a run. Runs once at startup, before any connection
+/// is accepted, and signals only recorded processes that are provably still the same root processes.
 enum OrphanSweeper {
     static func sweep() {
         do {
@@ -29,7 +27,7 @@ enum OrphanSweeper {
         path == ProcessIdentity.pppdPath || path.hasPrefix(BinaryLocator.cellarPrefix)
     }
 
-    /// SIGTERM, up to 10 s for a clean exit (openfortivpn restores routes), then SIGKILL.
+    /// SIGTERM first so openfortivpn can restore routes, then SIGKILL.
     private static func terminate(_ processes: [ProcessIdentity]) {
         for process in processes {
             kill(process.pid, SIGTERM)

@@ -2,7 +2,7 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// Tabs of the settings window (DESIGN §5.6).
+/// Tabs of the settings window.
 enum SettingsTab: Hashable {
     case account
     case connection
@@ -15,7 +15,7 @@ final class SettingsNavigation {
     var selection: SettingsTab = .account
 }
 
-/// The settings window (DESIGN §5.6): one reusable `NSWindow` hosting the three SwiftUI tabs.
+/// The settings window: one reusable `NSWindow` hosting the SwiftUI tabs.
 /// While it is open the app is a regular app (Dock icon, key focus); closing it returns the app
 /// to the menu bar only.
 final class SettingsWindowController: NSObject, NSWindowDelegate {

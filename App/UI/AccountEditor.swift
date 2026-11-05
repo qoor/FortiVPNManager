@@ -6,9 +6,9 @@ import Observation
 import os
 import UniformTypeIdentifiers
 
-/// Edit buffer behind the Account tab (DESIGN §5.6 tab 1). Fields start from config.yaml; "Save"
-/// writes config.yaml (`ConfigStore.update`) and the two passwords (Keychain). Passwords are never
-/// read back into the form: an empty password field means "keep the stored one".
+/// Edit buffer behind the Account tab. Fields start from config.yaml; "Save" writes config.yaml
+/// (`ConfigStore.update`) and the two passwords (Keychain). Passwords are never read back into the
+/// form: an empty password field means "keep the stored one".
 ///
 /// The OTP method and the Google account controls act immediately instead of waiting for "Save":
 /// the method is written to config.yaml when picked, and the OAuth client import, Google sign-in

@@ -92,13 +92,13 @@ enum ConfigText {
 
     // MARK: UTF-8
 
-    /// Decodes strict UTF-8 and strips one leading BOM. On failure returns the location of the
-    /// first invalid byte sequence.
     enum UTF8Decoding {
         case text(String)
         case invalid(at: LineColumn)
     }
 
+    /// Decodes strict UTF-8 and strips one leading BOM. On failure returns the location of the
+    /// first invalid byte sequence.
     static func decodeUTF8(_ data: Data) -> UTF8Decoding {
         if var text = String(validating: data, as: UTF8.self) {
             if text.unicodeScalars.first == "\u{FEFF}" {

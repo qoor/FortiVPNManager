@@ -28,35 +28,6 @@ enum ModifiedUTF7 {
         return result
     }
 
-    /// Encodes a mailbox name into its wire form.
-    static func encode(_ name: String) -> String {
-        var result = ""
-        var pending: [UInt16] = []
-        func flush() {
-            guard !pending.isEmpty else { return }
-            var data = Data(capacity: pending.count * 2)
-            for unit in pending {
-                data.append(UInt8(unit >> 8))
-                data.append(UInt8(unit & 0xFF))
-            }
-            let base64 = data.base64EncodedString()
-                .replacingOccurrences(of: "=", with: "")
-                .replacingOccurrences(of: "/", with: ",")
-            result += "&" + base64 + "-"
-            pending.removeAll()
-        }
-        for scalar in name.unicodeScalars {
-            if (0x20...0x7E).contains(scalar.value) {
-                flush()
-                result += scalar == "&" ? "&-" : String(scalar)
-            } else {
-                pending.append(contentsOf: String(scalar).utf16)
-            }
-        }
-        flush()
-        return result
-    }
-
     private static func decodeBase64Run(_ run: ArraySlice<UInt8>) -> String? {
         let isModifiedBase64 = run.allSatisfy { byte in
             (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte) || (0x30...0x39).contains(byte)

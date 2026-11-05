@@ -6,7 +6,7 @@ record="$1"
 
 password_prompt
 connected
-otp_prompt tokeninfo
+otp_prompt
 read_secret otp
 authenticated
 tunnel_setup

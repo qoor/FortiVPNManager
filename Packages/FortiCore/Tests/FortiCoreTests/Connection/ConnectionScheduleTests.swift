@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import FortiCore
 
-@Suite("Schedule window math (§5.4 schedule)")
+@Suite("Schedule window math")
 struct ConnectionScheduleTests {
     /// Monday to Friday, 09:00-18:00.
     static let weekdays = ConnectionSchedule(weekdays: [2, 3, 4, 5, 6], startMinute: 9 * 60, endMinute: 18 * 60, awayMinutes: 120)

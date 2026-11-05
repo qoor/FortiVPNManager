@@ -6,7 +6,7 @@ record="$1"
 password_prompt
 connected
 if [ "${2:-password}" = otp ]; then
-    otp_prompt tokeninfo
+    otp_prompt
     read_secret otp
     printf '\n'
 fi

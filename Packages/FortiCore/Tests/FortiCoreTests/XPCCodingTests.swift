@@ -10,7 +10,7 @@ import FortiShared
         certRejectedDigests: [String(repeating: "a", count: 64)],
         exitStatus: .signaled(signal: 15)
     )
-    let event = HelperEvent(attemptID: id, date: Date(timeIntervalSince1970: 1_000), kind: .exited(facts))
+    let event = HelperEvent(attemptID: id, kind: .exited(facts))
     let decoded = try XPCCoding.decode(HelperEvent.self, from: XPCCoding.encode(event))
     #expect(decoded == event)
 }

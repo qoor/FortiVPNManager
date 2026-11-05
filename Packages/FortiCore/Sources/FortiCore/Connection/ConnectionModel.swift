@@ -9,8 +9,6 @@ public struct ConnectionModel: Sendable, Equatable {
     public internal(set) var profile: VPNProfile
     public internal(set) var readiness: Readiness = .unknown
     public internal(set) var ledger: FailureLedger
-    /// Most recent classified failure (shown as the one-line reason).
-    public internal(set) var lastFailure: ConnectionFailureReason?
     public internal(set) var path: PathSnapshot?
     public internal(set) var isSleeping = false
     public internal(set) var lastWakeAt: Date?
@@ -85,7 +83,7 @@ public struct ConnectionModel: Sendable, Equatable {
         }
     }
 
-    /// Timers the current state calls for. `reconcile` diffs this against `timers`.
+    /// Timers the current state calls for. `reconcileTimers` diffs this against `timers`.
     func wantedTimers(now: Date) -> [ConnectionTimer: Date] {
         var wanted: [ConnectionTimer: Date] = [:]
         switch state {
@@ -95,7 +93,7 @@ public struct ConnectionModel: Sendable, Equatable {
                 wanted[.otpDeadline] = prompted.addingTimeInterval(RetryPolicy.otpDeadline)
             }
         case let .connected(context) where !isSleeping && pendingWake == nil:
-            // Suspended while asleep and until the wake has been evaluated (§6.3), then re-armed.
+            // Suspended while asleep and until the wake has been evaluated, then re-armed.
             // Outside the scheduled hours it also waits for an away user to return.
             if let planned = context.plannedReconnectAt, automaticReconnectAllowed(at: now) {
                 wanted[.proactiveReconnect] = planned

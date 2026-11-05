@@ -3,24 +3,19 @@ import os
 import FortiCore
 import FortiShared
 
-/// `OTPSessionService` over Gmail IMAP (DESIGN.md §5.3): one IMAP connection per connection attempt.
+/// `OTPSessionService` over Gmail IMAP: one IMAP connection per connection attempt.
 ///
 /// `start` hands any previous attempt a graceful close (it logs out in the background); every other
 /// call is ignored unless it names the current attempt.
 final class GmailOTPSession: OTPSessionService {
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)?
 
-    private let endpoint: IMAPEndpoint
     private var current: GmailOTPAttempt?
-
-    init(endpoint: IMAPEndpoint = .gmail) {
-        self.endpoint = endpoint
-    }
 
     func start(attemptID: AttemptID, account: GmailAccount) {
         guard current?.attemptID != attemptID else { return }
         current?.end(.close(checkJunk: false))
-        let attempt = GmailOTPAttempt(attemptID: attemptID, account: account, endpoint: endpoint) { [weak self] event in
+        let attempt = GmailOTPAttempt(attemptID: attemptID, account: account) { [weak self] event in
             self?.onEvent?(event)
         }
         current = attempt
@@ -44,9 +39,7 @@ final class GmailOTPSession: OTPSessionService {
     }
 }
 
-/// One attempt's IMAP connection: log in → snapshot `\All` → trash stale codes → `.ready` → IDLE;
-/// after `beginSearch`, search on every EXISTS and every 5 s until a code matches; then wait for
-/// `end` to trash the used messages (finish) or to stop, optionally checking `\Junk` (close).
+/// One attempt's IMAP connection.
 ///
 /// Events: `.ready`, `.codeFound` and `.failed` only before `end`; `.failed` never after `.codeFound`;
 /// `.foundInJunk` only from the close-time junk check.
@@ -71,7 +64,7 @@ private final class GmailOTPAttempt {
     }
 
     /// Fallback search period while looking for the code, in case an IDLE notification is missed or
-    /// late. Short on purpose: it only runs during the ≤ 50 s OTP window.
+    /// late. Short on purpose: it only runs during the OTP window.
     private static let searchInterval: Duration = .seconds(1)
     /// IDLE refresh period while not searching (servers end IDLE after ~30 min of silence).
     private static let idleRefresh: Duration = .seconds(300)
@@ -90,10 +83,10 @@ private final class GmailOTPAttempt {
     private var selection: OTPSelection?
     private var ending: Ending?
 
-    init(attemptID: AttemptID, account: GmailAccount, endpoint: IMAPEndpoint, emit: @escaping (OTPSessionEvent) -> Void) {
+    init(attemptID: AttemptID, account: GmailAccount, emit: @escaping (OTPSessionEvent) -> Void) {
         self.attemptID = attemptID
         self.account = account
-        self.transport = IMAPTransport(endpoint: endpoint)
+        self.transport = IMAPTransport()
         self.emit = emit
     }
 
@@ -135,8 +128,7 @@ private final class GmailOTPAttempt {
         await wrapUp()
     }
 
-    /// Logs in, finds the special mailboxes, SELECTs `\All`, snapshots it and trashes AuthCode
-    /// messages that already arrived after the snapshot.
+    /// Snapshots `\All` and trashes AuthCode messages that already arrived after the snapshot.
     private func prepare() async throws -> MailboxSnapshot {
         try await transport.logIn(account)
         let mailboxes = try await transport.specialMailboxes()
@@ -206,7 +198,6 @@ private final class GmailOTPAttempt {
         }
     }
 
-    /// e.g. "‹OTP mail: in Gmail 5s after the prompt · detected 1s after arrival (IDLE notification · 3 searches · 1 IDLE notification)›".
     /// INTERNALDATE has one-second resolution, so both spans are rounded and clamped at zero.
     private static func timingNote(
         promptedAt: Date, arrivedAt: Date, foundAt: Date, trigger: SearchTrigger, stats: SearchStats

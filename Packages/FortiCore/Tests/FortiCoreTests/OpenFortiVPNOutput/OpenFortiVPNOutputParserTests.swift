@@ -8,7 +8,7 @@ import Testing
 
     private func parse(_ lines: [String], source: OutputSource = .stdout) -> [OpenFortiVPNSignal] {
         var parser = OpenFortiVPNOutputParser()
-        return lines.flatMap { parser.parse($0, source: source) }
+        return lines.compactMap { parser.parse($0, source: source) }
     }
 
     /// Gateway certificate rejection block, tunnel.c:912-934.
@@ -36,14 +36,6 @@ import Testing
         ("INFO:   Connected to gateway.", OpenFortiVPNSignal.connectedToGateway),
         ("INFO:   Authenticated.", .authenticated),
         ("INFO:   Tunnel is up and running.", .tunnelUp),
-        ("INFO:   Interface ppp0 is UP.", .interfaceUp(name: "ppp0")),
-        ("INFO:   Interface ppp12 is UP.", .interfaceUp(name: "ppp12")),
-        ("INFO:   Setting new routes...", .routesTouched),
-        ("INFO:   Adding VPN nameservers...", .nameserversAdded),
-        ("INFO:   Setting ppp0 interface down.", .interfaceDown(name: "ppp0")),
-        ("INFO:   Removing VPN nameservers...", .nameserversRemoved),
-        ("ERROR:  Could not authenticate to gateway. Please check the password, client certificate, etc.", .authenticationFailed),
-        ("ERROR:  Could not authenticate to gateway.", .authenticationFailed),
         (
             "ERROR:  Could not authenticate to the gateway. Please make sure tunnel mode is allowed by the gateway, check the realm, etc.",
             .tunnelModeRejected
@@ -57,7 +49,6 @@ import Testing
         "",
         "VPN account password: ",
         "Two-factor authentication token: ",
-        "Please enter one-time password: ",
         "Connected to gateway.",  // no log.c prefix
         "INFO:  Connected to gateway.",  // 7-byte prefix
         "INFO:   Connected to gateway. ",
@@ -76,6 +67,9 @@ import Testing
         "  (raw) INFO:   Tunnel is up and running.",
         "ERROR:  /usr/sbin/pppd: No such file or directory.",
         "ERROR:  pppd: something new",
+        // Password/OTP rejection: only the tunnel-mode variant is a signal.
+        "ERROR:  Could not authenticate to gateway. Please check the password, client certificate, etc.",
+        "ERROR:  Could not authenticate to gateway.",
     ])
     func ignoresUnknownLines(line: String) {
         #expect(parse([line]).isEmpty)
@@ -94,28 +88,28 @@ import Testing
     @Test(arguments: [
         (
             "[10.212.134.200], ns [10.0.0.53, 10.0.0.54]",
-            TunnelAddresses(ip: "10.212.134.200", dnsServers: ["10.0.0.53", "10.0.0.54"])
+            TunnelAddresses(ip: "10.212.134.200")
         ),
         (
             "[10.212.134.200], ns [10.0.0.53, 10.0.0.54], ns_suffix [corp.example.com]",
-            TunnelAddresses(ip: "10.212.134.200", dnsServers: ["10.0.0.53", "10.0.0.54"], dnsSuffix: "corp.example.com")
+            TunnelAddresses(ip: "10.212.134.200")
         ),
         (
             "[10.1.2.3], ns [10.0.0.53, 0.0.0.0]",
-            TunnelAddresses(ip: "10.1.2.3", dnsServers: ["10.0.0.53"])
+            TunnelAddresses(ip: "10.1.2.3")
         ),
         (
             "[10.1.2.3], ns [0.0.0.0, 0.0.0.0], ns_suffix [a.example;b.example]",
-            TunnelAddresses(ip: "10.1.2.3", dnsServers: [], dnsSuffix: "a.example;b.example")
+            TunnelAddresses(ip: "10.1.2.3")
         ),
         (
             "[10.1.2.3], ns [0.0.0.0, 0.0.0.0], ns_suffix []",
-            TunnelAddresses(ip: "10.1.2.3", dnsServers: [])
+            TunnelAddresses(ip: "10.1.2.3")
         ),
     ])
     func parsesGotAddresses(payload: String, expected: TunnelAddresses) {
         var parser = OpenFortiVPNOutputParser()
-        #expect(parser.parse("INFO:   Got addresses: \(payload)", source: .stdout) == [.addressesAssigned(expected)])
+        _ = parser.parse("INFO:   Got addresses: \(payload)", source: .stdout)
         #expect(parser.tunnelAddresses == expected)
     }
 
@@ -130,7 +124,7 @@ import Testing
     ])
     func rejectsMalformedGotAddresses(payload: String) {
         var parser = OpenFortiVPNOutputParser()
-        #expect(parser.parse("INFO:   Got addresses: \(payload)", source: .stdout).isEmpty)
+        #expect(parser.parse("INFO:   Got addresses: \(payload)", source: .stdout) == nil)
         #expect(parser.tunnelAddresses == nil)
     }
 
@@ -145,7 +139,7 @@ import Testing
 
     @Test func extractsTheDigestFromTheTrustedCertLineOnly() {
         var parser = OpenFortiVPNOutputParser()
-        let signals = Self.certificateBlock(Self.digest).flatMap { parser.parse($0, source: .stdout) }
+        let signals = Self.certificateBlock(Self.digest).compactMap { parser.parse($0, source: .stdout) }
         #expect(signals == [.certificateRejected(digest: Self.digest)])
         #expect(parser.rejectedCertificateDigests == [Self.digest])
     }
@@ -155,7 +149,7 @@ import Testing
         var parser = OpenFortiVPNOutputParser()
         let lines = Self.certificateBlock(Self.digest) + ["INFO:   Closed connection to gateway."]
             + Self.certificateBlock(Self.digest) + ["INFO:   Could not log out."]
-        let signals = lines.flatMap { parser.parse($0, source: .stdout) }
+        let signals = lines.compactMap { parser.parse($0, source: .stdout) }
         #expect(signals == [.certificateRejected(digest: Self.digest)])
         #expect(parser.rejectedCertificateDigests == [Self.digest])
     }
@@ -164,7 +158,7 @@ import Testing
         var parser = OpenFortiVPNOutputParser()
         let lines = Self.certificateBlock(Self.otherDigest) + Self.certificateBlock(Self.digest)
             + Self.certificateBlock(Self.otherDigest)
-        let signals = lines.flatMap { parser.parse($0, source: .stdout) }
+        let signals = lines.compactMap { parser.parse($0, source: .stdout) }
         #expect(signals == [.certificateRejected(digest: Self.otherDigest), .certificateRejected(digest: Self.digest)])
         #expect(parser.rejectedCertificateDigests == [Self.otherDigest, Self.digest])
     }
@@ -194,7 +188,7 @@ import Testing
 
     @Test func reportsRoutesRestoredOnlyOnceRestoreReturned() {
         var parser = OpenFortiVPNOutputParser()
-        #expect(parser.parse("INFO:   Setting new routes...", source: .stdout) == [.routesTouched])
+        _ = parser.parse("INFO:   Setting new routes...", source: .stdout)
         #expect(parser.routesTouched && !parser.routesRestored)
         let duringRestore = [
             "INFO:   Setting ppp0 interface down.",
@@ -204,24 +198,26 @@ import Testing
             "WARN:   Could not restore default route (File exists). Already restored?",
             "ERROR:  /sbin/route: No such file or directory.",
         ]
-        #expect(duringRestore.flatMap { parser.parse($0, source: .stdout) } == [.interfaceDown(name: "ppp0")])
+        #expect(duringRestore.compactMap { parser.parse($0, source: .stdout) }.isEmpty)
         #expect(!parser.routesRestored)
-        #expect(parser.parse("INFO:   Removing VPN nameservers...", source: .stdout) == [.routesRestored, .nameserversRemoved])
+        _ = parser.parse("INFO:   Removing VPN nameservers...", source: .stdout)
         #expect(parser.routesTouched && parser.routesRestored)
-        #expect(parser.parse("INFO:   Terminated pppd.", source: .stdout).isEmpty)
+        #expect(parser.parse("INFO:   Terminated pppd.", source: .stdout) == nil)
     }
 
     @Test(arguments: [
-        ("ERROR:  pppd: The link was terminated by the modem hanging up.", [OpenFortiVPNSignal.routesRestored, .pppdExited(.exitStatus(16))]),
-        ("INFO:   Terminated pppd.", [.routesRestored]),
-        ("ERROR:  waitpid: No child processes", [.routesRestored]),
+        "ERROR:  pppd: The link was terminated by the modem hanging up.",
+        "INFO:   Terminated pppd.",
+        "ERROR:  waitpid: No child processes",
     ])
-    func completesRestoreOnTheNextInfoOrErrorLine(line: String, expected: [OpenFortiVPNSignal]) {
+    func completesRestoreOnTheNextInfoOrErrorLine(line: String) {
         // With set-dns = 0 there is no "Removing VPN nameservers..." line.
         var parser = OpenFortiVPNOutputParser()
         _ = parser.parse("INFO:   Setting new routes...", source: .stdout)
         _ = parser.parse("INFO:   Restoring routes...", source: .stdout)
-        #expect(parser.parse(line, source: .stdout) == expected)
+        #expect(!parser.routesRestored)
+        _ = parser.parse(line, source: .stdout)
+        #expect(parser.routesRestored)
     }
 
     @Test func leavesRoutesUnrestoredWhenTheRunEndsMidRestore() {
@@ -244,95 +240,19 @@ import Testing
             "INFO:   pppd: The link was terminated by the modem hanging up.",
             "INFO:   Terminated pppd.",
         ]
-        #expect(lines.flatMap { parser.parse($0, source: .stdout) } == [
-            .interfaceUp(name: "ppp0"), .routesTouched, .pppdExited(.exitStatus(16)),
-        ])
+        for line in lines {
+            _ = parser.parse(line, source: .stdout)
+        }
         #expect(parser.routesTouched && !parser.routesRestored)
-    }
-
-    // MARK: pppd exit (openfortivpn stdout)
-
-    @Test(arguments: ["INFO:   ", "ERROR:  "])
-    func classifiesTheModemHangupLineWithoutItsPrefix(prefix: String) {
-        // tunnel.c:535-550: INFO after SIGTERM/SIGINT, ERROR otherwise.
-        #expect(parse(["\(prefix)pppd: The link was terminated by the modem hanging up."]) == [.pppdExited(.exitStatus(16))])
-    }
-
-    @Test func mapsEveryPPPDMessageToItsExitStatus() {
-        let messages = OpenFortiVPNOutputParser.pppdExitMessages
-        #expect(messages.count == 20)
-        for (status, message) in messages.enumerated() {
-            #expect(parse(["ERROR:  pppd: \(message)"]) == [.pppdExited(.exitStatus(Int32(status)))])
-        }
-    }
-
-    @Test(arguments: [
-        ("ERROR:  pppd: Returned an unknown exit status code: 42", PPPDExit.exitStatus(42)),
-        ("ERROR:  pppd: Returned an unexpected exit status code: 7", .exitStatus(7)),
-        ("ERROR:  pppd: terminated by signal: Killed: 9", .signaled("Killed: 9")),
-        ("ERROR:  pppd: The PPP negotiation failed, that is, it didn't reach the point where at least one network protocol (e.g. IP) was running.", .exitStatus(10)),
-    ])
-    func parsesOtherPPPDExitLines(line: String, expected: PPPDExit) {
-        #expect(parse([line]) == [.pppdExited(expected)])
-    }
-
-    // MARK: pppd stderr
-
-    @Test(arguments: [
-        ("Modem hangup", PPPDNotice.modemHangup),
-        ("Connection terminated.", .connectionTerminated),
-        ("LCP terminated by peer", .terminatedByPeer(protocolName: "LCP", reason: nil)),
-        ("LCP terminated by peer (Session timeout)", .terminatedByPeer(protocolName: "LCP", reason: "Session timeout")),
-        ("IPCP terminated by peer", .terminatedByPeer(protocolName: "IPCP", reason: nil)),
-        ("Terminating on signal 15.", .terminatingOnSignal(15)),
-        ("Terminating on signal 2", .terminatingOnSignal(2)),
-        ("Hangup (SIGHUP)", .hangup),
-        ("Serial link appears to be disconnected.", .serialLinkDisconnected),
-    ])
-    func recognisesPPPDNotices(message: String, expected: PPPDNotice) {
-        for line in [message, "Fri Apr  5 11:31:24 2024 : \(message)", "Thu Oct 15 12:12:05 2026 : \(message)"] {
-            #expect(parse([line], source: .stderr) == [.pppdNotice(expected)], "\(line)")
-        }
-    }
-
-    @Test(arguments: [
-        "Thu Oct 15 09:12:04 2026 : Using interface ppp0",
-        "Thu Oct 15 09:12:04 2026 : publish_entry SCDSet() failed: Success!",
-        "Thu Oct 15 09:12:04 2026 : local  IP address 10.212.134.200",
-        "Fri Apr  5 11:31:24 2024 : ",
-        "Fri Apr  5 11:31:24 2024 :",
-        "Fri Apr  5 11:31:24 2024 : Modem hangup again",
-        "route: writing to routing socket: not in table",
-        "execv: No such file or directory",
-        " terminated by peer",
-        "LCP terminated by peer: bye",
-        "Terminating on signal fifteen.",
-    ])
-    func ignoresOtherStderrLines(line: String) {
-        #expect(parse([line], source: .stderr).isEmpty)
-    }
-
-    @Test func doesNotReadPPPDNoticesFromStdout() {
-        #expect(parse(["Modem hangup", "Connection terminated."], source: .stdout).isEmpty)
-    }
-
-    @Test(arguments: [
-        ("Fri Apr  5 11:31:24 2024 : Modem hangup", "Modem hangup"),
-        ("Thu Oct 15 09:12:04 2026 : x", "x"),
-        ("Fri Apr 5 11:31:24 2024 : Modem hangup", "Fri Apr 5 11:31:24 2024 : Modem hangup"),
-        ("Modem hangup", "Modem hangup"),
-    ])
-    func stripsOnlyACLocaleTimestamp(line: String, expected: String) {
-        #expect(OpenFortiVPNOutputParser.stripPPPDTimestamp(Substring(line)) == expected)
     }
 
     // MARK: Raw tunnel dump
 
-    @Test func acceptsOnlyTeardownSignalsAfterARawTunnelDump() {
+    @Test func tracksOnlyRouteRestorationAfterARawTunnelDump() {
         // io.c:473-474 and 421-429: up to 250 raw bytes, newlines included, follow on stdout.
         var parser = OpenFortiVPNOutputParser()
         let setup = ["INFO:   Connected to gateway.", "INFO:   Authenticated.", "INFO:   Setting new routes...", "INFO:   Tunnel is up and running."]
-        #expect(setup.flatMap { parser.parse($0, source: .stdout) } == [.connectedToGateway, .authenticated, .routesTouched, .tunnelUp])
+        #expect(setup.compactMap { parser.parse($0, source: .stdout) } == [.connectedToGateway, .authenticated, .tunnelUp])
         let dump = [
             "ERROR:  Received bad header from gateway:",
             "  (hex) 48 54 54 50 2f 31",
@@ -344,7 +264,7 @@ import Testing
             "INFO:   Tunnel is up and running.",
             "INFO:   Setting new routes...",
         ]
-        #expect(dump.flatMap { parser.parse($0, source: .stdout) }.isEmpty)
+        #expect(dump.compactMap { parser.parse($0, source: .stdout) }.isEmpty)
         #expect(parser.rejectedCertificateDigests.isEmpty)
         #expect(parser.tunnelAddresses == nil)
         let teardown = [
@@ -354,9 +274,7 @@ import Testing
             "INFO:   Removing VPN nameservers...",
             "ERROR:  pppd: The link was terminated by the modem hanging up.",
         ]
-        #expect(teardown.flatMap { parser.parse($0, source: .stdout) } == [
-            .interfaceDown(name: "ppp0"), .routesRestored, .nameserversRemoved, .pppdExited(.exitStatus(16)),
-        ])
+        #expect(teardown.compactMap { parser.parse($0, source: .stdout) }.isEmpty)
         #expect(parser.routesTouched && parser.routesRestored)
     }
 }

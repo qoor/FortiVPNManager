@@ -2,11 +2,11 @@ import Dispatch
 import Foundation
 
 /// Time source for `TunnelSupervisor`: monotonic time for watchdogs, batching and line flushing,
-/// wall-clock dates for events and output lines, and timers. Tests inject a manual clock.
+/// wall-clock dates for output lines, and timers. Tests inject a manual clock.
 public protocol SupervisorClock: Sendable {
     /// Monotonic time (`ContinuousClock` keeps counting while the Mac sleeps).
     var now: ContinuousClock.Instant { get }
-    /// Wall-clock time stamped on `HelperEvent` and `OutputLine`.
+    /// Wall-clock time stamped on `OutputLine`.
     var date: Date { get }
     /// Runs `action` on `queue` at or after `deadline` unless the returned timer is cancelled first.
     func schedule(

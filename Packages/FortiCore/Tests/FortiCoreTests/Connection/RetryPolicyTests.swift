@@ -34,15 +34,13 @@ struct RetryPolicyTests {
 
     @Test func rollingWindowExcludesAttemptsAnHourOld() {
         let now = ReducerFixture.t0 + 7_200
-        let ledger = FailureLedger(profileKey: "k", recentAuthAttempts: [
+        var ledger = FailureLedger(profileKey: "k", recentAuthAttempts: [
             now - 3_600, // exactly one hour old: out
             now - 3_599, // in
             now - 10, // in
         ])
-        #expect(ledger.authAttempts(asOf: now) == 2)
-        var pruned = ledger
-        pruned.prune(asOf: now)
-        #expect(pruned.recentAuthAttempts == [now - 3_599, now - 10])
+        ledger.prune(asOf: now)
+        #expect(ledger.recentAuthAttempts == [now - 3_599, now - 10])
     }
 
     @Test func cooldownEndIsNinetySecondsAfterTheLastAuthFailure() {

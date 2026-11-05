@@ -5,13 +5,11 @@ import FortiShared
 import Network
 import os
 
-/// Sleep/wake, presence and network path observation for the connection reducer (DESIGN §5.5, §6.3).
+/// Sleep/wake, presence and network path observation for the connection reducer.
 ///
-/// Emits `.willSleep`, `.didWake`, exactly one `.wakeSettled` per completed wake, and `.pathChanged`
-/// 3 s after the last `NWPathMonitor` update. The underlay is the interface (and its IPv4 source
-/// address) the kernel routes the gateway through, excluding ppp*/utun*/`.other`.
-/// Emits `.presenceChanged` when the user leaves or returns: away means the screen is locked, the
-/// displays are asleep or the system sleeps (schedule, §5.4).
+/// Emits exactly one `.wakeSettled` per completed wake, and `.pathChanged` only after `NWPathMonitor`
+/// updates have been quiet for `pathDebounce`. Away means the screen is locked, the displays are
+/// asleep or the system sleeps.
 /// System callbacks are delivered on the main queue and handled synchronously on the main actor.
 final class SystemMonitor {
     /// Receives the reducer events, on the main actor.
@@ -108,7 +106,7 @@ final class SystemMonitor {
         wakeTask = Task { [weak self] in await self?.settleAfterWake() }
     }
 
-    /// Waits until the path is satisfied and a Router is set (at most 30 s), then reports what survived.
+    /// Waits until the path is satisfied and a Router is set, then reports what survived.
     private func settleAfterWake() async {
         let deadline = Date().addingTimeInterval(RetryPolicy.wakeSettleTimeout)
         var settled = networkSettled()

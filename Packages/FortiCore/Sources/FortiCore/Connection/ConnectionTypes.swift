@@ -1,7 +1,7 @@
 import Foundation
 import FortiShared
 
-/// What the user wants, tracked separately from what is currently happening (§5.4).
+/// What the user wants, tracked separately from what is currently happening.
 public enum DesiredState: String, Sendable, Equatable, Codable {
     case connected
     case disconnected
@@ -88,7 +88,7 @@ public struct VPNProfile: Sendable, Equatable, Codable {
     }
 }
 
-/// Something that must be fixed in the settings before a connection can be attempted (§5.4 Readiness).
+/// Something that must be fixed in the settings before a connection can be attempted.
 public enum SetupItem: String, Sendable, Codable, CaseIterable, Hashable {
     /// `config.yaml` failed to load or validate.
     case invalidConfig
@@ -121,7 +121,7 @@ public enum Readiness: Sendable, Equatable {
     }
 }
 
-/// Raw facts the app gathers for a readiness check (§5.4). Pure mapping to `Readiness`.
+/// Raw facts the app gathers for a readiness check. Pure mapping to `Readiness`.
 public struct ReadinessInputs: Sendable, Equatable {
     public var configValid: Bool
     public var accountComplete: Bool
@@ -162,7 +162,7 @@ public struct ReadinessInputs: Sendable, Equatable {
     }
 }
 
-/// The physical route to the gateway (§5.5): result of `route -n get <gatewayIP>`, excluding ppp*/utun*/other.
+/// The physical route to the gateway: result of `route -n get <gatewayIP>`, excluding ppp*/utun*/other.
 public struct Underlay: Sendable, Equatable, Codable, Hashable {
     public var interfaceName: String
     public var sourceAddress: String?
@@ -184,12 +184,13 @@ public struct PathSnapshot: Sendable, Equatable {
     }
 }
 
-/// What the app observed once the network settled after a wake (or after 30 s without settling).
+/// What the app observed once the network settled after a wake (or after `RetryPolicy.wakeSettleTimeout`
+/// without settling).
 public struct WakeObservation: Sendable, Equatable {
     public var processAlive: Bool
     public var pppUp: Bool
     public var underlay: Underlay?
-    /// `false` when the path and Router did not come up within the 30 s settle window.
+    /// `false` when the path and Router did not come up within `RetryPolicy.wakeSettleTimeout`.
     public var pathSatisfied: Bool
 
     public init(processAlive: Bool, pppUp: Bool, underlay: Underlay?, pathSatisfied: Bool) {
@@ -200,7 +201,7 @@ public struct WakeObservation: Sendable, Equatable {
     }
 }
 
-/// How a Gmail IMAP session failed.
+/// How a Gmail OTP session (IMAP or Gmail API) failed.
 public enum OTPSessionFailure: String, Sendable, Equatable, Codable {
     /// Login rejected: the Gmail app password is wrong or revoked, or the Google authorization was
     /// revoked or refused (Gmail API).
@@ -209,11 +210,11 @@ public enum OTPSessionFailure: String, Sendable, Equatable, Codable {
     case network
 }
 
-/// Why the connection gave up or is waiting. The app maps each case to a Korean message.
+/// Why the connection gave up or is waiting.
 public enum ConnectionFailureReason: Sendable, Equatable, Codable {
     /// Rejected after reaching the gateway and before the OTP prompt (wrong password, locked account).
     case authenticationRejected
-    /// No OTP message matched within 50 s. `inJunk` is set when the message was found in the spam folder.
+    /// No OTP message matched in time. `inJunk` is set when the message was found in the spam folder.
     case otpNotReceived(inJunk: Bool)
     /// The OTP was submitted but authentication did not complete.
     case otpRejected
@@ -221,13 +222,13 @@ public enum ConnectionFailureReason: Sendable, Equatable, Codable {
     case tunnelSetupFailed
     /// The gateway refused tunnel mode after login (openfortivpn: "make sure tunnel mode is allowed").
     case tunnelModeRejected
-    /// The tunnel came up but dropped within two minutes.
+    /// The tunnel came up but dropped before `RetryPolicy.stableSessionDuration`.
     case sessionDroppedEarly
     /// The gateway certificate was rejected after the OTP had been used.
     case certificateRejectedAfterLogin
-    /// Gmail rejected the app password (openfortivpn is never started).
+    /// Gmail rejected the app password or the Google authorization.
     case gmailAppPassword
-    /// More than the allowed number of authentication attempts within 60 minutes.
+    /// Too many authentication attempts within `RetryPolicy.authAttemptWindow`.
     case tooManyReconnects
     /// The gateway could not be reached (not counted as an authentication failure).
     case network
@@ -237,13 +238,13 @@ public enum ConnectionFailureReason: Sendable, Equatable, Codable {
 
 /// Why the connection is waiting before the next attempt.
 public enum RetryReason: Sendable, Equatable, Codable {
-    /// Network error backoff (10 s doubling up to 5 min).
+    /// Network error backoff.
     case network
-    /// The server ended a session that lasted at least two minutes.
+    /// The server ended a stable session.
     case serverSessionEnded
-    /// One authentication failure was counted; one more try after 90 s.
+    /// One authentication failure was counted; one more try after the cooldown.
     case authFailure(ConnectionFailureReason)
-    /// A manual or automatic attempt waits until 90 s after the last authentication failure.
+    /// A manual or automatic attempt waits out the cooldown after the last authentication failure.
     case authCooldown
     /// An attempt was interrupted by sleep and resumes after wake.
     case sleep
@@ -277,7 +278,7 @@ public enum AttemptReason: Sendable, Equatable {
     /// The scheduled hours started.
     case scheduled
 
-    /// Manual attempts bypass the rolling 60-minute cap (the user's action resets the ledger).
+    /// Manual attempts bypass the rolling attempt cap (the user's action resets the ledger).
     var isManual: Bool {
         switch self {
         case .user, .manualReconnect: true
@@ -299,15 +300,15 @@ public enum AttemptReason: Sendable, Equatable {
 /// Timers owned by the reducer. The app keeps at most one pending timer per ID; scheduling an ID again
 /// replaces the previous one. A fire is only honoured when its generation is the current one.
 public enum ConnectionTimer: String, Sendable, Equatable, Hashable, CaseIterable, Codable {
-    /// Whole-attempt deadline (150 s).
+    /// Whole-attempt deadline.
     case attemptDeadline
-    /// OTP prompt to submission deadline (50 s, app-owned).
+    /// OTP prompt to submission deadline.
     case otpDeadline
     /// End of `waitingRetry`.
     case retry
     /// `plannedReconnectAt` while connected.
     case proactiveReconnect
-    /// Upper bound for a graceful quit (12 s).
+    /// Upper bound for a graceful quit.
     case quitDeadline
     /// Next start or end of the scheduled hours.
     case schedule

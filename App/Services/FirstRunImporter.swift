@@ -43,12 +43,8 @@ enum OpenFortiVPNImportError: LocalizedError, Equatable {
     }
 }
 
-/// Imports an existing openfortivpn config into `config.yaml` and the Keychain (DESIGN §5.6 Account tab):
-/// automatically on the first launch, and on demand from the Account tab.
-///
-/// host, port (`effectivePort`: the file's value, 443 only when it has none), username, realm and up
-/// to four `trusted-cert` digests go to `vpn.*`; the password goes to the Keychain (`username@host`).
-/// Gmail and connection options are kept. The source file is only read.
+/// Imports an existing openfortivpn config into `config.yaml` and the Keychain: automatically on the
+/// first launch, and on demand from the Account tab. The source file is only read.
 struct FirstRunImporter {
     static let maxSourceBytes = 64 * 1024
 

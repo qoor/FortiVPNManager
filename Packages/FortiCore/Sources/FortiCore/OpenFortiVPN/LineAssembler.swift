@@ -1,37 +1,21 @@
-import FortiShared
-
-/// One display line produced by `LineAssembler`.
-public struct AssembledLine: Equatable, Sendable {
-    /// Display-safe text: invalid UTF-8 is replaced with U+FFFD and control characters other than
-    /// TAB are shown in caret notation (`^[`, `^@`, `^?`; C1 controls as `M-^X`).
-    public var text: String
-    /// True when the text was emitted before its terminating LF arrived: an idle flush (typically
-    /// an input prompt), a hard split of an over-long line, or the end of the stream.
-    public var isPartial: Bool
-
-    public init(text: String, isPartial: Bool) {
-        self.text = text
-        self.isPartial = isPartial
-    }
-}
-
 /// Splits one raw output stream (openfortivpn stdout, or pppd/route stderr) into display lines
-/// for the Log tab and for `OpenFortiVPNOutputParser` (DESIGN §5.2, output handling).
+/// for the Log tab and for `OpenFortiVPNOutputParser`.
 ///
 /// Rules:
 /// - Lines end at LF; one trailing CR is dropped.
-/// - When no bytes arrive for `idleFlush`, the unfinished line is emitted with `isPartial = true`.
+/// - When no bytes arrive for `idleFlush`, the unfinished line is emitted.
 ///   openfortivpn prints its prompts without a newline (userinput.c:344-345) and the `"\n"` it
 ///   prints after reading stdin (userinput.c:367) stays in the stdio buffer until the next log
 ///   line flushes it, so a lone LF that only terminates an already emitted partial line is
 ///   swallowed instead of producing an empty line. Text that continues after a partial flush is
 ///   emitted as its own line.
 /// - Lines longer than `maxLineBytes` are hard-split on a UTF-8 scalar boundary.
+/// - Lines are display-safe: invalid UTF-8 is replaced with U+FFFD and control characters other
+///   than TAB are shown in caret notation (`^[`, `^@`, `^?`; C1 controls as `M-^X`).
 ///
 /// Time is injected: pass the reading time to `append(_:now:)`, and call `flushIfIdle(now:)`
 /// when `idleFlushDeadline` passes.
 public struct LineAssembler: Sendable {
-    public let source: OutputSource
     public let maxLineBytes: Int
     public let idleFlush: Duration
 
@@ -42,9 +26,8 @@ public struct LineAssembler: Sendable {
     /// Time of the last `append` that carried at least one byte.
     private var lastInputAt: ContinuousClock.Instant?
 
-    public init(source: OutputSource, maxLineBytes: Int = 16_384, idleFlush: Duration = .milliseconds(250)) {
+    public init(maxLineBytes: Int = 16_384, idleFlush: Duration = .milliseconds(250)) {
         precondition(maxLineBytes >= 4, "maxLineBytes must hold at least one UTF-8 scalar")
-        self.source = source
         self.maxLineBytes = maxLineBytes
         self.idleFlush = idleFlush
     }
@@ -58,7 +41,7 @@ public struct LineAssembler: Sendable {
 
     /// Feeds bytes read at `now`. A pending line whose idle deadline already passed is flushed
     /// first, so the result does not depend on how promptly the caller's timer fired.
-    public mutating func append<Bytes: Sequence>(_ bytes: Bytes, now: ContinuousClock.Instant) -> [AssembledLine]
+    public mutating func append<Bytes: Sequence>(_ bytes: Bytes, now: ContinuousClock.Instant) -> [String]
     where Bytes.Element == UInt8 {
         var lines = flushIfIdle(now: now)
         let input = Array(bytes)
@@ -76,22 +59,22 @@ public struct LineAssembler: Sendable {
         return lines
     }
 
-    /// Emits the unfinished line as partial if no bytes arrived for `idleFlush`.
+    /// Emits the unfinished line if no bytes arrived for `idleFlush`.
     ///
     /// A trailing CR or an incomplete UTF-8 sequence is held back so that a following LF or the
     /// rest of the scalar still pairs up with it.
-    public mutating func flushIfIdle(now: ContinuousClock.Instant) -> [AssembledLine] {
+    public mutating func flushIfIdle(now: ContinuousClock.Instant) -> [String] {
         guard !pending.isEmpty, let lastInputAt, now - lastInputAt >= idleFlush else { return [] }
         let emitCount = pending.count - Self.holdBackCount(pending)
         guard emitCount > 0 else { return [] }
         let text = Self.render(pending[..<emitCount])
         pending.removeFirst(emitCount)
         currentLineHasEmittedPart = true
-        return [AssembledLine(text: text, isPartial: true)]
+        return [text]
     }
 
-    /// Emits whatever is left at end of stream (as a partial line) and resets the assembler.
-    public mutating func finish() -> [AssembledLine] {
+    /// Emits whatever is left at end of stream and resets the assembler.
+    public mutating func finish() -> [String] {
         defer {
             pending.removeAll()
             currentLineHasEmittedPart = false
@@ -102,7 +85,7 @@ public struct LineAssembler: Sendable {
             content = content.dropLast()
         }
         guard !content.isEmpty else { return [] }
-        return [AssembledLine(text: Self.render(content), isPartial: true)]
+        return [Self.render(content)]
     }
 
     // MARK: - Private
@@ -111,7 +94,7 @@ public struct LineAssembler: Sendable {
     private static let cr: UInt8 = 0x0D
 
     /// Appends bytes that contain no LF, hard-splitting whenever the line would exceed the limit.
-    private mutating func appendWithinLine(_ segment: ArraySlice<UInt8>, into lines: inout [AssembledLine]) {
+    private mutating func appendWithinLine(_ segment: ArraySlice<UInt8>, into lines: inout [String]) {
         var index = segment.startIndex
         while index < segment.endIndex {
             let room = maxLineBytes - pending.count
@@ -132,16 +115,16 @@ public struct LineAssembler: Sendable {
         }
     }
 
-    private mutating func terminateLine() -> AssembledLine? {
+    private mutating func terminateLine() -> String? {
         var content = pending[...]
         if content.last == Self.cr {
             content = content.dropLast()
         }
         let continuesEmittedLine = currentLineHasEmittedPart
-        let line: AssembledLine? = if content.isEmpty && continuesEmittedLine {
+        let line: String? = if content.isEmpty && continuesEmittedLine {
             nil
         } else {
-            AssembledLine(text: Self.render(content), isPartial: false)
+            Self.render(content)
         }
         pending.removeAll(keepingCapacity: true)
         currentLineHasEmittedPart = false
@@ -151,7 +134,7 @@ public struct LineAssembler: Sendable {
     /// Emits the first `maxLineBytes` of `pending` (which holds `maxLineBytes` bytes, or one more
     /// when the last is a CR) because `next` makes the line too long. The cut backs off to the
     /// start of a multi-byte scalar that continues past it.
-    private mutating func hardSplit(before next: UInt8) -> AssembledLine {
+    private mutating func hardSplit(before next: UInt8) -> String {
         var cut = maxLineBytes
         let firstAfterCut = cut < pending.count ? pending[cut] : next
         if Self.isContinuation(firstAfterCut) {
@@ -167,7 +150,7 @@ public struct LineAssembler: Sendable {
         let text = Self.render(pending[..<cut])
         pending.removeFirst(cut)
         currentLineHasEmittedPart = true
-        return AssembledLine(text: text, isPartial: true)
+        return text
     }
 
     private static func isContinuation(_ byte: UInt8) -> Bool {

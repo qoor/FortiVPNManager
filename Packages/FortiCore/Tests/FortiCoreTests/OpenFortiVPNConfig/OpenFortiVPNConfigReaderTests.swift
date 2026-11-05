@@ -19,8 +19,8 @@ import Testing
         """
 
     @Test func fixtureDigestsAreWellFormed() {
-        #expect(OpenFortiVPNConfigSyntax.isDigest(Self.digestA))
-        #expect(OpenFortiVPNConfigSyntax.isDigest(Self.digestB))
+        #expect(TrustedCertPins.isValidDigest(Self.digestA))
+        #expect(TrustedCertPins.isValidDigest(Self.digestB))
     }
 
     @Test func importsEveryValueFromUserFileShape() {

@@ -2,16 +2,15 @@ import Foundation
 import FortiShared
 import Observation
 
-/// One line of the Log tab. `id` is local, strictly increasing and never reused (helper `seq`
-/// restarts with the helper process).
+/// One line of the Log tab. `id` is local, strictly increasing and never reused.
 struct LogEntry: Identifiable, Sendable, Equatable {
     let id: UInt64
     let line: OutputLine
 }
 
-/// In-memory ring buffer behind the Log tab (DESIGN §5.6): the newest 5,000 lines / 2 MB of raw
-/// openfortivpn, pppd and helper output, in arrival order (= helper `seq` order, one FIFO channel).
-/// Every appended batch is also handed to `LogFileWriter`, in order.
+/// In-memory buffer behind the Log tab: the newest raw openfortivpn, pppd and helper output, in arrival
+/// order (= helper emission order, one FIFO channel). Every appended batch is also handed to
+/// `LogFileWriter`, in order.
 @Observable
 final class LogStore {
     static let maxLines = 5_000

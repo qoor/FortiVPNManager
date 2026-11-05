@@ -3,10 +3,7 @@ import FortiCore
 import FortiShared
 import os
 
-/// Per-device transient state in `~/Library/Application Support/FortiVPNManager/state.json`
-/// (DESIGN §5.7): the failure ledger, whether the login item was registered once, and the routes the
-/// exception rules last wrote to each network service.
-/// Written atomically with mode 0600; kept out of the dotfiles-synced `config.yaml`.
+/// Per-device transient state in `state.json`, kept out of the dotfiles-synced `config.yaml`.
 final class StateStore {
     struct State: Codable, Equatable {
         var schemaVersion = 1
@@ -14,7 +11,7 @@ final class StateStore {
         var ledger: FailureLedger?
         /// The login item was registered on the first launch from /Applications.
         var loginItemRegistered = false
-        /// The additional routes the exception rules last wrote, by SCPreferences service ID (DESIGN §5.8).
+        /// The additional routes the exception rules last wrote, by SCPreferences service ID.
         /// Plain strings without validation, so no change to the address rules can make the file unreadable.
         var appliedExceptionRoutes: [String: [AdditionalRoute]]?
     }

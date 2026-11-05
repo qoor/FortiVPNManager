@@ -1,6 +1,6 @@
 import Foundation
 
-/// Menu bar icon (§5.6).
+/// Menu bar icon.
 public enum ConnectionIcon: String, Sendable, Equatable {
     case connected
     case disconnected
@@ -8,7 +8,7 @@ public enum ConnectionIcon: String, Sendable, Equatable {
     case error
 }
 
-/// Which menu items are shown or enabled (§5.6).
+/// Which menu items are shown or enabled.
 public struct ConnectionMenuActions: Sendable, Equatable {
     /// "Connect": desired is off, or the state is `failed` / `needsSetup`.
     public var showsConnect: Bool

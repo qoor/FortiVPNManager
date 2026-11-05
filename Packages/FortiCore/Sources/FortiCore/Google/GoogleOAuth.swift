@@ -93,7 +93,7 @@ public enum GoogleOAuth {
         return out
     }
 
-    /// Unguessable `state` value binding the callback to this flow (24 random bytes, base64url).
+    /// Unguessable `state` value binding the callback to this flow.
     public static func makeState() -> String {
         Base64URL.encode(SecureRandom.bytes(count: 24))
     }
@@ -112,12 +112,12 @@ public struct PKCE: Sendable, Equatable {
     /// `BASE64URL(SHA256(ASCII(verifier)))`, sent in the authorization request.
     public let challenge: String
 
-    /// A verifier from `count` bytes of the system CSPRNG.
+    /// A verifier from `generatedByteCount` bytes of the system CSPRNG.
     public static func generate() -> PKCE {
         PKCE(verifier: Base64URL.encode(SecureRandom.bytes(count: generatedByteCount)))!
     }
 
-    /// `nil` unless `verifier` is 43–128 characters of `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
+    /// `nil` unless `verifier` is `verifierLengths` characters of `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
     public init?(verifier: String) {
         guard Self.verifierLengths.contains(verifier.utf8.count),
               verifier.utf8.allSatisfy(Self.isUnreserved)

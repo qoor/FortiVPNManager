@@ -5,7 +5,7 @@ import Foundation
 import Synchronization
 import Testing
 
-/// Watchdogs, stop escalation and signal handling (DESIGN §3.7, §5.2 watchdog, §10).
+/// Watchdogs, stop escalation and signal handling.
 @Suite struct TunnelSupervisorWatchdogTests {
     @Test func defaultLimitsMatchTheDesignTable() {
         let limits = WatchdogLimits()
@@ -62,7 +62,6 @@ import Testing
         case .otpPromptToSubmit: limits.otpPromptToSubmit = tiny
         case .otpSubmitToAuth: limits.otpSubmitToAuth = tiny
         case .authToTunnel: limits.authToTunnel = tiny
-        case .terminate: Issue.record("not a phase watchdog")
         }
         let harness = try Harness(.hang, [stall.stage], limits: limits)
         defer { harness.record.remove() }
@@ -71,7 +70,6 @@ import Testing
         }
         let facts = try await harness.run()
 
-        #expect(facts.watchdogFired == stall.phase)
         #expect(facts.stopInitiator == .helper(.watchdog))
         #expect(facts.furthestMilestone == stall.furthest)
         #expect(facts.exitStatus == .signaled(signal: SIGTERM))
@@ -96,30 +94,30 @@ import Testing
         #expect(harness.supervisor.processID != nil)
         harness.supervisor.stop(reason: .sleep)
         let facts = try #require(await harness.recorder.waitForExit())
-        #expect(facts.watchdogFired == nil)
+        #expect(!harness.recorder.texts.contains { $0.hasPrefix("‹watchdog: ") })
         #expect(facts.stopInitiator == .helper(.sleep))
         #expect(facts.furthestMilestone == .tunnelUp)
     }
 
-    /// The watchdog's SIGTERM is ignored, so SIGKILL follows after `terminate`. The first cause
-    /// stays in `watchdogFired`.
+    /// The watchdog's SIGTERM is ignored, so SIGKILL follows after `terminate`. The watchdog stays
+    /// the stop initiator.
     @Test func sigkillWhenSIGTERMIsIgnoredAfterAWatchdog() async throws {
         let limits = WatchdogLimits(spawnToGateway: .milliseconds(300), terminate: .milliseconds(200))
         let harness = try Harness(.hang, ["spawned", "ignore-term"], limits: limits)
         defer { harness.record.remove() }
         let facts = try await harness.run()
 
-        #expect(facts.watchdogFired == .spawnToGateway)
         #expect(facts.stopInitiator == .helper(.watchdog))
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
         let texts = harness.recorder.texts
+        #expect(texts.contains("‹watchdog: spawnToGateway did not finish within 0.3s›"))
         #expect(texts.contains("‹sent SIGTERM (reason: watchdog)›"))
         #expect(texts.contains("‹sent SIGKILL: still running 0.2s after SIGTERM›"))
         #expect(texts.last == "‹exited: signal 9 (SIGKILL)›")
         expectOutputInvariants(harness)
     }
 
-    /// A user stop that needs SIGKILL reports `.terminate`; routes left changed are repaired.
+    /// A user stop that needs SIGKILL keeps the user as the initiator; routes left changed are repaired.
     @Test func sigkillAfterUserStopOnAnUpTunnel() async throws {
         let repairCalls = Mutex(0)
         let harness = try Harness(.hang, ["tunnel", "ignore-term"], limits: WatchdogLimits(terminate: .milliseconds(200)), routeRepair: {
@@ -135,17 +133,15 @@ import Testing
         harness.supervisor.stop(reason: .appQuit)
         let facts = try #require(await harness.recorder.waitForExit())
 
-        #expect(facts.watchdogFired == .terminate)
         #expect(facts.stopInitiator == .helper(.userDisconnect))
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
         #expect(facts.routeRepairPerformed)
         #expect(repairCalls.withLock { $0 } == 1)
         #expect(harness.recorder.texts.filter { $0.hasPrefix("‹sent SIGTERM") }.count == 1)
+        #expect(harness.recorder.texts.contains("‹sent SIGKILL: still running 0.2s after SIGTERM›"))
         expectOutputInvariants(harness)
     }
 
-    /// DESIGN §10: spawned from a background queue while the parent ignores SIGTERM, the child
-    /// still ends within a second of `stop`.
     @Test func sigtermStopsAChildSpawnedFromABackgroundQueueWhileTheParentIgnoresSIGTERM() async throws {
         let harness = try Harness(.hang, ["spawned"])
         defer { harness.record.remove() }
@@ -165,7 +161,6 @@ import Testing
             let facts = try #require(await harness.recorder.waitForExit(timeout: .seconds(1)))
             #expect(ContinuousClock.now - stoppedAt < .seconds(1))
             #expect(facts.exitStatus == .signaled(signal: SIGTERM))
-            #expect(facts.watchdogFired == nil)
             #expect(facts.stopInitiator == .helper(.userDisconnect))
         }
     }
@@ -185,13 +180,9 @@ import Testing
         clock.advance(by: .milliseconds(100))
         let facts = try #require(await harness.recorder.waitForExit())
 
-        #expect(facts.watchdogFired == .spawnToGateway)
+        #expect(facts.stopInitiator == .helper(.watchdog))
         #expect(facts.exitStatus == .signaled(signal: SIGTERM))
         #expect(harness.recorder.texts.contains("‹watchdog: spawnToGateway did not finish within 30s›"))
-        // Dates come from the injected clock too.
-        let origin = Date(timeIntervalSince1970: 1_800_000_000)
-        #expect(harness.recorder.events.first?.date == origin)
-        #expect(harness.recorder.events.last?.date == origin.addingTimeInterval(30))
     }
 
     @Test func sigkillEscalationFollowsTheInjectedClock() async throws {
@@ -209,7 +200,6 @@ import Testing
         clock.advance(by: .milliseconds(100))
         let facts = try #require(await harness.recorder.waitForExit())
 
-        #expect(facts.watchdogFired == .terminate)
         #expect(facts.stopInitiator == .helper(.helperShutdown))
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
         #expect(harness.recorder.texts.contains("‹sent SIGKILL: still running 10s after SIGTERM›"))
@@ -253,7 +243,6 @@ import Testing
         clock.advance(by: .milliseconds(20))
         #expect(await harness.recorder.wait { $0.texts.contains("INFO:   first") })
         #expect(!harness.recorder.texts.contains("partial tail"))
-        #expect(harness.recorder.lines.last?.isPartial == false)
         #expect(harness.recorder.lines.last?.date == Date(timeIntervalSince1970: 1_800_000_000))
 
         clock.advance(by: .milliseconds(230))
@@ -263,7 +252,6 @@ import Testing
         clock.advance(by: .milliseconds(20))
         #expect(await harness.recorder.wait { $0.texts.contains("partial tail") })
         let partial = try #require(harness.recorder.lines.last)
-        #expect(partial.isPartial)
         #expect(partial.date == Date(timeIntervalSince1970: 1_800_000_000.25))
         #expect(harness.recorder.events.count == 1)
 

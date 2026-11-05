@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Root of the settings window: Account / Connection / Log (DESIGN §5.6).
 struct SettingsView: View {
     let environment: AppEnvironment
     @Bindable var navigation: SettingsNavigation

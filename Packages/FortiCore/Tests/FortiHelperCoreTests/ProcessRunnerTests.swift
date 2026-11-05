@@ -7,7 +7,6 @@ import Synchronization
 import Testing
 
 @Suite struct ProcessRunnerTests {
-    /// Spawns `/bin/sh -c script`.
     private func spawnShell(_ script: String, environment: [String: String] = fixturePATH) throws -> SpawnedProcess {
         try ProcessRunner.spawn(executable: "/bin/sh", arguments: ["/bin/sh", "-c", script], environment: environment)
     }

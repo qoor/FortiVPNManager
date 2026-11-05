@@ -3,7 +3,7 @@ import Testing
 import FortiShared
 @testable import FortiCore
 
-@Suite("Gateway certificate auto-trust (§5.4, §6.2 row 1)")
+@Suite("Gateway certificate auto-trust")
 struct CertificatePinTests {
     @Test func rejectionLearnsThePinAndRetriesImmediatelyWithoutCounting() throws {
         var h = ReducerHarness()
@@ -24,7 +24,6 @@ struct CertificatePinTests {
         let retry = try #require(h.attempt)
         #expect(retry.attemptID == id2)
         #expect(retry.reason == .certificateRetry)
-        #expect(retry.chainID == id1)
         #expect(retry.certRetryUsed)
         #expect(h.model.ledger == FailureLedger(profileKey: ReducerFixture.profileKey))
 
@@ -60,7 +59,6 @@ struct CertificatePinTests {
         try h.startTunnel()
         h.exit(ReducerFixture.facts(.spawned, certs: [ReducerFixture.digestC], certAt: .spawned))
         #expect(h.attempt?.reason == .certificateRetry)
-        #expect(h.attempt?.chainID == chainStart.attemptID)
     }
 
     @Test func rejectionAfterOTPSubmissionCountsAndStillPins() throws {

@@ -9,8 +9,8 @@ struct RunRecord: Codable, Sendable, Equatable {
     var gatewayIP: String?
 }
 
-/// `/var/run/com.qoor.FortiVPNManager.Helper` (root, 0700): rendered openfortivpn configs
-/// (`config.XXXXXX`, 0600, deleted after each run) and the pidfile `run.json`.
+/// Root-only (0700) directory for rendered openfortivpn configs (0600, deleted after each run)
+/// and the pidfile.
 enum RunDirectory {
     static let path = "/var/run/com.qoor.FortiVPNManager.Helper"
     static let recordPath = path + "/" + recordName

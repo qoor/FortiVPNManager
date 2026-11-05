@@ -2,23 +2,15 @@ import Foundation
 
 /// Produces unique command tags (`A0001`, `A0002`, ...) for one IMAP session.
 public struct IMAPTagGenerator: Sendable, Equatable {
-    public let prefix: String
     private var counter: UInt64 = 0
 
-    /// - Parameter prefix: One or more ASCII letters/digits. Defaults to `"A"`.
-    public init(prefix: String = "A") {
-        precondition(
-            !prefix.isEmpty && prefix.utf8.allSatisfy(IMAPCommand.isTagByte),
-            "IMAP tag prefix must be non-empty ASCII alphanumerics"
-        )
-        self.prefix = prefix
-    }
+    public init() {}
 
     /// Returns the next tag. Tags are zero-padded to at least four digits.
     public mutating func next() -> String {
         counter += 1
         let digits = String(counter)
-        return prefix + String(repeating: "0", count: max(0, 4 - digits.count)) + digits
+        return "A" + String(repeating: "0", count: max(0, 4 - digits.count)) + digits
     }
 }
 

@@ -1,7 +1,7 @@
 import FortiShared
 import Foundation
 
-/// One list of the Exception Rules as edited in Settings (DESIGN §5.6), `routes.networks` or
+/// One list of the Exception Rules as edited in Settings, `routes.networks` or
 /// `routes.bypass_vpn`: rows as typed, against the list as saved. Nothing is saved until Apply writes
 /// ``entries``; Discard Changes goes back to ``saved``. Changes made elsewhere (the file, routes added
 /// outside the app) are merged into the edits with ``merge(saved:)``.

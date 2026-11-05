@@ -1,52 +1,29 @@
 /// Detects openfortivpn's stdin prompts in the raw stdout byte stream, without waiting for a
-/// newline or an idle period (DESIGN §3.2, §5.2 input injection).
+/// newline or an idle period.
 ///
 /// openfortivpn 1.24.1 prints every prompt through `read_password()` as `printf("%s", prompt);
 /// fflush(stdout);` with no newline and then blocks reading stdin (userinput.c:344-345), so the
 /// prompt is always the unfinished tail of the current stdout line. Prompts:
 /// - `"VPN account password: "` (main.c:732-734) → `.passwordPrompt`
-/// - `"Two-factor authentication token: "`, the tokeninfo path (http.c:780-782)
-///   → `.otpPrompt(.tokenInfo)`
-/// - the HTML-form path (http.c:497-518, 591-592): server text starting at `"Please"` and running
-///   up to the next `<` (at most 78 bytes; it may lack a trailing `": "` or even contain a
-///   newline), or the fallback `"Please enter one-time password: "` → `.otpPrompt(.htmlForm)`.
-///   It is reported as soon as a stdout line *starts* with `"Please"`: every openfortivpn log
-///   line starts with an 8-byte level prefix (log.c:43-51, 113-114) and `/sbin/route` output
-///   starts with `add`/`delete`/`route:`, so at default verbosity only this prompt can start a
-///   line with `"Please"`. Requiring a `": "` suffix would hang the attempt until a watchdog if
-///   the server's text has none. (The `otp-prompt` config key, config.c:266, would change the
-///   marker; `ConfigRenderer` never writes it.)
+/// - `"Two-factor authentication token: "` (http.c:780-782) → `.otpPrompt`
 ///
 /// Each prompt occurrence is reported once; state resets at every LF. Feed stdout only.
 public struct PromptDetector: Sendable {
     public enum Prompt: Equatable, Sendable {
         case passwordPrompt
-        case otpPrompt(OTPPromptPath)
-    }
-
-    /// Which openfortivpn code path asked for the one-time password.
-    public enum OTPPromptPath: String, Equatable, Sendable {
-        /// `tokeninfo=` in the `/remote/logincheck` response (http.c:750-782).
-        case tokenInfo
-        /// `HTTP/1.1 401` with an HTML form (http.c:717-721, try_otp_auth).
-        case htmlForm
+        case otpPrompt
     }
 
     public static let passwordPromptText = "VPN account password: "
-    public static let tokenInfoPromptText = "Two-factor authentication token: "
-    public static let htmlFormPromptLead = "Please"
-    public static let htmlFormDefaultPromptText = "Please enter one-time password: "
+    public static let otpPromptText = "Two-factor authentication token: "
 
     private static let suffixPrompts: [(bytes: [UInt8], prompt: Prompt)] = [
         (Array(passwordPromptText.utf8), .passwordPrompt),
-        (Array(tokenInfoPromptText.utf8), .otpPrompt(.tokenInfo)),
+        (Array(otpPromptText.utf8), .otpPrompt),
     ]
-    private static let htmlLeadBytes = Array(htmlFormPromptLead.utf8)
     /// Longer than any suffix prompt, so a match can always be checked across chunk boundaries.
     private static let tailCapacity = 64
 
-    /// First bytes of the current line (up to the `"Please"` marker length).
-    private var lineHead: [UInt8] = []
     /// Last bytes of the current line from earlier `append` calls, bounded by `tailCapacity`.
     private var tail: [UInt8] = []
     /// Bytes of the current line from earlier `append` calls.
@@ -60,8 +37,6 @@ public struct PromptDetector: Sendable {
     public mutating func append<Bytes: Sequence>(_ bytes: Bytes) -> [Prompt] where Bytes.Element == UInt8 {
         let input = Array(bytes)
         let suffixPrompts = Self.suffixPrompts
-        let htmlLead = Self.htmlLeadBytes
-        let htmlLeadCount = htmlLead.count
         var prompts: [Prompt] = []
         input.withUnsafeBufferPointer { buffer in
             var segmentStart = 0
@@ -72,15 +47,9 @@ public struct PromptDetector: Sendable {
                     segmentStart = index + 1
                     continue
                 }
-                let lineEnd = lineLength + (index - segmentStart) + 1
-                if lineEnd <= htmlLeadCount {
-                    lineHead.append(byte)
-                    if lineEnd == htmlLeadCount, lineHead == htmlLead {
-                        prompts.append(.otpPrompt(.htmlForm))
-                    }
-                }
                 // Every suffix prompt ends with a space; skip the comparison otherwise.
                 guard byte == 0x20 else { continue }
+                let lineEnd = lineLength + (index - segmentStart) + 1
                 for candidate in suffixPrompts where lineEnd - lastSuffixMatchEnd >= candidate.bytes.count
                     && suffix(candidate.bytes, endsAt: index, segmentStart: segmentStart, in: buffer) {
                     lastSuffixMatchEnd = lineEnd
@@ -99,7 +68,6 @@ public struct PromptDetector: Sendable {
     }
 
     private mutating func resetLine() {
-        lineHead.removeAll(keepingCapacity: true)
         tail.removeAll(keepingCapacity: true)
         lineLength = 0
         lastSuffixMatchEnd = 0

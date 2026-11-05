@@ -10,12 +10,12 @@ public enum ConfigFileChange: Sendable, Equatable {
     case modified(ConfigFileContents)
 }
 
-/// Polling state for `config.yaml` (DESIGN §5.7, file watching): a cheap ``FileFingerprint`` stat every
+/// Polling state for `config.yaml`: a cheap ``FileFingerprint`` stat every
 /// poll, and a byte comparison before reporting a change, so writes made by the app itself
 /// (recorded with ``noteOwnWrite(_:)``) and metadata-only changes are ignored. Hand edits are always
 /// reported, including one that ``ConfigFileStore/update(at:_:)`` merged into the app's own write.
 ///
-/// Value type; the app keeps one in its MainActor polling task and calls ``poll()`` every 2 s and
+/// Value type; the app keeps one in its MainActor polling task and calls ``poll()`` periodically and
 /// when it becomes active.
 public struct ConfigFileWatcher: Sendable {
     public let url: URL

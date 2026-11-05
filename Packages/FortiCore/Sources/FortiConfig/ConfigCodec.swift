@@ -2,11 +2,7 @@ import FortiShared
 import Foundation
 import Yams
 
-/// Strict reader for `config.yaml` (DESIGN §5.7, loading and validation). Pure: no file system access.
-///
-/// Pipeline: size/UTF-8 → `Yams` compose (single document, mapping root) → `schema_version` →
-/// reject anchors, aliases, `<<` merge keys and explicit tags → typed, range-checked fields with
-/// defaults for missing keys and warnings for unknown keys.
+/// Strict reader for `config.yaml`. Pure: no file system access.
 public enum ConfigCodec {
     /// Decodes and validates `config.yaml` bytes. An empty document (or one with only comments)
     /// yields the defaults.
@@ -19,9 +15,6 @@ public enum ConfigCodec {
         case let .text(decoded): text = decoded
         case let .invalid(location): throw ConfigLoadError(.invalidUTF8, at: location)
         }
-        // Yams builds the node tree recursively, up to libyaml's 1000-level nesting cap. That needs
-        // more than the 512 KiB stack of a secondary (e.g. Swift concurrency) thread, so a
-        // pathological file must not be composed on the caller's stack.
         return try LargeStackThread.run { composeResult(text: text) }.get()
     }
 

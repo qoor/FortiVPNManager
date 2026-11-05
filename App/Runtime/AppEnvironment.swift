@@ -3,8 +3,7 @@ import FortiCore
 import Observation
 import ServiceManagement
 
-/// Creates and wires the app's services (DESIGN §4). The UI reads the stores and controllers exposed
-/// here. The OTP session is an `OTPSessionRouter` over Gmail IMAP and the Gmail API (§5.3).
+/// Creates and wires the app's services. The UI reads the stores and controllers exposed here.
 @Observable
 final class AppEnvironment {
     let configStore: ConfigStore
@@ -24,7 +23,7 @@ final class AppEnvironment {
     let googleOAuth: GoogleOAuthService
     /// "Test Gmail API" (profile check with the stored authorization).
     let gmailAPITester: any GmailAPIConnectionTesting
-    /// Exception Rules: `routes.bypass_vpn` kept as the primary network service's additional routes (§5.8).
+    /// Exception Rules: `routes.bypass_vpn` kept as the primary network service's additional routes.
     let bypassRoutes: BypassRouteService
     /// macOS notifications (exception routes that keep failing to apply).
     let notifier: UserNotifier
@@ -76,7 +75,7 @@ final class AppEnvironment {
             configStore: configStore, stateStore: stateStore, helper: helperClient, notifier: notifier)
     }
 
-    /// First-run import → load config → login item → monitors → `appLaunched` → exception rules. Call once at launch.
+    /// Call once at launch.
     func start() {
         guard !started else { return }
         started = true
@@ -84,7 +83,6 @@ final class AppEnvironment {
         firstLaunchImport = importer.importOnFirstLaunch()
         notifier.start()
         configStore.start()
-        googleOAuth.dropImportMatchingBuiltIn()
         loginItems.registerOnFirstInstalledLaunch(state: stateStore)
 
         // Keychain changes raise no config notification.
@@ -119,17 +117,12 @@ final class AppEnvironment {
         }
     }
 
-    /// Re-reads config.yaml and re-checks readiness, the login item and presence (§5.4, §5.7).
+    /// Re-reads config.yaml and re-checks readiness, the login item and presence.
     func applicationDidBecomeActive() {
         configStore.poll()
         loginItems.refresh()
         systemMonitor.refreshPresence()
         connection.recheckReadiness()
-    }
-
-    /// Forward from `NSApplicationDelegate.applicationShouldTerminate(_:)`.
-    func applicationShouldTerminate() -> NSApplication.TerminateReply {
-        connection.applicationShouldTerminate()
     }
 
     /// "Register Helper" (only from /Applications), then watch for the approval in System Settings.
@@ -138,7 +131,7 @@ final class AppEnvironment {
         connection.recheckReadinessWhileSystemSettingsOpen()
     }
 
-    /// "Open System Settings" (Login Items & Extensions), then re-check readiness every 2 s for 2 minutes.
+    /// "Open System Settings" (Login Items & Extensions), then watch for the approval.
     func openHelperSystemSettings() {
         SMAppService.openSystemSettingsLoginItems()
         connection.recheckReadinessWhileSystemSettingsOpen()

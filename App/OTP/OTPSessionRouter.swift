@@ -12,9 +12,9 @@ import FortiShared
 /// transparently; the Log tab gets a note. Events from a backend that no longer serves the current
 /// attempt are dropped.
 final class OTPSessionRouter: OTPSessionService {
-    enum Backend: String {
-        case imap = "IMAP"
-        case gmailAPI = "Gmail API"
+    enum Backend {
+        case imap
+        case gmailAPI
     }
 
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)?
@@ -46,9 +46,6 @@ final class OTPSessionRouter: OTPSessionService {
             self?.handle(event, from: .gmailAPI)
         }
     }
-
-    /// The backend serving the current attempt, if any (diagnostics).
-    var currentBackend: Backend? { active?.backend }
 
     func start(attemptID: AttemptID, account: GmailAccount) {
         guard active?.attemptID != attemptID else { return }

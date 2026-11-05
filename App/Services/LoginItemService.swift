@@ -4,9 +4,9 @@ import Observation
 import os
 import ServiceManagement
 
-/// "Launch at Login" (DESIGN §5.6, §5.7): reads and writes `SMAppService.mainApp` directly, because the
-/// user can change it in System Settings. Only the /Applications copy registers, so the login item
-/// never points at a DerivedData build.
+/// "Launch at Login": reads and writes `SMAppService.mainApp` directly, because the user can change it
+/// in System Settings. Only the /Applications copy registers, so the login item never points at a
+/// DerivedData build.
 @Observable
 final class LoginItemService {
     enum LoginItemError: LocalizedError {

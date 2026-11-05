@@ -4,15 +4,6 @@ import os
 import FortiCore
 import FortiShared
 
-/// Where an IMAP session connects. The app always uses `.gmail`; a plain-TCP endpoint exists for tests.
-nonisolated struct IMAPEndpoint: Sendable {
-    var host: NWEndpoint.Host
-    var port: NWEndpoint.Port
-    var usesTLS = true
-
-    static let gmail = IMAPEndpoint(host: "imap.gmail.com", port: .imaps)
-}
-
 /// Why an IMAP connection or command failed. Every case except `.rejected` ends the connection.
 nonisolated enum IMAPTransportError: Error, Sendable {
     /// DNS, TCP or TLS failure as reported by Network.framework.
@@ -73,16 +64,15 @@ nonisolated extension Array where Element == IMAPResponse {
     }
 }
 
-/// A minimal IMAP client connection over Network.framework (DESIGN.md §5.3).
+/// A minimal IMAP client connection to Gmail over TLS with Network.framework.
 ///
-/// One command is in flight at a time: `execute` sends a tagged command and, on its tagged `OK`, returns
-/// the untagged responses received since the previous completion (a `NO`/`BAD` throws `.rejected`);
-/// `idle(for:)` runs one IDLE → `+` → DONE → `OK` cycle.
-/// The actor's executor is the connection's serial queue, so the `@Sendable` NWConnection callbacks
-/// enter the actor synchronously through `assumeIsolated`. A timeout, transport error or unexpected
-/// `BYE` fails the whole connection and every pending call.
+/// One command is in flight at a time. The actor's executor is the connection's serial queue, so the
+/// `@Sendable` NWConnection callbacks enter the actor synchronously through `assumeIsolated`.
+/// A timeout, transport error or unexpected `BYE` fails the whole connection and every pending call.
 actor IMAPTransport {
     nonisolated static let commandTimeout: Duration = .seconds(20)
+    private nonisolated static let host: NWEndpoint.Host = "imap.gmail.com"
+    private nonisolated static let port: NWEndpoint.Port = .imaps
 
     private enum Phase {
         /// Before `connect`.
@@ -130,12 +120,8 @@ actor IMAPTransport {
 
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
-    init(endpoint: IMAPEndpoint) {
-        connection = NWConnection(
-            host: endpoint.host,
-            port: endpoint.port,
-            using: endpoint.usesTLS ? .tls : .tcp
-        )
+    init() {
+        connection = NWConnection(host: Self.host, port: Self.port, using: .tls)
     }
 
     deinit {

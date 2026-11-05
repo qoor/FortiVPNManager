@@ -1,7 +1,6 @@
 import FortiCore
 import SwiftUI
 
-/// The menu bar icon (DESIGN §5.6): connected / disconnected / in progress / error.
 struct MenuBarIcon: View {
     let connection: ConnectionController
 
@@ -32,8 +31,6 @@ extension ConnectionIcon {
     }
 }
 
-/// The menu (DESIGN §5.6): status, the schedule's next step, the reason and "Open Settings" when
-/// attention is needed, the connection actions, "Settings…" and "Quit".
 struct MenuContent: View {
     let environment: AppEnvironment
     let clock: StatusClock

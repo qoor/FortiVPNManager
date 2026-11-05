@@ -194,7 +194,7 @@ struct UserActionTests {
         h.launch()
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         let failedAt = h.now
 
         h.advance(20)
@@ -212,7 +212,7 @@ struct UserActionTests {
         h.launch()
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         let failedAt = h.now
         h.advance(20)
         h.send(.userReconnectNow)
@@ -341,13 +341,14 @@ struct StaleEventTests {
     @Test func helperEventsFromOtherAttemptsAreIgnored() throws {
         var h = ReducerHarness()
         h.launch()
-        try h.startTunnel()
+        let id = try h.startTunnel()
         let before = h.model
         #expect(h.milestone(.tunnelUp, ip: "10.9.9.9", id: ReducerFixture.stranger) == [])
         #expect(h.exit(ReducerFixture.facts(.spawned), id: ReducerFixture.stranger) == [])
         #expect(h.model == before)
 
-        try h.runToConnectedFromTunnel()
+        try h.runMilestones(id: id, through: .tunnelUp)
+        #expect(h.connected != nil)
         let connected = h.model
         #expect(h.exit(ReducerFixture.facts(.tunnelUp, up: 5), id: ReducerFixture.stranger) == [])
         #expect(h.milestone(.otpPrompted, id: ReducerFixture.stranger) == [])
@@ -406,14 +407,5 @@ struct StaleEventTests {
         #expect(h.send(.timerFired(.retry, generation: generation)) == [])
         #expect(h.send(.timerFired(.attemptDeadline, generation: 999)) == [])
         #expect(h.model == after)
-    }
-}
-
-extension ReducerHarness {
-    /// From a started tunnel to `connected`.
-    mutating func runToConnectedFromTunnel(sourceLocation: SourceLocation = #_sourceLocation) throws {
-        let id = try #require(attempt?.attemptID, sourceLocation: sourceLocation)
-        try runMilestones(id: id, through: .tunnelUp, sourceLocation: sourceLocation)
-        _ = try #require(connected, sourceLocation: sourceLocation)
     }
 }

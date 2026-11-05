@@ -80,14 +80,13 @@ struct ReadinessProfileTests {
         h.launch()
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         #expect(h.model.ledger.consecutiveAuthFailures == 1)
 
-        let bob = VPNProfile(host: "vpn.example.com", port: 8443, username: "bob", trustedCerts: [ReducerFixture.pinOld])
-        let effects = h.send(.profileChanged(bob))
+        let effects = h.send(.profileChanged(Self.bob))
         #expect(effects == [.checkReadiness, .persistLedger(FailureLedger(profileKey: "bob@vpn.example.com"))])
         #expect(h.model.readiness == .unknown)
-        #expect(h.model.profile == bob)
+        #expect(h.model.profile == Self.bob)
 
         h.send(.readinessChanged(.needsSetup([.vpnPassword])))
         #expect(h.model.state == .needsSetup([.vpnPassword]))
@@ -102,7 +101,7 @@ struct ReadinessProfileTests {
 
     static let bob = VPNProfile(host: "vpn.example.com", port: 8443, username: "bob", trustedCerts: [ReducerFixture.pinOld])
 
-    /// §5.7: an account change applies from the next connection; the attempt in flight keeps the account
+    /// An account change applies from the next connection; the attempt in flight keeps the account
     /// its readiness check was issued for and never starts openfortivpn for the unverified one.
     @Test func accountChangeWhileTheGmailSessionStartsAppliesToTheNextAttempt() throws {
         var h = ReducerHarness()
@@ -212,10 +211,10 @@ struct ReadinessProfileTests {
     }
 }
 
-@Suite("Presentation (§5.6)")
+@Suite("Presentation")
 struct PresentationTests {
     static let attempt = AttemptContext(
-        attemptID: ReducerFixture.id(1), reason: .user, chainID: ReducerFixture.id(1), certRetryUsed: false,
+        attemptID: ReducerFixture.id(1), reason: .user, certRetryUsed: false,
         startedAt: ReducerFixture.t0, stage: .tunnel
     )
     static let session = ConnectedContext(

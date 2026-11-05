@@ -1,7 +1,7 @@
 import FortiShared
 import Foundation
 
-/// Text side of `/usr/sbin/networksetup -getadditionalroutes` / `-setadditionalroutes` (DESIGN §5.8).
+/// Text side of `networksetup -getadditionalroutes` / `-setadditionalroutes`.
 public enum NetworkSetupRoutes {
     public enum ParseFailure: Error, Sendable, Equatable {
         /// networksetup printed an error (`** Error: …`).

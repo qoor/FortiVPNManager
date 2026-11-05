@@ -1,7 +1,7 @@
 import FortiShared
 import Foundation
 
-/// Renders the fixed, commented `config.yaml` template (DESIGN §5.7, config.yaml schema).
+/// Renders the fixed, commented `config.yaml` template.
 ///
 /// Strings are always emitted as double-quoted YAML scalars with escapes, so
 /// `ConfigCodec.decode(render(c))` returns `c` for every config that passes ``AppConfig/validate()``.

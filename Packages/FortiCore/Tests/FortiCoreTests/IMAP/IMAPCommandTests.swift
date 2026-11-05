@@ -16,9 +16,8 @@ struct IMAPCommandTests {
         #expect(copy.next() == "A0003")
         #expect(tags.next() == "A0003")
 
-        var custom = IMAPTagGenerator(prefix: "OTP")
-        for _ in 0..<9_999 { _ = custom.next() }
-        #expect(custom.next() == "OTP10000")
+        for _ in 3..<9_999 { _ = tags.next() }
+        #expect(tags.next() == "A10000")
     }
 
     @Test func authenticatePlainUsesSASLInitialResponse() throws {
@@ -93,12 +92,6 @@ struct IMAPCommandTests {
     @Test(arguments: ["", "A 1", "A1\r\n", "A+1", "*", "\u{D0DC}\u{ADF8}"])
     func invalidTagsAreRejected(_ tag: String) {
         #expect(throws: IMAPCommandError.invalidTag) { try IMAPCommand.noop.encoded(tag: tag) }
-    }
-
-    @Test func modifiedUTF7NamesFromLISTRoundTripIntoSELECT() throws {
-        let entry = IMAPListEntry(attributes: ["\\HasNoChildren", "\\Trash"], delimiter: "/", name: ModifiedUTF7.encode("[Gmail]/\u{D734}\u{C9C0}\u{D1B5}"))
-        #expect(entry.name == "[Gmail]/&1zTJwNG1-")
-        #expect(try wire(.select(mailbox: entry.name)) == "A0001 SELECT \"[Gmail]/&1zTJwNG1-\"\r\n")
     }
 }
 

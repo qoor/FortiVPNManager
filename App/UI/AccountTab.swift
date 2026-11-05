@@ -1,9 +1,9 @@
 import FortiConfig
 import SwiftUI
 
-/// Tab 1, Account (DESIGN §5.6): the VPN account and the Gmail account that receives the OTP, saved
-/// together. No certificate fields: gateway certificates are trusted automatically. The OTP method
-/// (Gmail API with a Google account, or IMAP with an app password) applies as soon as it is picked.
+/// The Account tab: the VPN account and the Gmail account that receives the OTP, saved together.
+/// No certificate fields: gateway certificates are trusted automatically. The OTP method applies as
+/// soon as it is picked.
 struct AccountTab: View {
     let environment: AppEnvironment
     @Bindable var editor: AccountEditor

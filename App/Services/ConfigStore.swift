@@ -13,8 +13,8 @@ struct ConfigChange {
     var validityChanged: Bool
 }
 
-/// `~/.config/FortiVPNManager/config.yaml` (DESIGN §5.7): polled every 2 s and on app activation,
-/// validated by `ConfigCodec`, with the last-known-good config kept while the file is broken.
+/// `config.yaml`, polled and re-read on app activation, validated by `ConfigCodec`, with the
+/// last-known-good config kept while the file is broken.
 @Observable
 final class ConfigStore {
     let fileURL: URL
@@ -45,7 +45,7 @@ final class ConfigStore {
         watcher = ConfigFileWatcher(url: fileURL)
     }
 
-    /// Reads the file once now, then polls every 2 s.
+    /// Reads the file once now, then polls every `pollInterval`.
     func start() {
         poll()
         guard pollTask == nil else { return }

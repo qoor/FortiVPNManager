@@ -5,30 +5,20 @@ import FortiShared
 import Observation
 import os
 
-/// Raw inputs for the menu's one-line status text (DESIGN §5.6 "status text, refreshed every 30 s").
-struct ConnectionStatusInputs: Equatable {
+/// Raw inputs for the menu's one-line status text.
+struct ConnectionStatusInputs {
     var state: ConnectionState
-    var desired: DesiredState
-    var readiness: Readiness
-    var now: Date
-    var connectedSince: Date?
-    var tunnelIP: String?
     var plannedReconnectAt: Date?
-    var nextRetryAt: Date?
-    var lastFailure: ConnectionFailureReason?
     var scheduleOutlook: ScheduleOutlook?
 }
 
 /// Owns the `ConnectionModel`, feeds every input through `ConnectionReducer` and executes the
-/// resulting effects in order (DESIGN §5.4, §6). Events raised while effects run are queued, so each
-/// event's effects finish before the next event is reduced.
-///
-/// Inputs: helper events/output/connection loss (one ordered stream), OTP session events,
-/// `SystemMonitor`, `ConfigStore` changes, readiness answers, timers and the user's menu actions.
+/// resulting effects in order. Events raised while effects run are queued, so each event's effects
+/// finish before the next event is reduced.
 @Observable
 final class ConnectionController {
     private(set) var model: ConnectionModel
-    /// Wall-clock "now" for relative times in the UI: ticks every 30 s and after every event.
+    /// Wall-clock "now" for relative times in the UI: ticks every `tickInterval` and after every event.
     private(set) var now = Date()
 
     @ObservationIgnored private let configStore: ConfigStore
@@ -41,7 +31,6 @@ final class ConnectionController {
     @ObservationIgnored private let timers = ConnectionTimers()
     @ObservationIgnored private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "connection")
 
-    @ObservationIgnored private var launched = false
     @ObservationIgnored private var pendingEvents: [ConnectionEvent] = []
     @ObservationIgnored private var isDispatching = false
     @ObservationIgnored private var helperRequests: Task<Void, Never>?
@@ -56,7 +45,6 @@ final class ConnectionController {
     @ObservationIgnored private var terminationApproved = false
 
     static let tickInterval: Duration = .seconds(30)
-    /// Readiness polling "every 2 s for 2 minutes after opening System Settings".
     static let systemSettingsWatchDuration: TimeInterval = 120
     static let systemSettingsWatchInterval: Duration = .seconds(2)
 
@@ -113,43 +101,12 @@ final class ConnectionController {
         return context.tunnelIP
     }
 
-    /// The failure behind the current state (`failed`, or the wait after a counted or network failure).
-    var lastFailure: ConnectionFailureReason? {
-        if let failure = model.lastFailure { return failure }
-        switch model.state {
-        case let .failed(reason):
-            return reason
-        case let .waitingRetry(wait):
-            return failure(for: wait.reason)
-        case let .waitingNetwork(wait):
-            return failure(for: wait.reason)
-        default:
-            return nil
-        }
-    }
-
     var statusInputs: ConnectionStatusInputs {
         ConnectionStatusInputs(
             state: model.state,
-            desired: model.desired,
-            readiness: model.readiness,
-            now: now,
-            connectedSince: connectedSince,
-            tunnelIP: tunnelIP,
             plannedReconnectAt: plannedReconnectAt,
-            nextRetryAt: nextRetryAt,
-            lastFailure: lastFailure,
             scheduleOutlook: scheduleOutlook
         )
-    }
-
-    private func failure(for reason: RetryReason) -> ConnectionFailureReason? {
-        switch reason {
-        case .network: .network
-        case let .authFailure(failure): failure
-        case .authCooldown: model.ledger.lastAuthFailureReason
-        case .serverSessionEnded, .sleep, .userAway: nil
-        }
     }
 
     // MARK: - User intents
@@ -158,7 +115,7 @@ final class ConnectionController {
     func connect() { send(.userConnect) }
     /// "Disconnect".
     func disconnect() { send(.userDisconnect) }
-    /// "Reconnect Now" (waits until 90 s after the last authentication failure).
+    /// "Reconnect Now" (waits `RetryPolicy.authFailureRetryDelay` after the last authentication failure).
     func reconnectNow() { send(.userReconnectNow) }
     /// "Quit": goes through `applicationShouldTerminate` for a graceful disconnect.
     func quit() { NSApp.terminate(nil) }
@@ -168,7 +125,7 @@ final class ConnectionController {
         requestReadinessCheck()
     }
 
-    /// After System Settings was opened for the helper: re-check every 2 s for 2 minutes.
+    /// After System Settings was opened for the helper: keep re-checking readiness for a while.
     func recheckReadinessWhileSystemSettingsOpen() {
         systemSettingsWatch?.cancel()
         systemSettingsWatch = Task { [weak self] in
@@ -180,7 +137,7 @@ final class ConnectionController {
         }
     }
 
-    /// `NSApplicationDelegate.applicationShouldTerminate`: stop the tunnel first, then reply (at most 12 s).
+    /// `NSApplicationDelegate.applicationShouldTerminate`: stop the tunnel first, then reply.
     func applicationShouldTerminate() -> NSApplication.TerminateReply {
         if terminationApproved { return .terminateNow }
         if !terminationPending {
@@ -192,11 +149,9 @@ final class ConnectionController {
 
     // MARK: - Wiring
 
-    /// Starts consuming helper messages and the 30 s ticker, then sends `appLaunched`.
+    /// Starts consuming helper messages and the ticker, then sends `appLaunched`.
     /// `ConfigStore` must have loaded the file already.
     func launch(autoConnect: Bool, restoredLedger: FailureLedger?) {
-        guard !launched else { return }
-        launched = true
         model = Self.freshModel(configStore.config)
 
         inboundTask = Task { [weak self, helper] in
@@ -297,7 +252,7 @@ final class ConnectionController {
         }
         guard !notes.isEmpty else { return }
         let date = Date()
-        logStore.append(notes.map { OutputLine(seq: 0, date: date, attemptID: nil, source: .helper, text: $0) })
+        logStore.append(notes.map { OutputLine(date: date, source: .helper, text: $0) })
     }
 
     private static func isHolding(_ state: ConnectionState) -> Bool {
@@ -332,8 +287,8 @@ final class ConnectionController {
         case let .failed(attemptID, failure): send(.otpSessionFailed(attemptID, failure))
         case let .codeFound(attemptID, code): send(.otpCodeFound(attemptID, code: code))
         case let .foundInJunk(attemptID): send(.otpFoundInJunk(attemptID))
-        case let .note(attemptID, text):
-            logStore.append([OutputLine(seq: 0, date: Date(), attemptID: attemptID, source: .helper, text: text)])
+        case let .note(_, text):
+            logStore.append([OutputLine(date: Date(), source: .helper, text: text)])
         }
     }
 
@@ -432,9 +387,7 @@ final class ConnectionController {
     /// The run never started, so the helper wrote no output: keep the reason in the Log tab as a
     /// `▸` meta line (the failure itself only carries `error.code`).
     private func connectRejected(_ attemptID: AttemptID, _ error: HelperError) {
-        logStore.append([OutputLine(
-            seq: 0, date: Date(), attemptID: attemptID, source: .helper, text: "‹connect rejected: \(error.message)›"
-        )])
+        logStore.append([OutputLine(date: Date(), source: .helper, text: "‹connect rejected: \(error.message)›")])
         send(.helperConnectRejected(attemptID, error))
     }
 

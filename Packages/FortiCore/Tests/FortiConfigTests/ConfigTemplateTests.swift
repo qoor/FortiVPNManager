@@ -109,7 +109,7 @@ import Testing
         #expect(once == twice)
     }
 
-    /// Deterministic pseudo-random configs (fixed-seed LCG) over the whole valid domain.
+    /// Deterministic pseudo-random configs (fixed seed) over the whole valid domain.
     @Test func randomValidConfigsRoundTrip() throws {
         var rng = SeededGenerator(seed: 0x5EED_F0F1)
         let pool = Self.trickyStrings.filter { $0.count < 100 }
@@ -123,7 +123,7 @@ import Testing
                 username: string(), realm: string())
             for _ in 0..<Int.random(in: 0...5, using: &rng) {
                 let digest = (0..<64).map { _ in "0123456789abcdef".randomElement(using: &rng)! }
-                vpn.pinTrustedCert(String(digest))
+                vpn.trustedCerts.append(String(digest))
             }
             let config = AppConfig(
                 vpn: vpn,
@@ -150,7 +150,7 @@ import Testing
         }
     }
 
-    /// Up to 10 hosts and networks that do not overlap.
+    /// Hosts and networks that do not overlap.
     private func randomNetworks(using rng: inout SeededGenerator) -> [IPv4Network] {
         var destinations: [IPv4Network] = []
         for _ in 0..<Int.random(in: 0...10, using: &rng) {

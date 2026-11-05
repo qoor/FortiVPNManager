@@ -1,8 +1,8 @@
 import Foundation
 
-/// Timing and counting rules of §6 in one place. All durations are in seconds.
+/// Timing and counting rules of the connection state machine. All durations are in seconds.
 public enum RetryPolicy {
-    /// Whole-attempt deadline, owned by the app (§5.2 watchdog table).
+    /// Whole-attempt deadline, owned by the app.
     public static let attemptTimeout: TimeInterval = 150
     /// OTP prompt to submission deadline, owned by the app.
     public static let otpDeadline: TimeInterval = 50
@@ -33,7 +33,7 @@ public enum RetryPolicy {
     /// Upper bound for a graceful quit before the app terminates anyway.
     public static let quitTimeout: TimeInterval = 12
 
-    /// Backoff for the `failures`-th consecutive network failure (1-based): 10, 20, 40, ... capped at 300.
+    /// Backoff for the `failures`-th consecutive network failure (1-based), capped at `networkBackoffMax`.
     public static func networkBackoff(afterFailures failures: Int) -> TimeInterval {
         guard failures > 1 else { return networkBackoffInitial }
         let exponent = min(failures - 1, 16)

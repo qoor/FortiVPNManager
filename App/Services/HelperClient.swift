@@ -3,7 +3,7 @@ import FortiShared
 import os
 import Synchronization
 
-/// One message from the helper, in the order the helper sent it (DESIGN §5.1 ordering rules).
+/// One message from the helper, in the order the helper sent it.
 nonisolated enum HelperInbound: Sendable {
     case event(HelperEvent)
     case output([OutputLine])
@@ -11,7 +11,7 @@ nonisolated enum HelperInbound: Sendable {
     case connectionLost
 }
 
-/// XPC client for the root helper. Both ends pin each other's signing identity (DESIGN §5.2).
+/// XPC client for the root helper. Both ends pin each other's signing identity.
 ///
 /// Helper callbacks (`event`, `output`) and connection loss arrive on `inbound`, a single ordered
 /// channel. Replies are not ordered with respect to that channel; a run has finished only when its
@@ -106,7 +106,7 @@ final class HelperClient {
         }
     }
 
-    /// The additional routes of the primary network service (DESIGN §5.8).
+    /// The additional routes of the primary network service.
     func bypassRoutes() async throws -> BypassRoutesSnapshot {
         try await retryingOnce { link in
             try await self.requireBuild(on: link)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// `connection.schedule` as the reducer sees it (§5.4 schedule): one daily window on some weekdays.
+/// `connection.schedule` as the reducer sees it: one daily window on some weekdays.
 ///
 /// The window's start connects (like "Connect"); its end never disconnects. Outside the window,
 /// automatic reconnects wait while the user is away and stop for good once the user has been away

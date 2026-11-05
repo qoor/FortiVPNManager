@@ -31,7 +31,7 @@ final class SelfUpdateWatcher: @unchecked Sendable {
         return Self.fingerprint(of: path) != original
     }
 
-    /// Calls `onReplaced` every 5 s once the binary was replaced. Call once.
+    /// Calls `onReplaced` periodically once the binary was replaced. Call once.
     func start(onReplaced: @escaping @Sendable () -> Void) {
         timer.schedule(deadline: .now() + 5, repeating: 5)
         timer.setEventHandler { [weak self] in

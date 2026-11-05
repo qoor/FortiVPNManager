@@ -91,14 +91,14 @@ import Testing
         #expect(try watcher.poll() == .unchanged)
 
         // Changed by `update` from the bytes the watcher already knows.
-        let pinned = try store.update(at: url) { $0.vpn.pinTrustedCert(digestC) }
+        let pinned = try store.update(at: url) { $0.vpn.trustedCerts.insert(digestC, at: 0) }
         #expect(pinned.didWrite)
         #expect(pinned.baseContents?.data == created.contents.data)
         watcher.noteOwnWrite(pinned)
         #expect(try watcher.poll() == .unchanged)
 
         // A no-op `update` is harmless to record.
-        let same = try store.update(at: url) { $0.vpn.pinTrustedCert(digestC) }
+        let same = try store.update(at: url) { $0.vpn.trustedCerts = pinned.config.vpn.trustedCerts }
         #expect(!same.didWrite)
         watcher.noteOwnWrite(same)
         #expect(try watcher.poll() == .unchanged)
@@ -117,8 +117,8 @@ import Testing
         let edited = try readText(url).replacingOccurrences(of: "username: \"bob\"", with: "username: alice")
         try writeInPlace(edited, to: url)
 
-        // digestA is already the newest pin, so pinning it again changes nothing.
-        let result = try store.update(at: url) { $0.vpn.pinTrustedCert(changesSomething ? digestC : digestA) }
+        // [digestA, digestB] are the current pins, so writing them back changes nothing.
+        let result = try store.update(at: url) { $0.vpn.trustedCerts = changesSomething ? [digestC, digestA, digestB] : [digestA, digestB] }
         #expect(result.didWrite == changesSomething)
         #expect(result.config.vpn.username == "alice")
         #expect(result.baseContents?.data == Data(edited.utf8))

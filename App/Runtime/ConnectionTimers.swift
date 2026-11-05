@@ -1,9 +1,8 @@
 import Foundation
 import FortiCore
 
-/// Wall-clock timers for the reducer's `scheduleTimer` / `cancelTimer` effects: at most one pending
-/// task per `ConnectionTimer`, each sleeping until its `Date`. Scheduling an ID again replaces it.
-/// After a wake the remaining delays are recomputed from the wall clock (`rearmAll`).
+/// Wall-clock timers for the reducer's `scheduleTimer` / `cancelTimer` effects. Scheduling a timer
+/// again replaces it.
 final class ConnectionTimers {
     /// Called on the main actor when a timer is due, with the generation it was scheduled with.
     var onFire: ((ConnectionTimer, UInt64) -> Void)?

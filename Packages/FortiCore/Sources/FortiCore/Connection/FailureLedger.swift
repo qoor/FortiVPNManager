@@ -1,14 +1,14 @@
 import Foundation
 
 /// Authentication failure bookkeeping for one `username@host`, persisted in `state.json` so that the
-/// retry policy survives relaunches (§5.7, §6.2). The reducer emits `.persistLedger` on every change.
+/// retry policy survives relaunches. The reducer emits `.persistLedger` on every change.
 public struct FailureLedger: Sendable, Equatable, Codable {
     public var profileKey: String
     /// Counted authentication failures since the last stable session or manual action.
     public var consecutiveAuthFailures: Int
     public var lastAuthFailureAt: Date?
     public var lastAuthFailureReason: ConnectionFailureReason?
-    /// When attempts reached the gateway (i.e. credentials were sent), oldest first, within the last hour.
+    /// When attempts reached the gateway (i.e. credentials were sent), oldest first, within the rolling window.
     public var recentAuthAttempts: [Date]
 
     public init(
@@ -25,15 +25,9 @@ public struct FailureLedger: Sendable, Equatable, Codable {
         self.recentAuthAttempts = recentAuthAttempts
     }
 
-    /// No new attempt may start before this instant (90 s after the last authentication failure).
+    /// No new attempt may start before this instant.
     public var cooldownEnd: Date? {
         lastAuthFailureAt?.addingTimeInterval(RetryPolicy.authFailureRetryDelay)
-    }
-
-    /// Number of authentication attempts within the rolling window ending at `now`.
-    public func authAttempts(asOf now: Date) -> Int {
-        let start = now.addingTimeInterval(-RetryPolicy.authAttemptWindow)
-        return recentAuthAttempts.lazy.filter { $0 > start }.count
     }
 
     /// Drops attempts that fell out of the rolling window.
@@ -53,13 +47,13 @@ public struct FailureLedger: Sendable, Equatable, Codable {
         lastAuthFailureReason = reason
     }
 
-    /// A stable session (>= 2 minutes) proves the credentials work.
+    /// A stable session proves the credentials work.
     mutating func resetConsecutiveFailures() {
         consecutiveAuthFailures = 0
     }
 
     /// "Connect" / "Reconnect Now": the counter and the rolling history start over. The time of the last
-    /// failure is kept so the 90 s gap is still honoured.
+    /// failure is kept so the cooldown is still honoured.
     mutating func resetForManualAction() {
         consecutiveAuthFailures = 0
         recentAuthAttempts = []

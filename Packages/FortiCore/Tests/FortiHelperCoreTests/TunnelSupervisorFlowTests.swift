@@ -5,14 +5,13 @@ import Foundation
 import Synchronization
 import Testing
 
-/// End-to-end runs of `TunnelSupervisor` against fake openfortivpn scripts (DESIGN §10 TunnelSupervisor).
+/// End-to-end runs of `TunnelSupervisor` against fake openfortivpn scripts.
 @Suite struct TunnelSupervisorFlowTests {
     static let fullFlow: [Milestone] = [.spawned, .connectedToGateway, .otpPrompted, .otpSubmitted, .authenticated, .tunnelUp]
 
-    @Test(arguments: ["tokeninfo", "htmlform"])
-    func successThenUserDisconnect(promptPath: String) async throws {
+    @Test func successThenUserDisconnect() async throws {
         let repairCalls = Mutex(0)
-        let harness = try Harness(.success, [promptPath], routeRepair: {
+        let harness = try Harness(.success, routeRepair: {
             repairCalls.withLock { $0 += 1 }
             return .repaired
         })
@@ -32,16 +31,13 @@ import Testing
         })
         #expect(facts.furthestMilestone == .tunnelUp)
         #expect(facts.stopInitiator == .helper(.userDisconnect))
-        #expect(facts.watchdogFired == nil)
         #expect(facts.certRejectedDigests.isEmpty)
         #expect(facts.certRejectedAt == nil)
-        #expect(!facts.authFailLineSeen)
         #expect(try #require(facts.upDuration) >= 0)
         #expect(facts.exitStatus == .exited(code: 0))
         // "Restoring routes..." completed, so no repair.
         #expect(!facts.routeRepairPerformed)
         #expect(repairCalls.withLock { $0 } == 0)
-        #expect(harness.supervisor.isFinished)
         #expect(harness.supervisor.processID == nil)
 
         // The script received exactly the password and the OTP, and stdin was closed after the OTP.
@@ -57,7 +53,7 @@ import Testing
         expectOutputInvariants(harness)
         let texts = recorder.texts
         #expect(texts.first?.hasPrefix("‹attempt started: pid ") == true)
-        #expect(texts.first?.hasSuffix("/bin/sh \(Fixture.success.path) \(harness.record.path) \(promptPath)›") == true)
+        #expect(texts.first?.hasSuffix("/bin/sh \(Fixture.success.path) \(harness.record.path)›") == true)
         let order = [
             "‹password sent›",
             "INFO:   Connected to gateway.",
@@ -75,7 +71,7 @@ import Testing
         #expect(texts.last == "‹exited: code 0›")
         #expect(recorder.lines.contains { $0.source == .stderr && $0.text == "Thu Oct 15 12:12:05 2026 : Modem hangup" })
         #expect(recorder.lines.contains { $0.source == .stdout && $0.text == "add host 203.0.113.10: gateway 192.168.1.1" })
-        // The prompts are part of the log (as a partial line when the input took longer than 250 ms).
+        // The prompts are part of the log (as a partial line when the input took longer than `lineIdleFlush`).
         #expect(texts.contains("VPN account password: "))
         // Each milestone follows the line that produced it.
         #expect(linesBefore(recorder) { $0 == .milestone(.connectedToGateway, tunnelIP: nil) }.contains("INFO:   Connected to gateway."))
@@ -94,8 +90,7 @@ import Testing
             stopInitiator: .none,
             certRejectedDigests: [rejectedDigest],
             certRejectedAt: .spawned,
-            exitStatus: .exited(code: 1),
-            lastOutputSeq: facts.lastOutputSeq
+            exitStatus: .exited(code: 1)
         ))
         // The password prompt comes before TLS (main.c:732), so it was answered.
         #expect(harness.record.values["password_sha256"] == sha256Hex(testPassword))
@@ -119,9 +114,7 @@ import Testing
         #expect(facts == ExitFacts(
             furthestMilestone: furthest,
             stopInitiator: .none,
-            authFailLineSeen: true,
-            exitStatus: .exited(code: 1),
-            lastOutputSeq: facts.lastOutputSeq
+            exitStatus: .exited(code: 1)
         ))
         if mode == "otp" {
             #expect(harness.record.values["otp_sha256"] == sha256Hex(testOTP))
@@ -142,8 +135,6 @@ import Testing
         #expect(harness.recorder.milestones == Self.fullFlow)
         #expect(facts.furthestMilestone == .tunnelUp)
         #expect(facts.stopInitiator == .none)
-        #expect(facts.watchdogFired == nil)
-        #expect(!facts.authFailLineSeen)
         #expect(facts.exitStatus == .exited(code: 1))
         // The script stays up for 0.3 s.
         let upDuration = try #require(facts.upDuration)
@@ -208,7 +199,7 @@ import Testing
         defer { harness.record.remove() }
         let facts = try await harness.run()
 
-        #expect(facts == ExitFacts(furthestMilestone: .spawned, stopInitiator: .none, exitStatus: .exited(code: 1), lastOutputSeq: facts.lastOutputSeq))
+        #expect(facts == ExitFacts(furthestMilestone: .spawned, stopInitiator: .none, exitStatus: .exited(code: 1)))
         let texts = harness.recorder.texts
         #expect(texts.contains("‹input failed: openfortivpn exited before reading it (EPIPE)›"))
         #expect(!texts.contains("‹password sent›"))
@@ -223,7 +214,7 @@ import Testing
         defer { harness.record.remove() }
         let facts = try await harness.run()
         #expect(harness.recorder.milestones == [.spawned])
-        #expect(facts == ExitFacts(furthestMilestone: .spawned, stopInitiator: .none, exitStatus: .exited(code: 1), lastOutputSeq: facts.lastOutputSeq))
+        #expect(facts == ExitFacts(furthestMilestone: .spawned, stopInitiator: .none, exitStatus: .exited(code: 1)))
         #expect(harness.recorder.texts.contains("ERROR:  Specify a valid host:port couple."))
         expectOutputInvariants(harness)
     }
@@ -233,13 +224,11 @@ import Testing
         try harness.supervisor.start()
         let facts = try #require(await harness.recorder.waitForExit())
 
-        #expect(facts == ExitFacts(furthestMilestone: nil, stopInitiator: .none, exitStatus: .spawnFailed(errno: ENOENT), lastOutputSeq: 1))
+        #expect(facts == ExitFacts(furthestMilestone: nil, stopInitiator: .none, exitStatus: .spawnFailed(errno: ENOENT)))
         #expect(harness.recorder.milestones.isEmpty)
         #expect(harness.recorder.lines.count == 1)
         #expect(harness.recorder.texts.first?.hasPrefix("‹spawn failed: /nonexistent/openfortivpn: ") == true)
         #expect(harness.recorder.lines.first?.source == .helper)
-        #expect(harness.supervisor.isFinished)
-        #expect(harness.supervisor.furthestMilestone == nil)
         // Stop after the end is a no-op.
         harness.supervisor.stop(reason: .userDisconnect)
         try await Task.sleep(for: .milliseconds(30))
@@ -273,15 +262,6 @@ import Testing
         expectOutputInvariants(harness)
     }
 
-    @Test func outputSequenceContinuesFromFirstOutputSeq() async throws {
-        let harness = try Harness(.authFailed, ["password"], firstOutputSeq: 1_000)
-        defer { harness.record.remove() }
-        let facts = try await harness.run()
-        #expect(harness.recorder.lines.first?.seq == 1_000)
-        #expect(facts.lastOutputSeq == 1_000 + UInt64(harness.recorder.lines.count) - 1)
-        expectOutputInvariants(harness, firstSeq: 1_000)
-    }
-
     /// Output is delivered in several batches (timer and before each event), never after `.exited`.
     @Test func outputIsBatchedAndFlushedBeforeEvents() async throws {
         let harness = try Harness(.serverCut, ["cut"])
@@ -303,21 +283,25 @@ import Testing
                 sawOutput = false
             }
         }
-        // Lines arrive in seq order across batches.
-        let seqs = recorder.batches.flatMap { $0.map(\.seq) }
-        #expect(seqs == seqs.sorted())
+        // Lines arrive in emission order across batches.
+        let order = [
+            "INFO:   Connected to gateway.",
+            "INFO:   Authenticated.",
+            "INFO:   Setting new routes...",
+            "INFO:   Tunnel is up and running.",
+            "INFO:   Restoring routes...",
+            "INFO:   Logged out.",
+        ]
+        #expect(recorder.lines.filter { $0.source == .stdout }.map(\.text).filter(order.contains) == order)
         expectOutputInvariants(harness)
     }
 
-    @Test func linesWithoutNewlineAreFlushedAsPartialAtExit() async throws {
+    @Test func linesWithoutNewlineAreFlushedAtExit() async throws {
         let harness = try Harness(script: "printf 'INFO:   complete\\nunfinished tail'; printf 'err tail' >&2; exit 0")
         defer { harness.record.remove() }
         _ = try await harness.run()
         let lines = harness.recorder.lines.filter { $0.source != .helper }
         #expect(lines.map(\.text).sorted() == ["INFO:   complete", "err tail", "unfinished tail"])
-        #expect(lines.first { $0.text == "INFO:   complete" }?.isPartial == false)
-        #expect(lines.first { $0.text == "unfinished tail" }?.isPartial == true)
-        #expect(lines.first { $0.text == "err tail" }?.isPartial == true)
         expectOutputInvariants(harness)
     }
 }

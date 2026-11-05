@@ -1,5 +1,4 @@
 import Foundation
-import Testing
 @testable import FortiCore
 
 /// Shared helpers for the IMAP/OTP tests (namespaced to avoid clashes with other test files).
@@ -14,11 +13,9 @@ enum IMAPFixture {
         "{\(payload.utf8.count)}\r\n" + payload
     }
 
-    /// Parses a complete transcript in one feed and checks nothing is left buffered.
+    /// Parses a complete transcript in one feed.
     static func parseAll(_ transcript: String) throws -> [IMAPResponse] {
         var parser = IMAPResponseParser()
-        let responses = try parser.feed(Data(transcript.utf8))
-        #expect(parser.bufferedByteCount == 0)
-        return responses
+        return try parser.feed(Data(transcript.utf8))
     }
 }

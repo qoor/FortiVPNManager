@@ -51,7 +51,7 @@ nonisolated enum GoogleAccessTokenError: Error, Sendable, Equatable {
 /// Supplies Gmail API access tokens for an address.
 @MainActor
 protocol GoogleAccessTokenProviding: AnyObject {
-    /// A token valid for at least another minute, refreshed with the stored refresh token when needed.
+    /// A token that is not about to expire, refreshed with the stored refresh token when needed.
     func accessToken(for address: String) async throws(GoogleAccessTokenError) -> String
     /// Forget the cached token (after a 401) so the next call refreshes.
     func invalidateAccessToken(for address: String)
@@ -138,13 +138,9 @@ nonisolated enum GoogleOAuthError: LocalizedError, Equatable {
 
 /// Google OAuth for the Gmail API OTP path (`otp.method: gmail_api`).
 ///
-/// - Import: the Desktop-app client JSON's secret goes to the Keychain (`client-secret:<client ID>`),
-///   its client ID to config.yaml `otp.google_client_id`.
-/// - Sign-in (`connect`): loopback redirect on `127.0.0.1` + PKCE in the default browser, code
-///   exchange, then `users.getProfile` must report the configured Gmail address. The refresh token
-///   goes to the Keychain (`refresh-token:<lowercased address>`).
-/// - Access tokens are kept in memory only and refreshed shortly before they expire. A refresh
-///   answered with `invalid_grant` deletes the stored refresh token (authorization revoked).
+/// Sign-in uses a loopback redirect on `127.0.0.1` with PKCE in the default browser. Access tokens are
+/// kept in memory only; a refresh answered with `invalid_grant` deletes the stored refresh token
+/// (authorization revoked).
 @Observable
 final class GoogleOAuthService: GoogleAccessTokenProviding {
     /// How long `connect` waits for the browser to come back.
@@ -251,15 +247,6 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         return nil
     }
 
-    /// Drops an imported client that is identical to the built-in one (left over from before the
-    /// client was built in). The refresh token stays valid because the client ID does not change.
-    func dropImportMatchingBuiltIn() {
-        let imported = importedClientID
-        guard !imported.isEmpty, imported == Self.builtInClient?.clientID else { return }
-        removeImportedClient(keepingAuthorization: true)
-        logger.notice("Dropped the imported OAuth client: it matches the built-in client")
-    }
-
     /// "Use Built-in Client": forgets the imported client. Its refresh token was issued to that client,
     /// so it is deleted unless the client IDs are the same.
     func removeImportedClient() {
@@ -354,8 +341,8 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         return isAuthorized(address: address) ? .available : .notConfigured
     }
 
-    /// Runs the browser sign-in for `address` and stores the refresh token. Requires an imported
-    /// client. Fails with `.wrongAccount` when the user signs in with another Google account.
+    /// Runs the browser sign-in for `address` and stores the refresh token. Fails with `.wrongAccount`
+    /// when the user signs in with another Google account.
     func connect(address rawAddress: String) async throws(GoogleOAuthError) {
         let address = Self.normalized(rawAddress)
         guard !address.isEmpty else { throw .addressMissing }
@@ -442,9 +429,9 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         flowServer?.cancel()
     }
 
-    /// Deletes the stored refresh token of `address` and, with `revokeAtGoogle`, revokes it at Google
+    /// Deletes the stored refresh token of `address` and revokes it at Google
     /// (best effort; this removes the app's Gmail access for that account).
-    func disconnect(address rawAddress: String, revokeAtGoogle: Bool = true) async throws(GoogleOAuthError) {
+    func disconnect(address rawAddress: String) async throws(GoogleOAuthError) {
         let address = Self.normalized(rawAddress)
         guard !address.isEmpty else { return }
         let token = try? credentials.googleRefreshToken(address: address)
@@ -456,7 +443,7 @@ final class GoogleOAuthService: GoogleAccessTokenProviding {
         cachedTokens.removeAll()
         logger.notice("Google authorization removed")
         authorizationChanged()
-        if revokeAtGoogle, let token {
+        if let token {
             await revoke(token)
         }
     }

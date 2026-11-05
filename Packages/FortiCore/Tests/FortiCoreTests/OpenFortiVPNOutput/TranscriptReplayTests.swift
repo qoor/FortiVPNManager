@@ -6,13 +6,12 @@ import Testing
 /// Replays the synthetic transcripts in `Fixtures/openfortivpn` through `PromptDetector`,
 /// `LineAssembler` and `OpenFortiVPNOutputParser`, wired the way the helper uses them, under many
 /// chunkings and timings. The fixtures are reconstructed from openfortivpn 1.24.1 and Apple pppd
-/// source strings; replace them with real Phase 0b captures when available.
+/// source strings.
 @Suite struct TranscriptReplayTests {
     static let digest = "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11"
 
     enum Scenario: String, CaseIterable, Sendable {
         case successTokenInfo = "synthetic-success-tokeninfo"
-        case successHTMLForm = "synthetic-success-htmlform"
         case certRejected = "synthetic-cert-rejected"
         case authFailed = "synthetic-auth-failed"
         case serverTerminated = "synthetic-server-terminated"
@@ -20,56 +19,26 @@ import Testing
 
         var expectedPrompts: [PromptDetector.Prompt] {
             switch self {
-            case .successTokenInfo, .serverTerminated, .sigtermTeardown: [.passwordPrompt, .otpPrompt(.tokenInfo)]
-            case .successHTMLForm: [.passwordPrompt, .otpPrompt(.htmlForm)]
+            case .successTokenInfo, .serverTerminated, .sigtermTeardown: [.passwordPrompt, .otpPrompt]
             case .certRejected, .authFailed: [.passwordPrompt]
             }
         }
 
-        private static let tokenInfoUp: [OpenFortiVPNSignal] = [
-            .connectedToGateway,
-            .authenticated,
-            .addressesAssigned(TunnelAddresses(ip: "10.212.134.200", dnsServers: ["10.0.0.53", "10.0.0.54"], dnsSuffix: "corp.example.com")),
-            .interfaceUp(name: "ppp0"),
-            .routesTouched,
-            .nameserversAdded,
-            .tunnelUp,
-        ]
-
-        private static let teardown: [OpenFortiVPNSignal] = [
-            .interfaceDown(name: "ppp0"),
-            .routesRestored,
-            .nameserversRemoved,
-            .pppdExited(.exitStatus(16)),
-        ]
-
         var expectedStdoutSignals: [OpenFortiVPNSignal] {
             switch self {
-            case .successTokenInfo:
-                Self.tokenInfoUp
-            case .successHTMLForm:
-                [
-                    .connectedToGateway,
-                    .authenticated,
-                    .addressesAssigned(TunnelAddresses(ip: "10.212.134.201", dnsServers: ["10.0.0.53"])),
-                    .interfaceUp(name: "ppp0"),
-                    .routesTouched,
-                    .nameserversAdded,
-                    .tunnelUp,
-                ]
+            case .successTokenInfo, .serverTerminated, .sigtermTeardown:
+                [.connectedToGateway, .authenticated, .tunnelUp]
             case .certRejected:
                 [.certificateRejected(digest: TranscriptReplayTests.digest)]
             case .authFailed:
-                [.connectedToGateway, .authenticationFailed]
-            case .serverTerminated, .sigtermTeardown:
-                Self.tokenInfoUp + Self.teardown
+                [.connectedToGateway]
             }
         }
 
-        var expectedStderrSignals: [OpenFortiVPNSignal] {
+        var expectedTunnelIP: String? {
             switch self {
-            case .serverTerminated, .sigtermTeardown: [.pppdNotice(.modemHangup), .pppdNotice(.connectionTerminated)]
-            default: []
+            case .successTokenInfo, .serverTerminated, .sigtermTeardown: "10.212.134.200"
+            case .certRejected, .authFailed: nil
             }
         }
 
@@ -122,7 +91,7 @@ import Testing
         }
     }
 
-    /// Whether the helper answers a prompt (and pppd finishes a line) before the 250 ms idle flush.
+    /// Whether the helper answers a prompt (and pppd finishes a line) before the idle flush.
     enum Timing: CaseIterable, Sendable {
         case quick
         case slow
@@ -130,23 +99,23 @@ import Testing
 
     struct Replay {
         var promptsPerPause: [[PromptDetector.Prompt]] = []
-        var stdoutLines: [AssembledLine] = []
-        var stderrLines: [AssembledLine] = []
+        var stdoutLines: [String] = []
+        /// stdout text shown while openfortivpn waits for an answer (idle flush at a prompt pause).
+        var stdoutShownAtPauses: [String] = []
+        var stderrLines: [String] = []
         var stdoutSignals: [OpenFortiVPNSignal] = []
-        var stderrSignals: [OpenFortiVPNSignal] = []
         var parser = OpenFortiVPNOutputParser()
 
         var prompts: [PromptDetector.Prompt] { promptsPerPause.flatMap { $0 } }
 
-        mutating func record(_ lines: [AssembledLine], from source: OutputSource) {
+        mutating func record(_ lines: [String], from source: OutputSource) {
             for line in lines {
-                let signals = parser.parse(line.text, source: source)
+                let signal = parser.parse(line, source: source)
                 if source == .stdout {
                     stdoutLines.append(line)
-                    stdoutSignals += signals
+                    if let signal { stdoutSignals.append(signal) }
                 } else {
                     stderrLines.append(line)
-                    stderrSignals += signals
                 }
             }
         }
@@ -244,7 +213,7 @@ import Testing
         into replay: inout Replay
     ) {
         var detector = PromptDetector()
-        var stdoutAssembler = LineAssembler(source: .stdout)
+        var stdoutAssembler = LineAssembler()
         let stdout = transcript.stdout
         var promptsSincePause: [PromptDetector.Prompt] = []
         for range in chunks(length: stdout.count, cuts: cuts.union(transcript.promptPauses)) {
@@ -257,7 +226,9 @@ import Testing
                 replay.promptsPerPause.append(promptsSincePause)
                 promptsSincePause = []
                 now += pauseLength
-                replay.record(stdoutAssembler.flushIfIdle(now: now), from: .stdout)
+                let flushed = stdoutAssembler.flushIfIdle(now: now)
+                replay.stdoutShownAtPauses += flushed
+                replay.record(flushed, from: .stdout)
             }
         }
         replay.promptsPerPause.append(promptsSincePause)
@@ -271,7 +242,7 @@ import Testing
         now: inout ContinuousClock.Instant,
         into replay: inout Replay
     ) {
-        var stderrAssembler = LineAssembler(source: .stderr)
+        var stderrAssembler = LineAssembler()
         let stderr = transcript.stderr
         for range in chunks(length: stderr.count, cuts: cuts.union(transcript.pppdWrites)) {
             now += .milliseconds(1)
@@ -308,18 +279,17 @@ import Testing
             // Each prompt is reported before openfortivpn needs its answer, exactly once.
             #expect(replay.promptsPerPause == scenario.expectedPrompts.map { [$0] } + [[]], "\(timing)")
             #expect(replay.stdoutSignals == scenario.expectedStdoutSignals, "\(timing)")
-            #expect(replay.stderrSignals == scenario.expectedStderrSignals, "\(timing)")
             #expect(replay.parser.rejectedCertificateDigests == scenario.expectedDigests)
+            #expect(replay.parser.tunnelAddresses?.ip == scenario.expectedTunnelIP)
             #expect(replay.parser.routesTouched == scenario.expectedRoutesTouched)
             #expect(replay.parser.routesRestored == scenario.expectedRoutesRestored)
 
-            // Log tab: the original lines, a slow prompt shown as a partial line and its LF swallowed.
-            #expect(replay.stdoutLines.map(\.text) == stdoutLineTexts, "\(timing)")
-            let partialStdout = replay.stdoutLines.filter(\.isPartial).map(\.text)
-            #expect(partialStdout == (timing == .slow ? stdoutLineTexts.filter(Self.isPrompt) : []), "\(timing)")
-            #expect(replay.stderrLines.map(\.text).joined() == stderrLineTexts.joined(), "\(timing)")
+            // Log tab: the original lines, a slow prompt shown while openfortivpn waits and its LF swallowed.
+            #expect(replay.stdoutLines == stdoutLineTexts, "\(timing)")
+            #expect(replay.stdoutShownAtPauses == (timing == .slow ? stdoutLineTexts.filter(Self.isPrompt) : []), "\(timing)")
+            #expect(replay.stderrLines.joined() == stderrLineTexts.joined(), "\(timing)")
             if timing == .quick {
-                #expect(replay.stderrLines == stderrLineTexts.map { AssembledLine(text: $0, isPartial: false) })
+                #expect(replay.stderrLines == stderrLineTexts)
             }
         }
     }
@@ -330,23 +300,17 @@ import Testing
         let transcript = try Self.Transcript(scenario)
         let expectedPrompts = scenario.expectedPrompts
         let expectedStdout = scenario.expectedStdoutSignals
-        let expectedStderr = scenario.expectedStderrSignals
         var failingStdoutOffsets: [Int] = []
-        var failingStderrOffsets: [Int] = []
         for offset in stride(from: shard, through: transcript.stdout.count, by: 4) {
             let replay = Self.replay(transcript, stdoutCuts: [offset], stderrCuts: [], timing: .quick, streams: .stdout)
-            if replay.prompts != expectedPrompts || replay.stdoutSignals != expectedStdout {
+            if replay.prompts != expectedPrompts || replay.stdoutSignals != expectedStdout
+                || replay.parser.tunnelAddresses?.ip != scenario.expectedTunnelIP
+                || replay.parser.routesTouched != scenario.expectedRoutesTouched
+                || replay.parser.routesRestored != scenario.expectedRoutesRestored {
                 failingStdoutOffsets.append(offset)
             }
         }
-        for offset in stride(from: shard, through: transcript.stderr.count, by: 4) {
-            let replay = Self.replay(transcript, stdoutCuts: [], stderrCuts: [offset], timing: .quick, streams: .stderr)
-            if replay.stderrSignals != expectedStderr {
-                failingStderrOffsets.append(offset)
-            }
-        }
         #expect(failingStdoutOffsets.isEmpty)
-        #expect(failingStderrOffsets.isEmpty)
     }
 
     @Test(arguments: Scenario.allCases)
@@ -367,13 +331,12 @@ import Testing
     }
 
     static func isPrompt(_ line: String) -> Bool {
-        line == PromptDetector.passwordPromptText || line == PromptDetector.tokenInfoPromptText
-            || line.hasPrefix(PromptDetector.htmlFormPromptLead)
+        line == PromptDetector.passwordPromptText || line == PromptDetector.otpPromptText
     }
 }
 
 /// Deterministic generator for chunk boundaries.
-private struct SplitMix64: RandomNumberGenerator {
+struct SplitMix64: RandomNumberGenerator {
     private var state: UInt64
 
     init(seed: UInt64) {

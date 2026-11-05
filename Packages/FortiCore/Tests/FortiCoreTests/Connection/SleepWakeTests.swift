@@ -14,11 +14,7 @@ struct WakeCase: Sendable, CustomTestStringConvertible {
     var testDescription: String { name }
 }
 
-private func observe(alive: Bool = true, ppp: Bool = true, underlay: Underlay? = ReducerFixture.wifi, settled: Bool = true) -> WakeObservation {
-    WakeObservation(processAlive: alive, pppUp: ppp, underlay: underlay, pathSatisfied: settled)
-}
-
-@Suite("§6.3 sleep and wake")
+@Suite("Sleep and wake")
 struct SleepWakeTests {
     static let afterSleepOn = ConnectionSettings(reconnectAfterSleepEnabled: true, minSleepMinutes: 30)
 
@@ -143,7 +139,7 @@ struct SleepWakeTests {
         #expect(h.send(.wakeSettled(observe(underlay: ReducerFixture.ethernet))) == [])
     }
 
-    /// The §6.3 rules are for a tunnel that was up across the sleep. A session that came up after the wake
+    /// The wake rules are for a tunnel that was up across the sleep. A session that came up after the wake
     /// (path returned before `wakeSettled`) must survive a stale observation or a long sleep.
     @Test(arguments: [false, true])
     func wakeSettledLeavesASessionEstablishedAfterTheWakeAlone(afterSleepOn: Bool) throws {
@@ -201,7 +197,7 @@ struct SleepWakeTests {
         h.launch()
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         let failedAt = h.now
 
         #expect(h.send(.willSleep) == [.cancelTimer(.retry)])
@@ -239,7 +235,7 @@ struct SleepWakeTests {
     }
 }
 
-@Suite("Network path while connected (§5.5)")
+@Suite("Network path while connected")
 struct PathChangeTests {
     @Test func underlayChangeReconnects() throws {
         var h = ReducerHarness()

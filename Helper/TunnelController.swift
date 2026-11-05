@@ -5,8 +5,8 @@ import FortiHelperCore
 import FortiShared
 import Foundation
 
-/// The helper's single source of truth (DESIGN §5.2 "control"): at most one openfortivpn run (a
-/// `TunnelSupervisor`), the connection that owns it, and whether the helper is on its way out.
+/// The helper's single source of truth: at most one openfortivpn run (a `TunnelSupervisor`), the
+/// connection that owns it, and whether the helper is on its way out.
 ///
 /// All state is confined to `queue`. XPC handlers call in with `queue.sync`. Supervisor callbacks
 /// hop over with `queue.async`, never `sync` (the controller calls into the supervisor
@@ -25,7 +25,7 @@ final class TunnelController: @unchecked Sendable {
         var processes: [ProcessIdentity] = []
     }
 
-    /// How long SIGTERM waits for the run to finish (SIGTERM → SIGKILL takes 10 s of it).
+    /// How long SIGTERM waits for the run to finish; must exceed `WatchdogLimits.terminate`.
     private static let shutdownLimit: DispatchTimeInterval = .seconds(15)
 
     private let queue = DispatchQueue(label: "com.qoor.FortiVPNManager.Helper.controller")
@@ -33,8 +33,6 @@ final class TunnelController: @unchecked Sendable {
 
     private var run: Run?
     private var runSerial: UInt64 = 0
-    /// Output `seq` continues across runs so the app's log stays ordered.
-    private var nextOutputSeq: UInt64 = 1
     /// Owner of the most recent run: its pending callbacks (`.exited`) are flushed before exiting.
     private var lastOwner: ClientLink?
     /// Set once the helper decided to exit; no new run or connection is accepted afterwards.
@@ -87,8 +85,6 @@ final class TunnelController: @unchecked Sendable {
         let binary = BinaryLocator.locate()
         return queue.sync {
             var status = HelperStatus(
-                buildID: HelperBuild.id,
-                activeAttemptID: run?.attemptID,
                 childAlive: run?.supervisor.processID != nil,
                 openfortivpnPath: nil,
                 openfortivpnVersion: nil,
@@ -208,7 +204,6 @@ final class TunnelController: @unchecked Sendable {
                 attemptID: request.attemptID,
                 executable: .openfortivpn(path: binary.path, configPath: configPath),
                 password: request.password,
-                firstOutputSeq: nextOutputSeq,
                 routeRepair: { RouteRepair.repair(gatewayIP: gateway.ip) },
                 onEvent: { [weak self] event in
                     guard let self else { return }
@@ -290,7 +285,6 @@ final class TunnelController: @unchecked Sendable {
     private func finishRun(_ finished: Run, facts: ExitFacts) {
         RunDirectory.remove(finished.configPath)
         RunDirectory.removeRecord()
-        nextOutputSeq = max(nextOutputSeq, facts.lastOutputSeq &+ 1)
         lastOwner = finished.owner
         run = nil
         HelperLog.helper.notice("""
@@ -340,7 +334,7 @@ final class TunnelController: @unchecked Sendable {
         exitAfterFlushing()
     }
 
-    /// Exits once the callbacks already sent to the last run's owner have left (at most 1 s).
+    /// Exits once the callbacks already sent to the last run's owner have left.
     private func exitAfterFlushing() {
         isExiting = true
         guard let lastOwner else { exit(EXIT_SUCCESS) }

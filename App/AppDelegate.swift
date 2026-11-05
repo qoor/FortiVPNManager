@@ -18,9 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await openSettingsIfNeeded() }
     }
 
-    /// The controller stops the tunnel first and replies once it exited (at most 12 s).
+    /// The controller stops the tunnel first and replies once it exited.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        environment.applicationShouldTerminate()
+        environment.connection.applicationShouldTerminate()
     }
 
     /// Opening the app again (Finder, Spotlight) shows the settings window.
@@ -29,8 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    /// First run (DESIGN §5.6): show the imported openfortivpn settings, or open the tab that needs
-    /// attention when the first readiness check finds something missing.
+    /// First run: show the imported openfortivpn settings, or open the tab that needs attention when
+    /// the first readiness check finds something missing.
     private func openSettingsIfNeeded() async {
         if let outcome = environment.firstLaunchImport {
             settings.accountEditor.presentImport(outcome)

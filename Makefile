@@ -35,7 +35,7 @@ release:
 test:
 	swift test --package-path Packages/FortiCore
 
-## Signing sanity checks for the built app (see docs/DESIGN.md §7).
+## Signing sanity checks for the built app.
 verify:
 	@team=$$(scripts/detect-team-id.sh); \
 	set -e; \

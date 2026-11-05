@@ -60,7 +60,6 @@ struct IMAPFramingTests {
             var responses = try parser.feed(Self.transcript[..<offset])
             responses += try parser.feed(Self.transcript[offset...])
             #expect(responses == expected, "split at \(offset)")
-            #expect(parser.bufferedByteCount == 0)
         }
     }
 
@@ -103,23 +102,6 @@ struct IMAPFramingTests {
                 responses += try parser.feed(line[second...])
                 #expect(responses == expected, "splits at \(first), \(second)")
             }
-        }
-    }
-
-    /// Small deterministic PRNG for reproducible chunkings.
-    private struct SplitMix64 {
-        private var state: UInt64
-
-        init(seed: UInt64) {
-            state = seed
-        }
-
-        mutating func next() -> UInt64 {
-            state &+= 0x9E37_79B9_7F4A_7C15
-            var z = state
-            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-            return z ^ (z >> 31)
         }
     }
 }

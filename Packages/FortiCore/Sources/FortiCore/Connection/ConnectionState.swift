@@ -1,7 +1,7 @@
 import Foundation
 import FortiShared
 
-/// Where the connection is right now (§5.4).
+/// Where the connection is right now.
 public enum ConnectionState: Sendable, Equatable {
     case idle
     case needsSetup([SetupItem])
@@ -13,13 +13,13 @@ public enum ConnectionState: Sendable, Equatable {
     case failed(ConnectionFailureReason)
 }
 
-/// Steps of §6.1 before openfortivpn reports milestones.
+/// Steps before openfortivpn reports milestones.
 public enum AttemptStage: Sendable, Equatable {
-    /// §6.1 1-2: waiting for the app's readiness check (config, Keychain, helper status, BuildID).
+    /// Waiting for the app's readiness check (config, Keychain, helper status, BuildID).
     case checkingReadiness
-    /// §6.1 3: Gmail session is logging in and taking its snapshot.
+    /// Gmail session is logging in and taking its snapshot.
     case preparingOTP
-    /// §6.1 4+: `startTunnel` was issued; progress is in `milestone`.
+    /// `startTunnel` was issued; progress is in `milestone`.
     case tunnel
 }
 
@@ -27,8 +27,6 @@ public enum AttemptStage: Sendable, Equatable {
 public struct AttemptContext: Sendable, Equatable {
     public var attemptID: AttemptID
     public var reason: AttemptReason
-    /// First attempt of the certificate-retry chain this attempt belongs to.
-    public var chainID: AttemptID
     /// The chain already used its one immediate retry after a certificate rejection.
     public var certRetryUsed: Bool
     public var startedAt: Date
@@ -44,23 +42,21 @@ public struct AttemptContext: Sendable, Equatable {
     var otpFoundInJunk = false
     /// The network path changed while this attempt was running.
     public var pathChanged = false
-    /// Stop the app requested for this attempt (`otpTimeout` / `attemptTimeout`); the exit is still classified.
+    /// Stop the app requested for this attempt; the exit is still classified.
     public var stopRequested: StopReason?
     /// `vpn.*` when the attempt began: the account its readiness check was issued for and the one
-    /// `startTunnel` uses. A profile change while the attempt runs applies from the next attempt (§5.7).
+    /// `startTunnel` uses. A profile change while the attempt runs applies from the next attempt.
     var profile: VPNProfile?
 
     init(
         attemptID: AttemptID,
         reason: AttemptReason,
-        chainID: AttemptID,
         certRetryUsed: Bool,
         startedAt: Date,
         stage: AttemptStage
     ) {
         self.attemptID = attemptID
         self.reason = reason
-        self.chainID = chainID
         self.certRetryUsed = certRetryUsed
         self.startedAt = startedAt
         self.stage = stage

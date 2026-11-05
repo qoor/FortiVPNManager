@@ -3,10 +3,10 @@ import FortiHelperCore
 import FortiShared
 import SystemConfiguration
 
-/// Reads and replaces the additional IPv4 routes of the primary network service with
-/// `/usr/sbin/networksetup` (DESIGN §5.8). macOS keeps them in the service's settings and installs
-/// them whenever the service is active, so they survive reboots and VPN reconnects. networksetup
-/// runs with a fixed argv; every address in it was checked as dotted-quad IPv4 first.
+/// Reads and replaces the additional IPv4 routes of the primary network service with networksetup.
+/// macOS keeps them in the service's settings and installs them whenever the service is active, so
+/// they survive reboots and VPN reconnects. networksetup runs with a fixed argv; every address in
+/// it was checked as dotted-quad IPv4 first.
 enum BypassRoutes {
     static let networksetupPath = "/usr/sbin/networksetup"
 

@@ -2,37 +2,6 @@ import Foundation
 import Testing
 @testable import FortiConfig
 
-@Suite struct AppConfigCodableTests {
-    @Test func jsonUsesSnakeCaseKeys() throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let json = String(decoding: try encoder.encode(AppConfig()), as: UTF8.self)
-        for key in ["schema_version", "vpn", "host", "port", "username", "realm", "trusted_certs", "otp",
-                    "gmail_address", "method", "google_client_id", "connection", "auto_connect_on_launch", "session_max_minutes",
-                    "proactive_reconnect", "enabled", "margin_minutes", "reconnect_after_sleep", "min_sleep_minutes"] {
-            #expect(json.contains("\"\(key)\""), "missing \(key)")
-        }
-        #expect(!json.contains("trustedCerts"))
-        #expect(!json.contains("googleClientID"))
-        #expect(json.contains("\"method\":\"imap\""))
-    }
-
-    @Test func codableRoundTrip() throws {
-        let data = try JSONEncoder().encode(nonDefaultConfig)
-        #expect(try JSONDecoder().decode(AppConfig.self, from: data) == nonDefaultConfig)
-    }
-
-    @Test func missingKeysDecodeToDefaults() throws {
-        #expect(try JSONDecoder().decode(AppConfig.self, from: Data("{}".utf8)) == AppConfig())
-        let partial = #"{"vpn":{"port":8443},"otp":{"method":"gmail_api"},"connection":{"proactive_reconnect":{"margin_minutes":9}}}"#
-        var expected = AppConfig()
-        expected.vpn.port = 8443
-        expected.otp.method = .gmailAPI
-        expected.connection.proactiveReconnect.marginMinutes = 9
-        #expect(try JSONDecoder().decode(AppConfig.self, from: Data(partial.utf8)) == expected)
-    }
-}
-
 @Suite struct AppConfigValidationTests {
     @Test func validConfigsPass() throws {
         try AppConfig().validate()
@@ -75,7 +44,7 @@ import Testing
         #expect(error?.location == nil)
     }
 
-    /// A config whose rendered file the codec would refuse (over 64 KiB) must not validate.
+    /// A config whose rendered file the codec would refuse must not validate.
     @Test func renderedFileMustFitTheSizeLimit() throws {
         let limit = ConfigLimits.maxFileSize
         let overhead = ConfigCodec.encode(AppConfig()).count  // with an empty realm
@@ -97,33 +66,5 @@ import Testing
         #expect(throws: ConfigLoadError(.fileTooLarge(byteCount: ConfigCodec.encode(korean).count, limit: limit))) {
             try korean.validate()
         }
-    }
-}
-
-@Suite struct TrustedCertPinningTests {
-    private func pin(_ vpn: inout AppConfig.VPN, _ digest: String) -> Bool {
-        vpn.pinTrustedCert(digest)
-    }
-
-    @Test func pinsNewestFirstNormalizedAndCapped() {
-        var vpn = AppConfig.VPN()
-        #expect(pin(&vpn, digestA))
-        #expect(pin(&vpn, digestB.uppercased()))
-        #expect(vpn.trustedCerts == [digestB, digestA])
-        // Re-pinning moves an existing digest to the front without duplicating it.
-        #expect(pin(&vpn, digestA))
-        #expect(vpn.trustedCerts == [digestA, digestB])
-        #expect(pin(&vpn, digestC))
-        #expect(pin(&vpn, digestD))
-        #expect(pin(&vpn, digestE))
-        #expect(vpn.trustedCerts == [digestE, digestD, digestC, digestA])
-        #expect(vpn.trustedCerts.count == ConfigLimits.maxTrustedCerts)
-    }
-
-    @Test("Rejects non-digests", arguments: ["", "xyz", String(repeating: "a", count: 63), digestA + "0", " " + digestA])
-    func rejectsInvalid(candidate: String) {
-        var vpn = AppConfig.VPN(trustedCerts: [digestB])
-        #expect(!pin(&vpn, candidate))
-        #expect(vpn.trustedCerts == [digestB])
     }
 }

@@ -3,7 +3,7 @@ import Testing
 import FortiShared
 @testable import FortiCore
 
-@Suite("§6.1 connect sequence")
+@Suite("Connect sequence")
 struct ConnectSequenceTests {
     @Test func launchRunsTheWholeSequenceInOrder() throws {
         var h = ReducerHarness()
@@ -112,7 +112,7 @@ struct ConnectSequenceTests {
         #expect(h.send(.otpCodeFound(id, code: "654321")) == [])
 
         h.advance(1)
-        let exit = h.exit(ReducerFixture.facts(.otpPrompted, initiator: .helper(.otpTimeout), watchdog: nil))
+        let exit = h.exit(ReducerFixture.facts(.otpPrompted, initiator: .helper(.otpTimeout)))
         let wait = try #require(h.retryWait)
         #expect(wait.reason == .authFailure(.otpNotReceived(inJunk: false)))
         #expect(wait.until == h.now + 90)

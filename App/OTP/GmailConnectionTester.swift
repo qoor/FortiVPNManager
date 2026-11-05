@@ -5,12 +5,10 @@ import FortiShared
 
 /// "Test Gmail Connection" in the Account tab: logs in, resolves `\All`/`\Trash`/`\Junk` and logs out.
 struct GmailConnectionTester: GmailConnectionTesting {
-    var endpoint: IMAPEndpoint = .gmail
-
     private let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: "otp")
 
     func test(account: GmailAccount) async -> GmailTestResult {
-        let transport = IMAPTransport(endpoint: endpoint)
+        let transport = IMAPTransport()
         let result: GmailTestResult
         do {
             try await transport.logIn(account)

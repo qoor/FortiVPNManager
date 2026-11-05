@@ -279,7 +279,7 @@ import Testing
         #expect(error.kind == .marginNotLessThanSession(margin: 30, session: 30))
         #expect(error.location == loc(3, 57))
 
-        // Margin key order does not matter, and the default margin (5) fits the smallest session (10).
+        // Margin key order does not matter, and the default margin fits the smallest session.
         #expect(loadError("connection:\n  proactive_reconnect: { margin_minutes: 45 }\n  session_max_minutes: 30\n")?
             .kind == .marginNotLessThanSession(margin: 45, session: 30))
         #expect(loadError("connection:\n  session_max_minutes: 10\n") == nil)

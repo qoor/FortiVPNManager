@@ -4,31 +4,19 @@ import FortiCore
 import FortiShared
 import Foundation
 
-/// Runs and watches one openfortivpn attempt for the root helper (DESIGN §5.2: input injection,
-/// output handling, watchdog, RouteRepair).
+/// Runs and watches one openfortivpn attempt for the root helper.
 ///
-/// - Spawns the executable with `ProcessRunner` and reports `.spawned`; a spawn failure is
-///   reported as `.exited` with `furthestMilestone == nil` and `.spawnFailed(errno:)`.
-/// - Reads stdout and stderr on one private serial queue. stdout bytes go straight to
-///   `PromptDetector` (prompts have no newline) and, like stderr, through a `LineAssembler` to
-///   `OpenFortiVPNOutputParser`. Each milestone is reported once, in order.
-/// - Writes the password (plus LF) once, for the first password prompt before
-///   `Connected to gateway.`, then zeroes its copy. `submitOTP` writes the code once while
-///   `otpPrompted` and closes stdin.
-/// - Arms one watchdog per phase (`WatchdogLimits`); an expired watchdog stops the run with
-///   `.watchdog`. `stop` sends SIGTERM to openfortivpn only (its children such as `/sbin/route`
-///   must finish restoring routes) and, after `WatchdogLimits.terminate`, SIGKILL to it and its
-///   process group.
-/// - On exit, kills leftovers in the child's process group, waits up to
-///   `SupervisorTiming.pipeDrainLimit` for pipe EOF, flushes the line assemblers, runs
-///   `routeRepair` if routes were changed but not restored, delivers all pending output and only
-///   then reports `.exited(ExitFacts)`.
+/// - stdout bytes go straight to `PromptDetector` because prompts have no newline. Each milestone
+///   is reported once, in order.
+/// - The password is written once, only for a password prompt before `Connected to gateway.`, and
+///   its copy is zeroed.
+/// - SIGTERM goes to openfortivpn only: its children such as `/sbin/route` must finish restoring
+///   routes. Only the later SIGKILL also hits the process group.
+/// - `.exited(ExitFacts)` is reported only after all remaining output and any `routeRepair`.
 ///
-/// Output lines are numbered consecutively from `firstOutputSeq` and delivered in batches (every
-/// `SupervisorTiming.outputBatchInterval`, and before every event). `onEvent`, `onOutput` and
-/// `routeRepair` run on the private queue, never inside a call to a public method, and may call
-/// back into the supervisor. `onEvent`/`onOutput` must not block; `routeRepair` runs once the
-/// child is gone and may take a moment.
+/// `onEvent`, `onOutput` and `routeRepair` run on the private queue, never inside a call to a
+/// public method, and may call back into the supervisor. `onEvent`/`onOutput` must not block;
+/// `routeRepair` runs once the child is gone and may take a moment.
 public final class TunnelSupervisor: @unchecked Sendable {
     public let attemptID: AttemptID
 
@@ -93,18 +81,15 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     private var furthest: Milestone?
     private var certRejectedAt: Milestone?
-    private var authFailLineSeen = false
     private var tunnelModeRejected = false
     private var tunnelUpAt: ContinuousClock.Instant?
     private var stopInitiator = StopInitiator.none
     private var stopRequested = false
     private var watchdogPhase: WatchdogPhase?
-    private var watchdogFired: WatchdogPhase?
 
     private var timers: [TimerKind: ArmedTimer] = [:]
     private var timerGeneration: UInt64 = 0
 
-    private var nextSeq: UInt64
     private var batch: [OutputLine] = []
     private var outbox: [Delivery] = []
     private var deliveryScheduled = false
@@ -112,8 +97,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
     /// - Parameters:
     ///   - password: Validated with `ConfigRenderer.validatePassword`. The supervisor keeps only a
     ///     byte copy that it zeroes after writing; the caller should drop its `String`.
-    ///   - firstOutputSeq: `seq` of the first output line; continue a helper-wide sequence with
-    ///     the previous run's `ExitFacts.lastOutputSeq + 1`.
     ///   - routeRepair: Called on exit when openfortivpn changed routes but did not finish
     ///     restoring them; `.repaired` sets `ExitFacts.routeRepairPerformed`.
     /// - Throws: `.invalidRequest` if the password or `executable.arguments` is unusable.
@@ -124,7 +107,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
         limits: WatchdogLimits = WatchdogLimits(),
         timing: SupervisorTiming = SupervisorTiming(),
         clock: any SupervisorClock = SystemSupervisorClock(),
-        firstOutputSeq: UInt64 = 1,
         routeRepair: (@Sendable () -> RouteRepairOutcome)? = nil,
         onEvent: @escaping @Sendable (HelperEvent) -> Void,
         onOutput: @escaping @Sendable ([OutputLine]) -> Void
@@ -145,15 +127,14 @@ public final class TunnelSupervisor: @unchecked Sendable {
         self.routeRepair = routeRepair
         self.onEvent = onEvent
         self.onOutput = onOutput
-        self.nextSeq = firstOutputSeq
         var line: [UInt8] = []
         // Reserve room for the LF so appending it cannot leave an unzeroed copy behind.
         line.reserveCapacity(password.utf8.count + 1)
         line.append(contentsOf: password.utf8)
         line.append(0x0A)
         self.passwordLine = line
-        self.stdoutLines = LineAssembler(source: .stdout, idleFlush: timing.lineIdleFlush)
-        self.stderrLines = LineAssembler(source: .stderr, idleFlush: timing.lineIdleFlush)
+        self.stdoutLines = LineAssembler(idleFlush: timing.lineIdleFlush)
+        self.stderrLines = LineAssembler(idleFlush: timing.lineIdleFlush)
         self.queue = DispatchQueue(label: "com.qoor.FortiVPNManager.TunnelSupervisor.\(attemptID.uuidString)")
         queue.setSpecific(key: queueKey, value: true)
     }
@@ -164,7 +145,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     // MARK: - Public API
 
-    /// Whether `submitOTP` accepts `code`: 6 to 8 ASCII digits.
+    /// Whether `submitOTP` accepts `code`.
     public static func isValidOTP(_ code: String) -> Bool {
         (6...8).contains(code.utf8.count) && code.utf8.allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }
     }
@@ -183,9 +164,8 @@ public final class TunnelSupervisor: @unchecked Sendable {
     }
 
     /// Writes `code` and LF to openfortivpn's stdin and closes it.
-    /// - Throws: `.invalidRequest` unless `code` is 6-8 ASCII digits; `.wrongPhase` unless
-    ///   openfortivpn is waiting for the OTP (furthest milestone `otpPrompted`, not stopping)
-    ///   and no OTP was submitted yet.
+    /// - Throws: `.invalidRequest` unless `isValidOTP(code)`; `.wrongPhase` unless openfortivpn
+    ///   is waiting for the OTP and no OTP was submitted yet.
     public func submitOTP(_ code: String) throws(HelperError) {
         guard Self.isValidOTP(code) else {
             throw HelperError(.invalidRequest, "OTP must be 6 to 8 ASCII digits")
@@ -205,16 +185,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
     /// pid of the child while it is running (not yet reaped).
     public var processID: pid_t? {
         perform { state == .running ? pid : nil }
-    }
-
-    /// True once `.exited` has been queued for delivery.
-    public var isFinished: Bool {
-        perform { state == .finished }
-    }
-
-    /// The furthest milestone reached so far (`nil` before the spawn).
-    public var furthestMilestone: Milestone? {
-        perform { furthest }
     }
 
     // MARK: - Queue confinement
@@ -268,8 +238,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
             emit(.exited(ExitFacts(
                 furthestMilestone: nil,
                 stopInitiator: .none,
-                exitStatus: error.exitStatus,
-                lastOutputSeq: nextSeq &- 1
+                exitStatus: error.exitStatus
             )))
             return
         }
@@ -336,10 +305,10 @@ public final class TunnelSupervisor: @unchecked Sendable {
         armLineFlush()
     }
 
-    private func handle(_ lines: [AssembledLine], from source: OutputSource) {
+    private func handle(_ lines: [String], from source: OutputSource) {
         for line in lines {
-            appendOutput(line.text, source: source, isPartial: line.isPartial)
-            for signal in parser.parse(line.text, source: source) {
+            appendOutput(line, source: source)
+            if let signal = parser.parse(line, source: source) {
                 handle(signal)
             }
         }
@@ -353,26 +322,21 @@ public final class TunnelSupervisor: @unchecked Sendable {
             advance(to: .authenticated)
         case .tunnelUp:
             advance(to: .tunnelUp)
-        case .authenticationFailed:
-            authFailLineSeen = true
         case .tunnelModeRejected:
             tunnelModeRejected = true
         case .certificateRejected:
             certRejectedAt = certRejectedAt ?? furthest
-        default:
-            break
         }
     }
 
-    private func appendOutput(_ text: String, source: OutputSource, isPartial: Bool = false) {
-        batch.append(OutputLine(seq: nextSeq, date: clock.date, attemptID: attemptID, source: source, text: text, isPartial: isPartial))
-        nextSeq &+= 1
+    private func appendOutput(_ text: String, source: OutputSource) {
+        batch.append(OutputLine(date: clock.date, source: source, text: text))
         if timers[.outputBatch] == nil {
             arm(.outputBatch, at: clock.now + timing.outputBatchInterval)
         }
     }
 
-    /// A helper meta line (DESIGN §5.2: attempt start, input written, signals, exit).
+    /// A helper meta line.
     private func meta(_ text: String) {
         appendOutput(text, source: .helper)
     }
@@ -386,7 +350,7 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     private func emit(_ kind: HelperEvent.Kind) {
         flushBatch()
-        outbox.append(.event(HelperEvent(attemptID: attemptID, date: clock.date, kind: kind)))
+        outbox.append(.event(HelperEvent(attemptID: attemptID, kind: kind)))
     }
 
     private func armLineFlush() {
@@ -516,7 +480,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     private func watchdogExpired() {
         guard state == .running, !stopRequested, let phase = watchdogPhase else { return }
-        watchdogFired = phase
         let limit = limits.watchdog(after: furthest ?? .spawned)?.limit ?? .zero
         meta("‹watchdog: \(phase.rawValue) did not finish within \(Self.format(limit))›")
         requestStop(.watchdog)
@@ -535,7 +498,6 @@ public final class TunnelSupervisor: @unchecked Sendable {
 
     private func killExpired() {
         guard state == .running else { return }
-        watchdogFired = watchdogFired ?? .terminate
         meta("‹sent SIGKILL: still running \(Self.format(limits.terminate)) after SIGTERM›")
         // openfortivpn first, so its status is SIGKILL even if it would otherwise react to a
         // group member dying first; then whatever else is in its group (e.g. /sbin/route).
@@ -615,15 +577,12 @@ public final class TunnelSupervisor: @unchecked Sendable {
         emit(.exited(ExitFacts(
             furthestMilestone: furthest,
             stopInitiator: stopInitiator,
-            watchdogFired: watchdogFired,
             certRejectedDigests: parser.rejectedCertificateDigests,
             certRejectedAt: certRejectedAt,
-            authFailLineSeen: authFailLineSeen,
             tunnelModeRejected: tunnelModeRejected,
             upDuration: tunnelUpAt.map { (exitedAt - $0).timeInterval },
             exitStatus: exitStatus,
-            routeRepairPerformed: routeRepairPerformed,
-            lastOutputSeq: nextSeq &- 1
+            routeRepairPerformed: routeRepairPerformed
         )))
     }
 

@@ -2,7 +2,7 @@ import Foundation
 import FortiShared
 
 /// Deterministic source of attempt IDs so the reducer stays pure. The app seeds it with a random UUID
-/// once per launch; tests use a fixed seed. IDs are `seed` with the low 64 bits XOR-ed by a counter.
+/// once per launch; tests use a fixed seed.
 public struct AttemptIDGenerator: Sendable, Equatable {
     public let seed: UUID
     public private(set) var issued: UInt64 = 0

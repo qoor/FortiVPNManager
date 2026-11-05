@@ -1,7 +1,8 @@
 import Foundation
 
-/// Identifiers frozen at the first SMAppService registration. Changing them later trips launchd
-/// launch constraints, so treat every value here as permanent.
+/// Identifiers frozen at the first SMAppService registration. The registration, its approval in
+/// System Settings and the XPC code-signing requirements are tied to them, so treat every value
+/// here as permanent.
 public enum FortiIdentifiers {
     public static let appBundleID = "com.qoor.FortiVPNManager"
     public static let helperBundleID = "com.qoor.FortiVPNManager.Helper"
@@ -22,6 +23,6 @@ public struct BuildID: Codable, Hashable, Sendable, CustomStringConvertible {
     public var description: String { value }
 }
 
-/// One connection attempt. Every helper event and output line carries the attempt it belongs to,
+/// One connection attempt. Every helper event carries the attempt it belongs to,
 /// so late messages from an aborted attempt can be ignored.
 public typealias AttemptID = UUID

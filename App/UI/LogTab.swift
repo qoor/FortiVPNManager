@@ -2,7 +2,7 @@ import AppKit
 import FortiShared
 import SwiftUI
 
-/// Tab 3, Log (DESIGN §5.6): raw openfortivpn / pppd output and the helper's meta lines.
+/// The Log tab: raw openfortivpn / pppd output and the helper's meta lines.
 struct LogTab: View {
     let logStore: LogStore
 

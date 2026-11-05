@@ -3,7 +3,7 @@ import FortiShared
 import Foundation
 import Testing
 
-/// stdin injection rules (DESIGN §5.2, input injection).
+/// stdin injection rules.
 @Suite struct TunnelSupervisorInputTests {
     @Test(arguments: ["123456", "1234567", "12345678", "000000"])
     func validOTPs(code: String) {
@@ -55,7 +55,7 @@ import Testing
         try harness.supervisor.start()
         #expect(await harness.recorder.wait { $0.reached(.otpPrompted) })
         try harness.supervisor.submitOTP(testOTP)
-        #expect(harness.supervisor.furthestMilestone == .otpSubmitted)
+        #expect(await harness.recorder.wait { $0.reached(.otpSubmitted) })
         #expect(throws: HelperError(.wrongPhase, "an OTP was already submitted for this attempt")) {
             try harness.supervisor.submitOTP("654321")
         }
@@ -86,7 +86,6 @@ import Testing
         #expect(facts.stopInitiator == .helper(.otpTimeout))
     }
 
-    /// The password goes to the first prompt before "Connected to gateway." only.
     @Test func passwordIsWrittenOnceAndOnlyBeforeTheGateway() async throws {
         let script = """
         printf 'VPN account password: '
@@ -125,7 +124,6 @@ import Testing
         let facts = try #require(await harness.recorder.waitForExit())
         #expect(!harness.recorder.texts.contains("‹password sent›"))
         #expect(facts.stopInitiator == .helper(.appQuit))
-        #expect(facts.watchdogFired == .terminate)
         #expect(facts.exitStatus == .signaled(signal: SIGKILL))
     }
 
@@ -164,7 +162,6 @@ import Testing
         harness.supervisor.stop(reason: .userDisconnect)
         try await Task.sleep(for: .milliseconds(30))
         #expect(harness.recorder.delivered.isEmpty)
-        #expect(!harness.supervisor.isFinished)
         #expect(harness.supervisor.processID == nil)
     }
 

@@ -14,20 +14,20 @@ nonisolated struct FileIOError: LocalizedError, Equatable {
 
 /// Small POSIX file helpers for the app's own files (state.json, logs, imported configs).
 nonisolated enum FileIO {
-    /// `mkdir -p` that creates missing directories with `mode` and tightens the last one to `mode`.
-    static func makeDirectory(_ url: URL, mode: mode_t = 0o700) throws(FileIOError) {
+    /// `mkdir -p` that creates missing directories with 0700 and tightens the last one to 0700.
+    static func makeDirectory(_ url: URL) throws(FileIOError) {
         do {
             try FileManager.default.createDirectory(
-                at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: NSNumber(value: mode)]
+                at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: NSNumber(value: 0o700)]
             )
         } catch {
             throw FileIOError(operation: "mkdir", path: url.path, code: (error as NSError).posixCode ?? EIO)
         }
-        guard chmod(url.path, mode) == 0 else { throw FileIOError(operation: "chmod", path: url.path, code: errno) }
+        guard chmod(url.path, 0o700) == 0 else { throw FileIOError(operation: "chmod", path: url.path, code: errno) }
     }
 
-    /// Atomically replaces `url` with `data`: `mkstemp` in the same directory (0600) → write → fsync → rename.
-    static func writeAtomically(_ data: Data, to url: URL, mode: mode_t = 0o600) throws(FileIOError) {
+    /// Atomically replaces `url` with `data`; the new file has mode 0600.
+    static func writeAtomically(_ data: Data, to url: URL) throws(FileIOError) {
         let directory = url.deletingLastPathComponent().path
         var template = Array("\(directory)/.\(url.lastPathComponent).XXXXXX".utf8CString)
         let fd = template.withUnsafeMutableBufferPointer { buffer in
@@ -40,7 +40,7 @@ nonisolated enum FileIO {
             close(fd)
             if !renamed { unlink(tempPath) }
         }
-        guard fchmod(fd, mode) == 0 else { throw FileIOError(operation: "fchmod", path: tempPath, code: errno) }
+        guard fchmod(fd, 0o600) == 0 else { throw FileIOError(operation: "fchmod", path: tempPath, code: errno) }
         try writeAll(data, to: fd, path: tempPath)
         guard fsync(fd) == 0 else { throw FileIOError(operation: "fsync", path: tempPath, code: errno) }
         guard rename(tempPath, url.path) == 0 else { throw FileIOError(operation: "rename", path: url.path, code: errno) }

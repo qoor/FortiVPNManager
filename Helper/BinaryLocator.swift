@@ -14,9 +14,8 @@ struct OpenFortiVPNBinary: Sendable, Equatable {
     }
 }
 
-/// Finds Homebrew's openfortivpn and applies the basic checks of DESIGN §5.2 "BinaryLocator":
-/// `/opt/homebrew/bin/openfortivpn` must resolve to a regular, executable file under
-/// `/opt/homebrew/Cellar/openfortivpn/` that neither its group nor other users can modify.
+/// Finds Homebrew's openfortivpn: the link must resolve to a regular, executable file under the
+/// Cellar that neither its group nor other users can modify.
 enum BinaryLocator {
     static let homebrewPath = "/opt/homebrew/bin/openfortivpn"
     static let cellarPrefix = "/opt/homebrew/Cellar/openfortivpn/"

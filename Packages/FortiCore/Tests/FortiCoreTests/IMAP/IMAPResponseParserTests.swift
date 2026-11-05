@@ -118,7 +118,7 @@ struct IMAPResponseParserTests {
         #expect(entries.count == 9)
         #expect(entries[2] == IMAPListEntry(attributes: ["\\HasNoChildren", "\\All"], delimiter: "/", name: "[Gmail]/&yATMtLz0rQDVaA-"))
         #expect(entries[2].displayName == "[Gmail]/\u{C804}\u{CCB4}\u{BCF4}\u{AD00}\u{D568}")
-        #expect(entries[2].specialUses == [.all])
+        #expect(entries[2].hasAttribute("\\All"))
         #expect(entries[1].isSelectable == false)
         #expect(entries[8].displayName == "Tom & Jerry")
 
@@ -155,7 +155,7 @@ struct IMAPResponseParserTests {
         ])
         // Attribute matching is case-insensitive.
         guard case .list(let lower) = responses[5] else { return }
-        #expect(lower.specialUses == [.all])
+        #expect(lower.hasAttribute("\\All"))
         // The quoted name re-serializes with the same escapes.
         guard case .list(let quoted) = responses[3] else { return }
         #expect(String(decoding: try IMAPCommand.select(mailbox: quoted.name).encoded(tag: "A9"), as: UTF8.self)
@@ -340,11 +340,8 @@ struct IMAPResponseParserTests {
     @Test func partialInputStaysBuffered() throws {
         var parser = IMAPResponseParser()
         #expect(try parser.feed(Data("* 5 EXI".utf8)).isEmpty)
-        #expect(parser.bufferedByteCount == 7)
         #expect(try parser.feed(Data("STS\r\n* 6".utf8)) == [.exists(5)])
-        #expect(parser.bufferedByteCount == 3)
         #expect(try parser.feed(Data(" EXISTS\r\n".utf8)) == [.exists(6)])
-        #expect(parser.bufferedByteCount == 0)
         #expect(try parser.feed(Data()).isEmpty)
     }
 

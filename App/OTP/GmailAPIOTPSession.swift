@@ -5,11 +5,9 @@ import FortiShared
 
 /// `OTPSessionService` over the Gmail REST API: one polling loop per connection attempt.
 ///
-/// `start` takes an access token, checks `users.getProfile` (address and history ID snapshot) and
-/// reports `.ready`; no sweep is needed because only messages added after the snapshot are looked at.
-/// `beginSearch` polls `history.list` at once and then every 500 ms, fetching metadata only for new
-/// message IDs, until a code matches or the attempt ends. `start` hands a previous attempt a quiet
-/// close; every other call is ignored unless it names the current attempt.
+/// No stale-code sweep is needed because only messages added after the `users.getProfile` history ID
+/// snapshot are looked at. `start` hands a previous attempt a quiet close; every other call is
+/// ignored unless it names the current attempt.
 final class GmailAPIOTPSession: OTPSessionService {
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)?
 
@@ -55,8 +53,7 @@ final class GmailAPIOTPSession: OTPSessionService {
     }
 }
 
-/// One attempt: profile snapshot → `.ready` → (after `beginSearch`) poll until a code matches →
-/// wait for `end` to trash the used messages (finish) or to stop, optionally checking Spam (close).
+/// One attempt's polling loop.
 ///
 /// Events: `.ready`, `.codeFound` and `.failed` only before `end`; `.failed` never after `.codeFound`;
 /// `.foundInJunk` only from the close-time spam check.
@@ -109,7 +106,7 @@ private final class GmailAPIOTPAttempt {
     /// Consecutive failed polls tolerated before the attempt fails as a network problem.
     static let maxConsecutivePollFailures = 3
     static let rateLimitBackoff: Duration = .seconds(2)
-    /// History pages read per poll (100 records each); more would mean a very busy mailbox.
+    /// History pages read per poll; more would mean a very busy mailbox.
     static let maxHistoryPages = 10
     /// Search used when the history snapshot is unusable (`history.list` 404).
     static let fallbackQuery = "subject:AuthCode newer_than:1d"
@@ -239,8 +236,6 @@ private final class GmailAPIOTPAttempt {
         }
     }
 
-    /// One look for new messages: history since the cursor (or the search fallback), metadata for
-    /// new IDs, then the matcher over everything fetched so far.
     private func poll(promptedAt: Date) async throws(SessionError) {
         let refs: [GmailMessageRef]
         if cursor != nil {
@@ -364,7 +359,6 @@ private final class GmailAPIOTPAttempt {
         )))
     }
 
-    /// e.g. "‹OTP mail (Gmail API): in Gmail 4.2s after the prompt · detected 0.4s after arrival (9 polls)›".
     /// Both spans are clamped at zero (clocks differ slightly); `internalDate` has millisecond resolution.
     static func timingNote(promptedAt: Date, arrivedAt: Date, foundAt: Date, polls: Int) -> String {
         let delivery = seconds(arrivedAt.timeIntervalSince(promptedAt))

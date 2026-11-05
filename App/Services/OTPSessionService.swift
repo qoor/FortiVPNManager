@@ -10,7 +10,7 @@ struct GmailAccount: Sendable, Equatable {
     var appPassword: String
 }
 
-/// Reports from an OTP session, mapped 1:1 to `ConnectionEvent`s by the ConnectionController.
+/// Reports from an OTP session, mapped to `ConnectionEvent`s by the ConnectionController.
 enum OTPSessionEvent: Sendable, Equatable {
     /// Signed in and snapshot taken (IMAP also swept stale AuthCode mail), waiting (→ `.otpSessionReady`).
     case ready(AttemptID)
@@ -31,7 +31,7 @@ enum OTPSessionEvent: Sendable, Equatable {
     }
 }
 
-/// One Gmail session per connection attempt (DESIGN.md §5.3): IMAP (`GmailOTPSession`), the Gmail
+/// One Gmail session per connection attempt: IMAP (`GmailOTPSession`), the Gmail
 /// REST API (`GmailAPIOTPSession`), or `OTPSessionRouter` choosing between them per attempt.
 /// All methods are idempotent and ignore attempt IDs other than the current session's.
 @MainActor
@@ -40,13 +40,10 @@ protocol OTPSessionService: AnyObject {
     var onEvent: (@MainActor (OTPSessionEvent) -> Void)? { get set }
 
     /// Effect `.startOTPSession`: closes any previous session, then signs in and snapshots the mailbox.
-    /// IMAP: logs in, finds `\All`/`\Trash`/`\Junk`, SELECTs `\All`, snapshots UIDVALIDITY/UIDNEXT,
-    /// trashes stale AuthCode mail and enters IDLE. Gmail API: access token, `users.getProfile`
-    /// (address check) and its history ID.
     func start(attemptID: AttemptID, account: GmailAccount)
 
-    /// Effect `.beginOTPSearch`: start matching mail received at or after `promptedAt − 5 s` (IMAP: IDLE
-    /// plus a periodic UID SEARCH; Gmail API: `history.list` every 500 ms) and report `.codeFound` once.
+    /// Effect `.beginOTPSearch`: start matching mail received at or after `promptedAt` minus
+    /// `OTPMatcher.arrivalTolerance` and report `.codeFound` once.
     func beginSearch(attemptID: AttemptID, promptedAt: Date)
 
     /// Effect `.submitOTP` (after the code was handed to the helper): move every candidate message
@@ -77,7 +74,7 @@ protocol GmailConnectionTesting {
 enum GmailAPITestResult: Sendable, Equatable {
     /// The stored Google authorization works and belongs to the Gmail address.
     case success(address: String)
-    /// No OAuth client imported, or not signed in with Google for this address.
+    /// No OAuth client, or not signed in with Google for this address.
     case notAuthorized(String)
     /// Google refused the authorization (revoked, client rejected, other account, Gmail API refused).
     case authenticationFailed(String)

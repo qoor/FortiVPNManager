@@ -3,7 +3,7 @@ import Foundation
 import os
 import UserNotifications
 
-/// macOS notifications for problems the user should see while Settings is closed (DESIGN §5.6).
+/// macOS notifications for problems the user should see while Settings is closed.
 /// Permission is asked the first time something is posted; clicking a notification calls `onOpen`.
 final class UserNotifier: NSObject, UNUserNotificationCenterDelegate {
     /// Called on the main actor when the user clicks one of the app's notifications.

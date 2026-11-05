@@ -1,6 +1,6 @@
 import FortiShared
 
-/// How the primary network service's additional routes follow the exception rules (DESIGN §5.8).
+/// How the primary network service's additional routes follow the exception rules.
 /// Pure: the app reads the routes through the helper, plans, then writes the config and the routes.
 ///
 /// The rules apply only while this Mac's address is inside one of `networks`; elsewhere everything

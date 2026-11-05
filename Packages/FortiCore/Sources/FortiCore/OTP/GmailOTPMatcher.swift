@@ -19,8 +19,8 @@ public struct GmailOTPSelection: Sendable, Hashable {
     }
 }
 
-/// OTP matching over Gmail API message metadata (DESIGN.md §5.3 rules, same subject pattern and
-/// date window as the IMAP path).
+/// OTP matching over Gmail API message metadata, with the same subject pattern and date window as
+/// the IMAP path.
 extension OTPMatcher {
     /// Messages with these labels never count: IMAP's `\All` excludes Spam and Trash as well, and a
     /// draft is not a delivered OTP. Spam is only looked at by the junk check.
@@ -63,7 +63,7 @@ extension OTPMatcher {
     }
 
     /// Whether any message carries a code and arrived inside the window, regardless of labels — used
-    /// for the one-off spam check after the 50 s deadline.
+    /// for the one-off spam check after the OTP deadline.
     public static func containsFreshAuthCode(otpPromptedAt: Date, messages: [GmailMessageMetadata]) -> Bool {
         let earliest = otpPromptedAt.addingTimeInterval(-arrivalTolerance)
         return messages.contains { message in

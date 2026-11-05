@@ -20,11 +20,10 @@ struct ClassifierCase: Sendable, CustomTestStringConvertible {
 private typealias Input = ExitClassifier.Input
 private let digest = ReducerFixture.digestA
 
-/// §6.2, evaluated top to bottom.
-@Suite("§6.2 exit classification")
+@Suite("Exit classification")
 struct ExitClassifierTests {
     static let cases: [ClassifierCase] = [
-        // Row 1: certificate rejection before otpSubmitted.
+        // Certificate rejection before otpSubmitted.
         ClassifierCase("cert rejected during TLS, first in chain",
                        Input(facts: certFacts(.spawned, [digest], .spawned)), .certificateRetry),
         ClassifierCase("cert rejected, duplicate digests, first in chain",
@@ -41,7 +40,7 @@ struct ExitClassifierTests {
         ClassifierCase("cert rejected at otpPrompted is still before submission",
                        Input(facts: certFacts(.otpPrompted, [digest], .otpPrompted)), .certificateRetry),
 
-        // Row 2: stable tunnel ended by the server.
+        // Stable tunnel ended by the server.
         ClassifierCase("tunnel up 3h, nobody stopped it",
                        Input(facts: ReducerFixture.facts(.tunnelUp, up: 10_800)), .serverSessionEnded),
         ClassifierCase("tunnel up exactly 120 s",
@@ -53,25 +52,23 @@ struct ExitClassifierTests {
         ClassifierCase("stable tunnel stopped by the helper itself",
                        Input(facts: ReducerFixture.facts(.tunnelUp, initiator: .helper(.helperShutdown), up: 5_000)), .networkError),
 
-        // Row 4: never reached the gateway.
+        // Never reached the gateway.
         ClassifierCase("spawn failed", Input(facts: ReducerFixture.facts(nil)), .networkError),
         ClassifierCase("spawned only", Input(facts: ReducerFixture.facts(.spawned)), .networkError),
         ClassifierCase("spawn-to-gateway watchdog",
-                       Input(facts: ReducerFixture.facts(.spawned, initiator: .helper(.watchdog), watchdog: .spawnToGateway)), .networkError),
+                       Input(facts: ReducerFixture.facts(.spawned, initiator: .helper(.watchdog))), .networkError),
         ClassifierCase("whole-attempt deadline before gateway",
                        Input(facts: ReducerFixture.facts(.spawned, initiator: .helper(.attemptTimeout)), appStop: .attemptTimeout), .networkError),
 
-        // Row 5: gateway reached, no OTP prompt.
+        // Gateway reached, no OTP prompt.
         ClassifierCase("rejected at the gateway",
-                       Input(facts: ReducerFixture.facts(.connectedToGateway, authFail: true)), .authFailure(.authenticationRejected)),
-        ClassifierCase("rejected at the gateway, no auth line",
                        Input(facts: ReducerFixture.facts(.connectedToGateway)), .authFailure(.authenticationRejected)),
         ClassifierCase("gateway failure while the path changed",
-                       Input(facts: ReducerFixture.facts(.connectedToGateway, authFail: true), pathChangedDuringAttempt: true), .networkError),
+                       Input(facts: ReducerFixture.facts(.connectedToGateway), pathChangedDuringAttempt: true), .networkError),
         ClassifierCase("gateway failure right after wake",
                        Input(facts: ReducerFixture.facts(.connectedToGateway), withinWakeGrace: true), .networkError),
 
-        // Row 6: counted failures after the prompt.
+        // Counted failures after the prompt.
         ClassifierCase("OTP deadline",
                        Input(facts: ReducerFixture.facts(.otpPrompted, initiator: .helper(.otpTimeout)), appStop: .otpTimeout),
                        .authFailure(.otpNotReceived(inJunk: false))),
@@ -84,14 +81,14 @@ struct ExitClassifierTests {
                        Input(facts: ReducerFixture.facts(.otpPrompted), pathChangedDuringAttempt: true, withinWakeGrace: true),
                        .authFailure(.otpNotReceived(inJunk: false))),
         ClassifierCase("OTP rejected",
-                       Input(facts: ReducerFixture.facts(.otpSubmitted, authFail: true)), .authFailure(.otpRejected)),
+                       Input(facts: ReducerFixture.facts(.otpSubmitted)), .authFailure(.otpRejected)),
         ClassifierCase("submit-to-auth watchdog",
-                       Input(facts: ReducerFixture.facts(.otpSubmitted, initiator: .helper(.watchdog), watchdog: .otpSubmitToAuth)),
+                       Input(facts: ReducerFixture.facts(.otpSubmitted, initiator: .helper(.watchdog))),
                        .authFailure(.otpRejected)),
         ClassifierCase("reducer saw otpSubmitted, facts lag",
                        Input(facts: ReducerFixture.facts(.spawned), knownMilestone: .otpSubmitted), .authFailure(.otpRejected)),
         ClassifierCase("authenticated but no tunnel",
-                       Input(facts: ReducerFixture.facts(.authenticated, initiator: .helper(.watchdog), watchdog: .authToTunnel)),
+                       Input(facts: ReducerFixture.facts(.authenticated, initiator: .helper(.watchdog))),
                        .authFailure(.tunnelSetupFailed)),
         ClassifierCase("tunnel dropped after 30 s",
                        Input(facts: ReducerFixture.facts(.tunnelUp, up: 30)), .authFailure(.sessionDroppedEarly)),

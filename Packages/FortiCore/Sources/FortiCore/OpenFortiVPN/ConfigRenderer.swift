@@ -126,7 +126,7 @@ public enum ConfigRenderer {
         guard request.trustedCerts.count <= maxTrustedCerts else {
             throw ValidationError(field: .trustedCert, problem: .tooManyDigests(max: maxTrustedCerts))
         }
-        for (index, digest) in request.trustedCerts.enumerated() where !OpenFortiVPNConfigSyntax.isDigest(digest) {
+        for (index, digest) in request.trustedCerts.enumerated() where !TrustedCertPins.isValidDigest(digest) {
             throw ValidationError(field: .trustedCert, problem: .invalidDigest(index: index))
         }
 
@@ -134,7 +134,7 @@ public enum ConfigRenderer {
     }
 
     /// Checks a password before it is written (followed by '\n') to openfortivpn's stdin:
-    /// non-empty, no CR/LF/NUL, fewer than 256 UTF-8 bytes. Leading/trailing spaces are allowed.
+    /// non-empty, no CR/LF/NUL, at most `maxPasswordBytes` UTF-8 bytes. Leading/trailing spaces are allowed.
     public static func validatePassword(_ password: String) throws(ValidationError) {
         guard !password.isEmpty else { throw ValidationError(field: .password, problem: .empty) }
         // LF ends read_password() early, CR would become part of the password (pipe, no tty
@@ -149,20 +149,20 @@ public enum ConfigRenderer {
 
     // MARK: - Field rules
 
-    /// The `host` rules of `validate`: non-empty, at most 253 bytes, no forbidden characters or
+    /// The `host` rules of `validate`: non-empty, at most `maxHostBytes`, no forbidden characters or
     /// surrounding whitespace, and an LDH hostname or dotted-quad IPv4 address (no scheme, port or path).
     public static func validateHost(_ host: String) throws(ValidationError) {
         try validateText(host, field: .host, maxBytes: maxHostBytes)
         guard isValidHost(host) else { throw ValidationError(field: .host, problem: .invalidHost) }
     }
 
-    /// The `username` rules of `validate`: non-empty, at most 64 bytes, no forbidden characters or
+    /// The `username` rules of `validate`: non-empty, at most `maxUsernameBytes`, no forbidden characters or
     /// surrounding whitespace.
     public static func validateUsername(_ username: String) throws(ValidationError) {
         try validateText(username, field: .username, maxBytes: maxUsernameBytes)
     }
 
-    /// The `realm` rules of `validate`: `nil` or empty means no realm; otherwise at most 63 bytes, no
+    /// The `realm` rules of `validate`: `nil` or empty means no realm; otherwise at most `maxRealmBytes`, no
     /// forbidden characters or surrounding whitespace.
     public static func validateRealm(_ realm: String?) throws(ValidationError) {
         guard let realm, !realm.isEmpty else { return }

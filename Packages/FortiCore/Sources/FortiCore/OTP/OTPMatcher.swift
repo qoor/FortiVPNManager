@@ -53,10 +53,10 @@ public struct OTPSelection: Sendable, Hashable {
     }
 }
 
-/// Picks the FortiGate email OTP from fetched headers (DESIGN.md §5.3). Pure; time is injected.
+/// Picks the FortiGate email OTP from fetched headers. Pure; time is injected.
 public enum OTPMatcher {
     /// Subject marker. Equivalent to `AuthCode:\s*(\d{6,8})` with ASCII digits and no further digit
-    /// after the code. To be confirmed against real mails from Phase 0b.
+    /// after the code.
     public static let subjectMarker = "AuthCode:"
     public static let codeLengths = 6...8
     /// A message counts if `INTERNALDATE >= otpPromptedAt - arrivalTolerance`
@@ -125,7 +125,7 @@ public enum OTPMatcher {
     }
 
     /// Whether any message carries a code and arrived inside the window — used for the one-off
-    /// `\Junk` check after the 50 s deadline, to explain the failure.
+    /// `\Junk` check after the OTP deadline, to explain the failure.
     public static func containsFreshAuthCode(otpPromptedAt: Date, messages: [FetchedHeaderMessage]) -> Bool {
         let earliest = otpPromptedAt.addingTimeInterval(-arrivalTolerance)
         return messages.contains { message in

@@ -46,7 +46,7 @@ public struct ImportedOpenFortiVPNConfig: Equatable, Sendable {
         self.invalidLines = invalidLines
     }
 
-    /// The port openfortivpn would connect to: `port`, or 443 when the file has none.
+    /// The port openfortivpn would connect to: `port`, or `defaultPort` when the file has none.
     public var effectivePort: Int { port ?? Self.defaultPort }
 }
 
@@ -67,8 +67,7 @@ extension ImportedOpenFortiVPNConfig: CustomStringConvertible, CustomDebugString
 /// reads every known key to the end of the file instead of stopping at the first unknown key, and it
 /// also treats indented `#` lines as comments.
 public enum OpenFortiVPNConfigReader {
-    /// Files to try, in order: `~/.config/openfortivpn/config`, then Homebrew's
-    /// `/opt/homebrew/etc/openfortivpn/openfortivpn/config`.
+    /// Files to try, in order: the user's config, then Homebrew's.
     public static func defaultCandidatePaths(home: URL) -> [URL] {
         [
             home.appending(path: ".config/openfortivpn/config", directoryHint: .notDirectory),
@@ -150,7 +149,7 @@ public enum OpenFortiVPNConfigReader {
                 // openfortivpn compares against lowercase hex, so uppercase digests never matched
                 // there; normalizing makes them useful (same rule as config.yaml `trusted_certs`).
                 let digest = value.lowercased()
-                if Syntax.isDigest(digest) {
+                if TrustedCertPins.isValidDigest(digest) {
                     appendIfAbsent(digest, to: &result.trustedCerts)
                 } else {
                     result.invalidLines.append(lineNumber)
@@ -276,13 +275,6 @@ enum OpenFortiVPNConfigSyntax {
         case UInt8(ascii: "a")...UInt8(ascii: "z"): Int(byte - UInt8(ascii: "a")) + 10
         case UInt8(ascii: "A")...UInt8(ascii: "Z"): Int(byte - UInt8(ascii: "A")) + 10
         default: nil
-        }
-    }
-
-    /// `^[0-9a-f]{64}$`: the lowercase hex SHA-256 that tunnel.c compares with `memcmp`.
-    static func isDigest(_ string: String) -> Bool {
-        string.utf8.count == 64 && string.utf8.allSatisfy {
-            (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains($0)
         }
     }
 }

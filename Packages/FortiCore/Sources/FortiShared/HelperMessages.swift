@@ -68,16 +68,6 @@ public enum StopInitiator: Codable, Sendable, Equatable {
     case helper(StopReason)
 }
 
-/// Phase whose watchdog fired.
-public enum WatchdogPhase: String, Codable, Sendable {
-    case spawnToGateway
-    case gatewayToPromptOrAuth
-    case otpPromptToSubmit
-    case otpSubmitToAuth
-    case authToTunnel
-    case terminate
-}
-
 public enum ProcessExitStatus: Codable, Sendable, Equatable {
     case exited(code: Int32)
     case signaled(signal: Int32)
@@ -92,12 +82,10 @@ public struct ExitFacts: Codable, Sendable, Equatable {
     /// `nil` when the process could not be spawned at all.
     public var furthestMilestone: Milestone?
     public var stopInitiator: StopInitiator
-    public var watchdogFired: WatchdogPhase?
     /// Digests printed by openfortivpn in its "Gateway certificate validation failed" block, deduplicated.
     public var certRejectedDigests: [String]
     /// The milestone reached when the first certificate rejection was printed, if any.
     public var certRejectedAt: Milestone?
-    public var authFailLineSeen: Bool
     /// openfortivpn reported that the gateway refused tunnel mode after authentication
     /// (e.g. SSL VPN tunnel mode removed by a FortiOS upgrade).
     public var tunnelModeRejected: Bool
@@ -105,33 +93,25 @@ public struct ExitFacts: Codable, Sendable, Equatable {
     public var upDuration: TimeInterval?
     public var exitStatus: ProcessExitStatus
     public var routeRepairPerformed: Bool
-    /// Sequence number of the last output line sent before this event.
-    public var lastOutputSeq: UInt64
 
     public init(
         furthestMilestone: Milestone?,
         stopInitiator: StopInitiator,
-        watchdogFired: WatchdogPhase? = nil,
         certRejectedDigests: [String] = [],
         certRejectedAt: Milestone? = nil,
-        authFailLineSeen: Bool = false,
         tunnelModeRejected: Bool = false,
         upDuration: TimeInterval? = nil,
         exitStatus: ProcessExitStatus,
-        routeRepairPerformed: Bool = false,
-        lastOutputSeq: UInt64 = 0
+        routeRepairPerformed: Bool = false
     ) {
         self.furthestMilestone = furthestMilestone
         self.stopInitiator = stopInitiator
-        self.watchdogFired = watchdogFired
         self.certRejectedDigests = certRejectedDigests
         self.certRejectedAt = certRejectedAt
-        self.authFailLineSeen = authFailLineSeen
         self.tunnelModeRejected = tunnelModeRejected
         self.upDuration = upDuration
         self.exitStatus = exitStatus
         self.routeRepairPerformed = routeRepairPerformed
-        self.lastOutputSeq = lastOutputSeq
     }
 }
 
@@ -143,12 +123,10 @@ public struct HelperEvent: Codable, Sendable, Equatable {
     }
 
     public var attemptID: AttemptID
-    public var date: Date
     public var kind: Kind
 
-    public init(attemptID: AttemptID, date: Date, kind: Kind) {
+    public init(attemptID: AttemptID, kind: Kind) {
         self.attemptID = attemptID
-        self.date = date
         self.kind = kind
     }
 }
@@ -156,34 +134,25 @@ public struct HelperEvent: Codable, Sendable, Equatable {
 public enum OutputSource: String, Codable, Sendable {
     case stdout
     case stderr
-    /// Meta lines written by the helper itself (attempt start, "password written", signals, exit).
+    /// Meta lines written by the helper itself (attempt start, "password sent", signals, exit).
     case helper
 }
 
 /// One raw line of openfortivpn/pppd output (or a helper meta line), shown verbatim in the Log tab.
 public struct OutputLine: Codable, Sendable, Equatable {
-    public var seq: UInt64
     public var date: Date
-    public var attemptID: AttemptID?
     public var source: OutputSource
     public var text: String
-    /// True when the line was flushed before its terminating newline arrived (e.g. a prompt).
-    public var isPartial: Bool
 
-    public init(seq: UInt64, date: Date, attemptID: AttemptID?, source: OutputSource, text: String, isPartial: Bool = false) {
-        self.seq = seq
+    public init(date: Date, source: OutputSource, text: String) {
         self.date = date
-        self.attemptID = attemptID
         self.source = source
         self.text = text
-        self.isPartial = isPartial
     }
 }
 
 /// Snapshot returned by `status()`.
 public struct HelperStatus: Codable, Sendable, Equatable {
-    public var buildID: BuildID
-    public var activeAttemptID: AttemptID?
     public var childAlive: Bool
     public var openfortivpnPath: String?
     public var openfortivpnVersion: String?
@@ -191,15 +160,11 @@ public struct HelperStatus: Codable, Sendable, Equatable {
     public var binaryProblem: String?
 
     public init(
-        buildID: BuildID,
-        activeAttemptID: AttemptID?,
         childAlive: Bool,
         openfortivpnPath: String?,
         openfortivpnVersion: String?,
         binaryProblem: String?
     ) {
-        self.buildID = buildID
-        self.activeAttemptID = activeAttemptID
         self.childAlive = childAlive
         self.openfortivpnPath = openfortivpnPath
         self.openfortivpnVersion = openfortivpnVersion
@@ -215,7 +180,6 @@ public struct HelperError: Error, Codable, Sendable, Equatable {
         case unknownAttempt
         case wrongPhase
         case binaryUnavailable
-        case spawnFailed
         case notAuthorized
         case internalError
     }

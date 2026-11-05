@@ -1,15 +1,10 @@
 import Foundation
 import FortiCore
 
-/// The secrets of DESIGN §5.7 in the login Keychain.
+/// The app's secrets in the login Keychain.
 ///
-/// - VPN password: service `com.qoor.FortiVPNManager.vpn`, account `username@host` (`VPNProfile.profileKey`).
-///   A changed host or username therefore needs a new item, so an old password is never tried
-///   against another account (lockout protection).
-/// - Gmail app password: service `com.qoor.FortiVPNManager.gmail`, account = Gmail address.
-/// - Gmail API (`otp.method: gmail_api`): service `com.qoor.FortiVPNManager.google`, account
-///   `refresh-token:<lowercased Gmail address>` for the Google refresh token and
-///   `client-secret:<client ID>` for the OAuth client secret (the client ID is in config.yaml).
+/// The VPN password is keyed by `username@host`, so a changed host or username needs a new item and
+/// an old password is never tried against another account (lockout protection).
 struct CredentialStore {
     static let vpnService = "com.qoor.FortiVPNManager.vpn"
     static let gmailService = "com.qoor.FortiVPNManager.gmail"
@@ -120,12 +115,5 @@ struct CredentialStore {
 
     func deleteGoogleClientSecret(clientID: String) throws {
         try google.delete(account: Self.googleClientSecretAccount(clientID: clientID))
-    }
-
-    /// Whether the Gmail API can be used for `address` with `clientID`: the client secret and a
-    /// refresh token are stored. Reads no secret (no access prompt).
-    func hasGmailAPIAuthorization(address: String, clientID: String) throws -> Bool {
-        guard !address.isEmpty, !clientID.isEmpty else { return false }
-        return try hasGoogleClientSecret(clientID: clientID) && hasGoogleRefreshToken(address: address)
     }
 }

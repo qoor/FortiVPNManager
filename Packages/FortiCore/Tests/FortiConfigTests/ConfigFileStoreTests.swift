@@ -139,7 +139,7 @@ import Testing
         #expect(lastKnownGood.vpn.username == "bob")
 
         // The app stores a new certificate digest.
-        let result = try store.update(at: url) { $0.vpn.pinTrustedCert(digestC) }
+        let result = try store.update(at: url) { $0.vpn.trustedCerts.insert(digestC, at: 0) }
         #expect(result.didWrite)
         #expect(result.config.vpn.username == "alice")
         #expect(result.config.vpn.trustedCerts == [digestC, digestA, digestB])
@@ -321,7 +321,7 @@ import Testing
         let written = try store.update(at: url) { $0.vpn.realm = largest.vpn.realm }
         #expect(written.contents.data.count == ConfigLimits.maxFileSize)
         #expect(try store.load(from: url)?.config == largest)
-        #expect(try store.update(at: url) { $0.vpn.pinTrustedCert(digestA) }.didWrite == false)
+        #expect(try store.update(at: url) { $0.vpn.trustedCerts = largest.vpn.trustedCerts }.didWrite == false)
     }
 
     @Test func oversizedFileIsRejectedBeforeReading() throws {

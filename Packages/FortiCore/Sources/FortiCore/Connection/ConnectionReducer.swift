@@ -1,7 +1,7 @@
 import Foundation
 import FortiShared
 
-/// The connection state machine (§5.4, §6). Pure: time comes in as `now`, attempt IDs come from the
+/// The connection state machine. Pure: time comes in as `now`, attempt IDs come from the
 /// model's seeded generator, and every side effect is returned as a `ConnectionEffect`.
 ///
 /// Timers, App Nap activity and ledger persistence are derived from the resulting state after each
@@ -123,7 +123,6 @@ private struct ConnectionTransition {
         model.ledger.prune(asOf: now)
         resetScheduleBoundary()
 
-        // With a schedule, launch connects only inside the scheduled hours.
         guard autoConnect, model.isWithinSchedule(at: now) else {
             model.desired = .disconnected
             emit(.checkReadiness)
@@ -177,7 +176,7 @@ private struct ConnectionTransition {
         let old = model.profile
         var profile = incoming
         if profile.isDifferentGateway(from: old), !profile.trustedCerts.isEmpty, profile.trustedCerts == old.trustedCerts {
-            // The pins belong to the old gateway; the next connect learns the new one (§5.4).
+            // The pins belong to the old gateway; the next connect learns the new one.
             profile.trustedCerts = []
             emit(.persistTrustedCerts([]))
         }
@@ -295,7 +294,7 @@ private struct ConnectionTransition {
               context.stage == .preparingOTP else { return }
         context.stage = .tunnel
         model.state = .connecting(context)
-        // The account this attempt checked readiness for; a profile change applies from the next attempt (§5.7).
+        // The account this attempt checked readiness for; a profile change applies from the next attempt.
         let profile = context.profile ?? model.profile
         model.runProfile = profile
         emit(.startTunnel(attemptID, profile))
@@ -309,7 +308,7 @@ private struct ConnectionTransition {
         case .checkingReadiness:
             break
         case .preparingOTP:
-            // openfortivpn was never started (§6.2 IMAP rows).
+            // openfortivpn was never started.
             if failure == .authentication {
                 fail(.gmailAppPassword)
             } else {
@@ -364,7 +363,7 @@ private struct ConnectionTransition {
     }
 
     private static func isPlausibleOTP(_ code: String) -> Bool {
-        (6...8).contains(code.utf8.count) && code.utf8.allSatisfy { (0x30...0x39).contains($0) }
+        OTPMatcher.codeLengths.contains(code.utf8.count) && code.utf8.allSatisfy { (0x30...0x39).contains($0) }
     }
 
     // MARK: - Helper events
@@ -386,7 +385,7 @@ private struct ConnectionTransition {
         context.milestone = milestone
 
         if (previous ?? .spawned) < .connectedToGateway, milestone >= .connectedToGateway {
-            // TLS (and the pin check) passed: credentials go out now. Counts toward the 60-minute cap.
+            // TLS (and the pin check) passed: credentials go out now. Counts toward the rolling attempt cap.
             model.ledger.recordAuthAttempt(at: now)
         }
         switch milestone {
@@ -467,7 +466,7 @@ private struct ConnectionTransition {
                 return
             }
             switch error.code {
-            case .binaryUnavailable, .spawnFailed, .invalidRequest, .notAuthorized:
+            case .binaryUnavailable, .invalidRequest, .notAuthorized:
                 fail(.helper(error.code))
             case .busy, .wrongPhase, .unknownAttempt, .internalError:
                 networkFailure()
@@ -563,7 +562,7 @@ private struct ConnectionTransition {
                 model.state = .disconnecting(context)
             }
         case .connected, .idle, .needsSetup, .failed:
-            // A connected tunnel is kept across sleep (§2); its proactive timer is suspended.
+            // A connected tunnel is kept across sleep; its proactive timer is suspended.
             break
         }
     }
@@ -582,7 +581,7 @@ private struct ConnectionTransition {
         recordPath(PathSnapshot(isSatisfied: observation.pathSatisfied, underlay: observation.underlay))
         switch model.state {
         case let .connected(context):
-            // §6.3 judges a tunnel that was up across the sleep. A session that came up after the wake (the
+            // The wake rules judge a tunnel that was up across the sleep. A session that came up after the wake (the
             // path returned before the wake settled) is left alone: the observation may predate it, and it
             // was never asleep. Clearing `pendingWake` above re-arms its proactive timer either way.
             guard model.lastWakeAt.map({ context.since < $0 }) ?? true else { break }
@@ -594,14 +593,14 @@ private struct ConnectionTransition {
         }
     }
 
-    /// §6.3 rules for a tunnel that survived sleep, evaluated in order. When automatic reconnects
+    /// Rules for a tunnel that survived sleep, evaluated in order. When automatic reconnects
     /// are not allowed (schedule), a working tunnel is kept instead of being replaced; a dead or
     /// stranded one is still stopped, and the reconnect after it waits or is given up.
     private mutating func evaluateWake(_ context: ConnectedContext, _ observation: WakeObservation, sleptFor: TimeInterval) {
         var context = context
         let mayReconnect = model.automaticReconnectAllowed(at: now)
         guard observation.pathSatisfied else {
-            // The network did not settle within 30 s: keep the tunnel, decide later.
+            // The network did not settle: keep the tunnel, decide later.
             context.plannedReconnectAt = context.plannedReconnectAt.map {
                 max($0, now.addingTimeInterval(RetryPolicy.minimumPlannedLeadTime))
             }
@@ -645,7 +644,7 @@ private struct ConnectionTransition {
                 model.state = .connected(context)
             }
         default:
-            // connecting / disconnecting ignore path events (§5.5); other states act on the next attempt.
+            // connecting / disconnecting ignore path events; other states act on the next attempt.
             break
         }
     }
@@ -756,11 +755,11 @@ private struct ConnectionTransition {
 
     // MARK: - Attempts
 
-    /// Starts a new attempt unless a gate applies: desire, sleep, the rolling cap, the 90 s gap after an
-    /// authentication failure, or an unsatisfied network path.
+    /// Starts a new attempt unless a gate applies: desire, schedule, sleep, the rolling cap, the cooldown
+    /// after an authentication failure, or an unsatisfied network path.
     private mutating func beginAttempt(
         _ reason: AttemptReason,
-        continuing previous: AttemptContext? = nil,
+        certRetryUsed: Bool = false,
         readinessVerified: Bool = false
     ) {
         guard model.desired == .connected else {
@@ -810,8 +809,7 @@ private struct ConnectionTransition {
         var context = AttemptContext(
             attemptID: attemptID,
             reason: reason,
-            chainID: previous?.chainID ?? attemptID,
-            certRetryUsed: previous != nil,
+            certRetryUsed: certRetryUsed,
             startedAt: now,
             stage: .checkingReadiness
         )
@@ -906,7 +904,7 @@ private struct ConnectionTransition {
 
     private mutating func learnCertificates(from facts: ExitFacts) {
         let learned = TrustedCertPins.normalized(facts.certRejectedDigests)
-        // A run started before a host/port change presented the old gateway's certificate (§5.4).
+        // A run started before a host/port change presented the old gateway's certificate.
         guard !learned.isEmpty, runIsForCurrentGateway else { return }
         let merged = TrustedCertPins.merging(learned, into: model.profile.trustedCerts)
         guard merged != model.profile.trustedCerts else { return }
@@ -919,9 +917,9 @@ private struct ConnectionTransition {
     private mutating func apply(_ outcome: ExitClassifier.Outcome, after attempt: AttemptContext?) {
         switch outcome {
         case .certificateRetry:
-            if let attempt {
+            if attempt != nil {
                 // The chain's one immediate retry belongs to a gateway; a new one starts its own chain.
-                beginAttempt(.certificateRetry, continuing: runIsForCurrentGateway ? attempt : nil)
+                beginAttempt(.certificateRetry, certRetryUsed: runIsForCurrentGateway)
             } else {
                 networkFailure()
             }

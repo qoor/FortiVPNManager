@@ -30,7 +30,7 @@ public enum ConnectionEvent: Sendable, Equatable {
     case timerFired(ConnectionTimer, generation: UInt64)
     case willSleep
     case didWake(sleptFor: TimeInterval)
-    /// Sent once after every `didWake`, when the path and Router settled or after 30 s.
+    /// Sent once after every `didWake`, when the path and Router settled or after `RetryPolicy.wakeSettleTimeout`.
     case wakeSettled(WakeObservation)
     case pathChanged(PathSnapshot)
     /// The user left (screen locked, display or system asleep) or returned. Sent on changes only;
@@ -42,12 +42,12 @@ public enum ConnectionEvent: Sendable, Equatable {
 
 /// Outputs of `ConnectionReducer`, executed by the app in order.
 public enum ConnectionEffect: Sendable, Equatable {
-    /// Run the readiness check (§5.4) and answer with `.readinessChanged`.
+    /// Run the readiness check and answer with `.readinessChanged`.
     case checkReadiness
-    /// Start a Gmail session for this attempt (login, snapshot, sweep, IDLE); answer with
-    /// `.otpSessionReady` or `.otpSessionFailed`.
+    /// Start a Gmail session for this attempt; answer with `.otpSessionReady` or `.otpSessionFailed`.
     case startOTPSession(AttemptID)
-    /// The OTP prompt appeared; look for codes in messages received since `promptedAt − 5 s`.
+    /// The OTP prompt appeared; look for codes in messages received since `promptedAt` minus
+    /// `OTPMatcher.arrivalTolerance`.
     case beginOTPSearch(AttemptID, promptedAt: Date)
     /// Close the Gmail session. With `checkJunk`, search the spam folder once first and report
     /// `.otpFoundInJunk` if the OTP message is there.

@@ -52,16 +52,11 @@ public enum IMAPResponse: Sendable, Hashable {
     case other(String)
 }
 
-/// RFC 6154 SPECIAL-USE mailbox attributes (plus Gmail's `\Important`).
-public enum IMAPSpecialUse: String, Sendable, CaseIterable, Hashable {
+/// The RFC 6154 SPECIAL-USE mailbox attributes the OTP flow needs.
+public enum IMAPSpecialUse: String, Sendable, Hashable {
     case all = "\\All"
-    case archive = "\\Archive"
-    case drafts = "\\Drafts"
-    case flagged = "\\Flagged"
     case junk = "\\Junk"
-    case sent = "\\Sent"
     case trash = "\\Trash"
-    case important = "\\Important"
 }
 
 /// One `* LIST` reply.
@@ -88,10 +83,6 @@ public struct IMAPListEntry: Sendable, Hashable {
     /// Case-insensitive attribute check (`hasAttribute("\\Noselect")`).
     public func hasAttribute(_ attribute: String) -> Bool {
         attributes.contains { $0.caseInsensitiveCompare(attribute) == .orderedSame }
-    }
-
-    public var specialUses: Set<IMAPSpecialUse> {
-        Set(IMAPSpecialUse.allCases.filter { hasAttribute($0.rawValue) })
     }
 
     /// `false` for `\Noselect` / `\NonExistent` entries.

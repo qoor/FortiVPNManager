@@ -41,7 +41,7 @@ public struct SpawnError: Error, Sendable, Equatable, CustomStringConvertible {
     }
 }
 
-/// Starts and reaps child processes for the root helper (DESIGN §5.2 "spawn").
+/// Starts and reaps child processes for the root helper.
 ///
 /// The child gets a clean signal state regardless of the calling thread (dispatch worker threads
 /// block most signals, and ignored dispositions survive `exec`): an empty signal mask and the

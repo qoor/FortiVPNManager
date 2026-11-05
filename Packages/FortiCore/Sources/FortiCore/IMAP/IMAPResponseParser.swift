@@ -30,9 +30,6 @@ public struct IMAPResponseParser: Sendable {
         self.maxResponseSize = maxResponseSize
     }
 
-    /// Number of bytes buffered for a response that is not complete yet.
-    public var bufferedByteCount: Int { buffer.count }
-
     /// Consumes `bytes` and returns every response completed by them, in order.
     public mutating func feed(_ bytes: some Sequence<UInt8>) throws(IMAPParseError) -> [IMAPResponse] {
         if let failure { throw failure }

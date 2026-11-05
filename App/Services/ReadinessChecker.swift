@@ -18,10 +18,7 @@ struct HelperHealth: Equatable {
     var errorMessage: String?
 }
 
-/// Gathers `ReadinessInputs` (DESIGN §5.4): config validity, account fields, the Keychain items,
-/// helper `.enabled` and helper BuildID == app `CFBundleVersion`. Gmail counts as ready with an IMAP
-/// app password, or with `otp.method: gmail_api` and its Google authorization (client secret +
-/// refresh token).
+/// Gathers `ReadinessInputs`.
 ///
 /// On a BuildID mismatch with no run in progress it asks the old helper to exit (launchd then starts
 /// the embedded binary of this build) and checks once more.

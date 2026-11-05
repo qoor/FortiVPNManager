@@ -17,11 +17,7 @@ private func harness(at date: Date, schedule: ConnectionSchedule? = weekdayHours
     return h
 }
 
-private func observe(alive: Bool = true, ppp: Bool = true) -> WakeObservation {
-    WakeObservation(processAlive: alive, pppUp: ppp, underlay: ReducerFixture.wifi, pathSatisfied: true)
-}
-
-@Suite("Connection schedule (§5.4 schedule)")
+@Suite("Connection schedule")
 struct ScheduleTests {
     // MARK: Start, end and launch
 

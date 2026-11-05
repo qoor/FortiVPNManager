@@ -1,6 +1,6 @@
 import Foundation
 
-/// Identity of the file behind `config.yaml` for cheap change polling (DESIGN §5.7, file watching).
+/// Identity of the file behind `config.yaml` for cheap change polling.
 /// Any difference means "maybe changed"; compare bytes before reloading.
 public struct FileFingerprint: Sendable, Hashable {
     /// Fully resolved path (symlinks followed).
@@ -95,11 +95,10 @@ public enum ConfigStoreError: Error, Sendable, Equatable, LocalizedError, Custom
     public var description: String { message }
 }
 
-/// Reads and atomically writes `config.yaml` (DESIGN §5.7, writing).
+/// Reads and atomically writes `config.yaml`.
 ///
 /// - Directory is created 0700, the file is always written 0600.
-/// - Writes resolve `realpath` first so a symlinked `config.yaml` stays a symlink, then
-///   `mkstemp` (same directory) → write → `fsync` → `rename`.
+/// - Writes resolve `realpath` first so a symlinked `config.yaml` stays a symlink.
 /// - A file from a newer `schema_version` is never overwritten.
 public struct ConfigFileStore: Sendable {
     public init() {}

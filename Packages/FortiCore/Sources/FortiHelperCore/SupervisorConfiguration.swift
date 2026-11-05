@@ -17,17 +17,26 @@ public struct ExecutableSpec: Sendable, Equatable {
     }
 
     /// The only environment variable the helper passes on. openfortivpn honours `https_proxy` /
-    /// `all_proxy`, so nothing else may leak through (DESIGN §3.11).
+    /// `all_proxy`, so nothing else may leak through.
     public static let helperPATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
-    /// `openfortivpn -c <configPath>` with `PATH` as the only environment variable (DESIGN §5.2).
+    /// `openfortivpn -c <configPath>` with `PATH` as the only environment variable.
     public static func openfortivpn(path: String, configPath: String) -> ExecutableSpec {
         ExecutableSpec(path: path, arguments: [path, "-c", configPath], environment: ["PATH": helperPATH])
     }
 }
 
-/// Per-phase time limits enforced by the helper (DESIGN §5.2, watchdog). The whole-attempt limit
-/// (150 s) and the 50 s OTP limit belong to the app; `otpPromptToSubmit` is only a backstop.
+/// A run phase guarded by a helper watchdog (named in its `‹watchdog: …›` log line).
+public enum WatchdogPhase: String, Sendable {
+    case spawnToGateway
+    case gatewayToPromptOrAuth
+    case otpPromptToSubmit
+    case otpSubmitToAuth
+    case authToTunnel
+}
+
+/// Per-phase time limits enforced by the helper. The whole-attempt and OTP limits belong to the
+/// app; `otpPromptToSubmit` is only a backstop.
 public struct WatchdogLimits: Sendable, Equatable {
     /// spawn → `Connected to gateway.`
     public var spawnToGateway: Duration
@@ -71,7 +80,7 @@ public struct WatchdogLimits: Sendable, Equatable {
     }
 }
 
-/// Output handling intervals (DESIGN §5.2, output handling).
+/// Output handling intervals.
 public struct SupervisorTiming: Sendable, Equatable {
     /// Output lines are delivered in batches at most this far apart. Pending lines are also
     /// delivered right before every event.

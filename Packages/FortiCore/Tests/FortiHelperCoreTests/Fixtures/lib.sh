@@ -3,7 +3,7 @@
 # variable. They report what they received on stdin to the record file as key=value lines:
 # lengths and SHA-256 digests only, never the secrets themselves.
 # Output strings are copied from openfortivpn 1.24.1 (log.c prefixes, main.c, tunnel.c, io.c) and
-# Apple pppd; replace them with real Phase 0b captures when available.
+# Apple pppd.
 
 note() {
     printf '%s\n' "$1" >> "$record"
@@ -49,13 +49,8 @@ connected() {
     printf '\nINFO:   Connected to gateway.\n'
 }
 
-# otp_prompt [tokeninfo|htmlform]
 otp_prompt() {
-    if [ "$1" = htmlform ]; then
-        printf 'Please enter one-time password: '
-    else
-        printf 'Two-factor authentication token: '
-    fi
+    printf 'Two-factor authentication token: '
 }
 
 authenticated() {

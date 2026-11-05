@@ -2,15 +2,14 @@ import Foundation
 import FortiHelperCore
 import SystemConfiguration
 
-/// Repairs the IPv4 routing table after openfortivpn exited without restoring it (DESIGN §3.8,
-/// §5.2 "RouteRepair"): restores the default route via the primary service's router and removes
-/// the gateway host route openfortivpn added. Every address handed to `/sbin/route` is validated
-/// as dotted-quad IPv4 first.
+/// Repairs the IPv4 routing table after openfortivpn exited without restoring it: restores the
+/// default route via the primary service's router and removes the gateway host route openfortivpn
+/// added. Every address handed to `/sbin/route` is validated as dotted-quad IPv4 first.
 enum RouteRepair {
     static func repair(gatewayIP: String?) -> RouteRepairOutcome {
         var outcome = RouteRepairOutcome.notNeeded
         let defaultRoute = RouteTable.lookup("default")
-        if defaultRoute == nil || defaultRoute?.interface?.hasPrefix("ppp") == true {
+        if defaultRoute == nil || isPPPDefault(defaultRoute) {
             outcome = outcome.combined(with: restoreDefaultRoute(replacing: defaultRoute))
         }
         if let gatewayIP, let removed = removeHostRoute(to: gatewayIP) {
@@ -85,7 +84,6 @@ enum RouteRepair {
 enum RouteTable {
     struct Entry: Equatable, Sendable {
         var destination: String
-        var gateway: String?
         var interface: String?
         /// `UP`, `GATEWAY`, `HOST`, `STATIC`, ...
         var flags: Set<String>
@@ -128,7 +126,7 @@ enum RouteTable {
         let flags = fields["flags"].map { value in
             Set(value.trimmingCharacters(in: CharacterSet(charactersIn: "<>")).split(separator: ",").map(String.init))
         } ?? []
-        return Entry(destination: destination, gateway: fields["gateway"], interface: fields["interface"], flags: flags)
+        return Entry(destination: destination, interface: fields["interface"], flags: flags)
     }
 }
 

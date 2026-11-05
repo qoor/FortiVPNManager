@@ -3,14 +3,14 @@ import Testing
 import FortiShared
 @testable import FortiCore
 
-@Suite("§6.2 retry policy in the reducer")
+@Suite("Retry policy in the reducer")
 struct FailureHandlingTests {
     /// Fails one attempt at the gateway (wrong password) and returns its ID.
     @discardableResult
     private func failAtGateway(_ h: inout ReducerHarness) throws -> AttemptID {
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         return id
     }
 
@@ -107,7 +107,7 @@ struct FailureHandlingTests {
         for expected in [10.0, 20, 40, 80, 160, 300, 300] {
             try h.startTunnel()
             h.milestone(.spawned)
-            let effects = h.exit(ReducerFixture.facts(.spawned, initiator: .helper(.watchdog), watchdog: .spawnToGateway))
+            let effects = h.exit(ReducerFixture.facts(.spawned, initiator: .helper(.watchdog)))
             #expect(h.retryWait == RetryWait(until: h.now + expected, reason: .network))
             #expect(effects.persistedLedger == nil)
             try h.fire(.retry)
@@ -185,7 +185,7 @@ struct FailureHandlingTests {
         let id = try h.startTunnel()
         try h.runMilestones(id: id, through: .connectedToGateway)
         #expect(h.send(.pathChanged(PathSnapshot(isSatisfied: true, underlay: ReducerFixture.otherWifi))) == [])
-        h.exit(ReducerFixture.facts(.connectedToGateway, authFail: true))
+        h.exit(ReducerFixture.facts(.connectedToGateway))
         #expect(h.retryWait?.reason == .network)
         #expect(h.model.ledger.consecutiveAuthFailures == 0)
     }
@@ -257,7 +257,9 @@ struct FailureHandlingTests {
             }
         }
         #expect(h.model.state == .failed(.tooManyReconnects))
-        #expect(h.model.ledger.authAttempts(asOf: h.now) == 12)
+        var ledger = h.model.ledger
+        ledger.prune(asOf: h.now)
+        #expect(ledger.recentAuthAttempts.count == 12)
 
         // Manual action clears the history and is allowed through.
         let effects = h.send(.userConnect)
@@ -275,7 +277,9 @@ struct FailureHandlingTests {
             try h.fire(.retry)
             #expect(h.attempt != nil)
         }
-        #expect(h.model.ledger.authAttempts(asOf: h.now) < 12)
+        var ledger = h.model.ledger
+        ledger.prune(asOf: h.now)
+        #expect(ledger.recentAuthAttempts.count < 12)
     }
 
     @Test func failedOnlyClearsOnUserAction() throws {
@@ -299,7 +303,7 @@ struct FailureHandlingTests {
             .settingsChanged(ConnectionSettings(sessionMaxMinutes: 60)),
             .timerFired(.retry, generation: 1),
             .helperConnectionLost,
-            .helperEvent(HelperEvent(attemptID: ReducerFixture.id(2), date: h.now, kind: .exited(ReducerFixture.facts(.spawned)))),
+            .helperEvent(HelperEvent(attemptID: ReducerFixture.id(2), kind: .exited(ReducerFixture.facts(.spawned)))),
         ]
         for event in nonUserEvents {
             h.send(event)
@@ -388,8 +392,8 @@ struct FailureHandlingTests {
         step(&h, .readinessChanged(.ready))
         let id = ReducerFixture.id(1)
         step(&h, .otpSessionReady(id))
-        step(&h, .helperEvent(HelperEvent(attemptID: id, date: h.now, kind: .milestone(.connectedToGateway, tunnelIP: nil))))
-        step(&h, .helperEvent(HelperEvent(attemptID: id, date: h.now, kind: .exited(ReducerFixture.facts(.connectedToGateway)))))
+        step(&h, .helperEvent(HelperEvent(attemptID: id, kind: .milestone(.connectedToGateway, tunnelIP: nil))))
+        step(&h, .helperEvent(HelperEvent(attemptID: id, kind: .exited(ReducerFixture.facts(.connectedToGateway)))))
         h.advance(90)
         let retryGeneration = try #require(h.generation(of: .retry))
         step(&h, .timerFired(.retry, generation: retryGeneration))
@@ -454,7 +458,6 @@ struct FailureHandlingTests {
         (.unknownAttempt, nil),
         (.internalError, nil),
         (.binaryUnavailable, .helper(.binaryUnavailable)),
-        (.spawnFailed, .helper(.spawnFailed)),
         (.invalidRequest, .helper(.invalidRequest)),
         (.notAuthorized, .helper(.notAuthorized)),
     ])

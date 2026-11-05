@@ -33,8 +33,6 @@ func loc(_ line: Int, _ column: Int) -> LineColumn {
 let digestA = String(repeating: "a", count: 64)
 let digestB = String(repeating: "0123456789abcdef", count: 4)
 let digestC = String(repeating: "c", count: 63) + "d"
-let digestD = String(repeating: "d", count: 64)
-let digestE = String(repeating: "e", count: 64)
 
 let googleClientID = "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com"
 

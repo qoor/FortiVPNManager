@@ -2,12 +2,9 @@ import AppKit
 import FortiShared
 import SwiftUI
 
-/// One list of the Exception Rules (DESIGN §5.6): a single column with + / − below. Double-click the
-/// empty area (or click +) to add a row, double-click a row (or press Return) to edit it, − or
-/// Delete removes the selected rows and Esc cancels an edit. Every finished edit reports the whole
-/// list through `onChange`; nothing is saved here. Rows in `problemRows` are drawn in red.
-/// `onEditingChanged` tells whether a row is being typed (its text reaches `onChange` only when the
-/// edit ends).
+/// One list of the Exception Rules: a single column with + / − below. Every finished edit reports the
+/// whole list through `onChange`; nothing is saved here. `onEditingChanged` tells whether a row is
+/// being typed (its text reaches `onChange` only when the edit ends).
 struct AddressListEditor: NSViewRepresentable {
     let rows: [String]
     let problemRows: Set<Int>

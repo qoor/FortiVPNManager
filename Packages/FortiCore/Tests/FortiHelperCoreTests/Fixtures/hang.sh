@@ -14,7 +14,7 @@ if [ "$stage" = spawned ]; then hang; exit 0; fi
 password_prompt
 connected
 if [ "$stage" = gateway ]; then hang; exit 0; fi
-otp_prompt tokeninfo
+otp_prompt
 if [ "$stage" = otp ]; then hang; exit 0; fi
 read_secret otp
 printf '\n'

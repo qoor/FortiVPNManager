@@ -4,18 +4,11 @@ import FortiShared
 import Observation
 import os
 
-/// Exception Rules (DESIGN §5.8): while this Mac is inside one of `routes.networks`, keeps the
-/// primary network service's additional routes equal to `routes.bypass_vpn` (through its router) and
-/// imports routes added there outside the app; elsewhere removes the routes it wrote, so everything
-/// goes through the VPN. Routes through other gateways are never touched. Also owns the Connection
-/// tab's drafts of both lists (saved only by Apply).
-///
-/// Syncs at launch, when the `routes` section or the file's validity changes, when network settings
-/// or the primary network change (SCDynamicStore), and when the helper becomes reachable. Never while
-/// config.yaml is missing or broken. One sync runs at a time; requests meanwhile run it once more.
-/// A failed write (routes or the imported list) is retried every 10 seconds, at most 3 times. When
-/// the last retry fails too, the timer stops (the next network or rules change syncs again), a
-/// notification is posted once and Settings shows a red warning until a sync succeeds.
+/// Exception Rules: while this Mac is inside one of `routes.networks`, keeps the primary network
+/// service's additional routes equal to `routes.bypass_vpn` (through its router) and imports routes
+/// added there outside the app; elsewhere removes the routes it wrote, so everything goes through the
+/// VPN. Routes through other gateways are never touched. Also owns the Connection tab's drafts of both
+/// lists (saved only by Apply).
 @Observable
 final class BypassRouteService {
     /// What the last successful sync found and did.
@@ -293,8 +286,8 @@ final class BypassRouteService {
         }
     }
 
-    /// Retries in 10 seconds, at most `maxWriteRetries` times in a row. When the last retry fails
-    /// too, posts a notification (once per streak) and stops; later failures are not retried.
+    /// Retries after `writeRetryDelay`, at most `maxWriteRetries` times in a row. When the last retry
+    /// fails too, posts a notification (once per streak) and stops; later failures are not retried.
     private func writeFailed(_ message: String) {
         writeFailureStreak += 1
         setStatus(.failed(message))

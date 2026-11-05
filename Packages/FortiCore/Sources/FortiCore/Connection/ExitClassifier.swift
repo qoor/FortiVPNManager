@@ -1,7 +1,7 @@
 import Foundation
 import FortiShared
 
-/// Classifies how an unrequested (or deadline-stopped) run ended, following the §6.2 table top to bottom.
+/// Classifies how an unrequested (or deadline-stopped) run ended.
 /// Runs the app stopped on purpose (user disconnect, proactive reconnect, sleep, quit) are not classified.
 enum ExitClassifier {
     struct Input: Equatable {
@@ -9,12 +9,12 @@ enum ExitClassifier {
         /// Furthest milestone the reducer itself saw; combined with `facts.furthestMilestone`.
         var knownMilestone: Milestone?
         var certRetryUsed: Bool
-        /// Stop the app requested for this attempt (`otpTimeout` / `attemptTimeout`), if any.
+        /// Stop the app requested for this attempt, if any.
         var appStop: StopReason?
         var otpSessionFailure: OTPSessionFailure?
         var otpFoundInJunk: Bool
         var pathChangedDuringAttempt: Bool
-        /// The attempt started before `lastWakeAt + 30 s`.
+        /// The attempt started within `RetryPolicy.wakeGracePeriod` after the last wake.
         var withinWakeGrace: Bool
         /// Up-time measured by the app, used when the helper did not report one.
         var observedUpDuration: TimeInterval?
@@ -54,9 +54,9 @@ enum ExitClassifier {
     }
 
     enum Outcome: Equatable {
-        /// Learned the gateway certificate before any credentials were used: retry immediately, uncounted.
+        /// Learned the gateway certificate before the OTP was used: retry immediately, uncounted.
         case certificateRetry
-        /// The server ended a stable session: reconnect after 5 s and reset the counter.
+        /// The server ended a stable session: reconnect shortly and reset the counter.
         case serverSessionEnded
         /// Not counted; back off and wait for the network.
         case networkError
@@ -75,32 +75,26 @@ enum ExitClassifier {
             return failure == .authentication ? .fatal(.gmailAppPassword) : .networkError
         }
 
-        // Row 1: certificate rejected before the OTP was used.
         let rejected = !facts.certRejectedDigests.isEmpty
         if rejected, (facts.certRejectedAt ?? furthest ?? .spawned) < .otpSubmitted {
             let learnable = !TrustedCertPins.normalized(facts.certRejectedDigests).isEmpty
             return (input.certRetryUsed || !learnable) ? .networkError : .certificateRetry
         }
 
-        // Row 2: a stable tunnel ended without anyone on our side asking for it.
         if furthest == .tunnelUp, input.appStop == nil, facts.stopInitiator == .none,
            input.upDuration >= RetryPolicy.stableSessionDuration {
             return .serverSessionEnded
         }
 
-        // Row 3 (proactive timer) never reaches the classifier: it is a requested stop.
-
-        // Row 4: never reached the gateway.
         guard let furthest, furthest >= .connectedToGateway else { return .networkError }
 
-        // Row 5: reached the gateway, no OTP prompt.
+        // Ended at login: counted conservatively, because FortiGate locks the IP out after two failures.
         if furthest == .connectedToGateway {
             return (input.pathChangedDuringAttempt || input.withinWakeGrace)
                 ? .networkError
                 : .authFailure(.authenticationRejected)
         }
 
-        // Row 6: counted failures after the OTP prompt.
         if rejected { return .authFailure(.certificateRejectedAfterLogin) }
         if facts.tunnelModeRejected { return .authFailure(.tunnelModeRejected) }
         switch furthest {

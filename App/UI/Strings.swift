@@ -4,9 +4,9 @@ import FortiCore
 import FortiShared
 import ServiceManagement
 
-// Every user-facing phrase derived from connection state lives here (DESIGN §5.6), so the menu and
-// the settings window always describe the same state with the same words. Phrases about Gmail
-// credentials depend on `otp.method`: an app password for IMAP, a Google sign-in for the Gmail API.
+// Every user-facing phrase derived from connection state lives here, so the menu and the settings
+// window always describe the same state with the same words. Phrases about Gmail credentials depend
+// on `otp.method`: an app password for IMAP, a Google sign-in for the Gmail API.
 
 extension ConnectionFailureReason {
     /// Short phrase for the status line: "Error: <summary>".
@@ -76,7 +76,6 @@ extension HelperError.Code {
         case .busy: String(localized: "Helper is busy with another connection")
         case .invalidRequest: String(localized: "Invalid connection request")
         case .binaryUnavailable: String(localized: "openfortivpn not found")
-        case .spawnFailed: String(localized: "Couldn't start openfortivpn")
         case .notAuthorized: String(localized: "Helper refused the request")
         case .unknownAttempt, .wrongPhase, .internalError: String(localized: "Helper internal error")
         }
@@ -197,7 +196,7 @@ extension AttemptContext {
         }
     }
 
-    /// Current step of §6.1.
+    /// Current step of the attempt.
     var progress: String {
         switch stage {
         case .checkingReadiness: return String(localized: "Checking readiness")
@@ -306,8 +305,7 @@ enum StatusText {
     }
 }
 
-/// What the Connection tab says about the helper (DESIGN §5.6: not registered / needs approval /
-/// running / version mismatch).
+/// What the Connection tab says about the helper.
 enum HelperDisplayState: Equatable {
     case checking
     case notRegistered

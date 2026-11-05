@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rules for `vpn.trusted_certs` (§2, §5.4): lowercase 64-hex digests, newest first, at most four.
+/// Rules for `vpn.trusted_certs`: lowercase 64-hex digests, newest first, at most `limit`.
 public enum TrustedCertPins {
     public static let limit = 4
 
