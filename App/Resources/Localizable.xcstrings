@@ -226,7 +226,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "다른 게이트웨이를 거치는 경로 %lld개는 그대로 두었습니다."
+            "value": "다른 게이트웨이를 거치는 라우트 %lld개는 그대로 두었습니다."
           }
         }
       }
@@ -236,7 +236,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld개 대상은 이 Mac과 같은 네트워크에 있어 경로 없이 바로 연결됩니다."
+            "value": "%lld개 대상은 이 Mac과 같은 네트워크에 있어 라우트 없이 바로 연결됩니다."
           }
         }
       }
@@ -276,7 +276,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "'%@'은(는) 루프백, 멀티캐스트 또는 예약된 주소라서 경로로 쓸 수 없습니다."
+            "value": "'%@'은(는) 루프백, 멀티캐스트 또는 예약된 주소라서 라우팅할 수 없습니다."
           }
         }
       }
@@ -417,16 +417,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "시스템 설정에서 FortiVPNManager의 백그라운드 활동을 허용하세요."
-          }
-        }
-      }
-    },
-    "Allowed to run": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "실행 가능"
           }
         }
       }
@@ -586,7 +576,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "준비 확인"
+            "value": "준비 상태 확인"
           }
         }
       }
@@ -596,7 +586,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "경로를 확인하는 중…"
+            "value": "라우트를 확인하는 중…"
           }
         }
       }
@@ -926,7 +916,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "경로를 적용하지 못했습니다: %@"
+            "value": "라우트를 적용하지 못했습니다: %@"
           }
         }
       }
@@ -986,7 +976,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google 계정으로 Gmail을 읽지 못했습니다. Google 계정을 다시 연결하거나 예비용 앱 비밀번호를 확인하세요."
+            "value": "Google 계정으로 Gmail을 읽지 못했습니다. Google 계정을 다시 연결하거나 대체용 앱 비밀번호를 확인하세요."
           }
         }
       }
@@ -1016,7 +1006,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가져온 경로를 설정 파일에 저장하지 못했습니다: %@"
+            "value": "가져온 라우트를 설정 파일에 저장하지 못했습니다: %@"
           }
         }
       }
@@ -1031,22 +1021,12 @@
         }
       }
     },
-    "Couldn't start openfortivpn": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openfortivpn 실행 실패"
-          }
-        }
-      }
-    },
     "Couldn't start the local sign-in listener: %@": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "로그인 응답을 받을 로컬 수신기를 시작하지 못했습니다: %@"
+            "value": "로그인 응답을 받을 로컬 리스너를 시작하지 못했습니다: %@"
           }
         }
       }
@@ -1116,7 +1096,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "잠자기 전 연결 종료 중"
+            "value": "잠자기 전 연결 해제 중"
           }
         }
       }
@@ -1456,7 +1436,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google이 갱신 토큰을 주지 않았습니다. 다시 로그인하세요."
+            "value": "Google이 리프레시 토큰을 주지 않았습니다. 다시 로그인하세요."
           }
         }
       }
@@ -1636,7 +1616,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "IMAP 예비 수단(선택)"
+            "value": "IMAP 대체 수단(선택)"
           }
         }
       }
@@ -1676,7 +1656,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "알 수 없는 키 '%@'는 무시합니다. 설정창에서 저장하면 사라집니다."
+            "value": "알 수 없는 키 '%@'은(는) 무시합니다. 다음에 설정에서 저장하면 제거됩니다."
           }
         }
       }
@@ -1686,7 +1666,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "불러오기"
+            "value": "가져오기"
           }
         }
       }
@@ -1696,7 +1676,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "JSON 불러오기…"
+            "value": "JSON 가져오기…"
           }
         }
       }
@@ -1706,7 +1686,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "기존 openfortivpn 설정 불러오기…"
+            "value": "기존 openfortivpn 설정 가져오기…"
           }
         }
       }
@@ -1726,7 +1706,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@에서 불러왔습니다."
+            "value": "%@에서 가져왔습니다."
           }
         }
       }
@@ -1736,7 +1716,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "불러온 openfortivpn 설정"
+            "value": "가져온 openfortivpn 설정"
           }
         }
       }
@@ -1916,7 +1896,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "로그인 시 실행은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
+            "value": "로그인 시 열기은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
           }
         }
       }
@@ -1966,7 +1946,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "여유분"
+            "value": "여유 시간"
           }
         }
       }
@@ -1976,7 +1956,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "세션 최대시간"
+            "value": "세션 최대 시간"
           }
         }
       }
@@ -2086,7 +2066,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "다음 선제 재연결"
+            "value": "다음 사전 재연결"
           }
         }
       }
@@ -2316,7 +2296,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "로그인 시 실행"
+            "value": "로그인 시 열기"
           }
         }
       }
@@ -2326,7 +2306,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "로그인 시 실행은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
+            "value": "로그인 시 열기은 /Applications에 설치된 앱에서만 설정할 수 있습니다."
           }
         }
       }
@@ -2416,7 +2396,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선제 재연결"
+            "value": "사전 재연결"
           }
         }
       }
@@ -2426,7 +2406,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "선제 재연결은 서버가 세션을 끊기 전(세션 최대시간 − 여유분)에 미리 다시 연결합니다. 잠자기 후 재연결은 최소 잠자기 시간 이상 잠들었다 깨어나면 연결을 새로 맺습니다."
+            "value": "사전 재연결은 서버가 세션을 끊기 전(세션 최대 시간 − 여유 시간)에 미리 다시 연결합니다. 잠자기 후 재연결은 최소 잠자기 시간 이상 잠들었다 깨어나면 연결을 새로 맺습니다."
           }
         }
       }
@@ -2456,7 +2436,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "realm"
+            "value": "Realm"
           }
         }
       }
@@ -2466,7 +2446,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "realm %@"
+            "value": "Realm %@"
           }
         }
       }
@@ -2936,7 +2916,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Google 인증이 %@ 계정의 것이며 %@ 계정이 아닙니다. Google로 다시 로그인하세요."
+            "value": "Google 권한은 %@ 계정의 것이지만 Gmail 주소는 %@입니다. Google로 다시 로그인하세요."
           }
         }
       }
@@ -2966,7 +2946,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Helper가 경로 목록을 거부했습니다(%@)."
+            "value": "Helper가 라우트 목록을 거부했습니다(%@)."
           }
         }
       }
@@ -3236,7 +3216,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "키 '%@'가 같은 위치에 두 번 이상 있습니다. 하나만 남겨 주세요."
+            "value": "키 '%@'이(가) 같은 계층에 두 번 이상 있습니다. 하나만 남겨 주세요."
           }
         }
       }
@@ -3246,7 +3226,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "목록이 가득 차서 다른 곳에서 추가된 경로 %lld개는 가져오지 않았습니다."
+            "value": "목록이 가득 차서 다른 곳에서 추가된 라우트 %lld개는 가져오지 않았습니다."
           }
         }
       }
@@ -3256,7 +3236,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "경로를 쓰는 동안 네트워크나 경로가 바뀌었습니다."
+            "value": "라우트를 쓰는 동안 네트워크나 라우트가 바뀌었습니다."
           }
         }
       }
@@ -3376,7 +3356,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "설정 파일에 오류가 있어 경로를 바꾸지 않았습니다."
+            "value": "설정 파일에 오류가 있어 라우트를 바꾸지 않았습니다."
           }
         }
       }
@@ -3496,7 +3476,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "재연결 과다"
+            "value": "재연결 횟수 초과"
           }
         }
       }
@@ -3546,7 +3526,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "터널 설정 실패"
+            "value": "터널 구성 실패"
           }
         }
       }
@@ -3556,7 +3536,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "예상하지 못한 계속 요청(+)"
+            "value": "예상하지 못한 continuation request(+)"
           }
         }
       }
@@ -3566,7 +3546,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "예상하지 못한 서버 인사말"
+            "value": "예상하지 못한 서버 greeting"
           }
         }
       }
@@ -3666,7 +3646,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "OTP 확인"
+            "value": "OTP 인증"
           }
         }
       }
@@ -3766,7 +3746,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 Mac의 주소가 위 적용 대역 중 하나에 있으면 예외 대상은 VPN을 거치지 않고 그 네트워크의 라우터로 바로 나갑니다. 다른 네트워크에서는 모든 트래픽이 VPN을 거칩니다. 경로는 macOS 네트워크 설정에 저장되므로 재시동 후에도 유지됩니다. 변경 내용은 적용을 눌러야 반영됩니다. 적용 대역 안에서 다른 곳에서 같은 라우터로 추가한 경로는 여기에 나타나고, 다른 게이트웨이를 거치는 경로는 건드리지 않습니다."
+            "value": "이 Mac의 주소가 위 적용 대역 중 하나에 있으면 예외 대상은 VPN을 거치지 않고 그 네트워크의 라우터로 바로 나갑니다. 다른 네트워크에서는 모든 트래픽이 VPN을 거칩니다. 라우트는 macOS 네트워크 설정에 저장되므로 재시동 후에도 유지됩니다. 변경 내용은 적용을 눌러야 반영됩니다. 적용 대역 안에서 다른 곳에서 같은 라우터로 추가한 라우트는 여기에 나타나고, 다른 게이트웨이를 거치는 라우트는 건드리지 않습니다."
           }
         }
       }
@@ -3836,7 +3816,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "경로 쓰기를 %lld번 다시 시도했지만 실패해 재시도를 멈췄습니다. 네트워크나 예외 규칙이 바뀌면 다시 시도합니다."
+            "value": "라우트 쓰기를 %lld번 다시 시도했지만 실패해 재시도를 멈췄습니다. 네트워크나 예외 규칙이 바뀌면 다시 시도합니다."
           }
         }
       }
@@ -3846,7 +3826,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "경로 쓰기를 %lld번 다시 시도했지만 실패했습니다: %@"
+            "value": "라우트 쓰기를 %lld번 다시 시도했지만 실패했습니다: %@"
           }
         }
       }
@@ -3926,7 +3906,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "기록한 경로가 macOS 네트워크 설정에 남아 있지 않습니다."
+            "value": "기록한 라우트가 macOS 네트워크 설정에 남아 있지 않습니다."
           }
         }
       }
