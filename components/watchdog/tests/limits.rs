@@ -3,14 +3,90 @@
 mod common;
 
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use common::*;
 use fvm_contract::app_helper::{Milestone, ProcessExitStatus, StopInitiator, StopReason};
 use fvm_contract::helper_internal::RouteRepairOutcome;
 use fvm_watchdog::StageLimits;
+use rustix::process::Pid;
 
 const TINY: Duration = Duration::from_millis(150);
+
+fn wait_for_start(session: &mut Session) {
+    assert!(session.wait(Duration::from_secs(5), |session| {
+        session.record.value("started").is_some()
+    }));
+}
+
+/// SIGTERM goes to the client only: a process it started, such as /sbin/route restoring the
+/// routes, must be left to finish.
+#[test]
+fn sigterm_goes_to_the_client_only() {
+    let script_text = "\
+( trap 'echo leftover_term=yes >> \"$1\"' TERM; while :; do /bin/sleep 0.05; done ) </dev/null >/dev/null 2>&1 &
+trap 'echo client_term=yes >> \"$1\"; /bin/sleep 0.3; exit 0' TERM
+echo 'started=yes' >> \"$1\"
+while :; do /bin/sleep 0.05; done";
+    let mut session = script(script_text, Setup::default());
+    wait_for_start(&mut session);
+    session.run.stop(StopReason::UserDisconnect);
+    let facts = session.wait_for_exit();
+    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
+    assert_eq!(session.record.value("client_term").as_deref(), Some("yes"));
+    assert_eq!(session.record.value("leftover_term"), None);
+}
+
+/// What the client left in its group is killed once it exits, even when it ignores SIGTERM.
+#[test]
+fn leftovers_in_the_client_group_are_killed_after_it_exits() {
+    let script_text = "\
+( trap '' TERM; exec /bin/sleep 30 ) </dev/null >/dev/null 2>&1 &
+echo \"leftover=$!\" >> \"$1\"
+echo 'started=yes' >> \"$1\"
+exec /bin/sleep 30";
+    let mut session = script(script_text, Setup::default());
+    wait_for_start(&mut session);
+    let leftover: i32 = session.record.value("leftover").unwrap().parse().unwrap();
+    let leftover = Pid::from_raw(leftover).unwrap();
+    assert!(rustix::process::test_kill_process(leftover).is_ok());
+    session.run.stop(StopReason::UserDisconnect);
+    let facts = session.wait_for_exit();
+    assert_eq!(
+        facts.exit_status,
+        ProcessExitStatus::Signaled { signal: 15 }
+    );
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while rustix::process::test_kill_process(leftover).is_ok() {
+        assert!(Instant::now() < deadline, "the leftover still runs");
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// A leftover in the client's group that holds stdout is killed with the group, so the exit is
+/// reported without waiting for the drain period.
+#[test]
+fn a_leftover_holding_stdout_does_not_delay_the_exit() {
+    let mut setup = Setup::default();
+    setup.timing.pipe_drain = Duration::from_secs(2);
+    let started = Instant::now();
+    let mut session = script("/bin/sleep 30 &\necho 'INFO:   bye'\nexit 0", setup);
+    let facts = session.wait_for_exit();
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
+    assert!(session.has_text("INFO:   bye"));
+    assert!(
+        !session
+            .texts()
+            .iter()
+            .any(|text| text.starts_with("‹output pipes still open"))
+    );
+    session.assert_finished_cleanly();
+}
 
 #[test]
 fn a_stalled_stage_stops_the_client() {

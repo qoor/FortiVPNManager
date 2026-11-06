@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
@@ -41,6 +42,17 @@ pub const FULL_FLOW: [Milestone; 6] = [
 
 pub struct FakeOpenFortiVpn {
     pub stop_policy: StopPolicy,
+}
+
+/// openfortivpn's stop policy with a test's grace period.
+pub fn fake_backend(grace_period: Duration) -> FakeOpenFortiVpn {
+    FakeOpenFortiVpn {
+        stop_policy: StopPolicy {
+            graceful: StopScope::Process,
+            grace_period,
+            forced: StopScope::ProcessThenGroup,
+        },
+    }
 }
 
 impl Backend for FakeOpenFortiVpn {
@@ -274,16 +286,9 @@ pub struct Session {
 
 impl Session {
     pub fn start(launch: LaunchSpec, record: RecordFile, setup: Setup) -> Self {
-        let backend = FakeOpenFortiVpn {
-            stop_policy: StopPolicy {
-                graceful: StopScope::Process,
-                grace_period: setup.grace_period,
-                forced: StopScope::ProcessThenGroup,
-            },
-        };
         let (sender, reports) = mpsc::channel();
         let run = Run::start(
-            &backend,
+            &fake_backend(setup.grace_period),
             &launch,
             setup.password,
             setup.timing,
@@ -315,8 +320,8 @@ impl Session {
             match self.reports.recv_timeout(poll) {
                 Ok(report) => self.record_report(report),
                 Err(RecvTimeoutError::Timeout) => {}
-                // The run ended and nothing more will arrive.
-                Err(RecvTimeoutError::Disconnected) => return condition(self),
+                // The run ended, but the record file may still change.
+                Err(RecvTimeoutError::Disconnected) => thread::sleep(poll),
             }
         }
         true

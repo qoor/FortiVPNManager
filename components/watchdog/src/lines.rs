@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 /// Longer lines are split, so output without line breaks still reaches the Log tab.
-const MAX_LINE_BYTES: usize = 16_384;
+pub(crate) const MAX_LINE_BYTES: usize = 16_384;
 const LF: u8 = b'\n';
 const CR: u8 = b'\r';
 

@@ -2,14 +2,14 @@
 //! exit, the caller's requests and the time limits. Reader threads and an exit thread only forward
 //! what they see.
 
-use std::io::{self, PipeReader, Read, Write};
+use std::io::{self, PipeWriter, Write};
 use std::iter;
 use std::mem;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
-use std::thread;
+use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
@@ -18,9 +18,10 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, StopPolicy};
 use fvm_contract::helper_internal::RouteRepairOutcome;
+use rustix::process::Signal;
 use zeroize::Zeroizing;
 
-use crate::lines::LineAssembler;
+use crate::lines::{LineAssembler, MAX_LINE_BYTES};
 use crate::unix::{self, Child};
 use crate::{Report, RouteRepair, Timing};
 
@@ -28,14 +29,17 @@ use crate::{Report, RouteRepair, Timing};
 pub struct Run {
     inputs: Sender<Input>,
     client_name: &'static str,
-    /// 0 once the client is reaped.
+    /// 0 once the client is about to be reaped.
     process_id: Arc<AtomicU32>,
+    /// The thread that calls `on_report`.
+    run_thread: ThreadId,
 }
 
 impl Run {
     /// Starts the client as `launch` says, for one run, and calls `on_report` in order on the run's
     /// own thread until the `Exited` event, which is also how a failed start is reported.
-    /// `on_report` must not call `submit_otp`, which waits for that thread.
+    /// `on_report` must never wait for anything that may be held while `submit_otp` runs, since
+    /// `submit_otp` waits for that thread; calling `submit_otp` or `stop` on it panics.
     ///
     /// `password` goes to stdin at the client's first password prompt, if the interpreter expects
     /// one there, and is then zeroed. The process must ignore SIGPIPE (see the crate documentation).
@@ -66,13 +70,15 @@ impl Run {
                     launch.program.display(),
                     unix::describe_errno(errno)
                 );
-                start_thread("fvm-watchdog", move || {
-                    report_spawn_failure(text, errno, on_report)
-                });
+                let reporter = thread::Builder::new()
+                    .name("fvm-watchdog".to_owned())
+                    .spawn(move || report_spawn_failure(text, errno, on_report))
+                    .expect("starting the watchdog thread");
                 return Run {
                     inputs,
                     client_name,
                     process_id: Arc::new(AtomicU32::new(0)),
+                    run_thread: reporter.thread().id(),
                 };
             }
         };
@@ -80,18 +86,29 @@ impl Run {
         let process_id = Arc::new(AtomicU32::new(spawned.child.id()));
         let exit = spawned.child.exit_watch();
         let exited = inputs.clone();
-        start_thread("fvm-watchdog-exit", move || {
-            exit.wait();
-            let _ = exited.send(Input::Exited);
-        });
+        thread::Builder::new()
+            .name("fvm-watchdog-exit".to_owned())
+            .spawn(move || {
+                exit.wait();
+                let _ = exited.send(Input::Exited);
+            })
+            .expect("starting the watchdog's exit thread");
+        let wake = Arc::new(spawned.wake_read);
         for (source, pipe) in [
             (OutputSource::Stdout, spawned.stdout),
             (OutputSource::Stderr, spawned.stderr),
         ] {
+            let wake = Arc::clone(&wake);
             let forwarded = inputs.clone();
-            start_thread("fvm-watchdog-output", move || {
-                forward(source, pipe, forwarded)
-            });
+            thread::Builder::new()
+                .name("fvm-watchdog-output".to_owned())
+                .spawn(move || {
+                    unix::read_output(pipe, &wake, |bytes| {
+                        forwarded.send(Input::Output(source, bytes)).is_ok()
+                    });
+                    let _ = forwarded.send(Input::End(source));
+                })
+                .expect("starting a watchdog output thread");
         }
 
         let command = iter::once(launch.program.display().to_string())
@@ -119,16 +136,21 @@ impl Run {
             stop: None,
             stdout: Stream::new(timing.line_idle_flush),
             stderr: Stream::new(timing.line_idle_flush),
+            wake_readers: Some(spawned.wake_write),
             batch: Vec::new(),
             batch_deadline: None,
             stage: None,
             kill_deadline: None,
         };
-        start_thread("fvm-watchdog", move || watch.run(command, &received));
+        let watcher = thread::Builder::new()
+            .name("fvm-watchdog".to_owned())
+            .spawn(move || watch.run(command, &received))
+            .expect("starting the watchdog thread");
         Run {
             inputs,
             client_name,
             process_id,
+            run_thread: watcher.thread().id(),
         }
     }
 
@@ -136,9 +158,17 @@ impl Run {
     /// the client waits for the OTP. The caller checks the code with `Backend::check_otp` first.
     /// The error is the Helper's answer to the app.
     pub fn submit_otp(&self, code: String) -> Result<(), HelperError> {
+        assert_ne!(
+            thread::current().id(),
+            self.run_thread,
+            "submit_otp from on_report would wait for its own thread"
+        );
         let code = Zeroizing::new(code);
         let (reply, answer) = mpsc::sync_channel(1);
-        let not_running = || wrong_phase(format!("{} is not running", self.client_name));
+        let not_running = || HelperError {
+            code: HelperErrorCode::WrongPhase,
+            message: format!("{} is not running", self.client_name),
+        };
         if self.inputs.send(Input::SubmitOtp { code, reply }).is_err() {
             return Err(not_running());
         }
@@ -149,6 +179,11 @@ impl Run {
     /// Stops the client: the stop policy's graceful stop now, the forced one after its grace
     /// period. Only the first reason counts; nothing happens once the client has exited.
     pub fn stop(&self, reason: StopReason) {
+        assert_ne!(
+            thread::current().id(),
+            self.run_thread,
+            "stop is not for on_report"
+        );
         let _ = self.inputs.send(Input::Stop(reason));
     }
 
@@ -173,13 +208,6 @@ pub(crate) enum Input {
     RoutesRepaired(RouteRepairOutcome),
 }
 
-fn start_thread(name: &str, body: impl FnOnce() + Send + 'static) {
-    thread::Builder::new()
-        .name(name.to_owned())
-        .spawn(body)
-        .expect("starting a watchdog thread");
-}
-
 fn report_spawn_failure(text: String, errno: i32, mut on_report: impl FnMut(Report)) {
     on_report(Report::Output(vec![OutputLine {
         date: SystemTime::now(),
@@ -199,35 +227,6 @@ fn report_spawn_failure(text: String, errno: i32, mut on_report: impl FnMut(Repo
     }));
 }
 
-fn forward(source: OutputSource, mut pipe: PipeReader, inputs: Sender<Input>) {
-    let mut buffer = vec![0; 65_536];
-    loop {
-        match pipe.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => {
-                if inputs
-                    .send(Input::Output(source, buffer[..count].to_vec()))
-                    .is_err()
-                {
-                    // The run stopped waiting for this pipe.
-                    return;
-                }
-            }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            // Ends the stream as the end of file does.
-            Err(_) => break,
-        }
-    }
-    let _ = inputs.send(Input::End(source));
-}
-
-fn wrong_phase(message: impl Into<String>) -> HelperError {
-    HelperError {
-        code: HelperErrorCode::WrongPhase,
-        message: message.into(),
-    }
-}
-
 struct Watch<I, R> {
     client_name: &'static str,
     interpreter: I,
@@ -239,14 +238,16 @@ struct Watch<I, R> {
     process_id: Arc<AtomicU32>,
     phase: Phase,
 
-    stdin: Option<io::PipeWriter>,
+    stdin: Option<PipeWriter>,
     /// The password and a line break, until written.
     password: Option<Zeroizing<Vec<u8>>>,
     otp_submitted: bool,
 
     furthest: Milestone,
     tunnel_ip: Option<Ipv4Addr>,
-    tunnel_up_at: Option<Instant>,
+    /// On the clock that counts sleep: the app compares the up duration with how long a session
+    /// counts as stable. The stage limits stay on `Instant`, which stops during sleep, as before.
+    tunnel_up_at: Option<Duration>,
     rejected_certificates: Vec<String>,
     certificate_rejected_at: Option<Milestone>,
     tunnel_mode_rejected: bool,
@@ -255,6 +256,9 @@ struct Watch<I, R> {
 
     stdout: Stream,
     stderr: Stream,
+    /// Closed when the run finishes, so the output threads return even while something the client
+    /// started still holds a pipe.
+    wake_readers: Option<PipeWriter>,
     batch: Vec<OutputLine>,
     batch_deadline: Option<Instant>,
     stage: Option<Stage>,
@@ -266,7 +270,8 @@ enum Phase {
     /// Reaped; collecting the rest of the output until both pipes end or the deadline passes.
     Draining {
         status: ProcessExitStatus,
-        exited_at: Instant,
+        /// On the clock of `tunnel_up_at`.
+        exited_at: Duration,
         deadline: Instant,
     },
     RepairingRoutes(ExitFacts),
@@ -281,7 +286,8 @@ struct Stage {
 
 struct Stream {
     lines: LineAssembler,
-    /// The bytes after the last line break, for prompts.
+    /// The bytes after the last line break, for prompts; the last `MAX_LINE_BYTES` of them, like
+    /// the lines, since a prompt is at the end.
     unfinished: Vec<u8>,
     open: bool,
 }
@@ -412,6 +418,8 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             }
             None => stream.unfinished.extend_from_slice(bytes),
         }
+        let excess = stream.unfinished.len().saturating_sub(MAX_LINE_BYTES);
+        stream.unfinished.drain(..excess);
         // A prompt follows the lines printed before it.
         for text in lines {
             self.line(source, text);
@@ -479,7 +487,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
     fn reach(&mut self, milestone: Milestone) {
         self.furthest = milestone;
         let tunnel_ip = if milestone == Milestone::TunnelUp {
-            self.tunnel_up_at = Some(Instant::now());
+            self.tunnel_up_at = Some(unix::time_including_sleep());
             self.tunnel_ip
         } else {
             None
@@ -523,26 +531,27 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
 
     fn submit_otp(&mut self, code: &str) -> Result<(), HelperError> {
         let client = self.client_name;
-        if !self.running() || self.stop.is_some() {
-            return Err(wrong_phase(format!("{client} is not running")));
-        }
-        if self.otp_submitted {
-            return Err(wrong_phase("an OTP was already submitted for this attempt"));
-        }
-        if self.furthest != Milestone::OtpPrompted {
-            return Err(wrong_phase(format!("{client} is not waiting for an OTP")));
-        }
-        self.otp_submitted = true;
-        let mut line = Zeroizing::new(Vec::with_capacity(code.len() + 1));
-        line.extend_from_slice(code.as_bytes());
-        line.push(b'\n');
-        let written = self.write_stdin(&line);
-        // The client reads nothing after the OTP.
-        self.stdin = None;
-        if !written {
-            return Err(wrong_phase(format!(
-                "{client} exited before the OTP could be written"
-            )));
+        let refusal = if !self.running() || self.stop.is_some() {
+            Some(format!("{client} is not running"))
+        } else if self.otp_submitted {
+            Some("an OTP was already submitted for this attempt".to_owned())
+        } else if self.furthest != Milestone::OtpPrompted {
+            Some(format!("{client} is not waiting for an OTP"))
+        } else {
+            self.otp_submitted = true;
+            let mut line = Zeroizing::new(Vec::with_capacity(code.len() + 1));
+            line.extend_from_slice(code.as_bytes());
+            line.push(b'\n');
+            let written = self.write_stdin(&line);
+            // The client reads nothing after the OTP.
+            self.stdin = None;
+            (!written).then(|| format!("{client} exited before the OTP could be written"))
+        };
+        if let Some(message) = refusal {
+            return Err(HelperError {
+                code: HelperErrorCode::WrongPhase,
+                message,
+            });
         }
         self.meta("‹OTP sent›");
         self.advance(Milestone::OtpSubmitted);
@@ -595,7 +604,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         if self.stop.is_some() {
             return;
         }
-        child.terminate(self.stop_policy.graceful);
+        child.signal(Signal::TERM, self.stop_policy.graceful);
         self.stop = Some(reason);
         self.stage = None;
         self.meta(format!("‹sent SIGTERM (reason: {})›", raw_value(reason)));
@@ -612,7 +621,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             seconds(self.stop_policy.grace_period)
         ));
         if let Phase::Running(child) = &self.phase {
-            child.kill(self.stop_policy.forced);
+            child.signal(Signal::KILL, self.stop_policy.forced);
         }
     }
 
@@ -622,13 +631,13 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         let Phase::Running(child) = mem::replace(&mut self.phase, Phase::Reported) else {
             unreachable!("the client exits once")
         };
-        let status = child.reap();
+        // Before the pid can be reused.
         self.process_id.store(0, Ordering::Relaxed);
-        let now = Instant::now();
+        let status = child.reap();
         self.phase = Phase::Draining {
             status,
-            exited_at: now,
-            deadline: now + self.timing.pipe_drain,
+            exited_at: unix::time_including_sleep(),
+            deadline: Instant::now() + self.timing.pipe_drain,
         };
         self.stdin = None;
         self.password = None;
@@ -661,6 +670,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         else {
             unreachable!("a run finishes once, after the client exited")
         };
+        self.wake_readers = None;
         for source in [OutputSource::Stdout, OutputSource::Stderr] {
             if let Some(text) = self.stream(source).lines.finish() {
                 self.line(source, text);
@@ -682,15 +692,13 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             cert_rejected_digests: mem::take(&mut self.rejected_certificates),
             cert_rejected_at: self.certificate_rejected_at,
             tunnel_mode_rejected: self.tunnel_mode_rejected,
-            up_duration: self
-                .tunnel_up_at
-                .map(|up| exited_at.saturating_duration_since(up)),
+            up_duration: self.tunnel_up_at.map(|up| exited_at.saturating_sub(up)),
             exit_status: status,
         };
         if self.interpreter.routes_left_unrestored() {
             self.flush_batch();
             self.phase = Phase::RepairingRoutes(facts);
-            (self.on_report)(Report::RepairRoutes(RouteRepair(self.inputs.clone())));
+            (self.on_report)(Report::RepairRoutes(RouteRepair(Some(self.inputs.clone()))));
         } else {
             self.report_exit(facts);
         }

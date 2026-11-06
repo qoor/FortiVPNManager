@@ -333,12 +333,16 @@ fn spawn_failure_of_a_file_that_is_not_executable() {
 }
 
 /// pppd keeps the client's stderr and lives in its own session, so a pipe may stay open after the
-/// client exits: output is still collected for the drain period, then the exit is reported anyway.
+/// client exits: output is still collected for the drain period, then the exit is reported anyway
+/// and the run closes its end of the pipe.
 #[test]
 fn pipe_held_open_by_another_process_group() {
     let script_text = "\
 set -m
-( /bin/sleep 0.1; echo 'Thu Oct 15 12:12:06 2026 : late pppd line' >&2; exec /bin/sleep 3 ) </dev/null >/dev/null &
+( trap '' PIPE
+  /bin/sleep 0.1; echo 'Thu Oct 15 12:12:06 2026 : late pppd line' >&2
+  /bin/sleep 1.2; /bin/echo 'after the drain' >&2 || echo 'late_write_failed=yes' >> \"$1\"
+  exec /bin/sleep 3 ) </dev/null >/dev/null &
 set +m
 echo 'INFO:   bye'
 exit 0";
@@ -358,6 +362,10 @@ exit 0";
     ));
     assert!(session.has_text("‹output pipes still open after 0.7s; not waiting any longer›"));
     session.assert_finished_cleanly();
+    // Nothing reads the pipe any more, so the holder's next write fails.
+    assert!(session.wait(Duration::from_secs(3), |session| {
+        session.record.value("late_write_failed").is_some()
+    }));
 }
 
 /// Output goes out in several batches, by time and before each event, and never after the exit.

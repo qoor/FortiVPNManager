@@ -48,6 +48,19 @@ fn only_the_three_pipes_are_inherited() {
     drop(leaked);
 }
 
+/// This process ignores SIGPIPE, as the Helper must, yet the client gets the default: `yes` dies
+/// of SIGPIPE once `head` stops reading, instead of failing with EPIPE.
+#[test]
+fn sigpipe_is_at_its_default_in_the_client() {
+    let mut session = script(
+        "( /usr/bin/yes; echo \"yes_status=$?\" >> \"$1\" ) | /usr/bin/head -c1 >/dev/null",
+        Setup::default(),
+    );
+    session.wait_for_exit();
+    // 128 + SIGPIPE.
+    assert_eq!(session.record.value("yes_status").as_deref(), Some("141"));
+}
+
 #[test]
 fn the_environment_is_exactly_the_launch_one() {
     let mut launch = shell("/usr/bin/env", Vec::new());

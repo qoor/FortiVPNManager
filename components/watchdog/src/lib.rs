@@ -13,6 +13,7 @@ mod run;
 mod unix;
 
 use std::sync::mpsc::Sender;
+use std::thread;
 use std::time::Duration;
 
 use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine};
@@ -31,15 +32,26 @@ pub enum Report {
     RepairRoutes(RouteRepair),
 }
 
-/// Finishes the route repair a run asked for; the run waits for it.
+/// Finishes the route repair a run asked for. The run waits for it, so dropping it unfinished
+/// panics.
 #[must_use = "the run reports its exit only after the route repair is finished"]
-pub struct RouteRepair(Sender<run::Input>);
+pub struct RouteRepair(Option<Sender<run::Input>>);
 
 impl RouteRepair {
-    pub fn finish(self, outcome: RouteRepairOutcome) {
+    pub fn finish(mut self, outcome: RouteRepairOutcome) {
         self.0
+            .take()
+            .expect("a route repair is finished once")
             .send(run::Input::RoutesRepaired(outcome))
             .expect("the run waits for the route repair");
+    }
+}
+
+impl Drop for RouteRepair {
+    fn drop(&mut self) {
+        if self.0.is_some() && !thread::panicking() {
+            panic!("a route repair was dropped unfinished; the run would never report its exit");
+        }
     }
 }
 
