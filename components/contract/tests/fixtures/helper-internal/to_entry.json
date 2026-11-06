@@ -1,0 +1,14 @@
+[
+  {"appConnected": {"app": 1, "uid": 501}},
+  {"request": {"id": 1, "app": 1, "request": {"connect": {"json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\",\"host\":\"vpn.example.com\"}"}}}},
+  {"request": {"id": 2, "app": 1, "request": {"submitOtp": {"attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F", "code": "123456"}}}},
+  {"request": {"id": 3, "app": 1, "request": {"disconnect": {"attempt": "", "reason": "userDisconnect"}}}},
+  {"request": {"id": 4, "app": 1, "request": {"status": {}}}},
+  {"request": {"id": 5, "app": 1, "request": {"exitWhenIdle": {}}}},
+  {"appDisconnected": {"app": 1}},
+  {"executableReplaced": {}},
+  {"terminationRequested": {}},
+  {"routesRepaired": {"outcome": "repaired"}},
+  {"routesRepaired": {"outcome": "notNeeded"}},
+  {"routesRepaired": {"outcome": "failed"}}
+]

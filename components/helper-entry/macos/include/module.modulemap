@@ -1,0 +1,7 @@
+// `link` makes `import FVMHelperEntry` link the static library, so the target needs only
+// LIBRARY_SEARCH_PATHS to find it.
+module FVMHelperEntry {
+    header "fvm_helper_entry.h"
+    link "fvm_helper_entry_macos"
+    export *
+}

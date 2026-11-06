@@ -5,6 +5,9 @@ DerivedData/
 .build/
 packaging/macos/Config/Local.xcconfig
 
+# Cargo (terminal builds; Xcode builds go under DerivedData)
+/target
+
 # SwiftPM
 Packages/*/.build/
 Packages/*/.swiftpm/

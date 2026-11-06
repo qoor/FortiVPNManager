@@ -1,0 +1,15 @@
+[
+  {"ready": {}},
+  {"reply": {"id": 1}},
+  {"reply": {"id": 2, "json": "{\"code\":\"busy\",\"message\":\"openfortivpn is already running\"}"}},
+  {"replyFlag": {"id": 5, "value": true}},
+  {"sendEvent": {"app": 1, "json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\",\"kind\":{\"milestone\":{\"_0\":0}}}"}},
+  {"sendOutput": {"app": 1, "json": "[{\"date\":1762412345.25,\"source\":\"stdout\",\"text\":\"INFO:   Connected to gateway.\"}]"}},
+  {"repairRoutes": {"gateway": "10.30.161.16"}},
+  {"repairRoutes": {}},
+  {"exitAfterDraining": {}},
+  {"exitNow": {}},
+  {"log": {"level": "info", "category": "routes", "message": "gateway has no IPv4 address; its host route will not be repaired"}},
+  {"log": {"level": "notice", "category": "helper", "message": "run E621E1F8-C36C-495A-93FC-0C247A3E6E5F: tunnel up"}},
+  {"log": {"level": "error", "category": "helper", "message": "cannot write the pidfile: ‹denied›"}}
+]

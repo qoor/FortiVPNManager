@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = [
+    "components/contract",
+    "components/helper-entry/macos",
+]
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+fvm-contract = { path = "components/contract" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `all` exposes set_nosigpipe.
+socket2 = { version = "0.6", features = ["all"] }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+# Keeps file and line numbers in crash reports.
+debug = "line-tables-only"

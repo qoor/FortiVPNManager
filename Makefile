@@ -12,6 +12,9 @@ APP_ID       := com.qoor.FortiVPNManager
 HELPER_LABEL := com.qoor.FortiVPNManager.Helper
 SUBSYSTEM    := com.qoor.FortiVPNManager
 
+# rustup's cargo, which is not on the default PATH (scripts/build-rust.sh uses the same one).
+CARGO        ?= $(HOME)/.cargo/bin/cargo
+
 .PHONY: local-config gen build release test verify install run logs btm clean
 
 ## Create packaging/macos/Config/Local.xcconfig with DEVELOPMENT_TEAM from the Apple Development certificate.
@@ -32,8 +35,10 @@ build: gen
 release:
 	$(MAKE) build CONFIG=Release
 
-test:
+test: gen
 	swift test --package-path Packages/FortiCore
+	$(CARGO) test --workspace
+	xcodebuild -project $(PROJECT) -scheme ContractTests -derivedDataPath $(DERIVED) test
 
 ## Signing sanity checks for the built app.
 verify:
