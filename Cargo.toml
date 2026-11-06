@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "components/backend-adapter",
     "components/contract",
     "components/helper-entry/macos",
 ]
@@ -10,6 +11,7 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
+fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

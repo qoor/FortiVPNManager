@@ -1,0 +1,102 @@
+//! The client's name, executable problems, stop policy and leftover executables.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
+use fvm_contract::backend::{Backend, ClientProblem, ClientProblemKind, StopPolicy, StopScope};
+
+const RESOLVED: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
+
+fn describe(kind: ClientProblemKind, path: &str) -> String {
+    OpenFortiVpn.describe_problem(&ClientProblem {
+        kind,
+        path: PathBuf::from(path),
+    })
+}
+
+#[test]
+fn is_named_openfortivpn() {
+    assert_eq!(OpenFortiVpn.client_name(), "openfortivpn");
+}
+
+#[test]
+fn describes_problems_as_the_current_app_shows_them() {
+    assert_eq!(
+        describe(
+            ClientProblemKind::NotFound,
+            "/opt/homebrew/bin/openfortivpn"
+        ),
+        "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn"
+    );
+    assert_eq!(
+        describe(
+            ClientProblemKind::OutsideAllowedLocation,
+            "/usr/local/bin/openfortivpn"
+        ),
+        "openfortivpn resolves outside the Homebrew Cellar (/opt/homebrew/Cellar/openfortivpn/): /usr/local/bin/openfortivpn"
+    );
+    assert_eq!(
+        describe(ClientProblemKind::NotRegularFile, RESOLVED),
+        format!("openfortivpn is not a regular file: {RESOLVED}")
+    );
+    assert_eq!(
+        describe(
+            ClientProblemKind::WritableByOthers { mode: 0o775 },
+            RESOLVED
+        ),
+        format!(
+            "openfortivpn is writable by other users (mode 775); refusing to run it: {RESOLVED}"
+        )
+    );
+    assert_eq!(
+        describe(
+            ClientProblemKind::WritableByOthers { mode: 0o4757 },
+            RESOLVED
+        ),
+        format!(
+            "openfortivpn is writable by other users (mode 4757); refusing to run it: {RESOLVED}"
+        )
+    );
+    assert_eq!(
+        describe(ClientProblemKind::NotExecutable, RESOLVED),
+        format!("openfortivpn is not executable: {RESOLVED}")
+    );
+}
+
+#[test]
+fn stops_the_client_alone_first_and_its_group_only_by_force() {
+    assert_eq!(
+        OpenFortiVpn.stop_policy(),
+        StopPolicy {
+            graceful: StopScope::Process,
+            grace_period: Duration::from_secs(10),
+            forced: StopScope::ProcessThenGroup,
+        }
+    );
+}
+
+#[test]
+fn owns_openfortivpn_from_the_cellar_and_apple_pppd() {
+    for path in [
+        RESOLVED,
+        "/opt/homebrew/Cellar/openfortivpn/1.24.1_1/bin/openfortivpn",
+        "/opt/homebrew/Cellar/openfortivpn/1.23.0/bin/openfortivpn",
+        "/usr/sbin/pppd",
+    ] {
+        assert!(OpenFortiVpn.is_own_executable(Path::new(path)), "{path}");
+    }
+    for path in [
+        "/opt/homebrew/bin/openfortivpn",
+        "/opt/homebrew/Cellar/openfortivpn",
+        "/opt/homebrew/Cellar/openfortivpn-other/1.0/bin/openfortivpn",
+        "/opt/homebrew/Cellar/openconnect/9.12/bin/openconnect",
+        "/usr/local/bin/openfortivpn",
+        "/usr/local/sbin/pppd",
+        "/usr/sbin/pppd2",
+        "/sbin/route",
+        "/bin/sh",
+    ] {
+        assert!(!OpenFortiVpn.is_own_executable(Path::new(path)), "{path}");
+    }
+}

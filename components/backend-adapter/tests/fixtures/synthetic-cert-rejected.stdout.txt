@@ -1,0 +1,49 @@
+VPN account password: 
+ERROR:  Gateway certificate validation failed, and the certificate digest is not in the local whitelist. If you trust it, rerun with:
+ERROR:      --trusted-cert b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+ERROR:  or add this line to your configuration file:
+ERROR:      trusted-cert = b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+ERROR:  Gateway certificate:
+ERROR:      subject:
+ERROR:          C=US
+ERROR:          ST=California
+ERROR:          L=Sunnyvale
+ERROR:          O=Fortinet
+ERROR:          OU=FortiGate
+ERROR:          CN=FGT60FTK00000000
+ERROR:          emailAddress=support@fortinet.com
+ERROR:      issuer:
+ERROR:          C=US
+ERROR:          ST=California
+ERROR:          L=Sunnyvale
+ERROR:          O=Fortinet
+ERROR:          OU=Certificate Authority
+ERROR:          CN=fortinet-subca2001
+ERROR:          emailAddress=support@fortinet.com
+ERROR:      sha256 digest:
+ERROR:          b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+INFO:   Closed connection to gateway.
+ERROR:  Gateway certificate validation failed, and the certificate digest is not in the local whitelist. If you trust it, rerun with:
+ERROR:      --trusted-cert b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+ERROR:  or add this line to your configuration file:
+ERROR:      trusted-cert = b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+ERROR:  Gateway certificate:
+ERROR:      subject:
+ERROR:          C=US
+ERROR:          ST=California
+ERROR:          L=Sunnyvale
+ERROR:          O=Fortinet
+ERROR:          OU=FortiGate
+ERROR:          CN=FGT60FTK00000000
+ERROR:          emailAddress=support@fortinet.com
+ERROR:      issuer:
+ERROR:          C=US
+ERROR:          ST=California
+ERROR:          L=Sunnyvale
+ERROR:          O=Fortinet
+ERROR:          OU=Certificate Authority
+ERROR:          CN=fortinet-subca2001
+ERROR:          emailAddress=support@fortinet.com
+ERROR:      sha256 digest:
+ERROR:          b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11
+INFO:   Could not log out.
