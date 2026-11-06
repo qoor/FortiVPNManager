@@ -1,5 +1,4 @@
 import Foundation
-import FortiHelperCore
 import FortiShared
 import SystemConfiguration
 
@@ -7,8 +6,8 @@ import SystemConfiguration
 /// default route via the primary service's router and removes the gateway host route openfortivpn
 /// added. Every address handed to `/sbin/route` is validated as dotted-quad IPv4 first.
 enum RouteRepair {
-    static func repair(gatewayIP: String?) -> RouteRepairOutcome {
-        var outcome = RouteRepairOutcome.notNeeded
+    static func repair(gatewayIP: String?) -> HelperInternal.RouteRepairOutcome {
+        var outcome = HelperInternal.RouteRepairOutcome.notNeeded
         let defaultRoute = RouteTable.lookup("default")
         if defaultRoute == nil || isPPPDefault(defaultRoute) {
             outcome = outcome.combined(with: restoreDefaultRoute(replacing: defaultRoute))
@@ -19,7 +18,7 @@ enum RouteRepair {
         return outcome
     }
 
-    private static func restoreDefaultRoute(replacing current: RouteTable.Entry?) -> RouteRepairOutcome {
+    private static func restoreDefaultRoute(replacing current: RouteTable.Entry?) -> HelperInternal.RouteRepairOutcome {
         guard let primary = primaryIPv4() else {
             // No usable network (e.g. Wi-Fi off): there is no route to restore yet; configd adds
             // the default route when a network comes up.
@@ -130,9 +129,9 @@ enum RouteTable {
     }
 }
 
-private extension RouteRepairOutcome {
+private extension HelperInternal.RouteRepairOutcome {
     /// A failure wins over a repair, which wins over "nothing to do".
-    func combined(with other: RouteRepairOutcome) -> RouteRepairOutcome {
+    func combined(with other: HelperInternal.RouteRepairOutcome) -> HelperInternal.RouteRepairOutcome {
         if self == .failed || other == .failed { return .failed }
         if self == .repaired || other == .repaired { return .repaired }
         return .notNeeded

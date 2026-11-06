@@ -63,9 +63,8 @@
 - `components/os-integration-helper/macos/`: root 데몬
 - `Packages/FortiCore/`: 시스템에 의존하지 않는 로직
   - `FortiShared`: 앱과 Helper가 공유하는 XPC 계약
-  - `FortiCore`: 연결 state machine, openfortivpn 출력 해석, OTP 메일 판별, IMAP, 예외 규칙 계산
+  - `FortiCore`: 연결 state machine, OTP 메일 판별, IMAP, 예외 규칙 계산
   - `FortiConfig`: config.yaml 모델과 읽기·쓰기. Yams에 의존하므로 앱만 쓴다
-  - `FortiHelperCore`: Helper의 프로세스 감독
 
 ## 5. 동작 원칙
 

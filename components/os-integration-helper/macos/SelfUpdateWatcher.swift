@@ -6,7 +6,7 @@ import Foundation
 ///
 /// A running helper whose on-disk binary changed can no longer pass the app's code-signing check
 /// (the static code no longer matches what is running), so it must exit once idle and let launchd
-/// start the new binary on the next XPC request. `TunnelController` decides when exiting is safe.
+/// start the new binary on the next XPC request. The Helper entry decides when exiting is safe.
 final class SelfUpdateWatcher: @unchecked Sendable {
     // @unchecked: every stored property is immutable; the timer is only configured in `start`.
     private struct Fingerprint: Equatable {
@@ -20,7 +20,7 @@ final class SelfUpdateWatcher: @unchecked Sendable {
     private let timer: any DispatchSourceTimer
 
     init() {
-        path = Self.executablePath()
+        path = Bundle.main.executablePath ?? CommandLine.arguments[0]
         original = Self.fingerprint(of: path)
         timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "com.qoor.FortiVPNManager.Helper.selfupdate"))
     }
@@ -31,20 +31,16 @@ final class SelfUpdateWatcher: @unchecked Sendable {
         return Self.fingerprint(of: path) != original
     }
 
-    /// Calls `onReplaced` periodically once the binary was replaced. Call once.
+    /// Checks periodically and calls `onReplaced` once the binary was replaced; a replacement is
+    /// permanent, so checking stops there. Call once.
     func start(onReplaced: @escaping @Sendable () -> Void) {
         timer.schedule(deadline: .now() + 5, repeating: 5)
         timer.setEventHandler { [weak self] in
-            if self?.isReplaced == true {
-                onReplaced()
-            }
+            guard let self, isReplaced else { return }
+            timer.cancel()
+            onReplaced()
         }
         timer.resume()
-    }
-
-    /// The helper runs as root, so `ofRootProcess` finds its own process.
-    private static func executablePath() -> String {
-        ProcessIdentity.ofRootProcess(getpid())?.path ?? Bundle.main.executablePath ?? CommandLine.arguments[0]
     }
 
     private static func fingerprint(of path: String) -> Fingerprint? {

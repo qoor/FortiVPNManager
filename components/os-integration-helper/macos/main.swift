@@ -5,24 +5,23 @@ import FortiShared
 /// Accepts connections from the FortiVPNManager app (the listener pins its signing identity) and
 /// exports a `HelperService` bound to each one.
 final class ListenerDelegate: NSObject, NSXPCListenerDelegate {
-    private let controller: TunnelController
+    private let updateWatcher: SelfUpdateWatcher
 
-    init(controller: TunnelController) {
-        self.controller = controller
+    init(updateWatcher: SelfUpdateWatcher) {
+        self.updateWatcher = updateWatcher
         super.init()
     }
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        guard controller.admitNewConnection() else {
+        guard let client = EntryRelay.admit(connection, executableReplaced: updateWatcher.isReplaced) else {
             HelperLog.helper.notice("refusing a connection from pid \(connection.processIdentifier): helper is exiting")
             return false
         }
-        let client = ClientLink(connection: connection)
         connection.exportedInterface = NSXPCInterface(with: HelperXPCProtocol.self)
-        connection.exportedObject = HelperService(controller: controller, client: client)
+        connection.exportedObject = HelperService(client: client)
         connection.remoteObjectInterface = NSXPCInterface(with: HelperClientXPCProtocol.self)
-        connection.invalidationHandler = { @Sendable [controller] in
-            controller.clientInvalidated(client)
+        connection.invalidationHandler = { @Sendable in
+            EntryRelay.disconnected(client)
         }
         connection.resume()
         HelperLog.helper.notice("accepted client pid \(client.pid), uid \(client.uid)")
@@ -37,22 +36,24 @@ private func runHelper() {
         exit(EXIT_FAILURE)
     }
 
-    // EPIPE on a child's stdin means the child exited (ProcessRunner also sets F_SETNOSIGPIPE).
+    // Rust ignores SIGPIPE only in a Rust main, and this main is Swift: without this, the Helper
+    // entry writing to the stdin of a VPN client that already exited would kill the process.
     signal(SIGPIPE, SIG_IGN)
     // Delivered through the dispatch source below instead of terminating the process.
     signal(SIGTERM, SIG_IGN)
 
+    // Created before the entry starts, so a reinstall during its cleanup counts as a replacement.
     let updateWatcher = SelfUpdateWatcher()
-    let controller = TunnelController(updateWatcher: updateWatcher)
-    // Installed before the sweep: a SIGTERM during it is handled once the main queue runs.
+    // Installed before the entry starts: a SIGTERM during its cleanup is passed on once the main
+    // queue runs.
     let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-    termination.setEventHandler { controller.shutdown() }
+    termination.setEventHandler { EntryRelay.terminationRequested() }
     termination.resume()
 
-    OrphanSweeper.sweep()
-    updateWatcher.start { controller.binaryReplaced() }
+    EntryRelay.start()
+    updateWatcher.start { EntryRelay.executableReplaced() }
 
-    let delegate = ListenerDelegate(controller: controller)
+    let delegate = ListenerDelegate(updateWatcher: updateWatcher)
     let listener = NSXPCListener(machServiceName: FortiIdentifiers.helperMachService)
     listener.setConnectionCodeSigningRequirement(
         CodeSigningIdentity.requirement(identifier: FortiIdentifiers.appBundleID, teamID: teamID)

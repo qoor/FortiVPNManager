@@ -6,14 +6,12 @@ enum HelperBuild {
     static let id = BuildID(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")
 }
 
-/// XPC endpoint exported on one app connection. Decodes requests and forwards them, together with
-/// the caller's `ClientLink`, to the shared `TunnelController`.
+/// XPC endpoint exported on one app connection. Answers the version check and the exception-route
+/// methods itself and passes every other request, unread, to the Helper entry.
 final class HelperService: NSObject, HelperXPCProtocol {
-    private let controller: TunnelController
     private let client: ClientLink
 
-    init(controller: TunnelController, client: ClientLink) {
-        self.controller = controller
+    init(client: ClientLink) {
         self.client = client
         super.init()
     }
@@ -23,30 +21,23 @@ final class HelperService: NSObject, HelperXPCProtocol {
     }
 
     func connect(_ request: Data, reply: @escaping @Sendable (Data?) -> Void) {
-        let decoded: ConnectRequest
-        do {
-            decoded = try XPCCoding.decode(ConnectRequest.self, from: request)
-        } catch {
-            reply(Self.encode(HelperError(.invalidRequest, "could not decode the connect request")))
-            return
-        }
-        reply(controller.connect(decoded, from: client).map(Self.encode))
+        EntryRelay.forward(.connect(json: String(decoding: request, as: UTF8.self)), from: client, reply: .optionalData(reply))
     }
 
     func submitOTP(attemptID: String, code: String, reply: @escaping @Sendable (Data?) -> Void) {
-        reply(controller.submitOTP(attemptID: attemptID, code: code, from: client).map(Self.encode))
+        EntryRelay.forward(.submitOtp(attempt: attemptID, code: code), from: client, reply: .optionalData(reply))
     }
 
     func disconnect(attemptID: String, reason: String, reply: @escaping @Sendable (Data?) -> Void) {
-        reply(controller.disconnect(attemptID: attemptID, reason: reason, from: client).map(Self.encode))
+        EntryRelay.forward(.disconnect(attempt: attemptID, reason: reason), from: client, reply: .optionalData(reply))
     }
 
     func status(reply: @escaping @Sendable (Data) -> Void) {
-        reply((try? XPCCoding.encode(controller.status())) ?? Data())
+        EntryRelay.forward(.status, from: client, reply: .data(reply))
     }
 
     func exitWhenIdle(reply: @escaping @Sendable (Bool) -> Void) {
-        reply(controller.exitWhenIdle())
+        EntryRelay.forward(.exitWhenIdle, from: client, reply: .flag(reply))
     }
 
     func bypassRoutes(reply: @escaping @Sendable (Data) -> Void) {
@@ -62,11 +53,6 @@ final class HelperService: NSObject, HelperXPCProtocol {
             return
         }
         BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.write(decoded))) }
-    }
-
-    /// Never `nil`: a `nil` reply means success.
-    private static func encode(_ error: HelperError) -> Data {
-        (try? XPCCoding.encode(error)) ?? Data(#"{"code":"internalError","message":""}"#.utf8)
     }
 
     private static func encode(_ reply: BypassRoutesReply) -> Data {
