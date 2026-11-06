@@ -4,6 +4,7 @@ members = [
     "components/backend-adapter",
     "components/contract",
     "components/helper-entry/macos",
+    "components/watchdog",
 ]
 
 [workspace.package]
@@ -13,10 +14,14 @@ publish = false
 [workspace.dependencies]
 fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
+fvm-watchdog = { path = "components/watchdog" }
+nix = "0.31"
+rustix = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # `all` exposes set_nosigpipe.
 socket2 = { version = "0.6", features = ["all"] }
+zeroize = "1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

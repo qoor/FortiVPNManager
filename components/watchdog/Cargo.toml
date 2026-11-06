@@ -1,0 +1,18 @@
+[package]
+name = "fvm-watchdog"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+fvm-contract.workspace = true
+nix = { workspace = true, features = ["process", "signal"] }
+rustix = { workspace = true, features = ["process"] }
+serde_json.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+# A descriptor without close-on-exec, to show that the client does not inherit it.
+nix = { workspace = true, features = ["fs"] }
+
+[lints]
+workspace = true
