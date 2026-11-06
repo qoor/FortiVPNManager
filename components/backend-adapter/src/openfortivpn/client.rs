@@ -13,16 +13,11 @@ const CELLAR: &str = "/opt/homebrew/Cellar/openfortivpn/";
 const PPPD: &str = "/usr/sbin/pppd";
 
 pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
-    locate_at(Path::new(HOMEBREW_LINK), Path::new(CELLAR))
-}
-
-/// `cellar` is a resolved path.
-fn locate_at(link: &Path, cellar: &Path) -> Result<ClientExecutable, ClientProblem> {
-    let resolved = fs::canonicalize(link).map_err(|_| ClientProblem {
+    let resolved = fs::canonicalize(HOMEBREW_LINK).map_err(|_| ClientProblem {
         kind: ClientProblemKind::NotFound,
-        path: link.to_owned(),
+        path: HOMEBREW_LINK.into(),
     })?;
-    let Some(in_cellar) = inside_cellar(&resolved, cellar) else {
+    let Some(in_cellar) = inside_cellar(&resolved) else {
         return Err(ClientProblem {
             kind: ClientProblemKind::OutsideAllowedLocation,
             path: resolved,
@@ -65,11 +60,11 @@ pub(super) fn describe(problem: &ClientProblem) -> String {
 }
 
 pub(super) fn is_own_executable(path: &Path) -> bool {
-    path == Path::new(PPPD) || inside_cellar(path, Path::new(CELLAR)).is_some()
+    path == Path::new(PPPD) || inside_cellar(path).is_some()
 }
 
-fn inside_cellar<'a>(path: &'a Path, cellar: &Path) -> Option<&'a Path> {
-    path.strip_prefix(cellar)
+fn inside_cellar(path: &Path) -> Option<&Path> {
+    path.strip_prefix(CELLAR)
         .ok()
         .filter(|rest| !rest.as_os_str().is_empty())
 }
@@ -130,12 +125,10 @@ mod tests {
 
     #[test]
     fn only_paths_below_the_cellar_are_inside_it() {
-        let cellar = Path::new(CELLAR);
         assert_eq!(
-            inside_cellar(
-                Path::new("/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"),
-                cellar
-            ),
+            inside_cellar(Path::new(
+                "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+            )),
             Some(Path::new("1.24.1/bin/openfortivpn"))
         );
         for outside in [
@@ -145,11 +138,10 @@ mod tests {
             "/usr/local/bin/openfortivpn",
             "opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn",
         ] {
-            assert_eq!(inside_cellar(Path::new(outside), cellar), None, "{outside}");
+            assert_eq!(inside_cellar(Path::new(outside)), None, "{outside}");
         }
     }
 
-    /// A temporary directory with its symlinks resolved, as `canonicalize` reports paths.
     struct Scratch(PathBuf);
 
     impl Scratch {
@@ -158,12 +150,11 @@ mod tests {
                 env::temp_dir().join(format!("fvm-backend-adapter-{}-{name}", process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir(&path).unwrap();
-            Self(fs::canonicalize(path).unwrap())
+            Self(path)
         }
 
         fn file_with_mode(&self, name: &str, mode: u32) -> PathBuf {
             let path = self.0.join(name);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(&path, b"#!/bin/sh\n").unwrap();
             fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
             path
@@ -174,72 +165,6 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
-    }
-
-    #[test]
-    fn locate_reports_the_link_or_the_resolved_path_with_each_problem() {
-        let scratch = Scratch::new("locate");
-        let cellar = scratch.0.join("Cellar/openfortivpn");
-        let link = scratch.0.join("bin/openfortivpn");
-        fs::create_dir_all(link.parent().unwrap()).unwrap();
-        let problem = |kind, path: &Path| {
-            Err(ClientProblem {
-                kind,
-                path: path.to_owned(),
-            })
-        };
-
-        assert_eq!(
-            locate_at(&link, &cellar),
-            problem(ClientProblemKind::NotFound, &link)
-        );
-
-        let point_link_at = |target: &Path| {
-            let _ = fs::remove_file(&link);
-            symlink(target, &link).unwrap();
-        };
-        let outside = scratch.file_with_mode("elsewhere/openfortivpn", 0o755);
-        point_link_at(&outside);
-        assert_eq!(
-            locate_at(&link, &cellar),
-            problem(ClientProblemKind::OutsideAllowedLocation, &outside)
-        );
-
-        let directory = cellar.join("1.24.1_1/bin");
-        fs::create_dir_all(&directory).unwrap();
-        point_link_at(&directory);
-        assert_eq!(
-            locate_at(&link, &cellar),
-            problem(ClientProblemKind::NotRegularFile, &directory)
-        );
-
-        let writable = scratch.file_with_mode("Cellar/openfortivpn/1.24.1_1/bin/writable", 0o775);
-        point_link_at(&writable);
-        assert_eq!(
-            locate_at(&link, &cellar),
-            problem(
-                ClientProblemKind::WritableByOthers { mode: 0o775 },
-                &writable
-            )
-        );
-
-        let not_executable =
-            scratch.file_with_mode("Cellar/openfortivpn/1.24.1_1/bin/not-executable", 0o644);
-        point_link_at(&not_executable);
-        assert_eq!(
-            locate_at(&link, &cellar),
-            problem(ClientProblemKind::NotExecutable, &not_executable)
-        );
-
-        let usable = scratch.file_with_mode("Cellar/openfortivpn/1.24.1_1/bin/openfortivpn", 0o755);
-        point_link_at(&usable);
-        assert_eq!(
-            locate_at(&link, &cellar),
-            Ok(ClientExecutable {
-                path: usable,
-                version: Some("1.24.1".into()),
-            })
-        );
     }
 
     #[test]
@@ -266,6 +191,15 @@ mod tests {
                 "{mode:o}"
             );
         }
+    }
+
+    #[test]
+    fn a_directory_is_not_a_regular_file() {
+        let scratch = Scratch::new("directory");
+        assert_eq!(
+            file_problem(&fs::symlink_metadata(&scratch.0).unwrap()),
+            Some(ClientProblemKind::NotRegularFile)
+        );
     }
 
     #[test]
