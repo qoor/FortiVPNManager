@@ -124,7 +124,8 @@ fn check_text(field: &str, value: &str, max_bytes: usize) -> Result<(), String> 
         .chars()
         .find(|&c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{FEFF}'))
     {
-        return Err(forbidden(field, character));
+        let code = u32::from(character);
+        return Err(format!("{field} contains forbidden character U+{code:04X}"));
     }
     // Stricter than load_config(), which trims only ASCII whitespace.
     if value.starts_with(char::is_whitespace) || value.ends_with(char::is_whitespace) {
@@ -141,7 +142,10 @@ fn check_password(password: &str) -> Result<(), String> {
     // '\n' ends read_password() early, '\r' would become part of the password (a pipe has no tty
     // translation), and '\0' ends the C string.
     if let Some(character) = password.chars().find(|c| matches!(c, '\n' | '\r' | '\0')) {
-        return Err(forbidden("password", character));
+        let code = u32::from(character);
+        return Err(format!(
+            "password contains forbidden character U+{code:04X}"
+        ));
     }
     if password.len() > MAX_PASSWORD_BYTES {
         return Err(format!(
@@ -149,13 +153,6 @@ fn check_password(password: &str) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn forbidden(field: &str, character: char) -> String {
-    format!(
-        "{field} contains forbidden character U+{:04X}",
-        u32::from(character)
-    )
 }
 
 /// openfortivpn compares the gateway's SHA-256 digest as lowercase hex.

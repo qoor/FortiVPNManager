@@ -31,7 +31,7 @@ fn tunnel_up() -> Vec<Finding> {
     ]
 }
 
-const SCENARIOS: [Scenario; 5] = [
+const SCENARIOS: [Scenario; 6] = [
     Scenario {
         name: "success-tokeninfo",
         stdout: include_bytes!("fixtures/synthetic-success-tokeninfo.stdout.txt"),
@@ -71,6 +71,28 @@ const SCENARIOS: [Scenario; 5] = [
         stderr: include_bytes!("fixtures/synthetic-auth-failed.stderr.txt"),
         prompts: &[Prompt::Password],
         findings: || vec![Finding::Milestone(Milestone::ConnectedToGateway)],
+        routes_left_unrestored: false,
+    },
+    // No fixture was reconstructed for this run; it uses the same openfortivpn strings.
+    Scenario {
+        name: "tunnel-mode-rejected",
+        stdout: b"VPN account password: \n\
+INFO:   Connected to gateway.\n\
+Two-factor authentication token: \n\
+INFO:   Authenticated.\n\
+INFO:   Remote gateway has allocated a VPN.\n\
+ERROR:  Could not authenticate to the gateway. Please make sure tunnel mode is allowed by the gateway, check the realm, etc.\n\
+INFO:   Closed connection to gateway.\n\
+INFO:   Logged out.\n",
+        stderr: b"",
+        prompts: &[Prompt::Password, Prompt::Otp],
+        findings: || {
+            vec![
+                Finding::Milestone(Milestone::ConnectedToGateway),
+                Finding::Milestone(Milestone::Authenticated),
+                Finding::TunnelModeRejected,
+            ]
+        },
         routes_left_unrestored: false,
     },
 ];

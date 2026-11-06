@@ -15,16 +15,20 @@ const OTP_PROMPT: &[u8] = b"Two-factor authentication token: "; // http.c
 pub struct Interpreter {
     /// In the order printed. openfortivpn prints a rejection again when it reconnects to log out.
     rejected_certificates: Vec<String>,
-    /// "Setting new routes..." was printed.
-    routes_changed: bool,
-    /// Route restoration returned after the last route change.
-    routes_restored: bool,
-    /// "Restoring routes..." was printed and restoration has not returned yet.
-    restoring_routes: bool,
+    routes: Routes,
     /// After "Received bad header from gateway:" openfortivpn copies up to 250 bytes of tunnel data
     /// to stdout, line breaks included (io.c). That text can look like log lines, so from then on
     /// only route restoration, which happens at teardown, is still followed.
     after_raw_dump: bool,
+}
+
+#[derive(Default)]
+enum Routes {
+    #[default]
+    Unchanged,
+    Changed,
+    Restoring,
+    Restored,
 }
 
 enum Level {
@@ -60,16 +64,17 @@ impl OutputInterpreter for Interpreter {
         // Restoration logs only WARN and DEBUG lines and /sbin/route's own output (ipv4.c), apart
         // from "/sbin/route: <error>." when the binary is missing. The next INFO or ERROR line is
         // printed after it returned (tunnel.c).
-        if self.restoring_routes
+        if matches!(self.routes, Routes::Restoring)
             && matches!(level, Level::Info | Level::Error)
             && !message.starts_with("/sbin/route: ")
         {
-            self.restoring_routes = false;
-            self.routes_restored = true;
+            self.routes = Routes::Restored;
         }
         match message {
             "Restoring routes..." => {
-                self.restoring_routes = true;
+                if matches!(self.routes, Routes::Changed) {
+                    self.routes = Routes::Restoring;
+                }
                 return None;
             }
             "Received bad header from gateway:" => {
@@ -83,8 +88,7 @@ impl OutputInterpreter for Interpreter {
             "Authenticated." => return Some(Finding::Milestone(Milestone::Authenticated)),
             "Tunnel is up and running." => return Some(Finding::Milestone(Milestone::TunnelUp)),
             "Setting new routes..." => {
-                self.routes_changed = true;
-                self.routes_restored = false;
+                self.routes = Routes::Changed;
                 return None;
             }
             _ => {}
@@ -104,7 +108,7 @@ impl OutputInterpreter for Interpreter {
     }
 
     fn routes_left_unrestored(&self) -> bool {
-        self.routes_changed && !self.routes_restored
+        matches!(self.routes, Routes::Changed | Routes::Restoring)
     }
 }
 

@@ -62,7 +62,8 @@ pub struct ClientProblem {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ClientProblemKind {
-    /// Nothing usable at `path`, where the client is looked for.
+    /// Nothing usable at `path`, where the client is looked for. The Helper status leaves the
+    /// client path empty for it.
     NotFound,
     /// `path`, where the client resolves to, is outside the place it may be installed.
     OutsideAllowedLocation,
@@ -98,6 +99,7 @@ pub enum Finding {
     Milestone(Milestone),
     TunnelIp(Ipv4Addr),
     /// The client rejected the gateway certificate; trusting this value accepts it next time.
+    /// Each distinct value is reported once, in first-seen order.
     CertificateRejected(String),
     /// The gateway refused tunnel mode after authentication.
     TunnelModeRejected,

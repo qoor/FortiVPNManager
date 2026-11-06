@@ -387,6 +387,10 @@ fn rejects_usernames() {
             "bob\r\npppd-plugin = /tmp/x.so",
             "username contains forbidden character U+000D",
         ),
+        (
+            "bob\rpppd-plugin = /tmp/x.so",
+            "username contains forbidden character U+000D",
+        ),
         ("bob\0", "username contains forbidden character U+0000"),
         ("bob\u{0B}x", "username contains forbidden character U+000B"),
         ("bob\u{0C}x", "username contains forbidden character U+000C"),
