@@ -60,7 +60,7 @@
 
 ### 4.3 코드 구성
 - `App/`: 메뉴바 UI, 설정창, 연결 제어, OTP 세션, 시스템 감시
-- `Helper/`: root 데몬
+- `components/os-integration-helper/macos/`: root 데몬
 - `Packages/FortiCore/`: 시스템에 의존하지 않는 로직
   - `FortiShared`: 앱과 Helper가 공유하는 XPC 계약
   - `FortiCore`: 연결 state machine, openfortivpn 출력 해석, OTP 메일 판별, IMAP, 예외 규칙 계산

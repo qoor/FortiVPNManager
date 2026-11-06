@@ -26,21 +26,21 @@ settings:
 
 packages:
   FortiCore:
-    path: Packages/FortiCore
+    path: ../../Packages/FortiCore
 
 targets:
   FortiVPNManager:
     type: application
     platform: macOS
     sources:
-      - path: App
+      - path: ../../App
       - path: Support/LaunchDaemons/com.qoor.FortiVPNManager.Helper.plist
         buildPhase:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchDaemons
     info:
-      path: App/Info.plist
+      path: ../../App/Info.plist
       properties:
         LSUIElement: true
         CFBundleDisplayName: FortiVPNManager
@@ -59,7 +59,7 @@ targets:
       - name: Embed Google OAuth client
         basedOnDependencyAnalysis: false
         script: |
-          # Copies the gitignored Desktop-app OAuth client (Config/GoogleOAuthClient.json) into the
+          # Copies the gitignored Desktop-app OAuth client (packaging/macos/Config/GoogleOAuthClient.json) into the
           # app bundle. Without it the app still builds; users then import a client JSON in Settings.
           src="${SRCROOT}/Config/GoogleOAuthClient.json"
           dst="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleOAuthClient.json"
@@ -67,7 +67,7 @@ targets:
             install -m 644 "$src" "$dst"
           else
             rm -f "$dst"
-            echo "warning: Config/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
+            echo "warning: packaging/macos/Config/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
           fi
     dependencies:
       - package: FortiCore
@@ -83,7 +83,7 @@ targets:
     type: tool
     platform: macOS
     sources:
-      - path: Helper
+      - path: ../../components/os-integration-helper/macos
     settings:
       base:
         PRODUCT_NAME: FortiVPNManagerHelper

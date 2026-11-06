@@ -28,7 +28,7 @@ brew install xcodegen
 1. Xcode > Settings > Accounts에서 Apple ID를 추가합니다.
 2. 같은 화면의 Manage Certificates… > `+` > **Apple Development**를 선택해 인증서를 만듭니다.
    인증서가 유효하지 않다고 나오면 Apple WWDR G3 중간 인증서를 로그인 Keychain에 추가합니다.
-3. `make local-config`를 실행하면 인증서에서 Team ID를 읽어 `Config/Local.xcconfig`를 만듭니다.
+3. `make local-config`를 실행하면 인증서에서 Team ID를 읽어 `packaging/macos/Config/Local.xcconfig`를 만듭니다.
 
 ## Google OAuth 클라이언트 (Gmail API용, 선택)
 
@@ -38,7 +38,7 @@ OTP 메일을 가장 빠르게 감지하는 Gmail API 방식은 Google Cloud의 
 1. Google Cloud 프로젝트에서 Gmail API를 사용 설정하고, OAuth 동의 화면(조직 내부용이면 *Internal*)에
    `https://www.googleapis.com/auth/gmail.modify` 범위를 추가합니다.
 2. **데스크톱 앱** 유형의 OAuth 클라이언트를 만들고 JSON을 내려받습니다.
-3. 내려받은 JSON을 `Config/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
+3. 내려받은 JSON을 `packaging/macos/Config/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
    저장소에 올라가지 않습니다(client secret 포함).
 
 파일이 없으면 내장 클라이언트 없이 빌드되며, 설정창 계정 탭의 **OAuth 클라이언트 (고급)**에서 JSON을 직접
@@ -68,8 +68,8 @@ OTP 메일을 가장 빠르게 감지하는 Gmail API 방식은 Google Cloud의 
 ## 구조
 
 ```
-App/                    메뉴바 앱 (SwiftUI + AppKit)
-Helper/                 root 헬퍼 (LaunchDaemon, XPC)
-Packages/FortiCore/     순수 로직 패키지 (상태머신, 파서, IMAP, 설정, 프로세스 감독)
-Support/LaunchDaemons/  헬퍼 launchd plist
+App/                                     메뉴바 앱 (SwiftUI + AppKit)
+components/os-integration-helper/macos/  root 헬퍼 (LaunchDaemon, XPC)
+Packages/FortiCore/                      순수 로직 패키지 (상태머신, 파서, IMAP, 설정, 프로세스 감독)
+packaging/macos/Support/LaunchDaemons/   헬퍼 launchd plist
 ```

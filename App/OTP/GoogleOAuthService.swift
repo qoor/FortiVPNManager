@@ -170,7 +170,7 @@ final class GoogleOAuthService {
 
     /// Where the OAuth client in use comes from.
     enum ClientSource: Equatable {
-        /// Built into the app at build time (`Config/GoogleOAuthClient.json`, gitignored).
+        /// Built into the app at build time (`packaging/macos/Config/GoogleOAuthClient.json`, gitignored).
         case builtIn
         /// Imported by the user under Advanced; overrides the built-in client.
         case imported

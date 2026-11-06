@@ -3,7 +3,7 @@
 xcuserdata/
 DerivedData/
 .build/
-Config/Local.xcconfig
+packaging/macos/Config/Local.xcconfig
 
 # SwiftPM
 Packages/*/.build/
@@ -16,4 +16,4 @@ Packages/*/.swiftpm/
 App/Info.plist
 
 # Google OAuth Desktop client (contains the client secret); embedded into the app at build time
-Config/GoogleOAuthClient.json
+packaging/macos/Config/GoogleOAuthClient.json
