@@ -4,7 +4,8 @@ import SystemConfiguration
 
 /// Repairs the IPv4 routing table after openfortivpn exited without restoring it: restores the
 /// default route via the primary service's router and removes the gateway host route openfortivpn
-/// added. Every address handed to `/sbin/route` is validated as dotted-quad IPv4 first.
+/// added. The router is checked as dotted-quad IPv4 before it reaches `/sbin/route`; the gateway
+/// comes from the Helper entry as an IPv4 address.
 enum RouteRepair {
     static func repair(gatewayIP: String?) -> HelperInternal.RouteRepairOutcome {
         var outcome = HelperInternal.RouteRepairOutcome.notNeeded
@@ -50,8 +51,7 @@ enum RouteRepair {
     /// Deletes the static host route to the gateway (`route add -host <gateway> <router>` by
     /// openfortivpn), if it is still there. `nil` when there was nothing to delete.
     private static func removeHostRoute(to gateway: String) -> Bool? {
-        guard IPv4.isAddress(gateway),
-              let entry = RouteTable.lookup(gateway),
+        guard let entry = RouteTable.lookup(gateway),
               entry.destination == gateway,
               entry.flags.isSuperset(of: ["GATEWAY", "HOST", "STATIC"])
         else { return nil }
@@ -72,7 +72,7 @@ enum RouteRepair {
               let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
               let router = global[kSCPropNetIPv4Router as String] as? String,
               let interface = global[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
-              IPv4.isAddress(router),
+              IPv4Network.parseDottedQuad(Substring(router)) != nil,
               !interface.hasPrefix("ppp")
         else { return nil }
         return (router, interface)

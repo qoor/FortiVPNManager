@@ -3,7 +3,8 @@
 nonisolated enum HelperInternal {
     /// Sent to Rust.
     enum ToEntry: Encodable, Sendable {
-        /// An app connection passed the signature check; `app` names it in later messages.
+        /// An app connection passed the signature check; `app` names it in later messages. Held
+        /// until `FromEntry.admitted` answers.
         case appConnected(app: UInt64, uid: UInt32)
         /// The connection is gone, whether the app quit, crashed or was killed.
         case appDisconnected(app: UInt64)
@@ -38,6 +39,8 @@ nonisolated enum HelperInternal {
     enum FromEntry: Decodable, Sendable {
         /// Leftovers of an earlier Helper are cleaned up; accept app connections from now on.
         case ready
+        /// Answers `ToEntry.appConnected`. A refused connection is dropped without `appDisconnected`.
+        case admitted(app: UInt64, accept: Bool)
         /// Answers a connect, submitOtp, disconnect or status request; nil is the empty reply.
         case reply(id: UInt64, json: String?)
         /// Answers an exitWhenIdle request.

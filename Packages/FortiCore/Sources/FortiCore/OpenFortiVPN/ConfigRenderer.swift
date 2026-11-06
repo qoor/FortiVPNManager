@@ -1,36 +1,23 @@
-import FortiShared
-
-/// Renders the openfortivpn config file that the root helper passes with `-c`.
-///
-/// The helper never trusts the app, so every field is re-validated here and the output is limited
-/// to `host`, `port`, `username`, optional `realm` and one `trusted-cert` line per digest. The
-/// password is never written to the file; it goes to openfortivpn's stdin (`validatePassword`).
+/// The openfortivpn field rules the Helper applies at connect time. The app checks host, username,
+/// realm and password with them first, so a value the Helper would refuse shows up in the Account tab.
 public enum ConfigRenderer {
     /// A field the helper refuses to pass to openfortivpn. Descriptions never include the value.
     public struct ValidationError: Error, Equatable, Sendable, CustomStringConvertible {
         public enum Field: String, Sendable {
             case host
-            case port
             case username
             case realm
-            case trustedCert = "trusted-cert"
             case password
         }
 
         public enum Problem: Equatable, Sendable {
             case empty
             case tooLong(maxBytes: Int)
-            case outOfRange
             /// Code point of the first forbidden character (controls, U+2028, U+2029, U+FEFF; CR/LF/NUL for the password).
             case forbiddenCharacter(codePoint: UInt32)
             case leadingOrTrailingWhitespace
             /// Neither an LDH hostname (labels of 1-63 letters, digits, hyphens) nor a dotted-quad IPv4 address.
             case invalidHost
-            /// The digest at `index` is not 64 lowercase hex characters.
-            case invalidDigest(index: Int)
-            case tooManyDigests(max: Int)
-            /// openfortivpn would not read the rendered line back as exactly this value.
-            case notRoundTrippable
         }
 
         public let field: Field
@@ -48,8 +35,6 @@ public enum ConfigRenderer {
                 detail = "must not be empty"
             case .tooLong(let maxBytes):
                 detail = "must be at most \(maxBytes) UTF-8 bytes"
-            case .outOfRange:
-                detail = "must be between 1 and 65535"
             case .forbiddenCharacter(let codePoint):
                 let hex = String(codePoint, radix: 16, uppercase: true)
                 detail = "contains forbidden character U+\(String(repeating: "0", count: max(0, 4 - hex.count)))\(hex)"
@@ -57,12 +42,6 @@ public enum ConfigRenderer {
                 detail = "must not start or end with whitespace"
             case .invalidHost:
                 detail = "must be a DNS hostname (letters, digits and hyphens, labels of 1-63) or a dotted-quad IPv4 address"
-            case .invalidDigest(let index):
-                detail = "entry \(index) is not 64 lowercase hex characters"
-            case .tooManyDigests(let max):
-                detail = "allows at most \(max) digests"
-            case .notRoundTrippable:
-                detail = "would not be read back unchanged by openfortivpn"
             }
             return "\(field.rawValue) \(detail)"
         }
@@ -73,7 +52,6 @@ public enum ConfigRenderer {
     static let maxHostBytes = 253  // GATEWAY_HOST_SIZE
     static let maxUsernameBytes = 64  // USERNAME_SIZE
     static let maxRealmBytes = 63  // REALM_SIZE
-    static let maxTrustedCerts = 8
 
     /// read_password() (src/userinput.c) is called from main.c with `cfg.password, PASSWORD_SIZE`
     /// (256). It copies at most 256 bytes and stops early only at '\n' or EOF. A password of 256 bytes
@@ -81,56 +59,6 @@ public enum ConfigRenderer {
     /// the next read_password() call (the OTP prompt) would consume it as an empty answer. Strictly
     /// fewer than 256 bytes guarantees the '\n' we write is consumed together with the password.
     static let maxPasswordBytes = 255
-
-    /// Validates `request` (including the password) and returns the config file contents.
-    public static func render(_ request: ConnectRequest) throws(ValidationError) -> String {
-        try validate(request)
-
-        var entries: [(field: ValidationError.Field, key: String, value: String)] = [
-            (.host, "host", request.host),
-            (.port, "port", String(request.port)),
-            (.username, "username", request.username),
-        ]
-        if let realm = request.realm, !realm.isEmpty {
-            entries.append((.realm, "realm", realm))
-        }
-        for digest in request.trustedCerts {
-            entries.append((.trustedCert, "trusted-cert", digest))
-        }
-        let text = entries.map { "\($0.key) = \($0.value)\n" }.joined()
-
-        // Defense in depth: read the output back exactly as openfortivpn's load_config() would.
-        let reread = OpenFortiVPNConfigSyntax.entriesAsReadByOpenFortiVPN(Array(text.utf8))
-        for (index, entry) in entries.enumerated() {
-            guard index < reread.count,
-                  reread[index].key == Array(entry.key.utf8),
-                  reread[index].value == Array(entry.value.utf8)
-            else { throw ValidationError(field: entry.field, problem: .notRoundTrippable) }
-        }
-        guard reread.count == entries.count else {
-            throw ValidationError(field: entries[entries.count - 1].field, problem: .notRoundTrippable)
-        }
-        return text
-    }
-
-    /// The field checks of `render`.
-    private static func validate(_ request: ConnectRequest) throws(ValidationError) {
-        try validateHost(request.host)
-
-        guard (1...65_535).contains(request.port) else { throw ValidationError(field: .port, problem: .outOfRange) }
-
-        try validateUsername(request.username)
-        try validateRealm(request.realm)
-
-        guard request.trustedCerts.count <= maxTrustedCerts else {
-            throw ValidationError(field: .trustedCert, problem: .tooManyDigests(max: maxTrustedCerts))
-        }
-        for (index, digest) in request.trustedCerts.enumerated() where !TrustedCertPins.isValidDigest(digest) {
-            throw ValidationError(field: .trustedCert, problem: .invalidDigest(index: index))
-        }
-
-        try validatePassword(request.password)
-    }
 
     /// Checks a password before it is written (followed by '\n') to openfortivpn's stdin:
     /// non-empty, no CR/LF/NUL, at most `maxPasswordBytes` UTF-8 bytes. Leading/trailing spaces are allowed.
@@ -148,20 +76,20 @@ public enum ConfigRenderer {
 
     // MARK: - Field rules
 
-    /// The `host` rules of `validate`: non-empty, at most `maxHostBytes`, no forbidden characters or
+    /// The `host` rules: non-empty, at most `maxHostBytes`, no forbidden characters or
     /// surrounding whitespace, and an LDH hostname or dotted-quad IPv4 address (no scheme, port or path).
     public static func validateHost(_ host: String) throws(ValidationError) {
         try validateText(host, field: .host, maxBytes: maxHostBytes)
         guard isValidHost(host) else { throw ValidationError(field: .host, problem: .invalidHost) }
     }
 
-    /// The `username` rules of `validate`: non-empty, at most `maxUsernameBytes`, no forbidden characters or
+    /// The `username` rules: non-empty, at most `maxUsernameBytes`, no forbidden characters or
     /// surrounding whitespace.
     public static func validateUsername(_ username: String) throws(ValidationError) {
         try validateText(username, field: .username, maxBytes: maxUsernameBytes)
     }
 
-    /// The `realm` rules of `validate`: `nil` or empty means no realm; otherwise at most `maxRealmBytes`, no
+    /// The `realm` rules: `nil` or empty means no realm; otherwise at most `maxRealmBytes`, no
     /// forbidden characters or surrounding whitespace.
     public static func validateRealm(_ realm: String?) throws(ValidationError) {
         guard let realm, !realm.isEmpty else { return }

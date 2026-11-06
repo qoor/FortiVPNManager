@@ -103,11 +103,11 @@ public enum OpenFortiVPNConfigReader {
 
         for (offset, line) in Syntax.lines(of: body).enumerated() {
             let lineNumber = offset + 1
-            let content = Syntax.trimmed(line.bytes)
+            let content = Syntax.trimmed(line)
             if content.isEmpty || content.first == UInt8(ascii: "#") { continue }
 
-            guard !line.bytes.contains(0),
-                  let (keyBytes, valueBytes) = Syntax.split(line.bytes),
+            guard !line.contains(0),
+                  let (keyBytes, valueBytes) = Syntax.split(line),
                   let key = String(validating: keyBytes, as: UTF8.self), !key.isEmpty
             else {
                 result.invalidLines.append(lineNumber)
@@ -172,19 +172,11 @@ public enum OpenFortiVPNConfigReader {
 ///
 /// - Lines come from `getline()`: split on LF only, so a CR before the LF stays in the line and is
 ///   then trimmed as whitespace.
-/// - A line is skipped when `getline()` returned fewer than 2 bytes (LF included) or when its very
-///   first byte is `#` (an indented `#` is not a comment).
 /// - The line is split at the *first* `=`, so values may contain `=` and `#` (no inline comments).
 /// - Key and value are trimmed with `isspace()` in the C locale (openfortivpn never calls
 ///   `setlocale`), i.e. only SP, HT, LF, VT, FF and CR.
 /// - Everything is a C string, so a NUL byte ends the line early.
 enum OpenFortiVPNConfigSyntax {
-    struct Line {
-        var bytes: ArraySlice<UInt8>
-        /// Whether `getline()` returned a terminating LF with this line.
-        var hasNewline: Bool
-    }
-
     static func isSpace(_ byte: UInt8) -> Bool {
         byte == 0x20 || (0x09...0x0D).contains(byte)
     }
@@ -197,31 +189,16 @@ enum OpenFortiVPNConfigSyntax {
     }
 
     /// The lines `getline()` would return, without their LF. A trailing LF does not start a new line.
-    static func lines(of bytes: ArraySlice<UInt8>) -> [Line] {
-        var segments = bytes.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
-        let endsWithNewline = segments.last?.isEmpty == true
-        if endsWithNewline { segments.removeLast() }
-        return segments.indices.map { index in
-            Line(bytes: segments[index], hasNewline: index < segments.count - 1 || endsWithNewline)
-        }
+    static func lines(of bytes: ArraySlice<UInt8>) -> [ArraySlice<UInt8>] {
+        var lines = bytes.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
+        if lines.last?.isEmpty == true { lines.removeLast() }
+        return lines
     }
 
     /// Splits at the first `=` and trims both sides. `nil` when there is no `=` ("Bad line").
     static func split(_ line: ArraySlice<UInt8>) -> (key: ArraySlice<UInt8>, value: ArraySlice<UInt8>)? {
         guard let equals = line.firstIndex(of: UInt8(ascii: "=")) else { return nil }
         return (trimmed(line[..<equals]), trimmed(line[line.index(after: equals)...]))
-    }
-
-    /// The `(key, value)` pairs `load_config()` would act on, in file order, with its exact skipping
-    /// rules. `ConfigRenderer` uses this to prove that its output is read back unchanged.
-    static func entriesAsReadByOpenFortiVPN(_ bytes: [UInt8]) -> [(key: [UInt8], value: [UInt8])] {
-        lines(of: bytes[...]).compactMap { line in
-            let read = line.bytes.count + (line.hasNewline ? 1 : 0)
-            if read < 2 || line.bytes.first == UInt8(ascii: "#") { return nil }
-            let cString = line.bytes.prefix { $0 != 0 }
-            guard let (key, value) = split(cString) else { return nil }
-            return (Array(key), Array(value))
-        }
     }
 
     /// `strtol(value, NULL, 0)` followed by config.c's `1...65535` check: decimal, `0x` hex or

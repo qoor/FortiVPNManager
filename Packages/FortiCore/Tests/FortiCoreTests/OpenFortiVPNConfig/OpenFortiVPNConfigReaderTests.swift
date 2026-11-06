@@ -290,47 +290,11 @@ import Testing
     }
 }
 
-/// The byte-level model of openfortivpn's `load_config()` that the renderer's round-trip check uses.
+/// The byte-level model of openfortivpn's `load_config()` that the reader uses.
 @Suite struct OpenFortiVPNConfigSyntaxTests {
-    private func entries(_ text: String) -> [[String]] {
-        OpenFortiVPNConfigSyntax.entriesAsReadByOpenFortiVPN(Array(text.utf8)).map {
-            [String(decoding: $0.key, as: UTF8.self), String(decoding: $0.value, as: UTF8.self)]
-        }
-    }
-
-    @Test func matchesLoadConfigTokenization() {
-        #expect(entries("host = vpn\n") == [["host", "vpn"]])
-        #expect(entries("host=vpn") == [["host", "vpn"]])
-        #expect(entries("a = b = c\n") == [["a", "b = c"]])
-        #expect(entries("password = p#ss\n") == [["password", "p#ss"]])
-        #expect(entries("host = vpn\r\n") == [["host", "vpn"]])
-        #expect(entries(" \t host \u{0B}=\u{0C} vpn \t\n") == [["host", "vpn"]])
-        #expect(entries("key =\n") == [["key", ""]])
-    }
-
-    @Test func onlyColumnZeroHashIsAComment() {
-        #expect(entries("#host = vpn\n").isEmpty)
-        // openfortivpn reads this as the unknown key "# host" and stops parsing the file.
-        #expect(entries("  # host = vpn\n") == [["# host", "vpn"]])
-    }
-
-    @Test func skipsShortAndMalformedLines() {
-        #expect(entries("\n").isEmpty)
-        #expect(entries("x\n").isEmpty)  // no '=' ("Bad line")
-        #expect(entries("\r\n").isEmpty)
-        #expect(entries("=").isEmpty)  // getline() returned 1 byte
-        #expect(entries("=\n") == [["", ""]])
-    }
-
-    @Test func nulEndsTheCString() {
-        #expect(entries("host = vpn\0evil\n") == [["host", "vpn"]])
-        #expect(entries("host\0 = vpn\n").isEmpty)
-    }
-
     @Test func lineSplittingFollowsGetline() {
         let lines = OpenFortiVPNConfigSyntax.lines(of: Array("a\n\nb".utf8)[...])
-        #expect(lines.map { Array($0.bytes) } == [Array("a".utf8), [], Array("b".utf8)])
-        #expect(lines.map(\.hasNewline) == [true, true, false])
+        #expect(lines.map { Array($0) } == [Array("a".utf8), [], Array("b".utf8)])
         #expect(OpenFortiVPNConfigSyntax.lines(of: Array("a\n".utf8)[...]).count == 1)
         #expect(OpenFortiVPNConfigSyntax.lines(of: ArraySlice<UInt8>()).isEmpty)
     }

@@ -14,8 +14,8 @@ public enum Milestone: Int, Codable, Sendable, Comparable {
     }
 }
 
-/// Everything the helper needs to run openfortivpn once. The helper re-validates every field
-/// (see `ConfigRenderer`) and never trusts the app's input.
+/// Everything the helper needs to run openfortivpn once. The helper re-validates every field and
+/// never trusts the app's input.
 public struct ConnectRequest: Codable, Sendable, Equatable {
     public var attemptID: AttemptID
     public var host: String

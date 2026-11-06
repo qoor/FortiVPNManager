@@ -1,5 +1,7 @@
 [
   {"ready": {}},
+  {"admitted": {"app": 1, "accept": true}},
+  {"admitted": {"app": 2, "accept": false}},
   {"reply": {"id": 1}},
   {"reply": {"id": 2, "json": "{\"code\":\"busy\",\"message\":\"openfortivpn is already running\"}"}},
   {"replyFlag": {"id": 5, "value": true}},

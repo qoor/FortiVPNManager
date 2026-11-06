@@ -7,7 +7,7 @@ import Foundation
 /// `PATH` as its only environment variable. No shell is involved.
 enum SystemCommand {
     struct Result: Sendable {
-        /// `.unknown` when the tool could not be started; `errorOutput` then says why.
+        /// `.spawnFailed` when the tool could not be started; `errorOutput` then says why.
         var status: ProcessExitStatus
         var output: String
         var errorOutput: String
@@ -25,12 +25,27 @@ enum SystemCommand {
         process.standardInput = FileHandle.nullDevice
         let output = Pipe()
         let errorOutput = Pipe()
+        // Foundation leaves pipes inheritable; a VPN client the Helper entry spawns meanwhile must
+        // not hold them open. The tool still gets its ends, which Process duplicates onto 1 and 2.
+        for pipe in [output, errorOutput] {
+            for end in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {
+                _ = fcntl(end.fileDescriptor, F_SETFD, FD_CLOEXEC)
+            }
+        }
         process.standardOutput = output
         process.standardError = errorOutput
         do {
             try process.run()
         } catch {
-            return Result(status: .unknown, output: "", errorOutput: error.localizedDescription)
+            let error = error as NSError
+            // Process reports a missing or non-executable file as a Cocoa error, and a failed
+            // posix_spawn with its errno.
+            let code = error.domain == NSPOSIXErrorDomain ? Int32(error.code) : ENOENT
+            return Result(
+                status: .spawnFailed(errno: code),
+                output: "",
+                errorOutput: "\(String(cString: strerror(code))) (errno \(code))"
+            )
         }
         // Process reaps the tool on its own, so this may run just after the reap; XNU hands out pids
         // in sequence, so the pid is not reused within that moment.

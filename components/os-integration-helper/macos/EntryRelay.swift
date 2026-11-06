@@ -19,10 +19,12 @@ enum EntryRelay {
 
     private struct State {
         var clients: [UInt64: ClientLink] = [:]
+        /// Announced connections waiting for the entry's answer.
+        var admissions: [UInt64: (client: ClientLink, decided: DispatchSemaphore)] = [:]
         var lastClientID: UInt64 = 0
         var replies: [UInt64: Reply] = [:]
         var lastRequestID: UInt64 = 0
-        /// Cleared on SIGTERM and when the entry says to exit.
+        /// Cleared when the entry says to exit.
         var accepting = true
         var replacementReported = false
     }
@@ -44,20 +46,24 @@ enum EntryRelay {
         ready.wait()
     }
 
-    /// Registers and announces a connection that passed the signature check, or returns `nil` once
-    /// the Helper is on its way out. A replacement of the executable is announced first, so the
+    /// Announces a connection that passed the signature check and waits for the entry to admit or
+    /// refuse it; `nil` when refused. A replacement of the executable is announced first, so the
     /// entry can refuse the connection.
     static func admit(_ connection: NSXPCConnection, executableReplaced: Bool) -> ClientLink? {
+        let decided = DispatchSemaphore(value: 0)
         // Sent under the lock, so a replacement the watcher reports meanwhile cannot come after it.
-        state.withLock { state in
+        let announced = state.withLock { state -> ClientLink? in
             guard state.accepting else { return nil }
             if executableReplaced { reportReplacement(&state) }
             state.lastClientID += 1
             let client = ClientLink(id: state.lastClientID, connection: connection)
-            state.clients[client.id] = client
+            state.admissions[client.id] = (client, decided)
             stream.send(.appConnected(app: client.id, uid: client.uid))
             return client
         }
+        guard let announced else { return nil }
+        decided.wait()
+        return state.withLock { $0.clients[announced.id] }
     }
 
     /// The connection is gone, whether the app quit, crashed or was killed.
@@ -71,10 +77,9 @@ enum EntryRelay {
         state.withLock { reportReplacement(&$0) }
     }
 
-    /// SIGTERM: accept no more connections; the entry ends the run and says when to exit.
+    /// SIGTERM: the entry ends the run and says when to exit.
     static func terminationRequested() {
         HelperLog.helper.notice("SIGTERM received")
-        state.withLock { $0.accepting = false }
         stream.send(.terminationRequested)
     }
 
@@ -100,6 +105,15 @@ enum EntryRelay {
         switch message {
         case .ready:
             ready.signal()
+        case .admitted(let app, let accept):
+            let decided = state.withLock { state in
+                guard let admission = state.admissions.removeValue(forKey: app) else {
+                    fatalError("the Helper entry answered app \(app), which is not waiting for admission")
+                }
+                if accept { state.clients[app] = admission.client }
+                return admission.decided
+            }
+            decided.signal()
         case .reply(let id, let json):
             let data = json.map { Data($0.utf8) }
             switch takeReply(id) {

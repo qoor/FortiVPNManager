@@ -128,6 +128,22 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
+  # Helper sources that are testable without the Helper process.
+  HelperTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ../../components/os-integration-helper/macos/NetworkSetupRoutes.swift
+      - path: ../../components/os-integration-helper/tests/macos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.HelperTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - package: FortiCore
+        products: [FortiShared]
+
 schemes:
   FortiVPNManager:
     build:
@@ -140,3 +156,9 @@ schemes:
         ContractTests: [test]
     test:
       targets: [ContractTests]
+  HelperTests:
+    build:
+      targets:
+        HelperTests: [test]
+    test:
+      targets: [HelperTests]

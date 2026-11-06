@@ -21,7 +21,11 @@ final class HelperService: NSObject, HelperXPCProtocol {
     }
 
     func connect(_ request: Data, reply: @escaping @Sendable (Data?) -> Void) {
-        EntryRelay.forward(.connect(json: String(decoding: request, as: UTF8.self)), from: client, reply: .optionalData(reply))
+        guard let json = String(validating: request, as: UTF8.self) else {
+            reply(Self.encode(HelperError(.invalidRequest, "could not decode the connect request")))
+            return
+        }
+        EntryRelay.forward(.connect(json: json), from: client, reply: .optionalData(reply))
     }
 
     func submitOTP(attemptID: String, code: String, reply: @escaping @Sendable (Data?) -> Void) {
@@ -53,6 +57,11 @@ final class HelperService: NSObject, HelperXPCProtocol {
             return
         }
         BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.write(decoded))) }
+    }
+
+    /// Never `nil`: a `nil` reply means success.
+    private static func encode(_ error: HelperError) -> Data {
+        (try? XPCCoding.encode(error)) ?? Data(#"{"code":"internalError","message":""}"#.utf8)
     }
 
     private static func encode(_ reply: BypassRoutesReply) -> Data {

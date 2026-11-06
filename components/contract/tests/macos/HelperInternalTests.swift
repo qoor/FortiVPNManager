@@ -35,6 +35,8 @@ struct HelperInternalTests {
         let messages = try JSONDecoder().decode([HelperInternal.FromEntry].self, from: fixture("from_entry.json"))
         let expected: [HelperInternal.FromEntry] = [
             .ready,
+            .admitted(app: 1, accept: true),
+            .admitted(app: 2, accept: false),
             .reply(id: 1, json: nil),
             .reply(id: 2, json: #"{"code":"busy","message":"openfortivpn is already running"}"#),
             .replyFlag(id: 5, value: true),

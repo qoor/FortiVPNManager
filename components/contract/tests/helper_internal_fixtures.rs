@@ -70,6 +70,14 @@ fn messages_from_the_entry() {
     };
     let messages = [
         FromEntry::Ready {},
+        FromEntry::Admitted {
+            app: 1,
+            accept: true,
+        },
+        FromEntry::Admitted {
+            app: 2,
+            accept: false,
+        },
         FromEntry::Reply { id: 1, json: None },
         FromEntry::Reply {
             id: 2,

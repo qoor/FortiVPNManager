@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ToEntry {
-    /// An app connection passed the signature check; `app` names it in later messages.
+    /// An app connection passed the signature check; `app` names it in later messages. Swift
+    /// holds the connection until `FromEntry::Admitted` answers.
     AppConnected { app: u64, uid: u32 },
     /// The connection is gone, whether the app quit, crashed or was killed.
     AppDisconnected { app: u64 },
@@ -92,6 +93,9 @@ pub enum RouteRepairOutcome {
 pub enum FromEntry {
     /// Leftovers of an earlier Helper are cleaned up; accept app connections from now on.
     Ready {},
+    /// Answers `ToEntry::AppConnected`. A refused connection is dropped without
+    /// `ToEntry::AppDisconnected`.
+    Admitted { app: u64, accept: bool },
     /// Answers a connect, submitOtp, disconnect or status request with the data for the app;
     /// `None` is the empty (success) reply.
     Reply {
