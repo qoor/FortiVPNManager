@@ -4,11 +4,20 @@ edition.workspace = true
 publish.workspace = true
 
 [lib]
-crate-type = ["staticlib"]
+# The static library links into the Swift Helper; the Rust library is what the integration tests
+# link against.
+crate-type = ["staticlib", "lib"]
 
 [dependencies]
+fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
+fvm-watchdog.workspace = true
+libproc.workspace = true
+rustix = { workspace = true, features = ["process"] }
+serde.workspace = true
+serde_json.workspace = true
 socket2.workspace = true
+zeroize.workspace = true
 
 [lints]
 workspace = true

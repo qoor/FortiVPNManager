@@ -15,6 +15,7 @@ publish = false
 fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
 fvm-watchdog = { path = "components/watchdog" }
+libproc = "0.15"
 nix = "0.31"
 rustix = "1"
 serde = { version = "1", features = ["derive"] }
