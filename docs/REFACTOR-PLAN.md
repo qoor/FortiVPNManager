@@ -1,6 +1,6 @@
 # Rust 사전 리팩토링 계획
 
-상태: 1단계 준비 중 (2026-11-06 시작). 모든 단계가 끝나면 결정과 교훈을 [DESIGN.md](DESIGN.md)의 결정 이력으로 옮기고 이 문서는 지운다.
+상태: 1단계 진행 중 (2026-11-06 시작). 모든 단계가 끝나면 결정과 교훈을 [DESIGN.md](DESIGN.md)의 결정 이력으로 옮기고 이 문서는 지운다.
 
 ## 1. 목적
 
@@ -63,6 +63,7 @@ docs/  scripts/  Cargo.toml  Makefile  README.md
 | UI 상태 | 도메인 구역 단위로 보낸다. 바뀐 구역만 통째로 보내고, 로그는 추가분만 보낸다 |
 | macOS 영역 | UI, OS 연동, OS 연동 Helper는 Swift. macOS UI는 앞으로도 Swift로 만든다 |
 | unsafe | Rust에 unsafe 블록을 두지 않는다. 외부로 내보내는 시작 함수의 이름 표시만 허용한다 |
+| SIGPIPE | Helper 프로세스 전체가 SIGPIPE를 무시하는 것을 watchdog의 전제 조건으로 둔다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없기 때문이다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
 | 오류 | panic은 abort한다. Release 빌드에도 줄 번호를 남긴다 |
 | YAML | saphyr-parser의 이벤트 API를 쓰고, 엄격 규칙은 직접 확인한다 |
 | TLS | rustls에 ring provider 하나와 platform verifier를 쓴다 |
@@ -76,7 +77,7 @@ docs/  scripts/  Cargo.toml  Makefile  README.md
 |---|---|---|---|
 | 0. 기반 검증 | 완료 | Rust 연결, socketpair, Rust 통신, YAML 선택, spike 설치 | 시험 프로그램 전부 통과, 설치 뒤 Helper 재승인 없음 |
 | 이동 | 완료 | `project.yml`·`Config/`·`Support/`를 `packaging/macos/`로, `Helper/`를 `components/os-integration-helper/macos/`로 옮긴다. 내용은 바꾸지 않는다 | 빌드, `make verify`, 기존 테스트 |
-| 1. Helper 쪽 | 대기 | 공통 계약, backend adapter(openfortivpn), watchdog, Helper entry를 만든다. OS 연동 Helper를 줄인다. SPEC F-VR-01~07, F-SW-03 | Helper 시나리오 Rust 테스트, 지금 앱과 XPC 양방향 fixture, Log 설명 줄 일치, `make verify`, DESIGN §10의 1·2·3·5·6·8·9와 재설치 |
+| 1. Helper 쪽 | 진행 중 | 공통 계약, backend adapter(openfortivpn), watchdog, Helper entry를 만든다. OS 연동 Helper를 줄인다. SPEC F-VR-01~07, F-SW-03 | Helper 시나리오 Rust 테스트, 지금 앱과 XPC 양방향 fixture, Log 설명 줄 일치, `make verify`, DESIGN §10의 1·2·3·5·6·8·9와 재설치 |
 | 2. 앱 쪽 | 대기 | 판단 코어, 런타임, UI, OS 연동, macOS 쪽 공통 계약을 만들고 한 번에 전환한다 | 앱 시나리오와 YAML 사례, 저장소 호환, 구역별 UI 문장 일치, DESIGN §10 1~9 |
 | 3. 문서 | 대기 | DESIGN.md를 새 구조로 다시 쓰고(§9 정정 포함), README를 고친다 | |
 
