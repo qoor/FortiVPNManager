@@ -199,12 +199,6 @@ where
         }
     }
 
-    fn log(&self, level: LogLevel, category: LogCategory, message: String) {
-        self.swift.log(level, category, message);
-    }
-
-    // App connections and the Helper's own lifetime
-
     fn admit(&mut self, app: u64, uid: u32) {
         let accept = matches!(self.lifecycle, Lifecycle::Serving);
         if accept {
@@ -216,7 +210,7 @@ where
     fn app_disconnected(&mut self, app: u64) {
         self.apps.remove(&app);
         if let Some(current) = self.run.as_ref().filter(|run| run.owner_app == app) {
-            self.log(
+            self.swift.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
                 format!("run {}: owning connection invalidated", current.attempt),
@@ -236,7 +230,7 @@ where
     /// starts the new one on the next request.
     fn exit_for_replacement(&mut self) {
         let path = env::current_exe().expect("the Helper's executable path");
-        self.log(
+        self.swift.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
@@ -267,7 +261,7 @@ where
         match self.lifecycle {
             Lifecycle::ExitingWhenIdle { .. } => self.exit(FromEntry::ExitAfterDraining {}),
             Lifecycle::ShuttingDown { .. } => {
-                self.log(
+                self.swift.log(
                     LogLevel::Error,
                     LogCategory::Helper,
                     "the run did not finish after SIGTERM; exiting anyway".to_owned(),
@@ -284,8 +278,6 @@ where
         self.swift.send(&message);
         self.lifecycle = Lifecycle::Exiting;
     }
-
-    // Requests
 
     /// Answers every request exactly once, including those of an app that is gone.
     fn request(&mut self, id: u64, app: u64, request: AppRequest) {
@@ -370,7 +362,7 @@ where
         if let Err(failure) = run_directory::prepare(&self.run_directory)
             .and_then(|()| run_directory::write_config(&config_path, &launch.config_file))
         {
-            self.log(
+            self.swift.log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!("cannot write the {client_name} config: {failure}"),
@@ -394,7 +386,7 @@ where
                     .expect("the event loop runs as long as the process");
             },
         );
-        self.log(
+        self.swift.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
@@ -434,14 +426,14 @@ where
         }
         let current = self.controllable_run(attempt, uid)?;
         let reason = reason.parse().unwrap_or(StopReason::UserDisconnect);
-        self.log(
+        let raw = serde_json::to_value(reason).expect("a stop reason serializes");
+        let raw = raw
+            .as_str()
+            .expect("a stop reason serializes as its raw value");
+        self.swift.log(
             LogLevel::Notice,
             LogCategory::Helper,
-            format!(
-                "run {}: stop requested ({})",
-                current.attempt,
-                raw_value(reason)
-            ),
+            format!("run {}: stop requested ({raw})", current.attempt),
         );
         current.run.stop(reason);
         Ok(())
@@ -504,7 +496,7 @@ where
             return false;
         }
         if matches!(self.lifecycle, Lifecycle::Serving) {
-            self.log(
+            self.swift.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
                 "exiting on request so launchd starts the current binary".to_owned(),
@@ -516,11 +508,10 @@ where
         true
     }
 
-    // The current run
-
     /// The gateway's IPv4 address, for the pidfile and the route repair. Looked up while the run
     /// starts, since DNS may not answer once a broken tunnel took the routes; off this thread, since
-    /// a slow answer must not hold up the app's requests.
+    /// a slow answer must not hold up the app's requests. std cannot ask for IPv4 alone, so only the
+    /// first IPv4 answer counts, as in the Swift Helper's IPv4-only lookup.
     fn resolve_gateway(&self, run: u64, host: String) {
         let events = self.sender.clone();
         thread::Builder::new()
@@ -545,7 +536,7 @@ where
 
     fn gateway_resolved(&mut self, run: u64, gateway: Option<Ipv4Addr>) {
         let Some(gateway) = gateway else {
-            self.log(
+            self.swift.log(
                 LogLevel::Info,
                 LogCategory::Routes,
                 "gateway has no IPv4 address; its host route will not be repaired".to_owned(),
@@ -619,7 +610,8 @@ where
             current.attempt
         );
         self.save_record();
-        self.log(LogLevel::Notice, LogCategory::Helper, message);
+        self.swift
+            .log(LogLevel::Notice, LogCategory::Helper, message);
     }
 
     /// Adds what the client started for the tunnel, such as pppd, to the record.
@@ -636,7 +628,8 @@ where
             }
             self.save_record();
         }
-        self.log(LogLevel::Notice, LogCategory::Helper, message);
+        self.swift
+            .log(LogLevel::Notice, LogCategory::Helper, message);
     }
 
     fn save_record(&self) {
@@ -645,7 +638,7 @@ where
             .as_ref()
             .expect("a record belongs to the current run");
         if let Err(failure) = run_directory::write_record(&self.run_directory, &current.record) {
-            self.log(
+            self.swift.log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!("cannot write the pidfile: {failure}"),
@@ -660,7 +653,7 @@ where
             &run_directory::record_path(&self.run_directory),
             &self.swift,
         );
-        self.log(
+        self.swift.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
@@ -690,14 +683,6 @@ fn to_json(value: &impl Serialize) -> String {
     serde_json::to_string(value).expect("contract types serialize")
 }
 
-/// The value the app sends for `reason`.
-fn raw_value(reason: StopReason) -> String {
-    match serde_json::to_value(reason).expect("a stop reason serializes") {
-        serde_json::Value::String(raw) => raw,
-        other => unreachable!("a stop reason serializes as a string, not {other}"),
-    }
-}
-
 // The run's end in the unified log, worded as the Swift Helper's description of its types so that
 // searches through older logs keep matching.
 
@@ -714,7 +699,11 @@ fn swift_initiator(initiator: StopInitiator) -> String {
     match initiator {
         StopInitiator::Client {} => "none".to_owned(),
         StopInitiator::Helper { reason } => {
-            format!("helper(FortiShared.StopReason.{})", raw_value(reason))
+            let raw = serde_json::to_value(reason).expect("a stop reason serializes");
+            let raw = raw
+                .as_str()
+                .expect("a stop reason serializes as its raw value");
+            format!("helper(FortiShared.StopReason.{raw})")
         }
     }
 }

@@ -201,3 +201,4 @@
 7. config.yaml 직접 편집: 옵션 변경 반영, 잘못된 값 거부, 깨진 YAML에서 마지막 정상 설정 유지, symlink 유지
 8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다.
 9. 보안: `ps`와 로그에 비밀값이 없고, 렌더링된 openfortivpn 설정 파일은 0600이며 종료 후 삭제된다. config.yaml과 state.json은 0600이다. `make verify`가 통과한다.
+10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝내고 다음 앱 요청(예: [지금 재연결])을 일으킨다. 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그가 남고, 남아 있던 openfortivpn과 pppd가 사라지며 default route가 복원된다.

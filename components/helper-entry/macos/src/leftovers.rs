@@ -134,10 +134,11 @@ fn terminate(processes: &[ProcessIdentity], grace_period: Duration, swift: &Swif
     }
 }
 
+/// Checks each identity right before signalling it, since its pid may have been reused meanwhile.
 fn signal(processes: &[ProcessIdentity], signal: Signal) {
-    for process in processes {
+    for process in processes.iter().filter(|process| process.is_running()) {
         let pid = Pid::from_raw(process.pid).expect("a running process has a positive pid");
-        // It may have exited since it was checked.
+        // It may have exited since the check.
         let _ = rustix::process::kill_process(pid, signal);
     }
 }

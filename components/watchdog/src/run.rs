@@ -607,7 +607,11 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         child.signal(Signal::TERM, self.stop_policy.graceful);
         self.stop = Some(reason);
         self.stage = None;
-        self.meta(format!("‹sent SIGTERM (reason: {})›", raw_value(reason)));
+        let raw = serde_json::to_value(reason).expect("a stop reason serializes");
+        let raw = raw
+            .as_str()
+            .expect("a stop reason serializes as its raw value");
+        self.meta(format!("‹sent SIGTERM (reason: {raw})›"));
         self.kill_deadline = Some(Instant::now() + self.stop_policy.grace_period);
     }
 
@@ -719,14 +723,6 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
     fn report_exit(&mut self, facts: ExitFacts) {
         self.phase = Phase::Reported;
         self.event(HelperEventKind::Exited { facts });
-    }
-}
-
-/// The value the app sends for `reason`.
-fn raw_value(reason: StopReason) -> String {
-    match serde_json::to_value(reason).expect("a stop reason serializes") {
-        serde_json::Value::String(raw) => raw,
-        other => unreachable!("a stop reason serializes as a string, not {other}"),
     }
 }
 

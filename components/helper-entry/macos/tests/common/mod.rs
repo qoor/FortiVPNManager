@@ -4,7 +4,7 @@
 
 #![allow(dead_code)] // Each test file uses a different part.
 
-use std::io::{self, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -35,8 +35,6 @@ pub const TUNNEL_UP: u64 = 5;
 
 /// Generous, so a broken test fails instead of hanging.
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
-
-// The backend
 
 /// openfortivpn as far as the entry can tell: the adapter checks the request, builds the config file
 /// and reads the output, but the client is a fixture script run by /bin/sh.
@@ -131,8 +129,6 @@ impl Setup {
     }
 }
 
-// Scratch files
-
 static SCRATCH_NUMBER: AtomicU64 = AtomicU64::new(0);
 
 /// A directory per test for the run directory and the fixture's record file.
@@ -179,8 +175,6 @@ impl Drop for Scratch {
     }
 }
 
-// The fake Swift side
-
 pub struct Swift {
     stream: UnixStream,
     reader: BufReader<UnixStream>,
@@ -222,27 +216,32 @@ impl Swift {
         stream::send(&mut &self.stream, &message).unwrap();
     }
 
-    /// The next message, if one arrives within `timeout`.
+    /// The next message, if one starts arriving within `timeout`. Only the wait for its first bytes
+    /// has the timeout, so a timeout never cuts a message in two.
     pub fn receive_within(&mut self, timeout: Duration) -> Option<Value> {
-        self.reader
-            .get_ref()
+        let socket = self.reader.get_ref();
+        socket
             .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))
             .unwrap();
-        match stream::receive::<Value>(&mut self.reader) {
-            Ok(message) => {
-                self.received.push(message.clone());
-                Some(message)
-            }
+        match self.reader.fill_buf() {
+            Ok([]) => panic!("the entry closed its end"),
+            Ok(_) => {}
             Err(error)
                 if matches!(
                     error.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                    io::ErrorKind::WouldBlock
+                        | io::ErrorKind::TimedOut
+                        | io::ErrorKind::Interrupted
                 ) =>
             {
-                None
+                return None;
             }
             Err(error) => panic!("reading from the entry: {error}"),
         }
+        self.reader.get_ref().set_read_timeout(None).unwrap();
+        let message: Value = stream::receive(&mut self.reader).unwrap();
+        self.received.push(message.clone());
+        Some(message)
     }
 
     /// Receives until `condition` holds for everything received so far.
@@ -284,8 +283,6 @@ impl Swift {
     pub fn position(&self, matches: impl Fn(&Value) -> bool) -> Option<usize> {
         self.received.iter().position(matches)
     }
-
-    // Apps and requests
 
     /// Announces app connection `app` and returns whether the entry admitted it.
     pub fn connect_app(&mut self, app: u64, uid: u32) -> bool {
@@ -355,8 +352,6 @@ impl Swift {
         let id = self.request(app, json!({"status": {}}));
         self.reply_json(id)
     }
-
-    // What the entry sent to apps
 
     /// The `HelperEvent`s sent to `app`.
     pub fn events(&self, app: u64) -> Vec<Value> {

@@ -67,7 +67,7 @@ docs/  scripts/  Cargo.toml  Makefile  README.md
 | 오류 | panic은 abort한다. Release 빌드에도 줄 번호를 남긴다 |
 | YAML | saphyr-parser의 이벤트 API를 쓰고, 엄격 규칙은 직접 확인한다 |
 | TLS | rustls에 ring provider 하나와 platform verifier를 쓴다 |
-| 빌드 | Rust 2024 edition, Apple Silicon 전용. XcodeGen의 pre-build script가 cargo를 실행한다 |
+| 빌드 | Rust 2024 edition, Apple Silicon 전용. XcodeGen의 pre-build script가 cargo를 실행한다. libproc crate는 bindgen으로 binding을 만들므로 빌드할 때 libclang이 필요하다(Xcode에 포함) |
 | 앱 크기 | 줄이는 작업은 모든 단계가 끝난 뒤에 따로 한다 |
 | 나중에 | Linux UI는 Rust + QML(cxx-qt). Windows backend는 openconnect, driver는 Wintun 기본 |
 

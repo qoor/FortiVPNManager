@@ -107,10 +107,15 @@ pub(crate) fn record_path(directory: &Path) -> PathBuf {
 pub(crate) fn write_record(directory: &Path, record: &RunRecord) -> Result<(), Failure> {
     let draft = directory.join(RECORD_DRAFT);
     let json = serde_json::to_vec(record).expect("a run record serializes");
+    // A draft left by a Helper that died while writing is replaced, never followed if a symlink.
+    match fs::remove_file(&draft) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(Failure::new(format!("unlink {}", draft.display()), &error)),
+    }
     let mut file = OpenOptions::new()
         .write(true)
-        .create(true)
-        .truncate(true)
+        .create_new(true)
         .mode(0o600)
         .open(&draft)
         .map_err(|error| Failure::new(format!("open {}", draft.display()), &error))?;
