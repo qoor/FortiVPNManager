@@ -1,16 +1,18 @@
 # FortiVPNManager 설계
 
 이 문서는 앱이 **왜 이렇게 만들어졌는지**를 기록한다. 배경, 목표, 핵심 결정과 그 이유, 구성 요소의 역할, 확인된 외부 제약, 결정 이력을 다룬다.
-값, 시간, 필드, 파일 구성처럼 바뀔 수 있는 세부 사항은 코드가 기준이다. 이 문서에 다시 적지 않는다.
+무엇을 하는지는 [SPEC.md](SPEC.md)가 기준이다. 값, 시간, 필드, 파일 구성처럼 바뀔 수 있는 세부 사항은 코드가 기준이다. 이 문서에 다시 적지 않는다.
 
 ## 1. 배경
 - FortiGate SSL VPN 서버가 약 3시간마다 세션을 강제로 끊는다. 그때마다 `sudo openfortivpn`을 다시 실행하고 Gmail로 온 이메일 OTP를 손으로 입력해야 했다.
 - 개인 Mac에서 쓰는 도구다. 지인 배포는 추후 과제이고, 유료 Apple Developer 계정은 없다.
+- 나중에 Linux와 Windows에서도 쓰고, VPN client로 openconnect도 고를 수 있게 하려 한다(§7.2).
 
 ## 2. 목표와 범위
 - **목표**
   - 메뉴바에 상주하면서 openfortivpn 실행, OTP 입력, 재연결을 사람 대신 한다.
   - 사용자가 신경 쓸 일을 최소로 줄인다. 인증서 확인 창, 수동 OTP 입력 창, 기술적인 설정 항목을 두지 않는다.
+  - 다른 OS와 VPN client를 붙일 때 UI, OS 연동, VPN client 처리만 새로 만들면 되도록 공통 부분을 나눠 둔다. 지금 지원하는 것은 macOS와 openfortivpn이다.
 - **범위 밖**
   - 앱이 비정상 종료된 뒤 실행 중인 터널을 다시 이어받는 기능(adopt)
   - split DNS, 다중 VPN 프로필
@@ -18,16 +20,18 @@
   - 공증된 배포본
 
 ## 3. 핵심 결정
+
+### 3.1 동작
 | 결정 | 이유 |
 |---|---|
-| VPN 클라이언트를 직접 만들지 않고 Homebrew openfortivpn을 감싼다 | 이미 이 게이트웨이에서 동작이 확인된 도구다. Homebrew 바이너리를 root로 실행하는 위험(§8)은 개인 Mac이라 감수한다 |
+| VPN client를 직접 만들지 않고 Homebrew openfortivpn을 감싼다 | 이미 이 게이트웨이에서 동작이 확인된 도구다. Homebrew 바이너리를 root로 실행하는 위험(§8)은 개인 Mac이라 감수한다 |
 | root 작업은 SMAppService.daemon으로 등록한 Helper가 맡고, 앱과 XPC로 통신한다 | openfortivpn(pppd, routing table 변경)은 root가 필요하다. 매번 관리자 암호를 묻지 않으면서 root 권한이 필요한 범위만 좁게 분리하기 위해서다 |
 | 무료 Apple ID(Personal Team)의 Apple Development 인증서로 서명한다 | launchd는 등록한 프로그램을 cdhash가 아니라 Team ID와 signing identifier로 식별한다. 그래서 재빌드해도 다시 승인받을 필요가 없다. 그 대가로 **번들 ID(`com.qoor.FortiVPNManager`, `…Helper`)는 최초 등록 후 바꾸지 않는다** |
 | 연결할 때마다 openfortivpn 프로세스를 새로 띄운다 | `--persistent`는 이메일 OTP 경로에서 이미 쓴 OTP를 다시 보낸다 |
 | 비밀번호와 OTP는 stdin pipe로만 전달한다 | argv, 설정 파일, 환경 변수, 로그 어디에도 비밀값을 남기지 않는다. PTY를 쓰지 않고 기본 verbosity로 고정하면 openfortivpn 원본 로그에도 비밀값이 나오지 않는다 |
 | 종료 원인은 openfortivpn 출력이 아니라 Helper가 기록한 사실로 판단한다 | openfortivpn의 exit code와 pppd 메시지만으로는 원인을 구분할 수 없다(§6). 대신 어느 단계까지 진행했는지, 누가 종료시켰는지, 터널이 얼마나 유지됐는지를 본다 |
 | 서버 인증서는 무조건 자동 신뢰한다 | 사용자가 인증서를 신경 쓰지 않기를 원했다. openfortivpn이 인증서를 거부하면서 출력하는 SHA-256 digest를 config.yaml `vpn.trusted_certs`에 저장하고, 이후 연결부터는 이 값을 넘긴다. 그래서 평소에는 openfortivpn을 한 번만 실행한다. 거부는 비밀번호를 보내기 전에 일어나므로 계정 잠금과는 무관하다 |
-| OTP는 Gmail API(OAuth)로 읽고, 실패하면 IMAP IDLE(앱 비밀번호)로 전환한다 | IMAP은 메일이 Gmail에 도착한 뒤 IMAP에서 보이기까지 약 7초가 늦었다. Gmail API는 도착 즉시 감지한다. API 인증이 실패하고 앱 비밀번호가 있으면 같은 시도 안에서 IMAP으로 넘어간다 |
+| OTP는 Gmail API(OAuth)로 읽고, 실패하면 IMAP IDLE(앱 비밀번호)로 전환한다 | IMAP은 메일이 Gmail에 도착한 뒤 IMAP에서 보이기까지 약 7초가 늦었다. Gmail API는 도착 즉시 감지한다. API 인증이 실패하고 앱 비밀번호가 있으면 같은 시도 안에서 IMAP으로 넘어간다. IMAP은 설정이 더 쉽고 일반적이라 계속 둔다 |
 | OAuth Desktop client는 빌드할 때 앱에 넣는다 | client는 사용자가 아니라 앱을 식별하는 값이므로 사용자가 직접 가져올 이유가 없다. Desktop client의 secret은 비밀로 취급되지 않고 PKCE로 보호된다. 다른 client를 쓰고 싶으면 계정 탭의 고급 항목에서 가져와 덮어쓸 수 있다 |
 | 사용한 OTP 메일은 휴지통으로 옮긴다 | 다음 시도에서 이전 코드를 잘못 고르지 않게 하고, 받은편지함에 OTP 메일이 쌓이지 않게 한다 |
 | 수동 OTP 입력 창은 만들지 않는다 | 자동화가 목적이다. OTP를 읽지 못하면 실패로 처리한다 |
@@ -37,17 +41,32 @@
 | health check는 프로세스와 ppp interface만 본다 | Apple pppd에는 LCP echo가 없고 openfortivpn에는 network timeout이 없다. 그래서 별도 ping 대상을 두지 않는 대신 연결 단계마다 watchdog을 둔다 |
 | 설정은 config.yaml, 비밀번호는 Keychain, 기기별 일시 상태는 state.json에 둔다 | config.yaml은 사람이 편집할 수 있고 dotfiles로 옮길 수 있다. 로그인 시 열기 여부는 macOS(SMAppService)가 소유하는 상태라서 YAML에 두지 않는다 |
 | config.yaml은 엄격하게 읽는다 | 사람이 직접 편집하는 파일이다. YAML 1.1의 8진수·60진수 해석, anchor/alias처럼 의도와 다르게 읽힐 수 있는 문법은 거부한다. 파일에 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다 |
-| 앱이 config.yaml을 다시 쓰면 직접 단 주석은 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장, 새 인증서 digest 기록, 예외 규칙 가져오기뿐이다 |
+| 앱이 config.yaml을 다시 쓰면 직접 단 주석과 이 버전이 모르는 키는 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장, 새 인증서 digest 기록, 예외 규칙 가져오기뿐이다 |
 | 로그는 마스킹하지 않은 원본을 보여준다 | 기본 verbosity에서는 비밀값이 출력되지 않음을 openfortivpn 소스에서 확인했다. 문제를 추적할 때는 원본이 가장 유용하다 |
-| 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다 |
+| 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명은 라이브러리 원문(영어)을 그대로 보인다(§7.2) |
+
+### 3.2 구조와 기술
+| 결정 | 이유 |
+|---|---|
+| 공통 로직은 Rust로, macOS의 UI·OS 연동·Helper 껍데기는 Swift로 만든다 | 다른 OS와 VPN client를 붙일 때 공통 부분을 그대로 쓰기 위해서다. **macOS UI는 앞으로도 Swift로 만든다.** OS 기본 UI가 가장 단순하고 반응이 빠르며, OS에 의존하는 영역을 다른 언어로 옮기면 복잡도만 는다 |
+| Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 Helper entry)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
+| 메시지 타입은 Rust가 기준이다 | Swift 쪽 Codable 정의는 Rust가 만든 예시 JSON(fixture)으로 맞는지 테스트한다. gRPC, MessagePack, protobuf는 쓰지 않는다 |
+| UI 상태는 도메인 구역 단위로 보낸다 | 화면 모양의 전체 상태는 비효율적이고 공통 부분을 화면 변경에 묶는다. 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 구역 중 바뀐 것만 통째로 보내고, 로그는 추가분만 보낸다. 판단(버튼 상태, "다음 연결부터 적용" 등)은 공통 부분이 하고, 문장은 모두 UI가 만들어 번역한다 |
+| Rust에 unsafe 블록을 두지 않는다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시만 허용한다 |
+| SIGPIPE: Rust가 socketpair 양쪽에 SIGPIPE 금지를 켜고, Helper 프로세스는 SIGPIPE 전체를 무시한다 | main이 Swift라 Rust의 SIGPIPE 무시가 적용되지 않는다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없어서, Helper 전체의 무시를 watchdog의 전제 조건으로 둔다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
+| 내부 오류는 곧바로 중단한다 | 억지 예외 처리 대신 panic은 abort하고 crash report를 남긴다. Release 빌드에도 줄 번호를 남긴다 |
+| config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
+| TLS는 rustls에 ring provider 하나와 platform verifier를 쓴다 | OS의 신뢰 저장소를 따른다. aws-lc-rs는 넣지 않는다. HTTPS는 OS의 proxy 설정을 따른다 |
 
 ## 4. 구성과 역할
 
 ### 4.1 앱과 Helper
 - **앱** (사용자 권한, 메뉴바 상주)
   - 모든 판단을 맡는다. 연결 state machine, OTP 처리, 재연결 스케줄, config.yaml·Keychain·state.json, 서버 인증서 digest, 예외 규칙 계산, UI, 로그 보관이 여기에 속한다.
+  - Swift의 UI와 OS 연동이 Rust 런타임을 같은 프로세스에서 시작한다. 판단과 공통 I/O는 런타임이, 화면과 macOS 기능(Keychain, XPC, 시스템 이벤트, 알림, 로그인 항목)은 Swift가 맡는다.
 - **Helper** (root LaunchDaemon, 요청이 있을 때 launchd가 실행)
   - 실행하고 감시하는 일만 한다. openfortivpn 실행, stdin으로 비밀번호·OTP 주입, prompt 감지, 단계별 watchdog, 프로세스 종료, 비정상 종료 뒤 routing table 복구, 남은 프로세스 정리, 네트워크 서비스의 additional routes 읽기·쓰기가 여기에 속한다.
+  - Swift의 OS 연동 Helper(XPC, launchd, 서명 확인, route 복구, networksetup)가 Rust Helper entry(watchdog과 backend adapter)를 같은 프로세스에서 시작한다.
   - 상태를 저장하지 않고 config.yaml도 읽지 않는다. 앱이 보낸 값 중 검증을 통과한 것만 쓴다. 환경 변수는 PATH만 넘긴다(openfortivpn이 proxy 환경 변수를 읽기 때문, §6).
 - **둘을 나눈 이유**: root로 실행되는 코드를 최소로 줄이기 위해서다. 앱은 root 권한 없이 자유롭게 재시작하거나 재설치할 수 있다.
 
@@ -55,16 +74,39 @@
 - XPC 연결은 양쪽이 서로의 code signing requirement(Team ID + signing identifier)를 확인한다. 비밀번호는 Helper의 버전을 확인한 뒤에만 보낸다.
 - 앱과 Helper는 같은 빌드여야 한다(BuildID 비교). 다르면 연결하지 않고 "Helper 버전 불일치"로 표시한다. 그래서 둘 사이의 메시지 형식은 구버전 호환을 고려하지 않는다.
   - 예외: 버전 확인과 옛 Helper에 대한 종료 요청은 다른 빌드 사이에서 오가므로 형식을 바꾸지 않는다.
+- XPC로 오가는 내용은 공통 계약이 정한 JSON이다. 앱의 OS 연동은 내용을 읽지 않고 런타임에 그대로 넘기며, 직접 읽는 것은 버전뿐이다.
 - Helper는 앱의 연결이 끊기면(종료, 강제 종료, 크래시) 터널을 정상 종료한다. 그래서 세 경우가 모두 같은 경로를 탄다.
 - Helper가 보내는 이벤트와 로그 출력은 하나의 순서 있는 채널로 전달된다. 연결 해제나 종료가 끝났는지는 요청에 대한 응답이 아니라 Helper가 보내는 종료 이벤트로 판단한다.
 
-### 4.3 코드 구성
-- `App/`: 메뉴바 UI, 설정창, 연결 제어, OTP 세션, 시스템 감시
-- `components/os-integration-helper/macos/`: root 데몬
-- `Packages/FortiCore/`: 시스템에 의존하지 않는 로직
-  - `FortiShared`: 앱과 Helper가 공유하는 XPC 계약
-  - `FortiCore`: 연결 state machine, OTP 메일 판별, IMAP, 예외 규칙 계산
-  - `FortiConfig`: config.yaml 모델과 읽기·쓰기. Yams에 의존하므로 앱만 쓴다
+### 4.3 구성 요소
+구성 요소마다 디렉토리를 하나 둔다. 구성 요소 안에서 OS에 의존하는 부분만 `macos/` 같은 하위 디렉토리로 나눈다. Rust crate 이름에는 `fvm-` 접두사를 붙인다(Rust의 기본 라이브러리 `core`와 겹치지 않게).
+
+```
+components/
+  contract/                     공통 계약: backend 인터페이스, 앱 ↔ Helper 메시지, 앱 ↔ 런타임 메시지, 메시지 읽기·쓰기
+                                (macos/: Swift 쪽 정의와 XPC 연결 정의)
+  core/                         판단 코어: 연결 state machine, config.yaml, 예외 규칙 계산, IMAP·Gmail API·OAuth·OTP 메일 형식. I/O 없음
+  runtime/                      런타임: 조율과 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화, UI 메시지
+                                (src/macos/, macos/: macOS 앱이 런타임을 시작하는 부분)
+  backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 방식, 검증된 버전, 기존 설정 가져오기
+  watchdog/                     watchdog: 프로세스 실행, stdin, 출력, 단계별 시간 제한, 종료, 종료 사실 (unix/)
+  helper-entry/macos/           Helper entry: backend adapter를 골라 watchdog에 연결하는 Helper의 시작 함수
+  ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
+  os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
+  os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
+packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보
+```
+
+- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, backend adapter, 공통 계약.
+- 판단 코어와 watchdog은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
+- **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.
+- **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점만 새로 만든다. Linux와 Windows의 서비스는 Rust로 Helper entry 역할을 한다.
+
+### 4.4 빌드와 설치
+- Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
+- `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
+- `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
+- 앱 크기를 줄이는 작업은 따로 한다.
 
 ## 5. 동작 원칙
 
@@ -95,6 +137,7 @@
 ### 5.3 잠자기와 깨어남
 - 연결 중이거나 재시도를 기다리는 중에 잠들면 시도를 중단한다. 깨어나 네트워크가 돌아오면 새로 시도한다.
 - 연결된 상태에서 깨어나면 다음 경우에만 재연결한다. 사전 재연결 시각이 지났을 때, 프로세스나 ppp interface가 사라졌을 때, 게이트웨이까지의 물리 경로(underlay)가 바뀌었을 때, 사용자가 켜 둔 "잠자기 후 재연결" 조건을 만족할 때다. 그 밖에는 유지한다.
+- 타이머는 벽시계 기준이다. 잠자기나 시계 변경 뒤에도 정해 둔 시각이 지났으면 곧바로 동작한다.
 
 ### 5.4 스케줄
 사용자가 요청한 기능이다. 퇴근 후나 주말에 OTP 메일 알림이 오는 것을 막고, 다른 기기에서 연 세션과 자동 재연결이 서로 다투지 않게 한다.
@@ -123,6 +166,7 @@
 ### 5.6 UI
 - 메뉴바 아이콘은 연결됨 / 끊김 / 연결·재연결 중 / 오류 네 가지만 구분한다.
 - 설정창은 계정, 연결 관리, 로그 세 탭이다. 인증서 관련 항목은 없다.
+- UI는 판단하지 않는다. 받은 도메인 구역을 그리고, 사용자의 조작을 명령으로 보낸다. Log 탭의 [모두 복사]는 UI가 화면에 가진 줄로 만든다.
 - 기존 `~/.config/openfortivpn/config`가 있으면 첫 실행 때 값을 가져온다. 원본 파일은 수정하지 않는다.
 - macOS 알림은 설정창이 닫혀 있어도 사용자가 알아야 하는 문제(예외 규칙 쓰기 실패)에만 쓴다.
 
@@ -136,7 +180,7 @@
 - 비밀값은 verbosity를 올렸을 때만 출력된다(cookie `-v`, OTP `-vv`, password `-vvv`).
 - exit code는 원인과 무관하게 섞여 나오고, pppd의 끊김 메시지도 원인을 구분해 주지 않는다.
 - 인증서 검증은 끌 수 없다. 거부할 때 stdout에 `trusted-cert = <digest>`를 출력하고, 인증 이후 단계에서도 다시 나올 수 있다. password는 TLS 검증을 통과한 뒤에야 전송된다.
-- SIGTERM handler는 터널이 올라온 뒤에만 설치된다. 그 전에는 즉시 종료되며, spawn할 때 signal mask를 초기화해야 이렇게 동작한다.
+- SIGTERM handler는 터널이 올라온 뒤에만 설치된다. 그 전에는 즉시 종료되며, spawn할 때 signal mask를 초기화해야 이렇게 동작한다. 터널이 올라온 뒤 SIGTERM을 받으면 스스로 정상 종료(exit code 0)하므로 서버 종료와 구별되지 않는다. SIGKILL로 끝내야 signal 종료로 남는다. pppd만 끝내도 openfortivpn은 signal 없이 스스로 끝난다.
 - 비정상 종료하면 default route가 사라진다. 그래서 Helper에 route 복구가 있다.
 - `https_proxy`/`all_proxy` 환경 변수를 읽는다.
 
@@ -154,14 +198,23 @@
 - Personal Team Development 서명은 Release 빌드에도 `get-task-allow`를 넣는다. App Sandbox나 제한된 entitlement를 쓰면 7일짜리 provisioning profile이 붙으므로 **entitlement는 비워 둔다.**
 - 서명 인증서가 유효하려면 로그인 Keychain에 Apple WWDR G3 중간 인증서가 있어야 했다.
 - 재설치하면 실행 중인 옛 Helper는 디스크의 바이너리가 바뀌어 앱의 서명 확인을 통과하지 못한다. 그래서 Helper가 자기 실행 파일이 바뀐 것을 감지하면 유휴 상태일 때 스스로 종료한다. `make install`에 sudo가 필요 없는 이유다.
-- 앱 target의 기본 격리가 MainActor라서, XPC 오류·무효화 callback을 `@Sendable`로 선언하지 않으면 런타임 격리 검사에서 크래시한다.
+- main actor에 격리된 Swift 코드에서 XPC 오류·무효화 callback을 `@Sendable`로 선언하지 않으면 런타임 격리 검사에서 크래시한다.
 - `/sbin/route`와 `networksetup`은 실패해도 exit code 0으로 끝난다. 결과는 출력이나 변경 후의 routing table로 판단한다.
 - networksetup이 다루는 저장된 additional routes에 macOS가 스스로 넣는 항목은 없다. macOS 자체 route(자기 IP `/32`, `169.254.0.0/16`)는 실행 상태에만 있고 networksetup에는 보이지 않는다.
 - 화면 잠금은 `com.apple.screenIsLocked`/`Unlocked` 분산 알림이 기준이다. 잠금 해제 직후 세션 정보는 잠시 잠금 상태로 남아 있을 수 있다.
 - main actor task 안에서 modal 창(`runModal`)을 열면 main queue가 멈춰 연결 처리, OTP 확인, 타이머가 모두 멈춘다. 파일 선택 창은 sheet로 연다.
+- Rust의 `main`이 아닌 프로세스(Swift 앱에 링크된 Rust 라이브러리)에서는 SIGPIPE가 무시되지 않는다. 닫힌 상대에게 쓰면 프로세스가 죽는다.
+- `xcodebuild`는 String Catalog에 새 문장을 넣지 않는다. Xcode에서 빌드하거나, 빌드가 남긴 `.stringsdata`로 `xcstringstool sync`를 실행한다.
+
+**openconnect 9.21 (Windows에서 확인, 나중의 backend)**
+- `--protocol=fortinet`으로 같은 게이트웨이에 비밀번호와 이메일 OTP로 로그인했다. prompt는 `Password:` 다음 `Code:`다.
+- 인증서 고정 값의 형식이 openfortivpn과 다르다(`pin-sha256:`, SPKI base64). openfortivpn의 digest는 맞지 않으므로 고정 값은 backend마다 따로 둔다.
+- route가 많으면(약 27개) vpnc-script-win.js가 openconnect의 10초 제한을 넘긴다. 스크립트는 나중에 끝나고 터널은 유지됐다. Wintun은 쓸 때마다 "experimental" 경고를 낸다.
 
 ## 7. 결정 이력과 교훈
 같은 실수를 반복하지 않기 위해, 현재 구성에 이르게 한 결정과 그 근거를 남긴다.
+
+### 7.1 기능
 - **2026-10-15 SMAppService 검증**: Personal Team 서명으로 등록, 승인, XPC 통신이 동작했다. 실패하면 쓰려던 레거시 LaunchDaemon 설치(최초 1회 관리자 암호)는 필요 없어졌다. 재설치 문제(§6 macOS)도 이때 발견했다.
 - **2026-10-15 OTP 지연 측정 → Gmail API 추가**: IMAP으로 측정해 보니 prompt부터 코드 입력까지 약 10초가 걸렸다. 사용자가 즉시 입력을 원해서 Gmail API 방식을 추가하고 IMAP은 대체 경로로 남겼다.
 - **2026-10-15 route 복구 검토**: `/sbin/route`가 실패해도 0으로 끝나서, 복구 후 routing table을 다시 확인하도록 바꿨다.
@@ -177,12 +230,44 @@
   - "필요할지 몰라서" 넣었다가 쓰이지 않던 데이터 항목, 옵션, 테스트용 장치를 지웠다.
   - 원칙은 다음과 같다. 기능의 목적이 분명할 때 만든다. 테스트를 위해 제품 코드에 무언가를 두지 않는다. 세부 사항은 코드에 두고, 방향과 설계는 이 문서에 둔다.
 - **2026-11-09 강제 종료 뒤 곧바로 재연결**
-  - kill 테스트에서 재연결이 정해진 대기 시간만큼 늦었다. openfortivpn을 SIGKILL로 끝내면 서버 종료로 분류돼 잠시 기다렸고, 터널이 올라온 직후였다면 "너무 빨리 끊김"으로 인증 실패에 세어져 더 오래 기다렸다. signal 종료는 서버나 계정과 무관하므로 강제 종료로 따로 분류하고 곧바로 재연결한다. 터널이 올라오기 전의 signal 종료는 FortiGate의 IP 잠금 때문에 단계 규칙을 그대로 둔다. pppd만 끝내면 openfortivpn이 정상 종료해서 서버 종료와 구분할 수 없어 그대로 둔다.
+  - kill 테스트에서 재연결이 정해진 대기 시간만큼 늦었다. openfortivpn을 SIGKILL로 끝내면 서버 종료로 분류돼 잠시 기다렸고, 터널이 올라온 직후였다면 "너무 빨리 끊김"으로 인증 실패에 세어져 더 오래 기다렸다. signal 종료는 서버나 계정과 무관하므로 강제 종료로 따로 분류하고 곧바로 재연결한다. 터널이 올라오기 전의 signal 종료는 FortiGate의 IP 잠금 때문에 단계 규칙을 그대로 둔다. pppd만 끝내면 openfortivpn이 signal 없이 스스로 끝나서 서버 종료와 구분할 수 없어 그대로 둔다.
   - Helper를 `kill -9`로 끝내면 네트워크 오류로 다뤄 backoff만큼 기다렸다. Helper와의 연결은 Mac 안에만 있어서 끊겼다면 언제나 Helper 프로세스가 끝난 것이지 네트워크 문제가 아니다. 그래서 강제 종료로 다룬다.
   - Helper는 내부 오류에서 곧바로 중단한다(fail fast). 연결할 때마다 중단되면 곧바로 재연결이 VPN 로그인과 OTP 메일을 끝없이 반복하므로, 안정 세션이 생길 때까지 곧바로 재연결은 한 번만 한다.
 
+### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
+- **방향**
+  - Windows의 FortiClient는 7.4.6부터 CLI(`FortiVPN.exe --cli`)가 있지만, 사용자 PC의 7.4.3은 회사 설치본이라 올릴 수 없었다. 그래서 Windows backend는 openconnect로 정하고 실제 PC에서 로그인, OTP, 트래픽을 확인했다(§6).
+  - macOS는 openfortivpn을 기본으로 두고 나중에 openconnect를 고를 수 있게 한다. Windows는 openconnect로 고정하고, Linux는 둘 다 지원한다.
+  - 이번 작업은 구조만 준비하는 사전 리팩토링이다. openconnect backend는 만들지 않았다. 공통 부분(판단, 공통 I/O, VPN client 처리)을 Rust로 옮기고 OS 앱에는 UI와 OS 연동만 남겼다.
+- **구조 결정**
+  - 처음에는 UniFFI를 검토했다. 사용자가 C binding용 unsafe가 늘어나는 것에 반대했고 설정 부담도 컸다. 그래서 socketpair 위의 JSON 메시지로 바꿨다(§3.2).
+  - 공통 crate 5개(공통 계약, 판단 코어, 런타임, backend adapter, watchdog)와 macOS 전용 Helper entry 하나로 나눴다. backend adapter와 watchdog은 합치지 않았다. VPN client마다 바뀌는 부분과 프로세스 처리를 나눠야 유지보수가 쉽고, watchdog은 공통 계약에만 의존한다.
+  - 디렉토리는 구성 요소 기준으로 나눴다. 언어별(`crates/`)이나 플랫폼별(최상위 `macos/`) 배치는 사용자가 거절했다.
+  - UI 상태는 화면 모양의 전체 상태 대신 도메인 구역으로 보낸다(§3.2).
+  - Linux UI는 나중에 Rust + QML(cxx-qt)로 만든다. Windows UI는 나중에 정한다.
+- **진행 방식과 교훈**
+  - 코드 이야기 없이 기능만 적은 명세(SPEC.md)를 먼저 썼다. 처음 쓴 초안은 코드를 산문으로 옮긴 것이라 다시 썼다.
+  - 옛 코드는 바꿀 수 없는 외부 사실(XPC 메시지 모양, 시간 값과 횟수, openfortivpn 출력 문구와 실행 조건)을 확인할 때만 봤다. 옛 구조와 흐름은 따르지 않고 설계에서 출발했다. 옛 Swift 테스트는 Rust로 옮겨 같은 결과가 나오는지 확인했다.
+  - 단계마다 자동 테스트, 리뷰, 실제 설치를 거쳤다. 단계는 기반 검증(Rust 연결, socketpair, 통신, YAML 선택), 파일 이동, Helper 쪽, 앱 쪽(한 번에 전환), 문서 순서였다.
+  - 강제 종료 시험은 SIGKILL로 한다. openfortivpn은 SIGTERM을 받으면 스스로 정상 종료해서 서버 종료 경로를 탄다(§6).
+  - 설치는 VPN을 끊으므로, 터널이 돌아오지 않으면 이전 앱으로 되돌리는 단계를 넣었다(§4.4).
+- **저장소 호환**: config.yaml, state.json(실패 기록 포함), Keychain 항목, 로그 파일(위치, 줄 형식, 회전)을 그대로 쓴다. 앱 ↔ Helper의 XPC 메시지는 Swift만 있던 빌드와 같은 형식이다. 바뀐 것은 Helper 상태의 실행 파일 문제(아래 3)뿐이다.
+- **승인된 동작 변경**: 사용자가 보는 동작은 바꾸지 않는 것이 원칙이었고, 아래만 승인을 받아 바꿨다.
+  1. config.yaml에 raw NEL·LS·PS가 있으면 오류로 처리한다. YAML 1.1과 1.2가 이 문자를 줄바꿈으로 볼지 다르게 정한다.
+  2. YAML parser를 바꾸면서 일부 오류의 줄·열 위치와 드문 문법의 처리가 조금 달라졌다(block scalar와 일부 문법 오류의 위치, flow 중첩 255단계 제한, `key:<TAB>value`는 문법 오류, 따옴표 값이나 키의 tag 거부). 값을 다르게 읽는 경우는 없다.
+  3. openfortivpn 실행 파일 문제는 종류와 경로로 넘기고, UI가 문장을 만들어 번역한다. 전에는 Helper의 영어 문장을 그대로 보였다.
+  4. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명(계정 탭의 Gmail 연결 테스트, Google 계정 연결, 기존 설정 가져오기)은 라이브러리 원문(영어)을 그대로 보인다. 전에는 macOS가 만든 한국어 설명이었다. 사용자가 실제로 보고 필요하면 따로 개선을 요청한다.
+  - 전환 중에 강제 종료 뒤 곧바로 재연결하는 규칙(§7.1)을 추가했다. Swift 앱에 먼저 넣은 뒤 판단 코어가 같은 규칙을 구현했다.
+- **함께 한 정리**
+  - IPv4 읽기, 인증서 값 형식 확인, 인증서 값 비우기 규칙을 각각 한 곳으로 모았다.
+  - 검증된 버전 판단은 UI에서 backend adapter로, "다음 연결부터 적용"과 상태 줄 판단은 UI에서 판단 코어로 옮겼다.
+  - 준비 상태의 "Gmail 앱 비밀번호 있음"을 실제 뜻인 "Gmail 인증 있음"(앱 비밀번호 또는 Google 계정)으로 바꿨다.
+  - OTP 세션의 시도 기록을 런타임의 OTP 세션 하나로 모았다.
+  - 테스트에만 쓰던 시계 주입, config.yaml 통째 저장·읽기 전용 불러오기, 큰 스택 스레드는 옮기지 않았다.
+- **결과**: Helper 쪽 설치 뒤 강제 종료부터 재연결까지 openfortivpn 11.1초, Helper 7.1초(전에는 19.4초)가 걸렸다. 앱 쪽 전환 설치 뒤에는 앱 종료부터 터널 연결까지 약 11초였다. §10의 점검 가운데 2·3·4·8·9·10과 7의 일부는 실제 환경에서 확인했다. 6은 사용자 결정으로, 1은 openfortivpn 설정 파일의 비밀번호가 Keychain을 덮어쓸 수 있어 자동 테스트로 대신했다. 5(잠자기)는 사용자가 나중에 확인한다.
+
 ## 8. 보안 요약과 감수하는 위험
-- 비밀값은 Keychain에 저장하고, Helper에는 XPC로 메모리 안에서만 전달한다. argv, 설정 파일, 환경 변수, 로그에 남지 않는다.
+- 비밀값은 Keychain에 저장하고, Helper에는 XPC로 메모리 안에서만 전달한다. argv, 설정 파일, 환경 변수, 로그에 남지 않는다. Rust에서 비밀값을 담는 타입은 디버그 출력에서 값을 가린다. panic 메시지와 crash report에 들어갈 수 있기 때문이다.
 - XPC는 양쪽 모두 Team ID와 signing identifier를 확인한다. Helper는 검증된 값만 받고, config.yaml은 읽지 않는다.
 - **감수하는 위험** (개인 Mac, 사용자 결정)
   1. **서버 인증서 자동 신뢰**: 공용 Wi-Fi 등에서 능동적인 MITM 공격자가 가짜 인증서를 내밀면 자동으로 신뢰한다. 그러면 VPN 비밀번호와 실시간 OTP가 넘어갈 수 있다. OTP를 자동 제출하므로 사람이 알아챌 틈이 없다.
@@ -191,18 +276,23 @@
 - 강화 옵션(인증서 변경 시 확인, root 소유 바이너리 사본, 게이트웨이 고정과 관리자 인증)은 추후 과제다.
 
 ## 9. 리스크와 추후 과제
-- FortiOS 7.6.3 이상으로 게이트웨이를 올리면 openfortivpn을 쓸 수 없다. 대안 후보는 openconnect `--protocol=fortinet`이다.
+- FortiOS 7.6.3 이상으로 게이트웨이를 올리면 openfortivpn을 쓸 수 없다. openconnect의 `--protocol=fortinet`도 같은 SSL VPN tunnel mode라 대안이 되지 않는다. 대안은 아직 없다.
 - 잠자기 중 PPP kernel extension panic 보고가 있다(openfortivpn #1278).
 - health check가 프로세스와 interface로 한정돼 있어 서버 idle-timeout으로 죽은 연결은 늦게 감지될 수 있다.
 - Personal Team 인증서는 1년마다 만료된다.
 - openfortivpn을 업그레이드하면 출력 문자열이 바뀔 수 있다. 검증된 버전이 아니면 연결 관리 탭에 경고를 띄운다.
-- 추후 과제: 지인 배포, 인증서 보안 강화, split DNS, 다중 프로필, 비정상 종료 뒤 터널 이어받기(adopt), root 소유 바이너리 사본, openconnect backend.
+- Windows에서 openconnect를 쓸 때의 경고(§6)는 알려진 문제로 두고 써 보면서 개선한다. driver는 Wintun을 기본으로 하고, 불안정하면 TAP을 검토한다.
+- 추후 과제
+  - openconnect backend, Linux 앱(Rust + QML)과 서비스, Windows 앱과 서비스
+  - Linux·Windows용 Rust 테스트를 돌릴 CI(GitHub Actions 후보, 사용자 확인 필요)
+  - 앱 크기 줄이기
+  - 지인 배포, 인증서 보안 강화, split DNS, 다중 프로필, 비정상 종료 뒤 터널 이어받기(adopt), root 소유 바이너리 사본
 
 ## 10. 수동 점검
 큰 변경 뒤 실제 환경에서 확인할 시나리오다.
-1. config.yaml이 없는 상태로 첫 실행: 기존 openfortivpn 설정을 가져오고, Helper 승인과 Gmail 연결 후 openfortivpn 1회 실행으로 연결된다.
+1. config.yaml이 없는 상태로 첫 실행: 기존 openfortivpn 설정을 가져오고, Helper 승인과 Gmail 연결 후 openfortivpn 1회 실행으로 연결된다. openfortivpn 설정에 비밀번호가 있으면 Keychain의 VPN 비밀번호를 그 값으로 덮어쓰므로, 값이 최신일 때만 한다.
 2. `vpn.trusted_certs`를 비우고 연결: 인증서 거부 1회 뒤 즉시 재실행으로 연결되고 digest가 저장된다. 다음 연결부터는 거부 없이 1회에 연결된다.
-3. openfortivpn 또는 pppd를 강제로 종료: route가 복구되고 재연결된다. openfortivpn을 끝내면 곧바로, pppd만 끝내면 서버 종료처럼 잠시 뒤 재연결한다.
+3. openfortivpn 또는 pppd를 강제로 종료: route가 복구되고 재연결된다. openfortivpn을 SIGKILL로 끝내면 곧바로, pppd만 끝내면 서버 종료처럼 잠시 뒤 재연결한다. 직전 연결 후 2분 안에 끝내면 너무 빨리 끊긴 세션으로 보고 더 오래 기다린다.
 4. 세션 최대 시간을 짧게 바꿔 사전 재연결이 동작하는지 확인한다.
 5. 짧은 잠자기, 긴 잠자기, 연결 중 잠자기, Wi-Fi 변경
 6. 잘못된 VPN 비밀번호, 잘못된 Gmail 인증, OTP 메일 차단: 각각 정해진 대로 멈춘다.

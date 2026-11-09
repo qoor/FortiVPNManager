@@ -69,7 +69,7 @@ fn without_bom(text: &str) -> &str {
 
 /// The characters libyaml reads, the parser of the earlier app, less NEL, LS and PS: YAML 1.1 reads
 /// those as line breaks and YAML 1.2 as text, so a file holding them raw could be read two ways
-/// (REFACTOR-PLAN §2, exception 1).
+/// (DESIGN §7.2, approved change 1).
 fn readable(character: char) -> bool {
     matches!(
         u32::from(character),

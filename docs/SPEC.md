@@ -1,6 +1,6 @@
 # FortiVPNManager 기능 명세
 
-시스템이 하는 일을 구성 요소와 기능 단위로 정한다. 왜 이렇게 만들었는지는 [DESIGN.md](DESIGN.md), 진행 중인 Rust 사전 리팩토링은 [REFACTOR-PLAN.md](REFACTOR-PLAN.md)를 본다.
+시스템이 하는 일을 구성 요소와 기능 단위로 정한다. 왜 이렇게 만들었는지는 [DESIGN.md](DESIGN.md)를 본다.
 
 # 0. 문서 정보
 

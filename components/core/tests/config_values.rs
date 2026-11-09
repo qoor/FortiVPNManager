@@ -614,7 +614,7 @@ fn wrong_node_kinds() {
             ValueKind::Integer,
             loc(2, 9),
         ),
-        // The parser places a block scalar at its content, not at `|` (REFACTOR-PLAN §2 exception 2).
+        // The parser places a block scalar at its content, not at `|` (DESIGN §7.2 approved change 2).
         (
             "vpn:\n  port: |\n    443\n".to_owned(),
             "vpn.port",

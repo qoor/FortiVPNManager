@@ -57,8 +57,8 @@ fn multiple_documents_are_refused() {
 fn syntax_errors_carry_line_and_column() {
     for (yaml, location) in [
         ("vpn:\n  port: [1, 2\n", loc(3, 1)),
-        // libyaml: 2:1 and 3:1. saphyr points at the tab and at the opening quote (REFACTOR-PLAN
-        // §2 exception 2).
+        // libyaml: 2:1 and 3:1. saphyr points at the tab and at the opening quote (DESIGN §7.2,
+        // approved change 2).
         ("vpn:\n\tport: 1\n", loc(2, 2)),
         ("vpn:\n  host: \"unterminated\n", loc(2, 9)),
         ("vpn:\n  host: a\n port: 1\n", loc(3, 2)),
@@ -175,7 +175,7 @@ fn raw_characters_the_reader_refuses_are_located() {
 
 #[test]
 fn raw_next_line_and_separators_are_refused() {
-    // REFACTOR-PLAN §2 exception 1: YAML 1.1 and 1.2 disagree on whether they break lines.
+    // DESIGN §7.2 approved change 1: YAML 1.1 and 1.2 disagree on whether they break lines.
     for (raw, scalar) in [("\u{85}", 0x85), ("\u{2028}", 0x2028), ("\u{2029}", 0x2029)] {
         let error = load_error(&format!("vpn:\n  realm: a{raw}b\n")).unwrap();
         assert_eq!(
@@ -384,7 +384,7 @@ fn empty_certificate_lists() {
 
 #[test]
 fn deep_flow_nesting_within_the_cap_reads() {
-    // saphyr's flow nesting stops at 255 levels (REFACTOR-PLAN §2 exception 2); libyaml's at 1000.
+    // saphyr's flow nesting stops at 255 levels (DESIGN §7.2 approved change 2); libyaml's at 1000.
     for depth in [100, 254] {
         let yaml = format!("notes: {}{}\n", "[".repeat(depth), "]".repeat(depth));
         assert_eq!(
