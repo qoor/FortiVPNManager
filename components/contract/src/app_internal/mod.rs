@@ -70,6 +70,12 @@ pub enum FromRuntime {
         #[serde(rename = "_0")]
         action: PortAction,
     },
+    /// Show the settings window. Sent at most once per launch, after the sections it rests on, and
+    /// only when the first config section carries an import report (the automatic first-launch
+    /// import) or the first readiness evaluation finds setup required. Setup that becomes required
+    /// later in the run opens nothing. The UI only picks the tab: Account when the config section
+    /// has an import report, otherwise the tab of the first setup item in the connection status.
+    OpenSettings {},
 }
 
 /// What the app knows about itself at launch.

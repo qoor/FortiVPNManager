@@ -169,6 +169,7 @@ fn messages_from_the_runtime() {
             FromRuntime::PortAction {
                 action: PortAction::ApproveQuit {},
             },
+            FromRuntime::OpenSettings {},
         ],
     );
 }

@@ -273,6 +273,7 @@ private extension AppInternal {
             ]),
             .portRequest(id: 7, request: .screenState),
             .portAction(.approveQuit),
+            .openSettings,
         ]
 
         static let connectionSections: [ConnectionSection] = [

@@ -24,6 +24,11 @@ nonisolated enum AppInternal {
         case portRequest(id: UInt64, request: PortRequest)
         /// Carry out without an answer.
         case portAction(PortAction)
+        /// Show the settings window, at most once per launch (the rule is in
+        /// components/contract/src/app_internal/mod.rs). Pick the tab only: Account when the config
+        /// section has an import report, otherwise the tab of the first setup item in the
+        /// connection status.
+        case openSettings
     }
 
     struct AppFacts: Encodable, Sendable {
