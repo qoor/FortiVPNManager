@@ -131,6 +131,30 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
+  # The app's Swift parts (UI and OS integration) on the contract, without the Rust runtime. Not in
+  # the app target until the cutover. Nonisolated by default like the contract tests: the contract's
+  # Swift types do not compile with the app target's main-actor default yet, so these sources state
+  # their isolation themselves.
+  AppSwiftTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ../../components/contract/macos
+        excludes:
+          - "HelperInternal.swift"
+      - path: ../../components/ui/macos
+      - path: ../../components/os-integration/macos
+      - path: ../../components/ui/tests/macos
+      - path: ../../components/os-integration/tests/macos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.AppSwiftTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    dependencies:
+      - package: FortiCore
+        products: [FortiShared]
+
   # Helper sources that are testable without the Helper process.
   HelperTests:
     type: bundle.unit-test
@@ -165,3 +189,9 @@ schemes:
         HelperTests: [test]
     test:
       targets: [HelperTests]
+  AppSwiftTests:
+    build:
+      targets:
+        AppSwiftTests: [test]
+    test:
+      targets: [AppSwiftTests]
