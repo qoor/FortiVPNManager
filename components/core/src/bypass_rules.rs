@@ -21,8 +21,8 @@ use fvm_contract::app_internal::section::{
 /// Most entries one list may hold; the settings file refuses more.
 pub const MAX_ENTRIES: usize = 100;
 
-const MIN_PREFIX_LENGTH: u32 = 8;
-const MAX_PREFIX_LENGTH: u32 = 32;
+pub const MIN_PREFIX_LENGTH: u32 = 8;
+pub const MAX_PREFIX_LENGTH: u32 = 32;
 
 /// An IPv4 host (a /32) or network as the exception rules use it: no bits set after the prefix,
 /// a prefix of 8 to 32, and an address that can be routed. Shown as `10.30.161.16` for a host and
