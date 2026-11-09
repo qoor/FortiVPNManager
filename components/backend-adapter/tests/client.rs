@@ -24,20 +24,20 @@ fn is_named_openfortivpn() {
 fn describes_problems_as_the_current_app_shows_them() {
     assert_eq!(
         describe(
-            ClientProblemKind::NotFound,
+            ClientProblemKind::NotFound {},
             "/opt/homebrew/bin/openfortivpn"
         ),
         "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn"
     );
     assert_eq!(
         describe(
-            ClientProblemKind::OutsideAllowedLocation,
+            ClientProblemKind::OutsideAllowedLocation {},
             "/usr/local/bin/openfortivpn"
         ),
         "openfortivpn resolves outside the Homebrew Cellar (/opt/homebrew/Cellar/openfortivpn/): /usr/local/bin/openfortivpn"
     );
     assert_eq!(
-        describe(ClientProblemKind::NotRegularFile, RESOLVED),
+        describe(ClientProblemKind::NotRegularFile {}, RESOLVED),
         format!("openfortivpn is not a regular file: {RESOLVED}")
     );
     assert_eq!(
@@ -59,7 +59,7 @@ fn describes_problems_as_the_current_app_shows_them() {
         )
     );
     assert_eq!(
-        describe(ClientProblemKind::NotExecutable, RESOLVED),
+        describe(ClientProblemKind::NotExecutable {}, RESOLVED),
         format!("openfortivpn is not executable: {RESOLVED}")
     );
 }

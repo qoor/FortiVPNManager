@@ -1,0 +1,17 @@
+[
+  {
+    "launched": {
+      "facts": {
+        "appBuild": "20261109120000",
+        "installedCopy": true,
+        "builtInOauthClient": "{\"installed\":{\"client_id\":\"123-abc.apps.googleusercontent.com\"}}",
+        "timeZone": "Asia/Seoul",
+        "signInPages": {
+          "completed": "FortiVPNManager: you can close this window.",
+          "notCompleted": "FortiVPNManager: Google sign-in was not completed. You can close this window.",
+          "invalid": "FortiVPNManager: this sign-in response is not valid. Start the sign-in again in Settings."
+        }
+      }
+    }
+  }
+]

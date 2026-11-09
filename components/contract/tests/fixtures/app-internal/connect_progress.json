@@ -1,0 +1,9 @@
+[
+  "checkingReadiness",
+  "connectingToGmail",
+  "contactingServer",
+  "loggingIn",
+  "waitingForOtp",
+  "verifyingOtp",
+  "openingTunnel"
+]

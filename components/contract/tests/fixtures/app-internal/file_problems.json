@@ -1,0 +1,20 @@
+[
+  {
+    "notFound": {}
+  },
+  {
+    "notRegularFile": {}
+  },
+  {
+    "tooLarge": {
+      "limitBytes": 65536
+    }
+  },
+  {
+    "io": {
+      "errno": 1,
+      "operation": "open",
+      "path": "/Users/alice/Downloads/client_secret.json"
+    }
+  }
+]

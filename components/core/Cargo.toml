@@ -1,0 +1,10 @@
+[package]
+name = "fvm-core"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+fvm-contract.workspace = true
+
+[lints]
+workspace = true

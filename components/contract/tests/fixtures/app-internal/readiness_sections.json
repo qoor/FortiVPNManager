@@ -1,0 +1,96 @@
+[
+  {
+    "client": {
+      "path": "/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn",
+      "untestedVersion": {
+        "testedSeries": "1.24"
+      },
+      "version": "1.25.0"
+    },
+    "helper": {
+      "running": {
+        "build": "20261109120000"
+      }
+    },
+    "readiness": {
+      "ready": {}
+    },
+    "registerHelper": "hidden"
+  },
+  {
+    "helper": {
+      "notRegistered": {}
+    },
+    "readiness": {
+      "needsSetup": {
+        "items": [
+          {
+            "helperApproval": {}
+          }
+        ]
+      }
+    },
+    "registerError": {
+      "notInstalledCopy": {}
+    },
+    "registerHelper": "enabled"
+  },
+  {
+    "client": {
+      "problem": {
+        "kind": {
+          "notFound": {}
+        },
+        "path": "/opt/homebrew/bin/openfortivpn"
+      }
+    },
+    "helper": {
+      "running": {
+        "build": "20261109120000"
+      }
+    },
+    "readiness": {
+      "ready": {}
+    },
+    "registerError": {
+      "failed": {
+        "description": "Operation not permitted"
+      }
+    },
+    "registerHelper": "hidden"
+  },
+  {
+    "helper": {
+      "requiresApproval": {}
+    },
+    "readiness": {
+      "ready": {}
+    },
+    "registerHelper": "hidden"
+  },
+  {
+    "helper": {
+      "versionMismatch": {
+        "appBuild": "20261109120000",
+        "helperBuild": "20261108090000"
+      }
+    },
+    "readiness": {
+      "ready": {}
+    },
+    "registerHelper": "hidden"
+  },
+  {
+    "helper": {
+      "unreachable": {
+        "failure": {
+          "noReply": {}
+        }
+      }
+    },
+    "readiness": {
+      "ready": {}
+    },
+    "registerHelper": "hidden"
+  }
+]

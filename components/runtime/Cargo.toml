@@ -1,0 +1,23 @@
+[package]
+name = "fvm-runtime"
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+# The static library links into the Swift app; the Rust library is what the tests link against.
+crate-type = ["staticlib", "lib"]
+
+[dependencies]
+fvm-backend-adapter.workspace = true
+fvm-contract.workspace = true
+fvm-core.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+socket2.workspace = true
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+rustix = { workspace = true, features = ["net"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true

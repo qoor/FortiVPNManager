@@ -474,7 +474,7 @@ where
             ),
             Err(problem) => (
                 // Nothing was found where the client is looked for, so there is no path to show.
-                (problem.kind != ClientProblemKind::NotFound)
+                (problem.kind != ClientProblemKind::NotFound {})
                     .then(|| problem.path.display().to_string()),
                 None,
                 Some(self.backend.describe_problem(&problem)),

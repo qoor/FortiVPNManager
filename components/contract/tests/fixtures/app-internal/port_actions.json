@@ -1,0 +1,173 @@
+[
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "connection",
+          "level": "info",
+          "message": "state: connected"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "readiness",
+          "level": "notice",
+          "message": "readiness: ready"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "system",
+          "level": "error",
+          "message": "presence: away"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "config",
+          "level": "info",
+          "message": "config changed"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "state",
+          "level": "info",
+          "message": "state saved"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "logfile",
+          "level": "info",
+          "message": "log file rotated"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "import",
+          "level": "info",
+          "message": "imported"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "oauth",
+          "level": "info",
+          "message": "token refreshed"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "otp",
+          "level": "info",
+          "message": "code found"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "imap",
+          "level": "info",
+          "message": "IDLE"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "bypass-routes",
+          "level": "info",
+          "message": "routes written"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "log": {
+          "category": "login-item",
+          "level": "info",
+          "message": "registered"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "postNotification": {
+          "notification": {
+            "exceptionRulesNotApplied": {
+              "failure": {
+                "routesNotKept": {}
+              },
+              "retries": 3
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "holdActivity": {
+          "hold": true
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "openHelperApprovalSettings": {}
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "approveQuit": {}
+      }
+    }
+  }
+]

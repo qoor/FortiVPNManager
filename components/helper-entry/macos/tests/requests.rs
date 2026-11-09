@@ -284,7 +284,7 @@ fn a_bad_connect_request_starts_nothing() {
 #[test]
 fn a_client_that_is_not_found_has_no_path_in_the_status() {
     let not_found = ClientProblem {
-        kind: ClientProblemKind::NotFound,
+        kind: ClientProblemKind::NotFound {},
         path: PathBuf::from("/opt/homebrew/bin/openfortivpn"),
     };
     let message = "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn";
@@ -308,7 +308,7 @@ fn a_client_with_another_problem_keeps_its_path_in_the_status() {
     let path = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
     let mut swift = Swift::start(Setup {
         client: Err(ClientProblem {
-            kind: ClientProblemKind::NotExecutable,
+            kind: ClientProblemKind::NotExecutable {},
             path: PathBuf::from(path),
         }),
         ..Setup::fixture("success")

@@ -1,0 +1,32 @@
+[
+  {
+    "network": {}
+  },
+  {
+    "serverEndedSession": {}
+  },
+  {
+    "forcedTermination": {}
+  },
+  {
+    "authFailure": {
+      "reason": {
+        "otpNotReceived": {
+          "inSpam": true,
+          "waitedSeconds": 50
+        }
+      }
+    }
+  },
+  {
+    "authCooldown": {
+      "delaySeconds": 90
+    }
+  },
+  {
+    "sleep": {}
+  },
+  {
+    "userAway": {}
+  }
+]

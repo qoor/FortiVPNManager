@@ -1,7 +1,7 @@
 import Foundation
 
 /// Swift end of the socketpair to Rust. Each message is a 4-byte big-endian length followed by that
-/// many bytes of UTF-8 JSON (components/contract/src/stream.rs).
+/// many bytes of UTF-8 JSON (components/contract/src/stream.rs), coded by `MessageCoding`.
 ///
 /// One thread reads and one serial queue writes, so neither touches the caller's thread. Neither
 /// side closes its end on purpose, so a failed read or write, a message that does not decode and the
@@ -15,7 +15,7 @@ nonisolated final class MessageStream<Incoming: Decodable & Sendable, Outgoing: 
     init(fileDescriptor: Int32, onMessage: @escaping @Sendable (Incoming) -> Void) {
         handle = FileHandle(fileDescriptor: fileDescriptor, closeOnDealloc: true)
         let reader = Thread { [handle] in
-            let decoder = JSONDecoder()
+            let decoder = MessageCoding.decoder()
             while true {
                 let payload = Self.readMessage(from: handle)
                 let message: Incoming
@@ -34,7 +34,7 @@ nonisolated final class MessageStream<Incoming: Decodable & Sendable, Outgoing: 
     /// Writes happen in call order.
     func send(_ message: Outgoing) {
         // Encoding fails only for non-finite numbers, which no message carries.
-        let payload = try! JSONEncoder().encode(message)
+        let payload = try! MessageCoding.encoder().encode(message)
         let length = UInt32(payload.count)
         let frame = Data([24, 16, 8, 0].map { UInt8(truncatingIfNeeded: length >> $0) }) + payload
         writeQueue.async { [handle] in
@@ -70,5 +70,21 @@ nonisolated final class MessageStream<Incoming: Decodable & Sendable, Outgoing: 
             data.append(chunk)
         }
         return data
+    }
+}
+
+/// The JSON coding of every message to and from Rust: times (`Date`) are whole milliseconds since
+/// 1970, as Rust writes them.
+nonisolated enum MessageCoding {
+    static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return decoder
+    }
+
+    static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
+        return encoder
     }
 }

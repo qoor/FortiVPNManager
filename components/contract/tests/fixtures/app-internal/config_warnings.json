@@ -1,0 +1,68 @@
+[
+  {
+    "kind": {
+      "unknownKey": {
+        "path": "vpn.colour"
+      }
+    },
+    "location": {
+      "column": 5,
+      "line": 4
+    }
+  },
+  {
+    "kind": {
+      "invalidTrustedCert": {
+        "index": 1
+      }
+    },
+    "location": {
+      "column": 5,
+      "line": 4
+    }
+  },
+  {
+    "kind": {
+      "duplicateTrustedCert": {
+        "index": 2
+      }
+    },
+    "location": {
+      "column": 5,
+      "line": 4
+    }
+  },
+  {
+    "kind": {
+      "duplicateRouteEntry": {
+        "index": 3,
+        "path": "routes.networks"
+      }
+    },
+    "location": {
+      "column": 5,
+      "line": 4
+    }
+  },
+  {
+    "kind": {
+      "multipleHardLinks": {
+        "count": 2
+      }
+    }
+  },
+  {
+    "kind": {
+      "insecurePermissions": {
+        "mode": 420
+      }
+    }
+  },
+  {
+    "kind": {
+      "permissionsCorrected": {
+        "previousMode": 416
+      }
+    }
+  }
+]

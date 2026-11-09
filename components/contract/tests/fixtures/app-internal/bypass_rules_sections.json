@@ -1,0 +1,338 @@
+[
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "currentNetwork": {
+      "address": "10.20.161.20",
+      "prefixLength": 24,
+      "serviceName": "Ethernet",
+      "within": "10.20.161.0/24"
+    },
+    "discard": "enabled",
+    "hasChanges": true,
+    "networks": {
+      "problemRows": [],
+      "rows": [
+        "10.20.161.0/24"
+      ]
+    },
+    "notice": {
+      "rowProblem": {
+        "problem": {
+          "invalid": {
+            "problem": {
+              "malformed": {}
+            }
+          }
+        },
+        "row": "10.30.161"
+      }
+    },
+    "status": {
+      "applied": {
+        "keptThroughOtherGateways": 3,
+        "notImported": 2,
+        "onLinkTargets": 1,
+        "router": "10.20.161.1",
+        "serviceName": "Ethernet"
+      }
+    },
+    "targets": {
+      "problemRows": [
+        1,
+        2
+      ],
+      "rows": [
+        "10.30.161.16",
+        "10.30.161",
+        "10.30.161.16/32"
+      ]
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "currentNetwork": {
+      "address": "192.168.0.12",
+      "serviceName": "Wi-Fi"
+    },
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "notice": {
+      "rowProblem": {
+        "problem": {
+          "duplicate": {
+            "entry": "10.30.161.16"
+          }
+        },
+        "row": "10.30.161.16/32"
+      }
+    },
+    "status": {
+      "outsideNetworks": {
+        "keptThroughOtherGateways": 0
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "notice": {
+      "rowProblem": {
+        "problem": {
+          "overlap": {
+            "other": "10.30.170.0/24"
+          }
+        },
+        "row": "10.30.170.9"
+      }
+    },
+    "status": {
+      "noNetworksListed": {
+        "keptThroughOtherGateways": 1
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "notice": {
+      "applyFailed": {
+        "error": {
+          "unreadableFile": {
+            "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+            "problem": {
+              "kind": {
+                "duplicateKey": {
+                  "key": "vpn"
+                }
+              },
+              "location": {
+                "column": 1,
+                "line": 7
+              }
+            }
+          }
+        }
+      }
+    },
+    "status": {
+      "noConfigFile": {}
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "configInvalid": {}
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "noNetwork": {}
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "routesNotKept": {}
+        },
+        "retryInSeconds": 10
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "networkChanged": {}
+        },
+        "stoppedAfterRetries": 3
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "helperRefused": {
+            "message": "the route list has repeats, too many routes, or routes this helper does not write"
+          }
+        }
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "settingsNotChanged": {
+            "message": "** Error: The parameters were not valid."
+          }
+        }
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "importNotSaved": {
+            "error": {
+              "unreadableFile": {
+                "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+                "problem": {
+                  "kind": {
+                    "duplicateKey": {
+                      "key": "vpn"
+                    }
+                  },
+                  "location": {
+                    "column": 1,
+                    "line": 7
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "problemRows": [],
+      "rows": []
+    },
+    "status": {
+      "failed": {
+        "failure": {
+          "helperUnreachable": {
+            "failure": {
+              "connectionLost": {}
+            }
+          }
+        }
+      }
+    },
+    "targets": {
+      "problemRows": [],
+      "rows": []
+    }
+  }
+]

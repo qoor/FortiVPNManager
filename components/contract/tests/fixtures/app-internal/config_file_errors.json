@@ -1,0 +1,58 @@
+[
+  {
+    "invalidSettings": {
+      "problem": {
+        "kind": {
+          "scheduleEndNotAfterStart": {
+            "end": {
+              "hour": 9,
+              "minute": 0
+            },
+            "start": {
+              "hour": 18,
+              "minute": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "unreadableFile": {
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "problem": {
+        "kind": {
+          "duplicateKey": {
+            "key": "vpn"
+          }
+        },
+        "location": {
+          "column": 1,
+          "line": 7
+        }
+      }
+    }
+  },
+  {
+    "notRegularFile": {
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml"
+    }
+  },
+  {
+    "danglingSymlink": {
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml"
+    }
+  },
+  {
+    "keptChanging": {
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml"
+    }
+  },
+  {
+    "io": {
+      "errno": 13,
+      "operation": "rename",
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml"
+    }
+  }
+]

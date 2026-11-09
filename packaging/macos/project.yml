@@ -84,7 +84,10 @@ targets:
     platform: macOS
     sources:
       - path: ../../components/os-integration-helper/macos
+      # The app's messages to its runtime are not the Helper's.
       - path: ../../components/contract/macos
+        excludes:
+          - "app/**"
       - path: ../../components/helper-entry/macos/swift
     settings:
       base:

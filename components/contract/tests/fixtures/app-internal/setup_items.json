@@ -1,0 +1,22 @@
+[
+  {
+    "configFile": {}
+  },
+  {
+    "accountDetails": {}
+  },
+  {
+    "vpnPassword": {}
+  },
+  {
+    "gmailCredential": {
+      "method": "imap"
+    }
+  },
+  {
+    "helperApproval": {}
+  },
+  {
+    "helperVersion": {}
+  }
+]

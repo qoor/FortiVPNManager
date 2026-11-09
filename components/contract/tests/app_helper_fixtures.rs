@@ -1,15 +1,25 @@
 //! The files in `fixtures/app-helper/` were captured from the phase-1 Swift app's XPC encoder
-//! (FortiShared `XPCCoding`); phase 2 replaces them. Never edit them by hand. The Helper receives
-//! the run request and sends everything else, so the run request is decoded and the rest encoded.
+//! (FortiShared `XPCCoding`); phase 2 replaces them. Never edit them by hand. The Helper and the
+//! app's runtime each write what the other reads, so every message is checked in both directions,
+//! except the bypass-route request and reply, which only the runtime writes or reads.
 
+use std::fmt::Debug;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::*;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::{Value, to_value};
 
 fn fixture(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
+}
+
+/// `value` encodes to the fixture and the fixture decodes to `value`.
+fn both_ways<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: T, text: &str) {
+    assert_eq!(to_value(&value).unwrap(), fixture(text));
+    assert_eq!(serde_json::from_str::<T>(text).unwrap(), value);
 }
 
 const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
@@ -41,10 +51,7 @@ fn at(seconds: f64) -> SystemTime {
 
 #[test]
 fn run_request() {
-    let request: RunRequest =
-        serde_json::from_str(include_str!("fixtures/app-helper/run_request.json")).unwrap();
-    assert_eq!(
-        request,
+    both_ways(
         RunRequest {
             attempt_id: attempt(),
             host: "vpn.example.com".into(),
@@ -53,18 +60,14 @@ fn run_request() {
             realm: Some("staff".into()),
             trusted_certs: vec![DIGEST_A.into(), DIGEST_B.into()],
             password: "p@ss/w\"rd\\ ‹ü›".into(),
-        }
+        },
+        include_str!("fixtures/app-helper/run_request.json"),
     );
 }
 
 #[test]
 fn run_request_without_realm() {
-    let request: RunRequest = serde_json::from_str(include_str!(
-        "fixtures/app-helper/run_request_without_realm.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        request,
+    both_ways(
         RunRequest {
             attempt_id: attempt(),
             host: "192.0.2.10".into(),
@@ -73,7 +76,8 @@ fn run_request_without_realm() {
             realm: None,
             trusted_certs: vec![],
             password: "secret".into(),
-        }
+        },
+        include_str!("fixtures/app-helper/run_request_without_realm.json"),
     );
 }
 
@@ -88,9 +92,9 @@ fn milestones_in_order() {
         Authenticated,
         TunnelUp,
     ];
-    assert_eq!(
-        to_value(milestones).unwrap(),
-        fixture(include_str!("fixtures/app-helper/milestones.json"))
+    both_ways(
+        milestones,
+        include_str!("fixtures/app-helper/milestones.json"),
     );
     assert!(milestones.is_sorted());
 }
@@ -111,9 +115,9 @@ fn stop_reasons() {
         Watchdog,
         HelperShutdown,
     ];
-    assert_eq!(
-        to_value(reasons).unwrap(),
-        fixture(include_str!("fixtures/app-helper/stop_reasons.json"))
+    both_ways(
+        reasons,
+        include_str!("fixtures/app-helper/stop_reasons.json"),
     );
 }
 
@@ -134,9 +138,9 @@ fn stop_initiators() {
             reason: StopReason::Watchdog,
         },
     ];
-    assert_eq!(
-        to_value(initiators).unwrap(),
-        fixture(include_str!("fixtures/app-helper/stop_initiators.json"))
+    both_ways(
+        initiators,
+        include_str!("fixtures/app-helper/stop_initiators.json"),
     );
 }
 
@@ -148,19 +152,17 @@ fn process_exit_statuses() {
         ProcessExitStatus::SpawnFailed { errno: 13 },
         ProcessExitStatus::Unknown {},
     ];
-    assert_eq!(
-        to_value(statuses).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/process_exit_statuses.json"
-        ))
+    both_ways(
+        statuses,
+        include_str!("fixtures/app-helper/process_exit_statuses.json"),
     );
 }
 
 #[test]
 fn exit_facts() {
-    assert_eq!(
-        to_value(full_facts()).unwrap(),
-        fixture(include_str!("fixtures/app-helper/exit_facts.json"))
+    both_ways(
+        full_facts(),
+        include_str!("fixtures/app-helper/exit_facts.json"),
     );
 }
 
@@ -175,11 +177,9 @@ fn exit_facts_spawn_failed() {
         up_duration: None,
         exit_status: ProcessExitStatus::SpawnFailed { errno: 2 },
     };
-    assert_eq!(
-        to_value(facts).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/exit_facts_spawn_failed.json"
-        ))
+    both_ways(
+        facts,
+        include_str!("fixtures/app-helper/exit_facts_spawn_failed.json"),
     );
 }
 
@@ -194,11 +194,9 @@ fn exit_facts_tunnel_mode_rejected() {
         up_duration: None,
         exit_status: ProcessExitStatus::Signaled { signal: 15 },
     };
-    assert_eq!(
-        to_value(facts).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/exit_facts_tunnel_mode_rejected.json"
-        ))
+    both_ways(
+        facts,
+        include_str!("fixtures/app-helper/exit_facts_tunnel_mode_rejected.json"),
     );
 }
 
@@ -211,11 +209,9 @@ fn helper_events() {
             tunnel_ip: Some(Ipv4Addr::new(10, 211, 0, 7)),
         },
     };
-    assert_eq!(
-        to_value(tunnel_up).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/helper_event_milestone.json"
-        ))
+    both_ways(
+        tunnel_up,
+        include_str!("fixtures/app-helper/helper_event_milestone.json"),
     );
 
     let gateway = HelperEvent {
@@ -225,11 +221,9 @@ fn helper_events() {
             tunnel_ip: None,
         },
     };
-    assert_eq!(
-        to_value(gateway).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/helper_event_milestone_without_ip.json"
-        ))
+    both_ways(
+        gateway,
+        include_str!("fixtures/app-helper/helper_event_milestone_without_ip.json"),
     );
 
     let exited = HelperEvent {
@@ -238,9 +232,9 @@ fn helper_events() {
             facts: full_facts(),
         },
     };
-    assert_eq!(
-        to_value(exited).unwrap(),
-        fixture(include_str!("fixtures/app-helper/helper_event_exited.json"))
+    both_ways(
+        exited,
+        include_str!("fixtures/app-helper/helper_event_exited.json"),
     );
 }
 
@@ -251,9 +245,9 @@ fn output_sources() {
         OutputSource::Stderr,
         OutputSource::Helper,
     ];
-    assert_eq!(
-        to_value(sources).unwrap(),
-        fixture(include_str!("fixtures/app-helper/output_sources.json"))
+    both_ways(
+        sources,
+        include_str!("fixtures/app-helper/output_sources.json"),
     );
 }
 
@@ -286,10 +280,7 @@ fn output_lines() {
             "VPN account password: \\x1b[0m",
         ),
     ];
-    assert_eq!(
-        to_value(lines).unwrap(),
-        fixture(include_str!("fixtures/app-helper/output_lines.json"))
-    );
+    both_ways(lines, include_str!("fixtures/app-helper/output_lines.json"));
 }
 
 #[test]
@@ -300,9 +291,9 @@ fn helper_statuses() {
         client_version: Some("1.24.1".into()),
         client_problem: None,
     };
-    assert_eq!(
-        to_value(running).unwrap(),
-        fixture(include_str!("fixtures/app-helper/helper_status.json"))
+    both_ways(
+        running,
+        include_str!("fixtures/app-helper/helper_status.json"),
     );
 
     let missing = HelperStatus {
@@ -314,11 +305,9 @@ fn helper_statuses() {
                 .into(),
         ),
     };
-    assert_eq!(
-        to_value(missing).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/helper_status_problem.json"
-        ))
+    both_ways(
+        missing,
+        include_str!("fixtures/app-helper/helper_status_problem.json"),
     );
 }
 
@@ -344,9 +333,9 @@ fn helper_errors() {
             "could not create the openfortivpn config file: permission denied",
         ),
     ];
-    assert_eq!(
-        to_value(errors).unwrap(),
-        fixture(include_str!("fixtures/app-helper/helper_errors.json"))
+    both_ways(
+        errors,
+        include_str!("fixtures/app-helper/helper_errors.json"),
     );
 }
 
@@ -371,4 +360,75 @@ fn run_request_debug_redacts_the_password() {
     let debug = format!("{request:?}");
     assert!(!debug.contains(&request.password), "{debug}");
     assert!(debug.contains("password: <redacted>"), "{debug}");
+}
+
+#[test]
+fn a_position_past_the_last_milestone_is_unreadable() {
+    assert!(serde_json::from_str::<Milestone>("6").is_err());
+}
+
+fn route(destination: &str, subnet_mask: &str, gateway: &str) -> AdditionalRoute {
+    AdditionalRoute {
+        destination: destination.into(),
+        subnet_mask: subnet_mask.into(),
+        gateway: gateway.into(),
+    }
+}
+
+fn ethernet_snapshot() -> BypassRoutesSnapshot {
+    BypassRoutesSnapshot {
+        service_id: "8A3F1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B".into(),
+        service_name: "Ethernet".into(),
+        router: "10.20.161.1".into(),
+        address: "10.20.161.20".into(),
+        subnet_mask: "255.255.255.0".into(),
+        routes: vec![
+            route("10.30.161.16", "255.255.255.255", "10.20.161.1"),
+            route("192.168.50.0", "255.255.255.0", "10.20.161.254"),
+        ],
+    }
+}
+
+#[test]
+fn bypass_routes_request() {
+    let request = BypassRoutesRequest {
+        expected: ethernet_snapshot(),
+        routes: vec![
+            route("10.30.170.0", "255.255.255.0", "10.20.161.1"),
+            route("192.168.50.0", "255.255.255.0", "10.20.161.254"),
+        ],
+    };
+    assert_eq!(
+        to_value(request).unwrap(),
+        fixture(include_str!(
+            "fixtures/app-helper/bypass_routes_request.json"
+        ))
+    );
+}
+
+#[test]
+fn bypass_routes_replies() {
+    let success: BypassRoutesReply = serde_json::from_str(include_str!(
+        "fixtures/app-helper/bypass_routes_reply_success.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        success,
+        BypassRoutesReply::Success {
+            snapshot: ethernet_snapshot()
+        }
+    );
+    let failure: BypassRoutesReply = serde_json::from_str(include_str!(
+        "fixtures/app-helper/bypass_routes_reply_failure.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        failure,
+        BypassRoutesReply::Failure {
+            error: HelperError {
+                code: HelperErrorCode::WrongPhase,
+                message: "the routes changed since they were read; read them again".into(),
+            }
+        }
+    );
 }

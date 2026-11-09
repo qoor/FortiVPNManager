@@ -1,8 +1,10 @@
 //! What the app and the Helper exchange. The JSON is what the current Swift app encodes and decodes
 //! (FortiShared `XPCCoding`): an enum value with data is an object keyed by its case name, data
 //! without a label uses the key `_0`, a case without data is `{}`, dates are seconds since 1970,
-//! and absent optional values are left out. Each type derives only the direction the Helper uses:
-//! it receives the run request and sends everything else.
+//! and absent optional values are left out. Each type derives only the directions its two users
+//! need: the Helper receives the run request and sends everything else, and the app's runtime does
+//! the opposite. The bypass-route payloads are answered by the OS integration Helper (Swift), which
+//! reads and writes networksetup itself.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -67,7 +69,7 @@ impl fmt::Display for AttemptId {
 }
 
 /// Everything the Helper needs for one run. The Helper checks every value again before use.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRequest {
     #[serde(rename = "attemptID")]
@@ -76,6 +78,7 @@ pub struct RunRequest {
     /// Not narrowed here: an out-of-range port is a validation error, not an unreadable request.
     pub port: i64,
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub realm: Option<String>,
     /// Gateway certificate values to trust.
     pub trusted_certs: Vec<String>,
@@ -98,8 +101,8 @@ impl fmt::Debug for RunRequest {
 }
 
 /// Progress of one run, in the order it normally happens. Sent as its position, starting at 0.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize)]
-#[serde(into = "u8")]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+#[serde(into = "u8", try_from = "u8")]
 #[repr(u8)]
 pub enum Milestone {
     Spawned,
@@ -113,6 +116,34 @@ pub enum Milestone {
 impl From<Milestone> for u8 {
     fn from(milestone: Milestone) -> Self {
         milestone as u8
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct UnknownMilestone(pub u8);
+
+impl fmt::Display for UnknownMilestone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "no milestone at position {}", self.0)
+    }
+}
+
+impl TryFrom<u8> for Milestone {
+    type Error = UnknownMilestone;
+
+    fn try_from(position: u8) -> Result<Self, Self::Error> {
+        use Milestone::*;
+        [
+            Spawned,
+            ConnectedToGateway,
+            OtpPrompted,
+            OtpSubmitted,
+            Authenticated,
+            TunnelUp,
+        ]
+        .get(usize::from(position))
+        .copied()
+        .ok_or(UnknownMilestone(position))
     }
 }
 
@@ -148,7 +179,7 @@ impl FromStr for StopReason {
 }
 
 /// Who ended the run.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum StopInitiator {
     /// The client exited on its own (server cut, failed login, crash, ...).
     #[serde(rename = "none")]
@@ -160,7 +191,7 @@ pub enum StopInitiator {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProcessExitStatus {
     Exited {
@@ -177,7 +208,7 @@ pub enum ProcessExitStatus {
 }
 
 /// What the Helper recorded about a finished run; the app classifies the end from these facts.
-#[derive(Clone, PartialEq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExitFacts {
     /// `None` when the client could not be started.
@@ -193,7 +224,9 @@ pub struct ExitFacts {
     pub tunnel_mode_rejected: bool,
     /// From tunnel up to exit, if the tunnel came up.
     #[serde(
+        default,
         serialize_with = "seconds::optional_duration",
+        deserialize_with = "seconds::read_optional_duration",
         skip_serializing_if = "Option::is_none"
     )]
     pub up_duration: Option<Duration>,
@@ -201,14 +234,14 @@ pub struct ExitFacts {
 }
 
 /// Sent by the Helper to the app that owns the run.
-#[derive(Clone, PartialEq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct HelperEvent {
     #[serde(rename = "attemptID")]
     pub attempt_id: AttemptId,
     pub kind: HelperEventKind,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HelperEventKind {
     Milestone {
@@ -224,7 +257,7 @@ pub enum HelperEventKind {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputSource {
     Stdout,
@@ -234,16 +267,19 @@ pub enum OutputSource {
 }
 
 /// One line for the Log tab. The app receives them in batches (a JSON array).
-#[derive(Clone, PartialEq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct OutputLine {
-    #[serde(serialize_with = "seconds::time")]
+    #[serde(
+        serialize_with = "seconds::time",
+        deserialize_with = "seconds::read_time"
+    )]
     pub date: SystemTime,
     pub source: OutputSource,
     pub text: String,
 }
 
 /// Answer to the app's status request.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct HelperStatus {
     #[serde(rename = "childAlive")]
     pub client_running: bool,
@@ -260,13 +296,13 @@ pub struct HelperStatus {
 }
 
 /// Error answer to an app request; `message` is English and reaches the app as it is.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct HelperError {
     pub code: HelperErrorCode,
     pub message: String,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HelperErrorCode {
     Busy,
@@ -279,12 +315,63 @@ pub enum HelperErrorCode {
     InternalError,
 }
 
+/// One additional route of a network service, as `networksetup -getadditionalroutes` prints it.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdditionalRoute {
+    pub destination: String,
+    pub subnet_mask: String,
+    pub gateway: String,
+}
+
+/// The primary network service, the one macOS sends default traffic through, and its additional
+/// routes.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BypassRoutesSnapshot {
+    /// Stable across renames.
+    #[serde(rename = "serviceID")]
+    pub service_id: String,
+    /// The name networksetup uses, such as `Ethernet` or `Wi-Fi`.
+    pub service_name: String,
+    /// The service's IPv4 router; exception routes go through it.
+    pub router: String,
+    /// This Mac's IPv4 address on the service and its subnet mask.
+    pub address: String,
+    pub subnet_mask: String,
+    pub routes: Vec<AdditionalRoute>,
+}
+
+/// The complete additional route list for the service in `expected`. The Helper writes it only
+/// while the primary service, its router and its current routes are still exactly `expected`, and
+/// only with routes through that router or routes the service already has.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct BypassRoutesRequest {
+    /// What the app read and planned from.
+    pub expected: BypassRoutesSnapshot,
+    pub routes: Vec<AdditionalRoute>,
+}
+
+/// Answer to reading or writing the bypass routes.
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BypassRoutesReply {
+    Success {
+        #[serde(rename = "_0")]
+        snapshot: BypassRoutesSnapshot,
+    },
+    Failure {
+        #[serde(rename = "_0")]
+        error: HelperError,
+    },
+}
+
 /// Seconds since 1970 or durations in seconds, written as Swift's encoder writes a `Double`: whole
 /// seconds without a fraction.
 mod seconds {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use serde::{Serializer, ser};
+    use serde::{Deserialize, Deserializer, Serializer, de, ser};
 
     fn write<S: Serializer>(duration: Duration, serializer: S) -> Result<S::Ok, S::Error> {
         if duration.subsec_nanos() == 0 {
@@ -309,5 +396,19 @@ mod seconds {
             Some(duration) => write(*duration, serializer),
             None => serializer.serialize_none(),
         }
+    }
+
+    fn read<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+        Duration::try_from_secs_f64(f64::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
+
+    pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
+        Ok(UNIX_EPOCH + read(deserializer)?)
+    }
+
+    pub fn read_optional_duration<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Duration>, D::Error> {
+        read(deserializer).map(Some)
     }
 }

@@ -1,0 +1,115 @@
+[
+  {
+    "cancelSignIn": "enabled",
+    "connectGoogle": "hidden",
+    "disconnectGoogle": "hidden",
+    "googleAccount": {
+      "signingIn": {}
+    },
+    "importClient": "disabled",
+    "importedClientSecretMissing": false,
+    "method": "gmailApi",
+    "oauthClient": {
+      "imported": {
+        "clientId": "987-xyz.apps.googleusercontent.com"
+      }
+    },
+    "test": {
+      "idle": {}
+    },
+    "testButton": "disabled",
+    "useBuiltInClient": "disabled"
+  },
+  {
+    "cancelSignIn": "hidden",
+    "connectBlocker": "saveAddressFirst",
+    "connectGoogle": "disabled",
+    "disconnectGoogle": "hidden",
+    "googleAccount": {
+      "notConnected": {}
+    },
+    "googleError": {
+      "wrongAccount": {
+        "actual": "bob@example.com",
+        "expected": "alice@example.com"
+      }
+    },
+    "importClient": "enabled",
+    "importedClientSecretMissing": true,
+    "method": "imap",
+    "methodError": {
+      "unreadableFile": {
+        "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+        "problem": {
+          "kind": {
+            "duplicateKey": {
+              "key": "vpn"
+            }
+          },
+          "location": {
+            "column": 1,
+            "line": 7
+          }
+        }
+      }
+    },
+    "oauthClient": {
+      "notConfigured": {}
+    },
+    "test": {
+      "running": {}
+    },
+    "testButton": "disabled",
+    "useBuiltInClient": "hidden"
+  },
+  {
+    "cancelSignIn": "hidden",
+    "connectGoogle": "enabled",
+    "disconnectGoogle": "hidden",
+    "googleAccount": {
+      "disconnecting": {}
+    },
+    "importClient": "enabled",
+    "importedClientSecretMissing": false,
+    "method": "gmailApi",
+    "oauthClient": {
+      "builtIn": {
+        "clientId": "123-abc.apps.googleusercontent.com"
+      }
+    },
+    "test": {
+      "apiSucceeded": {
+        "address": "alice@example.com"
+      }
+    },
+    "testButton": "enabled",
+    "useBuiltInClient": "hidden"
+  },
+  {
+    "cancelSignIn": "hidden",
+    "connectGoogle": "enabled",
+    "disconnectGoogle": "hidden",
+    "googleAccount": {
+      "connected": {
+        "address": "alice@example.com"
+      }
+    },
+    "importClient": "enabled",
+    "importedClientSecretMissing": false,
+    "method": "gmailApi",
+    "oauthClient": {
+      "builtIn": {
+        "clientId": "123-abc.apps.googleusercontent.com"
+      }
+    },
+    "test": {
+      "imapSucceeded": {
+        "archive": "[Gmail]/All Mail",
+        "spam": "[Gmail]/Spam",
+        "trash": "[Gmail]/Trash"
+      }
+    },
+    "testButton": "enabled",
+    "useBuiltInClient": "hidden"
+  }
+]

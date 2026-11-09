@@ -14,12 +14,12 @@ const PPPD: &str = "/usr/sbin/pppd";
 
 pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
     let resolved = fs::canonicalize(HOMEBREW_LINK).map_err(|_| ClientProblem {
-        kind: ClientProblemKind::NotFound,
+        kind: ClientProblemKind::NotFound {},
         path: HOMEBREW_LINK.into(),
     })?;
     let Some(in_cellar) = inside_cellar(&resolved) else {
         return Err(ClientProblem {
-            kind: ClientProblemKind::OutsideAllowedLocation,
+            kind: ClientProblemKind::OutsideAllowedLocation {},
             path: resolved,
         });
     };
@@ -27,7 +27,7 @@ pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
     // lstat: a symlink swapped in after resolving is refused rather than followed.
     let kind = match fs::symlink_metadata(&resolved) {
         Ok(metadata) => file_problem(&metadata),
-        Err(_) => Some(ClientProblemKind::NotRegularFile),
+        Err(_) => Some(ClientProblemKind::NotRegularFile {}),
     };
     match kind {
         Some(kind) => Err(ClientProblem {
@@ -45,17 +45,19 @@ pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
 pub(super) fn describe(problem: &ClientProblem) -> String {
     let path = problem.path.display();
     match problem.kind {
-        ClientProblemKind::NotFound => {
+        ClientProblemKind::NotFound {} => {
             format!("openfortivpn not found at {path}; install it with: brew install openfortivpn")
         }
-        ClientProblemKind::OutsideAllowedLocation => {
+        ClientProblemKind::OutsideAllowedLocation {} => {
             format!("openfortivpn resolves outside the Homebrew Cellar ({CELLAR}): {path}")
         }
-        ClientProblemKind::NotRegularFile => format!("openfortivpn is not a regular file: {path}"),
+        ClientProblemKind::NotRegularFile {} => {
+            format!("openfortivpn is not a regular file: {path}")
+        }
         ClientProblemKind::WritableByOthers { mode } => format!(
             "openfortivpn is writable by other users (mode {mode:o}); refusing to run it: {path}"
         ),
-        ClientProblemKind::NotExecutable => format!("openfortivpn is not executable: {path}"),
+        ClientProblemKind::NotExecutable {} => format!("openfortivpn is not executable: {path}"),
     }
 }
 
@@ -90,11 +92,11 @@ fn version(in_cellar: &Path) -> String {
 fn file_problem(metadata: &Metadata) -> Option<ClientProblemKind> {
     let mode = metadata.permissions().mode() & 0o7777;
     if !metadata.is_file() {
-        Some(ClientProblemKind::NotRegularFile)
+        Some(ClientProblemKind::NotRegularFile {})
     } else if mode & 0o022 != 0 {
         Some(ClientProblemKind::WritableByOthers { mode })
     } else if mode & 0o111 == 0 {
-        Some(ClientProblemKind::NotExecutable)
+        Some(ClientProblemKind::NotExecutable {})
     } else {
         None
     }
@@ -187,7 +189,7 @@ mod tests {
         for mode in [0o644, 0o600, 0o444] {
             assert_eq!(
                 problem(mode),
-                Some(ClientProblemKind::NotExecutable),
+                Some(ClientProblemKind::NotExecutable {}),
                 "{mode:o}"
             );
         }
@@ -198,7 +200,7 @@ mod tests {
         let scratch = Scratch::new("directory");
         assert_eq!(
             file_problem(&fs::symlink_metadata(&scratch.0).unwrap()),
-            Some(ClientProblemKind::NotRegularFile)
+            Some(ClientProblemKind::NotRegularFile {})
         );
     }
 
@@ -210,7 +212,7 @@ mod tests {
         symlink(&target, &link).unwrap();
         assert_eq!(
             file_problem(&fs::symlink_metadata(&link).unwrap()),
-            Some(ClientProblemKind::NotRegularFile)
+            Some(ClientProblemKind::NotRegularFile {})
         );
     }
 }

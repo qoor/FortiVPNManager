@@ -1,0 +1,147 @@
+[
+  {
+    "event": {
+      "_0": {
+        "willSleep": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "didWake": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "screenLocked": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "screenUnlocked": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "displaysSlept": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "displaysWoke": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "networkPathChanged": {
+          "satisfied": true,
+          "interfaces": [
+            {
+              "name": "en0",
+              "kind": "wiredEthernet"
+            },
+            {
+              "name": "en1",
+              "kind": "wifi"
+            },
+            {
+              "name": "pdp_ip0",
+              "kind": "cellular"
+            },
+            {
+              "name": "lo0",
+              "kind": "loopback"
+            },
+            {
+              "name": "ppp0",
+              "kind": "other"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "networkPathChanged": {
+          "satisfied": false,
+          "interfaces": []
+        }
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "networkSettingsChanged": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "clockChanged": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "timeZoneChanged": {
+          "timeZone": "Europe/Berlin"
+        }
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "appActivated": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "quitRequested": {}
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "helperEvent": {
+          "json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\",\"kind\":{\"milestone\":{\"_0\":0}}}"
+        }
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "helperOutput": {
+          "json": "[{\"date\":1762412345.25,\"source\":\"stdout\",\"text\":\"INFO:   Connected to gateway.\"}]"
+        }
+      }
+    }
+  },
+  {
+    "event": {
+      "_0": {
+        "helperConnectionLost": {}
+      }
+    }
+  }
+]

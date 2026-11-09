@@ -1,0 +1,23 @@
+[
+  {
+    "malformed": {}
+  },
+  {
+    "prefixOutOfRange": {
+      "length": 4,
+      "maximum": 32,
+      "minimum": 8
+    }
+  },
+  {
+    "nonContiguousMask": {}
+  },
+  {
+    "unroutable": {}
+  },
+  {
+    "hostBitsSet": {
+      "network": "10.30.170.0/24"
+    }
+  }
+]

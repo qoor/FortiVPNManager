@@ -1,0 +1,264 @@
+[
+  {
+    "portRequest": {
+      "id": 1,
+      "request": {
+        "readSecret": {
+          "item": {
+            "vpnPassword": {
+              "host": "vpn.example.com",
+              "username": "alice"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 2,
+      "request": {
+        "hasSecret": {
+          "item": {
+            "gmailAppPassword": {
+              "address": "alice@example.com"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 3,
+      "request": {
+        "writeSecret": {
+          "item": {
+            "googleRefreshToken": {
+              "address": "Alice@Example.com"
+            }
+          },
+          "value": "1//0g-refresh"
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 4,
+      "request": {
+        "deleteSecret": {
+          "item": {
+            "googleClientSecret": {
+              "clientId": "987-xyz.apps.googleusercontent.com"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 5,
+      "request": {
+        "helperRegistration": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 6,
+      "request": {
+        "registerHelper": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 7,
+      "request": {
+        "helperBuild": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 8,
+      "request": {
+        "callHelper": {
+          "call": {
+            "connect": {
+              "json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\",\"host\":\"vpn.example.com\",\"password\":\"p\"}"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 9,
+      "request": {
+        "callHelper": {
+          "call": {
+            "submitOtp": {
+              "attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F",
+              "code": "123456"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 10,
+      "request": {
+        "callHelper": {
+          "call": {
+            "disconnect": {
+              "attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F",
+              "reason": "userDisconnect"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 11,
+      "request": {
+        "callHelper": {
+          "call": {
+            "disconnect": {
+              "reason": "clientInvalidated"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 12,
+      "request": {
+        "callHelper": {
+          "call": {
+            "status": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 13,
+      "request": {
+        "callHelper": {
+          "call": {
+            "exitWhenIdle": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 14,
+      "request": {
+        "callHelper": {
+          "call": {
+            "readBypassRoutes": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 15,
+      "request": {
+        "callHelper": {
+          "call": {
+            "writeBypassRoutes": {
+              "json": "{\"expected\":{},\"routes\":[]}"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 16,
+      "request": {
+        "resolveIpv4": {
+          "host": "vpn.example.com"
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 17,
+      "request": {
+        "routeInterface": {
+          "destination": "203.0.113.10"
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 18,
+      "request": {
+        "interfaceAddresses": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 19,
+      "request": {
+        "primaryRouter": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 20,
+      "request": {
+        "screenState": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 21,
+      "request": {
+        "openBrowser": {
+          "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y"
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 22,
+      "request": {
+        "loginItemRegistration": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 23,
+      "request": {
+        "setLoginItem": {
+          "enabled": false
+        }
+      }
+    }
+  }
+]

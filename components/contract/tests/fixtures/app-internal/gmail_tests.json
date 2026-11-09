@@ -1,0 +1,268 @@
+[
+  {
+    "idle": {}
+  },
+  {
+    "running": {}
+  },
+  {
+    "imapSucceeded": {
+      "archive": "[Gmail]/All Mail",
+      "trash": "[Gmail]/Trash"
+    }
+  },
+  {
+    "apiSucceeded": {
+      "address": "alice@example.com"
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "enterAddress": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "enterAppPassword": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "appPasswordUnreadable": {
+          "failure": {
+            "description": "User interaction is not allowed."
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapLoginRejected": {
+          "serverText": "[AUTHENTICATIONFAILED] Invalid credentials (Failure)"
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapLoginRejected": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "mailboxesMissing": {
+          "allMail": true,
+          "trash": false
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "network": {
+              "detail": "dns error: failed to lookup address information"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "timedOut": {
+              "step": {
+                "connecting": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "timedOut": {
+              "step": {
+                "command": {
+                  "name": "UID SEARCH"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "serverClosed": {
+              "text": "System error"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "serverClosed": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "protocol": {
+              "detail": "unexpected server greeting"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "rejected": {
+              "command": "SELECT",
+              "status": "NO",
+              "text": "[NONEXISTENT] Unknown Mailbox"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "imapUnreachable": {
+          "failure": {
+            "closed": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "noOAuthClient": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "notSignedIn": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "accessRevoked": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "clientRejected": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "secretStore": {
+          "failure": {
+            "description": "User interaction is not allowed."
+          }
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "otherAccount": {
+          "authorized": "bob@example.com",
+          "expected": "alice@example.com"
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "accessTokenRejected": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "gmailApiRefused": {
+          "reason": "accessNotConfigured"
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "rateLimited": {}
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "googleUnreachable": {
+          "detail": "connection reset by peer"
+        }
+      }
+    }
+  },
+  {
+    "failed": {
+      "failure": {
+        "googleReturnedError": {
+          "detail": "HTTP 500"
+        }
+      }
+    }
+  }
+]

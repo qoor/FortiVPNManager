@@ -1,0 +1,126 @@
+[
+  {
+    "clientFileUnreadable": {
+      "problem": {
+        "tooLarge": {
+          "limitBytes": 65536
+        }
+      }
+    }
+  },
+  {
+    "clientFileInvalid": {
+      "problem": {
+        "notJson": {}
+      }
+    }
+  },
+  {
+    "clientFileInvalid": {
+      "problem": {
+        "webClient": {}
+      }
+    }
+  },
+  {
+    "clientFileInvalid": {
+      "problem": {
+        "noDesktopClient": {}
+      }
+    }
+  },
+  {
+    "clientFileInvalid": {
+      "problem": {
+        "missingField": {
+          "name": "client_secret"
+        }
+      }
+    }
+  },
+  {
+    "clientFileInvalid": {
+      "problem": {
+        "invalidField": {
+          "name": "client_id"
+        }
+      }
+    }
+  },
+  {
+    "noOAuthClient": {}
+  },
+  {
+    "enterAddress": {}
+  },
+  {
+    "alreadyInProgress": {}
+  },
+  {
+    "listenerFailed": {
+      "detail": "Address already in use (os error 48)"
+    }
+  },
+  {
+    "browserUnavailable": {}
+  },
+  {
+    "timedOut": {
+      "afterSeconds": 300
+    }
+  },
+  {
+    "cancelledInBrowser": {}
+  },
+  {
+    "denied": {
+      "code": "invalid_scope"
+    }
+  },
+  {
+    "tokenRejected": {
+      "detail": "Bad Request"
+    }
+  },
+  {
+    "clientRejected": {}
+  },
+  {
+    "noRefreshToken": {}
+  },
+  {
+    "scopeNotGranted": {}
+  },
+  {
+    "wrongAccount": {
+      "actual": "bob@example.com",
+      "expected": "alice@example.com"
+    }
+  },
+  {
+    "gmailApiRefused": {
+      "reason": "accessNotConfigured"
+    }
+  },
+  {
+    "network": {
+      "detail": "connection refused"
+    }
+  },
+  {
+    "secretStore": {
+      "failure": {
+        "description": "User interaction is not allowed."
+      }
+    }
+  },
+  {
+    "config": {
+      "error": {
+        "keptChanging": {
+          "path": "/Users/alice/.config/FortiVPNManager/config.yaml"
+        }
+      }
+    }
+  }
+]

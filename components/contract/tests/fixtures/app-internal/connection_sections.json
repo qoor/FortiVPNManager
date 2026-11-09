@@ -1,0 +1,184 @@
+[
+  {
+    "accountAppliesNextConnection": true,
+    "connect": "hidden",
+    "disconnect": "enabled",
+    "icon": "connected",
+    "reconnectNow": "enabled",
+    "status": {
+      "connected": {
+        "outlook": {
+          "reconnectsAt": {
+            "at": 1762422845250
+          }
+        },
+        "proactiveReconnect": {
+          "at": {
+            "at": 1762422845250
+          }
+        },
+        "since": 1762412345250,
+        "tunnelIp": "10.211.0.7"
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "connected": {
+        "outlook": {
+          "wontReconnect": {}
+        },
+        "proactiveReconnect": {
+          "pausedBySchedule": {}
+        },
+        "since": 1762412345250
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "connected": {
+        "outlook": {
+          "reconnectOnHold": {}
+        },
+        "proactiveReconnect": {
+          "off": {}
+        },
+        "since": 1762412345250
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "connected": {
+        "proactiveReconnect": {
+          "off": {}
+        },
+        "since": 1762412345250
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "hidden",
+    "disconnect": "enabled",
+    "icon": "inProgress",
+    "nextAttemptAt": 1762412435250,
+    "reconnectNow": "enabled",
+    "status": {
+      "waitingToReconnect": {
+        "until": 1762412435250
+      }
+    },
+    "waitReason": {
+      "authCooldown": {
+        "delaySeconds": 90
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "attention": {
+      "needsSetup": {
+        "items": [
+          {
+            "vpnPassword": {}
+          },
+          {
+            "gmailCredential": {
+              "method": "gmailApi"
+            }
+          }
+        ]
+      }
+    },
+    "connect": "enabled",
+    "disconnect": "enabled",
+    "icon": "error",
+    "reconnectNow": "disabled",
+    "status": {
+      "setupRequired": {}
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "attention": {
+      "failed": {
+        "reason": {
+          "vpnLoginRejected": {}
+        }
+      }
+    },
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "error",
+    "reconnectNow": "disabled",
+    "status": {
+      "failed": {
+        "reason": {
+          "vpnLoginRejected": {}
+        }
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "connecting": {
+        "progress": "waitingForOtp",
+        "reconnecting": true
+      }
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "reconnectOnHold": {}
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "waitingForNetwork": {}
+    }
+  },
+  {
+    "accountAppliesNextConnection": false,
+    "connect": "enabled",
+    "disconnect": "hidden",
+    "icon": "disconnected",
+    "reconnectNow": "disabled",
+    "status": {
+      "disconnecting": {
+        "then": "reconnect"
+      }
+    }
+  }
+]

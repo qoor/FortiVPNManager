@@ -1,0 +1,21 @@
+[
+  {
+    "appNotSigned": {}
+  },
+  {
+    "connection": {
+      "description": "Couldn’t communicate with a helper application."
+    }
+  },
+  {
+    "connectionLost": {}
+  },
+  {
+    "noReply": {}
+  },
+  {
+    "unreadableReply": {
+      "description": "The data couldn’t be read because it isn’t in the correct format."
+    }
+  }
+]

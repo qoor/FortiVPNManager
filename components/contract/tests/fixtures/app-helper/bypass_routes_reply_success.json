@@ -1,0 +1,1 @@
+{"success":{"_0":{"serviceName":"Ethernet","serviceID":"8A3F1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B","router":"10.20.161.1","address":"10.20.161.20","subnetMask":"255.255.255.0","routes":[{"subnetMask":"255.255.255.255","destination":"10.30.161.16","gateway":"10.20.161.1"},{"subnetMask":"255.255.255.0","destination":"192.168.50.0","gateway":"10.20.161.254"}]}}}

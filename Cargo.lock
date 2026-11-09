@@ -92,6 +92,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvm-core"
+version = "0.0.0"
+dependencies = [
+ "fvm-contract",
+]
+
+[[package]]
 name = "fvm-helper-entry-macos"
 version = "0.0.0"
 dependencies = [
@@ -104,6 +111,18 @@ dependencies = [
  "serde_json",
  "socket2",
  "zeroize",
+]
+
+[[package]]
+name = "fvm-runtime"
+version = "0.0.0"
+dependencies = [
+ "fvm-backend-adapter",
+ "fvm-contract",
+ "fvm-core",
+ "rustix",
+ "serde_json",
+ "socket2",
 ]
 
 [[package]]

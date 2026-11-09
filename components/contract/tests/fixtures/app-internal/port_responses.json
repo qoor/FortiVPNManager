@@ -1,0 +1,331 @@
+[
+  {
+    "portResponse": {
+      "id": 1,
+      "response": {
+        "secret": {
+          "value": "p@ss"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 1,
+      "response": {
+        "secret": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 2,
+      "response": {
+        "hasSecret": {
+          "exists": true
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 3,
+      "response": {
+        "secretChanged": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 4,
+      "response": {
+        "secretStoreFailed": {
+          "failure": {
+            "description": "User interaction is not allowed."
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 5,
+      "response": {
+        "registration": {
+          "status": "notRegistered"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 5,
+      "response": {
+        "registration": {
+          "status": "enabled"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 5,
+      "response": {
+        "registration": {
+          "status": "requiresApproval"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 5,
+      "response": {
+        "registration": {
+          "status": "notFound"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 6,
+      "response": {
+        "registered": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 6,
+      "response": {
+        "registrationFailed": {
+          "error": {
+            "notInstalledCopy": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 6,
+      "response": {
+        "registrationFailed": {
+          "error": {
+            "failed": {
+              "description": "Operation not permitted"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 7,
+      "response": {
+        "helperBuild": {
+          "build": "20261109120000"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperReply": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 12,
+      "response": {
+        "helperReply": {
+          "json": "{\"childAlive\":false}"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 13,
+      "response": {
+        "helperReplyFlag": {
+          "value": true
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperUnreachable": {
+          "failure": {
+            "appNotSigned": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperUnreachable": {
+          "failure": {
+            "connection": {
+              "description": "Couldn’t communicate with a helper application."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperUnreachable": {
+          "failure": {
+            "connectionLost": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperUnreachable": {
+          "failure": {
+            "noReply": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 7,
+      "response": {
+        "helperUnreachable": {
+          "failure": {
+            "unreadableReply": {
+              "description": "The data couldn’t be read because it is missing."
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 8,
+      "response": {
+        "helperBuildMismatch": {
+          "helperBuild": "20261108090000"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 16,
+      "response": {
+        "ipv4": {
+          "address": "203.0.113.10"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 16,
+      "response": {
+        "ipv4": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 17,
+      "response": {
+        "routeInterface": {
+          "interface": "en0"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 17,
+      "response": {
+        "routeInterface": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 18,
+      "response": {
+        "interfaceAddresses": {
+          "addresses": [
+            {
+              "name": "en0",
+              "up": true,
+              "ipv4": "10.20.161.20"
+            },
+            {
+              "name": "ppp0",
+              "up": true
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 19,
+      "response": {
+        "primaryRouter": {
+          "router": "10.20.161.1"
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 19,
+      "response": {
+        "primaryRouter": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 20,
+      "response": {
+        "screenState": {
+          "locked": true,
+          "displaysAsleep": false
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 21,
+      "response": {
+        "browserOpened": {
+          "opened": false
+        }
+      }
+    }
+  }
+]

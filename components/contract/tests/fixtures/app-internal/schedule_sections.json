@@ -1,0 +1,199 @@
+[
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "outlook": {
+      "connects": {
+        "at": 1762415945250
+      }
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  },
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "hoursError": {
+      "endNotAfterStart": {}
+    },
+    "outlook": {
+      "noDays": {}
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  },
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "hoursError": {
+      "notSaved": {
+        "error": {
+          "unreadableFile": {
+            "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+            "problem": {
+              "kind": {
+                "duplicateKey": {
+                  "key": "vpn"
+                }
+              },
+              "location": {
+                "column": 1,
+                "line": 7
+              }
+            }
+          }
+        }
+      }
+    },
+    "outlook": {
+      "withinHours": {
+        "end": 1762419545250
+      }
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  },
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "outlook": {
+      "outsideHoursPresent": {}
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  },
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "outlook": {
+      "holdingWhileAway": {
+        "until": 1762414145250
+      }
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  },
+  {
+    "awayMinutes": {
+      "maximum": 1440,
+      "minimum": 1,
+      "value": 60
+    },
+    "days": [
+      "mon",
+      "tue",
+      "wed",
+      "thu",
+      "fri",
+      "sat",
+      "sun"
+    ],
+    "enabled": true,
+    "end": {
+      "hour": 18,
+      "minute": 30
+    },
+    "outlook": {
+      "suspended": {}
+    },
+    "start": {
+      "hour": 9,
+      "minute": 0
+    }
+  }
+]

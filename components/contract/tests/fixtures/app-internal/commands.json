@@ -1,0 +1,370 @@
+[
+  {
+    "command": {
+      "_0": {
+        "connect": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "disconnect": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "reconnectNow": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "settingsOpened": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "settingsClosed": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "editAccount": {
+          "form": {
+            "host": "vpn.example.com",
+            "port": "443",
+            "username": "alice",
+            "realm": "",
+            "gmailAddress": "alice@example.com",
+            "vpnPassword": "p@ss",
+            "appPassword": ""
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "saveAccount": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "revertAccount": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "importClientSettings": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "importClientSettings": {
+          "file": "/Users/alice/vpn.conf"
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "dismissImportReport": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setOtpMethod": {
+          "method": "gmailApi"
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setOtpMethod": {
+          "method": "imap"
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "testGmail": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "connectGoogleAccount": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "cancelGoogleSignIn": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "disconnectGoogleAccount": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "importOAuthClient": {
+          "file": "/Users/alice/Downloads/client_secret_123.json"
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "useBuiltInOAuthClient": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "scheduleEnabled": {
+              "enabled": true
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "scheduleDay": {
+              "day": "mon",
+              "selected": false
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "scheduleDay": {
+              "day": "sun",
+              "selected": true
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "awayMinutes": {
+              "minutes": 45
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "autoConnectOnLaunch": {
+              "enabled": false
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "sessionMaxMinutes": {
+              "minutes": -5
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "proactiveReconnect": {
+              "enabled": true
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "proactiveMarginMinutes": {
+              "minutes": 10
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "reconnectAfterSleep": {
+              "enabled": true
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setConnectionOption": {
+          "option": {
+            "minSleepMinutes": {
+              "minutes": 30
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setScheduleHours": {
+          "start": {
+            "hour": 9,
+            "minute": 0
+          },
+          "end": {
+            "hour": 18,
+            "minute": 30
+          }
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setOpenAtLogin": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "registerHelper": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "openHelperApprovalSettings": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setBypassRows": {
+          "list": "networks",
+          "rows": [
+            "10.20.161.0/24"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "setBypassRows": {
+          "list": "targets",
+          "rows": [
+            "10.30.161.16",
+            ""
+          ]
+        }
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "addCurrentNetwork": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "discardBypassChanges": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "applyBypassRules": {}
+      }
+    }
+  }
+]

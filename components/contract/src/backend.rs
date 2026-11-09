@@ -6,6 +6,8 @@ use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::Serialize;
+
 use crate::app_helper::{Milestone, OutputSource, RunRequest};
 
 pub trait Backend {
@@ -53,26 +55,28 @@ pub struct ClientExecutable {
 }
 
 /// Why the client executable cannot be used, as a kind and the path it concerns; wording is left
-/// to whoever shows it.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// to whoever shows it. The app's UI receives it in the Helper's section (`app_internal`).
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 pub struct ClientProblem {
     pub kind: ClientProblemKind,
     pub path: PathBuf,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Cases without data are empty structs so the JSON matches Swift's enum coding.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ClientProblemKind {
     /// Nothing usable at `path`, where the client is looked for. The Helper status leaves the
     /// client path empty for it.
-    NotFound,
+    NotFound {},
     /// `path`, where the client resolves to, is outside the place it may be installed.
-    OutsideAllowedLocation,
-    NotRegularFile,
+    OutsideAllowedLocation {},
+    NotRegularFile {},
     /// Other users may modify it; `mode` holds the permission bits.
     WritableByOthers {
         mode: u32,
     },
-    NotExecutable,
+    NotExecutable {},
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

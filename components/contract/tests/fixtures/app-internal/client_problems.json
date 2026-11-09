@@ -1,0 +1,34 @@
+[
+  {
+    "kind": {
+      "notFound": {}
+    },
+    "path": "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+  },
+  {
+    "kind": {
+      "outsideAllowedLocation": {}
+    },
+    "path": "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+  },
+  {
+    "kind": {
+      "notRegularFile": {}
+    },
+    "path": "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+  },
+  {
+    "kind": {
+      "writableByOthers": {
+        "mode": 509
+      }
+    },
+    "path": "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+  },
+  {
+    "kind": {
+      "notExecutable": {}
+    },
+    "path": "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
+  }
+]

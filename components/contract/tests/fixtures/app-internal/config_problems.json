@@ -1,0 +1,387 @@
+[
+  {
+    "kind": {
+      "fileTooLarge": {
+        "byteCount": 70000,
+        "limit": 65536
+      }
+    }
+  },
+  {
+    "kind": {
+      "invalidUtf8": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "disallowedCharacter": {
+        "scalar": 133
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "syntax": {
+        "problem": "did not find expected key"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "multipleDocuments": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "nestingTooDeep": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "duplicateKey": {
+        "key": "port"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "rootNotMapping": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "anchorOrAlias": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "mergeKey": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "explicitTag": {
+        "tag": "!!str"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "complexKey": {}
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "typeMismatch": {
+        "expected": "mapping",
+        "path": "vpn"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "typeMismatch": {
+        "expected": "sequence",
+        "path": "routes.networks"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "typeMismatch": {
+        "expected": "string",
+        "path": "vpn.host"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "typeMismatch": {
+        "expected": "integer",
+        "path": "vpn.port"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "typeMismatch": {
+        "expected": "boolean",
+        "path": "connection.auto_connect_on_launch"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidInteger": {
+        "path": "vpn.port",
+        "raw": "0443"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidBoolean": {
+        "path": "connection.auto_connect_on_launch",
+        "raw": "yes"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "quotedNumber": {
+        "path": "vpn.port",
+        "raw": "443"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "quotedBoolean": {
+        "path": "connection.proactive_reconnect.enabled",
+        "raw": "true"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidChoice": {
+        "allowed": [
+          "imap",
+          "gmail_api"
+        ],
+        "path": "otp.method",
+        "raw": "pop3"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "outOfRange": {
+        "maximum": 65535,
+        "minimum": 1,
+        "path": "vpn.port",
+        "raw": "70000"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "marginNotLessThanSession": {
+        "margin": 30,
+        "session": 20
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidTime": {
+        "path": "connection.schedule.start",
+        "raw": "9am"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "scheduleEndNotAfterStart": {
+        "end": {
+          "hour": 9,
+          "minute": 0
+        },
+        "start": {
+          "hour": 18,
+          "minute": 0
+        }
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidCharacter": {
+        "path": "vpn.username",
+        "scalar": 8232
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "newerSchemaVersion": {
+        "version": 2
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidTrustedCert": {
+        "index": 0
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "invalidRouteEntry": {
+        "index": 1,
+        "path": "routes.bypass_vpn",
+        "problem": {
+          "hostBitsSet": {
+            "network": "10.30.170.0/24"
+          }
+        },
+        "raw": "10.30.170.5/24"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "tooManyRouteEntries": {
+        "count": 101,
+        "limit": 100,
+        "path": "routes.networks"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "duplicateRouteEntry": {
+        "index": 2,
+        "path": "routes.bypass_vpn"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  },
+  {
+    "kind": {
+      "overlappingRouteEntry": {
+        "index": 1,
+        "other": "10.20.0.0/16",
+        "path": "routes.networks"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
+  }
+]
