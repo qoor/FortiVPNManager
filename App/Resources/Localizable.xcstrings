@@ -811,6 +811,16 @@
         }
       }
     },
+    "Connection was forcibly ended": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "연결이 강제 종료됨"
+          }
+        }
+      }
+    },
     "Connects %@": {
       "localizations": {
         "ko": {

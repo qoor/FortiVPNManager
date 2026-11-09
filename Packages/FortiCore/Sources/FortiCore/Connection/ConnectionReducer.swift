@@ -280,6 +280,7 @@ private struct ConnectionTransition {
     private mutating func resetForManualAction() {
         model.ledger.resetForManualAction()
         model.networkFailureStreak = 0
+        model.forcedRetryUsed = false
         model.reconnectSuspended = false
     }
 
@@ -428,6 +429,7 @@ private struct ConnectionTransition {
             let upDuration = facts.upDuration ?? now.timeIntervalSince(context.since)
             if upDuration >= RetryPolicy.stableSessionDuration {
                 model.ledger.resetConsecutiveFailures()
+                model.forcedRetryUsed = false
             }
             model.lastFailureAttemptID = attemptID
             let input = ExitClassifier.Input(
@@ -469,16 +471,19 @@ private struct ConnectionTransition {
         }
     }
 
+    /// The connection is local to the Mac: it breaks only when the Helper process ends (killed or
+    /// crashed), never because of the network.
     private mutating func helperConnectionLost() {
         switch model.state {
         case var .connecting(context) where context.stage == .tunnel:
             closeOTPSession(&context)
-            context.otpSessionFailure == .authentication ? fail(.gmailAppPassword) : networkFailure()
+            context.otpSessionFailure == .authentication ? fail(.gmailAppPassword) : forcedTermination()
         case let .connected(context):
             if now.timeIntervalSince(context.since) >= RetryPolicy.stableSessionDuration {
                 model.ledger.resetConsecutiveFailures()
+                model.forcedRetryUsed = false
             }
-            networkFailure()
+            forcedTermination()
         case let .disconnecting(context):
             finishStop(context, upDuration: nil)
         default:
@@ -852,6 +857,7 @@ private struct ConnectionTransition {
         let up = upDuration ?? context.connectedSince.map { now.timeIntervalSince($0) }
         if let up, up >= RetryPolicy.stableSessionDuration {
             model.ledger.resetConsecutiveFailures()
+            model.forcedRetryUsed = false
         }
         settle(context.after)
     }
@@ -910,6 +916,8 @@ private struct ConnectionTransition {
             beginAttempt(.certificateRetry, certRetryUsed: runIsForCurrentGateway)
         case .serverSessionEnded:
             scheduleRetry(.serverSessionEnded, after: RetryPolicy.serverSessionEndDelay)
+        case .forcedTermination:
+            forcedTermination()
         case .networkError:
             networkFailure()
         case let .authFailure(reason):
@@ -917,6 +925,18 @@ private struct ConnectionTransition {
         case let .fatal(reason):
             fail(reason)
         }
+    }
+
+    /// Reconnects at once through the same gates as any retry, but only once until a session is
+    /// stable again: the Helper aborts on internal faults, and one that crashed on every connect would
+    /// otherwise loop VPN logins and OTP emails.
+    private mutating func forcedTermination() {
+        guard !model.forcedRetryUsed else {
+            networkFailure()
+            return
+        }
+        model.forcedRetryUsed = true
+        beginAttempt(.retry(.forcedTermination))
     }
 
     private mutating func networkFailure() {

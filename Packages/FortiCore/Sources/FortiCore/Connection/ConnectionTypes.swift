@@ -240,6 +240,8 @@ public enum RetryReason: Sendable, Equatable {
     case network
     /// The server ended a stable session.
     case serverSessionEnded
+    /// openfortivpn was killed after the tunnel came up, or the Helper ended (killed or crashed).
+    case forcedTermination
     /// One authentication failure was counted; one more try after the cooldown.
     case authFailure(ConnectionFailureReason)
     /// A manual or automatic attempt waits out the cooldown after the last authentication failure.

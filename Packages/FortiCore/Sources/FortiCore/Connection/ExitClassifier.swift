@@ -58,6 +58,8 @@ enum ExitClassifier {
         case certificateRetry
         /// The server ended a stable session: reconnect shortly and reset the counter.
         case serverSessionEnded
+        /// Killed by someone else after the tunnel came up: reconnect immediately, uncounted.
+        case forcedTermination
         /// Not counted; back off and wait for the network.
         case networkError
         /// Counted authentication failure.
@@ -81,9 +83,11 @@ enum ExitClassifier {
             return (input.certRetryUsed || !learnable) ? .networkError : .certificateRetry
         }
 
-        if furthest == .tunnelUp, input.appStop == nil, facts.stopInitiator == .none,
-           input.upDuration >= RetryPolicy.stableSessionDuration {
-            return .serverSessionEnded
+        if furthest == .tunnelUp, input.appStop == nil, facts.stopInitiator == .none {
+            // A signal nobody here sent is a kill, not the server or the account, whatever the up-time.
+            // Only the client's own death shows: a pppd kill ends openfortivpn normally.
+            if case .signaled = facts.exitStatus { return .forcedTermination }
+            if input.upDuration >= RetryPolicy.stableSessionDuration { return .serverSessionEnded }
         }
 
         guard let furthest, furthest >= .connectedToGateway else { return .networkError }

@@ -54,7 +54,8 @@ enum ReducerFixture {
         initiator: StopInitiator = .none,
         up: TimeInterval? = nil,
         certs: [String] = [],
-        certAt: Milestone? = nil
+        certAt: Milestone? = nil,
+        status: ProcessExitStatus? = nil
     ) -> ExitFacts {
         ExitFacts(
             furthestMilestone: furthest,
@@ -62,8 +63,13 @@ enum ReducerFixture {
             certRejectedDigests: certs,
             certRejectedAt: certAt,
             upDuration: up,
-            exitStatus: furthest == nil ? .spawnFailed(errno: 2) : .exited(code: 1)
+            exitStatus: status ?? (furthest == nil ? .spawnFailed(errno: 2) : .exited(code: 1))
         )
+    }
+
+    /// openfortivpn killed with SIGKILL by someone outside the app and the helper.
+    static func killed(_ furthest: Milestone? = .tunnelUp, up: TimeInterval? = nil) -> ExitFacts {
+        facts(furthest, up: up, status: .signaled(signal: 9))
     }
 }
 

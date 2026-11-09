@@ -52,6 +52,33 @@ struct ExitClassifierTests {
         ClassifierCase("stable tunnel stopped by the helper itself",
                        Input(facts: ReducerFixture.facts(.tunnelUp, initiator: .helper(.helperShutdown), up: 5_000)), .networkError),
 
+        // Killed by a signal nobody here sent, after the tunnel came up.
+        ClassifierCase("killed after a 3 min session",
+                       Input(facts: ReducerFixture.killed(up: 180)), .forcedTermination),
+        ClassifierCase("killed 30 s after tunnelUp is not an early drop",
+                       Input(facts: ReducerFixture.killed(up: 30)), .forcedTermination),
+        ClassifierCase("killed, helper did not report up-time",
+                       Input(facts: ReducerFixture.killed(), observedUpDuration: 5), .forcedTermination),
+        ClassifierCase("killed, facts lag behind, reducer saw tunnelUp",
+                       Input(facts: ReducerFixture.killed(.authenticated, up: 2), knownMilestone: .tunnelUp), .forcedTermination),
+        ClassifierCase("killed while our deadline stop raced tunnelUp",
+                       Input(facts: ReducerFixture.killed(up: 1), appStop: .attemptTimeout), .networkError),
+        ClassifierCase("helper's own stop of a young tunnel ended by a signal",
+                       Input(facts: ReducerFixture.facts(.tunnelUp, initiator: .helper(.helperShutdown), up: 20, status: .signaled(signal: 15))),
+                       .authFailure(.sessionDroppedEarly)),
+        ClassifierCase("helper's own stop of a stable tunnel ended by a signal",
+                       Input(facts: ReducerFixture.facts(.tunnelUp, initiator: .helper(.helperShutdown), up: 5_000, status: .signaled(signal: 9))),
+                       .networkError),
+
+        // Killed before the tunnel came up: the stage rules still apply.
+        ClassifierCase("killed before reaching the gateway", Input(facts: ReducerFixture.killed(.spawned)), .networkError),
+        ClassifierCase("killed at login",
+                       Input(facts: ReducerFixture.killed(.connectedToGateway)), .authFailure(.authenticationRejected)),
+        ClassifierCase("killed waiting for the OTP",
+                       Input(facts: ReducerFixture.killed(.otpPrompted)), .authFailure(.otpNotReceived(inJunk: false))),
+        ClassifierCase("killed after authentication, before the tunnel",
+                       Input(facts: ReducerFixture.killed(.authenticated)), .authFailure(.tunnelSetupFailed)),
+
         // Never reached the gateway.
         ClassifierCase("spawn failed", Input(facts: ReducerFixture.facts(nil)), .networkError),
         ClassifierCase("spawned only", Input(facts: ReducerFixture.facts(.spawned)), .networkError),

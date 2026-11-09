@@ -480,13 +480,13 @@ struct FailureHandlingTests {
         var connected = ReducerHarness()
         try connected.launchConnected()
         connected.send(.helperConnectionLost)
-        #expect(connected.retryWait?.reason == .network)
+        #expect(connected.attempt?.reason == .retry(.forcedTermination))
 
         var connecting = ReducerHarness()
         connecting.launch()
         let id = try connecting.startTunnel()
         #expect(connecting.send(.helperConnectionLost).first == .closeOTPSession(id, checkJunk: false))
-        #expect(connecting.retryWait?.reason == .network)
+        #expect(connecting.attempt?.reason == .retry(.forcedTermination))
 
         var stopping = ReducerHarness()
         try stopping.launchConnected()

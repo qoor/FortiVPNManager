@@ -87,6 +87,7 @@ extension RetryReason {
         switch self {
         case .network: String(localized: "Network error")
         case .serverSessionEnded: String(localized: "Server ended the session")
+        case .forcedTermination: String(localized: "Connection was forcibly ended")
         case let .authFailure(reason):
             String(localized: "Authentication failed (\(reason.summary(otpMethod: otpMethod))), retrying once")
         case .authCooldown: String(localized: "Waiting \(Duration.seconds(RetryPolicy.authFailureRetryDelay).formatted(.units(width: .wide))) after authentication failure")

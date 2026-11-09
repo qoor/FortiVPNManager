@@ -26,6 +26,9 @@ public struct ConnectionModel: Sendable, Equatable {
     var scheduleBoundary: Date?
     var pendingWake: PendingWake?
     var networkFailureStreak = 0
+    /// The immediate reconnect after a forced termination was used and no session has been stable
+    /// since: the next forced termination backs off like a network error.
+    var forcedRetryUsed = false
     var lastFailureAttemptID: AttemptID?
     /// Profile of the last `startTunnel`, i.e. of the openfortivpn run whose events are accepted now.
     /// Differs from `profile` when `vpn.*` changed while that run was in flight.
