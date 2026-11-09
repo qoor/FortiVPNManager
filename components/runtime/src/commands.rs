@@ -1,4 +1,4 @@
-//! The UI's commands (SPEC F-RT-02 item 1) and the settings they change directly: the connection
+//! The UI's commands and the settings they change directly: the connection
 //! options and the schedule, the OTP method, the login item and the Helper's registration.
 
 use fvm_contract::app_internal::command::{Command, ConnectionOption};
@@ -198,7 +198,7 @@ impl Runtime {
     }
 
     /// The first launch of the copy in /Applications opens the app at login once; turning it off
-    /// later is the user's choice (SPEC F-SR-01 item 3).
+    /// later is the user's choice.
     pub(crate) fn register_login_item_once(&mut self) {
         if !self.facts.installed_copy || self.state.state().login_item_registered {
             self.refresh_login_item();

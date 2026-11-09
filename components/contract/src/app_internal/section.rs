@@ -387,7 +387,7 @@ pub enum GoogleError {
         problem: OAuthClientFileProblem,
     },
     /// The local listener for Google's answer could not start. The detail is the runtime's English
-    /// text, shown as it is (DESIGN §7.2, approved change 4); so are the other network details.
+    /// text, shown as it is by the user's choice; so are the other network details.
     ListenerFailed {
         detail: String,
     },
@@ -510,7 +510,7 @@ pub enum GmailTestFailure {
 }
 
 /// Why an IMAP session failed. Server texts are carried as they came; the other details are the
-/// runtime's English text, shown as it is (DESIGN §7.2, approved change 4).
+/// runtime's English text, shown as it is by the user's choice.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ImapFailure {
@@ -533,7 +533,6 @@ pub enum ImapFailure {
         status: String,
         text: String,
     },
-    Closed {},
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]

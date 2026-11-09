@@ -46,7 +46,6 @@ extension AppInternal {
         case scheduleEndNotAfterStart(start: TimeOfDay, end: TimeOfDay)
         case invalidCharacter(path: String, scalar: UInt32)
         case newerSchemaVersion(version: Int)
-        case invalidTrustedCert(index: Int)
         case invalidRouteEntry(path: String, index: Int, raw: String, problem: AddressProblem)
         case tooManyRouteEntries(path: String, count: Int, limit: Int)
         case duplicateRouteEntry(path: String, index: Int)

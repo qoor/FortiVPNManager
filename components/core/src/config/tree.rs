@@ -11,8 +11,7 @@ use saphyr_parser::{Event, Parser, ScalarStyle, ScanError};
 
 use super::text::location;
 
-/// libyaml's limit, the parser of the earlier app. The parser here allows deeper block nesting but
-/// stops flow nesting at 255 levels.
+/// Block nesting deeper than this is refused; the parser itself stops flow nesting sooner.
 const MAX_NESTING: usize = 1000;
 
 pub(super) struct Tree<'a> {
@@ -23,7 +22,7 @@ pub(super) struct Tree<'a> {
 pub(super) struct Node<'a> {
     pub kind: Kind<'a>,
     /// Where the node starts, at its anchor or tag if it has one. An alias is located at the node
-    /// it refers to, as the earlier app located it.
+    /// it refers to.
     pub location: LineColumn,
     /// Has an anchor, or is an alias.
     pub anchored: bool,
@@ -150,9 +149,8 @@ pub(super) fn build(text: &str) -> Result<Tree<'_>, ConfigProblem> {
     Ok(Tree { nodes, root })
 }
 
-/// A key written twice in one mapping, reported as the earlier app did: the alphabetically first
-/// such key, at its first appearance. Keys are compared by their text alone; the earlier app also
-/// compared how they would resolve, so `1` and `"1"` were different keys there.
+/// A key written twice in one mapping: the alphabetically first such key, at its first appearance.
+/// Keys are compared by their text alone, so `1` and `"1"` are the same key.
 fn check_repeated_keys(nodes: &[Node<'_>], pairs: &[(usize, usize)]) -> Result<(), ConfigProblem> {
     let mut first_seen: HashMap<&str, LineColumn> = HashMap::new();
     let mut reported: Option<(&str, LineColumn)> = None;
@@ -182,7 +180,7 @@ fn check_repeated_keys(nodes: &[Node<'_>], pairs: &[(usize, usize)]) -> Result<(
     }
 }
 
-fn scalar_text<'n>(node: &'n Node<'_>) -> Option<&'n str> {
+pub(super) fn scalar_text<'n>(node: &'n Node<'_>) -> Option<&'n str> {
     match &node.kind {
         Kind::Scalar { text, .. } => Some(text),
         _ => None,

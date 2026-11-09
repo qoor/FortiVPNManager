@@ -112,8 +112,6 @@ extension AppInternal.ConfigProblemKind {
                 String(localized: "This config file was written by a newer version of the app (schema_version \(version))."),
                 String(localized: "Update the app. Until then, this file is treated as read-only and is never overwritten."),
             ].joined(separator: " ")
-        case let .invalidTrustedCert(index):
-            return String(localized: "In \(SettingsKey.trustedCerts), entry \(index + 1) is not a SHA-256 digest (64 lowercase hex digits).")
         case let .invalidRouteEntry(path, index, raw, problem):
             return String(localized: "In \(path), entry \(index + 1): \(problem.message(for: raw))")
         case let .tooManyRouteEntries(path, count, limit):

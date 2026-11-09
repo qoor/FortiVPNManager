@@ -1,4 +1,4 @@
-//! IMAP commands, UID sets and login rejections (SPEC F-OT-03).
+//! IMAP commands, UID sets and login rejections.
 
 use base64::Engine;
 use fvm_contract::app_internal::SecretText;

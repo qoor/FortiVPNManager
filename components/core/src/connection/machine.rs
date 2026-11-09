@@ -1,5 +1,5 @@
 //! The connection state machine: what the user wants, where the connection is, and how each input
-//! moves it (SPEC F-CM-01 to F-CM-09).
+//! moves it.
 //!
 //! Timers, the activity hold and saving the ledger follow from the state after each input, so no
 //! transition can forget to cancel a timer or save the ledger.

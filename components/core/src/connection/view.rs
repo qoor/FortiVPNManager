@@ -1,4 +1,4 @@
-//! What the connection, schedule and readiness sections show (SPEC F-CM-10). Each is a function
+//! What the connection, schedule and readiness sections show. Each is a function
 //! of the state as of the last input: every time-bound change, such as a schedule boundary, comes
 //! with a timer input.
 

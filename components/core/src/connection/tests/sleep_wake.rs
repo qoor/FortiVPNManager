@@ -1,4 +1,4 @@
-//! Sleep, wake and network path changes (SPEC F-CM-06, F-CM-07).
+//! Sleep, wake and network path changes.
 
 use std::time::Duration;
 

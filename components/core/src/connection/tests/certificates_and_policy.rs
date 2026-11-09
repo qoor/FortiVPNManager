@@ -1,4 +1,4 @@
-//! Gateway certificate auto-trust, retry values and the failure ledger (SPEC F-CM-04, F-CM-09).
+//! Gateway certificate auto-trust, retry values and the failure ledger.
 
 use fvm_contract::app_helper::{Milestone, StopReason};
 

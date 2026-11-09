@@ -1,12 +1,10 @@
 import Foundation
 
-/// An IPv4 host or network in CIDR form, as the exception rules use it: written
-/// `10.30.161.16` (one host, /32) or `10.30.170.0/24` (a network, no bits set after the prefix).
-/// Exception targets (`routes.bypass_vpn`) and the networks where they apply (`routes.networks`)
-/// are both lists of these. Encoded as that text; decoding re-validates it.
-struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible {
+/// An IPv4 host or network that can be an exception target. The Helper writes exception routes only
+/// to such destinations; the exception rules themselves are planned by the app.
+struct IPv4Network: Sendable, Hashable {
     enum ParseError: Error, Sendable, Equatable {
-        /// Not `a.b.c.d` or `a.b.c.d/n` in plain decimal (octets 0-255 and the prefix without leading zeros).
+        /// Not dotted quads in plain decimal (octets 0-255 without leading zeros).
         case malformed
         /// The prefix length is outside ``IPv4Network/prefixLengths``.
         case prefixOutOfRange(Int)
@@ -26,29 +24,10 @@ struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible {
     let address: UInt32
     let prefixLength: Int
 
-    /// Parses `a.b.c.d` or `a.b.c.d/n`; `a.b.c.d/32` is the same as `a.b.c.d`. No surrounding spaces.
-    init(parsing text: String) throws(ParseError) {
-        let parts = text.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
-        guard let address = Self.parseDottedQuad(parts[0]) else { throw .malformed }
-        var prefixLength = 32
-        if parts.count == 2 {
-            guard let value = Self.parseDecimal(parts[1], maxDigits: 2) else { throw .malformed }
-            prefixLength = value
-        }
-        try self.init(address: address, prefixLength: prefixLength)
-    }
-
     /// A route destination as `networksetup` reports it: dotted address and dotted subnet mask.
     init(address text: String, subnetMask: String) throws(ParseError) {
         let (address, prefixLength) = try Self.parse(address: text, subnetMask: subnetMask)
         try self.init(address: address, prefixLength: prefixLength)
-    }
-
-    /// The network an interface address belongs to, e.g. `10.20.161.0/24` for `10.20.161.20` with
-    /// `255.255.255.0` (the host bits are cleared instead of rejected).
-    init(enclosing text: String, subnetMask: String) throws(ParseError) {
-        let (address, prefixLength) = try Self.parse(address: text, subnetMask: subnetMask)
-        try self.init(address: address & Self.mask(prefixLength), prefixLength: prefixLength)
     }
 
     private init(address: UInt32, prefixLength: Int) throws(ParseError) {
@@ -68,46 +47,6 @@ struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible {
         self.prefixLength = prefixLength
     }
 
-    /// Dotted-quad address, e.g. `10.30.170.0`.
-    var addressText: String { Self.dottedQuad(address) }
-    /// Dotted subnet mask, e.g. `255.255.255.0`.
-    var subnetMask: String { Self.dottedQuad(Self.mask(prefixLength)) }
-
-    /// `10.30.161.16` for a host, `10.30.170.0/24` for a network.
-    var description: String {
-        prefixLength == 32 ? addressText : "\(addressText)/\(prefixLength)"
-    }
-
-    /// Whether `address` (host byte order) is inside this network.
-    func contains(_ address: UInt32) -> Bool {
-        address & Self.mask(prefixLength) == self.address
-    }
-
-    /// Whether all of `other` is inside this network.
-    func contains(_ other: IPv4Network) -> Bool {
-        other.prefixLength >= prefixLength && contains(other.address)
-    }
-
-    /// Whether the two share any address (one contains the other).
-    func overlaps(_ other: IPv4Network) -> Bool {
-        contains(other) || other.contains(self)
-    }
-
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let text = try container.decode(String.self)
-        do {
-            try self.init(parsing: text)
-        } catch {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "not an IPv4 host or network: \(text)")
-        }
-    }
-
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(description)
-    }
-
     /// `a.b.c.d` with four decimal octets 0-255 and no leading zeros (never shorthand or octal forms).
     static func parseDottedQuad(_ text: Substring) -> UInt32? {
         let octets = text.split(separator: ".", omittingEmptySubsequences: false)
@@ -118,10 +57,6 @@ struct IPv4Network: Codable, Sendable, Hashable, CustomStringConvertible {
             value = value << 8 | UInt32(number)
         }
         return value
-    }
-
-    private static func dottedQuad(_ value: UInt32) -> String {
-        "\(value >> 24).\(value >> 16 & 0xFF).\(value >> 8 & 0xFF).\(value & 0xFF)"
     }
 
     /// Number of leading ones when `mask` is contiguous (ones, then zeros); `nil` otherwise.
@@ -164,11 +99,6 @@ struct AdditionalRoute: Codable, Sendable, Hashable {
         self.gateway = gateway
     }
 
-    /// `network` routed through `gateway`.
-    init(_ network: IPv4Network, gateway: String) {
-        self.init(destination: network.addressText, subnetMask: network.subnetMask, gateway: gateway)
-    }
-
     /// The destination as an exception target, or `nil` when it cannot be one (e.g. a /4 or loopback).
     var network: IPv4Network? {
         try? IPv4Network(address: destination, subnetMask: subnetMask)
@@ -198,11 +128,6 @@ struct BypassRoutesSnapshot: Codable, Sendable, Equatable {
         self.address = address
         self.subnetMask = subnetMask
         self.routes = routes
-    }
-
-    /// The network this Mac is on, e.g. `10.20.161.0/24`.
-    var localNetwork: IPv4Network? {
-        try? IPv4Network(enclosing: address, subnetMask: subnetMask)
     }
 }
 

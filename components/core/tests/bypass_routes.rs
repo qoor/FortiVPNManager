@@ -1,4 +1,4 @@
-//! Route planning for the exception rules (SPEC F-BR-01).
+//! Route planning for the exception rules.
 
 use std::collections::HashSet;
 

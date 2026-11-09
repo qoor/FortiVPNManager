@@ -246,7 +246,7 @@ struct Watch<I, R> {
     furthest: Milestone,
     tunnel_ip: Option<Ipv4Addr>,
     /// On the clock that counts sleep: the app compares the up duration with how long a session
-    /// counts as stable. The stage limits stay on `Instant`, which stops during sleep, as before.
+    /// counts as stable. The stage limits stay on `Instant`, which stops during sleep.
     tunnel_up_at: Option<Duration>,
     rejected_certificates: Vec<String>,
     certificate_rejected_at: Option<Milestone>,

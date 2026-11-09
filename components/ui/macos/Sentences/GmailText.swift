@@ -192,7 +192,6 @@ extension AppInternal.ImapFailure {
             }
         case let .protocol(detail): String(localized: "IMAP protocol error: \(detail)")
         case let .rejected(command, status, text): String(localized: "\(command) rejected (\(status)): \(text)")
-        case .closed: String(localized: "The connection was closed")
         }
     }
 }

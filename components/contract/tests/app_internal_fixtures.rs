@@ -710,7 +710,6 @@ fn gmail_tests() {
                 status: "NO".into(),
                 text: "[NONEXISTENT] Unknown Mailbox".into(),
             }),
-            unreachable(ImapFailure::Closed {}),
             failed(GmailTestFailure::NoOAuthClient {}),
             failed(GmailTestFailure::NotSignedIn {}),
             failed(GmailTestFailure::AccessRevoked {}),
@@ -1285,7 +1284,6 @@ fn settings_file_problems() {
                 scalar: 0x2028,
             }),
             problem(NewerSchemaVersion { version: 2 }),
-            problem(InvalidTrustedCert { index: 0 }),
             problem(InvalidRouteEntry {
                 path: path("routes.bypass_vpn"),
                 index: 1,
@@ -1492,14 +1490,13 @@ fn port_actions() {
         [
             log(LogLevel::Info, Connection, "state: connected"),
             log(LogLevel::Notice, Readiness, "readiness: ready"),
-            log(LogLevel::Error, System, "presence: away"),
+            log(LogLevel::Error, Connection, "presence: away"),
             log(LogLevel::Info, Config, "config changed"),
             log(LogLevel::Info, State, "state saved"),
             log(LogLevel::Info, Logfile, "log file rotated"),
             log(LogLevel::Info, Import, "imported"),
             log(LogLevel::Info, Oauth, "token refreshed"),
             log(LogLevel::Info, Otp, "code found"),
-            log(LogLevel::Info, Imap, "IDLE"),
             log(LogLevel::Info, BypassRoutes, "routes written"),
             log(LogLevel::Info, LoginItem, "registered"),
             action(PortAction::PostNotification {

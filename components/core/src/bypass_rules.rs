@@ -1,5 +1,5 @@
 //! Exception rules: whether they apply on the current network, the routes it should have, routes to
-//! import, and the edit drafts of both lists (SPEC F-BR-01, F-BR-03).
+//! import, and the edit drafts of both lists.
 //!
 //! Both lists, the networks where the rules apply (`routes.networks`) and the targets that skip the
 //! VPN there (`routes.bypass_vpn`), hold IPv4 hosts and networks written `10.30.161.16` or

@@ -8,9 +8,9 @@ const MAX_NESTING: usize = 32;
 /// A framing failure; the parser stays failed and the connection is dropped.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ParseError {
-    /// A literal (`{n}`) announced more than 1 MiB, or a length too large to read.
+    /// A literal (`{n}`) announced more than the literal limit, or a length too large to read.
     LiteralTooLarge { declared: u64 },
-    /// One response, literals included, grew beyond 4 MiB.
+    /// One response, literals included, grew beyond the response limit.
     ResponseTooLarge,
 }
 
@@ -62,7 +62,7 @@ impl Parser {
                     if declared > MAX_LITERAL_BYTES {
                         return Err(self.fail(ParseError::LiteralTooLarge { declared }));
                     }
-                    let declared = usize::try_from(declared).expect("at most 1 MiB");
+                    let declared = usize::try_from(declared).expect("within the literal limit");
                     if self.buffer.len() + declared > MAX_RESPONSE_BYTES {
                         return Err(self.fail(ParseError::ResponseTooLarge));
                     }

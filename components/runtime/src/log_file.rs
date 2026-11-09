@@ -1,5 +1,5 @@
 //! The log file: the VPN client's output and the explanatory lines, unmasked, appended and rotated
-//! by size (SPEC F-SR-02). Its line format is also the Log tab's Copy All text.
+//! by size. Its line format is also the Log tab's Copy All text.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};

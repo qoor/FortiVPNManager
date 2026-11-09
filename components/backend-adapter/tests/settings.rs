@@ -1,4 +1,4 @@
-//! Importing an existing openfortivpn config file (SPEC F-CF-04), and the account checks the
+//! Importing an existing openfortivpn config file, and the account checks the
 //! app's runtime uses.
 
 use std::path::{Path, PathBuf};

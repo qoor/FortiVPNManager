@@ -1,5 +1,5 @@
 //! The text the app writes: always the same commented template, so the user's comments and the
-//! keys this version does not know are lost on a write (DESIGN §3).
+//! keys this version does not know are lost on a write, a limit the user accepted.
 
 use std::fmt;
 use std::ops::RangeInclusive;

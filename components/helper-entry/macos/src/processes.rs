@@ -6,7 +6,7 @@ use libproc::libproc::proc_pid::{pidinfo, pidpath};
 use libproc::processes::{ProcFilter, pids_by_type};
 use serde::{Deserialize, Serialize};
 
-/// As the pidfile records it; the field names are the Swift Helper's.
+/// As the pidfile records it.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProcessIdentity {

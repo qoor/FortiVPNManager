@@ -53,7 +53,7 @@ fn routes_are_repaired_and_leftovers_removed_before_ready() {
     let logged = swift.position(is("log")).unwrap();
     assert_eq!(
         swift.received[logged]["log"]["message"],
-        "cleaned up after an unfinished run (route repair: repaired)"
+        "cleaned up after an unfinished run (route repair: Repaired)"
     );
     assert_eq!(swift.received.len(), 3, "{:#?}", swift.received);
     assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
@@ -85,7 +85,7 @@ fn an_unreadable_pidfile_still_leads_to_a_route_repair() {
     swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
     assert!(
         swift
-            .has_log("notice helper: cleaned up after an unfinished run (route repair: notNeeded)")
+            .has_log("notice helper: cleaned up after an unfinished run (route repair: NotNeeded)")
     );
 }
 
@@ -119,7 +119,7 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
             "category": "helper",
             "message": format!(
                 "cannot prepare the run directory: {} is not a directory owned by the helper: \
-                 Operation not permitted (errno 1)",
+                 Operation not permitted (os error 1)",
                 path.display()
             ),
         })
@@ -129,7 +129,7 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     assert!(swift.connect_app(1, 501));
     let message = format!(
         "could not create the openfortivpn config file: {} is not a directory owned by the \
-         helper: Operation not permitted (errno 1)",
+         helper: Operation not permitted (os error 1)",
         path.display()
     );
     assert_eq!(swift.connect(1, ATTEMPT), error("internalError", &message));

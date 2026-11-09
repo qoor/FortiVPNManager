@@ -1,5 +1,5 @@
 //! Whether everything a connection needs is in place, and following the Helper's registration
-//! and approval (SPEC F-CM-11).
+//! and approval.
 
 use std::time::SystemTime;
 

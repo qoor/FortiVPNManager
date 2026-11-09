@@ -7,7 +7,7 @@
 //!   and the values it puts in them, such as time limits, come with the kinds. Descriptions from
 //!   outside (Google, the IMAP server, the Helper, macOS) are carried as they came; so are the
 //!   English details of the runtime's own network and file failures, which the UI shows untranslated
-//!   (DESIGN §7.2, approved change 4). Button states are decided here, not in the UI.
+//!   by the user's choice. Button states are decided here, not in the UI.
 //! - The OS integration answers port requests, carries out port actions and reports system events.
 //!   It reports facts only; combining them, such as into "away", is the runtime's job. Helper
 //!   payloads cross it as JSON text it never reads.

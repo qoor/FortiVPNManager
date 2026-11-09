@@ -1,4 +1,4 @@
-//! The Google account for the Gmail API (SPEC F-GA-01, F-GA-02): the OAuth client (built in, or
+//! The Google account for the Gmail API: the OAuth client (built in, or
 //! imported with its secret in the secret storage), the browser sign-in with a loopback redirect and
 //! PKCE, access tokens from the stored refresh token, and disconnecting.
 

@@ -129,18 +129,16 @@ extension AppInternal {
         case error
     }
 
-    /// The unified-log category, kept from before the runtime so existing log filters still match.
+    /// The unified-log category.
     enum LogCategory: String, Decodable, Sendable {
         case connection
         case readiness
-        case system
         case config
         case state
         case logfile
         case `import`
         case oauth
         case otp
-        case imap
         case bypassRoutes = "bypass-routes"
         case loginItem = "login-item"
     }
@@ -151,8 +149,7 @@ extension AppInternal {
 }
 
 extension AppInternal.SecretItem {
-    /// The login Keychain service of this secret. Kept from before the runtime, so items saved by
-    /// earlier builds still match.
+    /// The login Keychain service of this secret. Changing it loses the items already saved.
     var keychainService: String {
         switch self {
         case .vpnPassword: "com.qoor.FortiVPNManager.vpn"

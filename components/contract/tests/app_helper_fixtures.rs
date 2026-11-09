@@ -1,9 +1,7 @@
-//! The files in `fixtures/app-helper/` were captured from the phase-1 Swift app's XPC encoder, so
-//! the wire format stayed the one installed Helpers and apps speak. Never edit them by hand, with
-//! one exception: the Helper status files follow the fields phase 2 changed (`clientProblem` and
-//! `untestedVersion` added, the English `binaryProblem` removed). The Helper and the
-//! app's runtime each write what the other reads, so every message is checked in both directions,
-//! except the bypass-route request and reply, which only the runtime writes or reads.
+//! The files in `fixtures/app-helper/` are the wire format between the app and the Helper; they
+//! change with the contract. The Helper and the app's runtime each write what the other reads, so
+//! every message is checked in both directions, except the bypass-route request and reply, which
+//! only the runtime writes or reads.
 
 use std::fmt::Debug;
 use std::net::Ipv4Addr;

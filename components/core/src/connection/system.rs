@@ -1,5 +1,5 @@
 //! Turning the OS's facts into what the connection rules judge: whether the user is away, the
-//! route to the gateway, and what survived a sleep (SPEC F-CM-06, F-CM-07, F-CM-08).
+//! route to the gateway, and what survived a sleep.
 
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime};

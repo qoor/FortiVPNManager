@@ -1721,16 +1721,6 @@
         }
       }
     },
-    "In %@, entry %lld is not a SHA-256 digest (64 lowercase hex digits).": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@의 %lld번째 항목이 SHA-256 digest(소문자 16진수 64자리)가 아닙니다."
-          }
-        }
-      }
-    },
     "In %@, entry %lld overlaps %@, which is already listed. Entries in one list must not overlap.": {
       "localizations": {
         "ko": {
@@ -3077,16 +3067,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "연결 요청이 거부됐습니다. 계정 정보와 VPN 비밀번호를 확인하세요. 이유는 로그 탭에 있습니다."
-          }
-        }
-      }
-    },
-    "The connection was closed": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "연결이 닫혔습니다"
           }
         }
       }

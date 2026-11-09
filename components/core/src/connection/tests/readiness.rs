@@ -1,5 +1,4 @@
-//! The readiness gate, account changes and what the connection section shows (SPEC F-CM-10,
-//! F-CM-11).
+//! The readiness gate, account changes and what the connection section shows.
 
 use fvm_contract::app_helper::Milestone;
 use fvm_contract::app_internal::ButtonState;

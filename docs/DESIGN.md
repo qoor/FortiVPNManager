@@ -40,6 +40,7 @@
 | 잠자기 중에는 터널을 유지하고, 깨어나면 상태를 보고 판단한다 | 짧은 잠자기마다 재연결해서 OTP 메일이 오는 일을 막는다 |
 | health check는 프로세스와 ppp interface만 본다 | Apple pppd에는 LCP echo가 없고 openfortivpn에는 network timeout이 없다. 그래서 별도 ping 대상을 두지 않는 대신 연결 단계마다 watchdog을 둔다 |
 | 설정은 config.yaml, 비밀번호는 Keychain, 기기별 일시 상태는 state.json에 둔다 | config.yaml은 사람이 편집할 수 있고 dotfiles로 옮길 수 있다. 로그인 시 열기 여부는 macOS(SMAppService)가 소유하는 상태라서 YAML에 두지 않는다 |
+| 이전 빌드와 다음 빌드는 서로가 남긴 저장소를 읽을 수 있어야 한다 | 사용자 결정이다(Rust 빌드부터). config.yaml, state.json, Keychain 항목, Helper의 실행 기록이 해당한다. 앱 ↔ Helper 메시지는 같은 빌드끼리만 오가므로 해당하지 않는다(§4.2) |
 | config.yaml은 엄격하게 읽는다 | 사람이 직접 편집하는 파일이다. YAML 1.1의 8진수·60진수 해석, anchor/alias처럼 의도와 다르게 읽힐 수 있는 문법은 거부한다. 파일에 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다 |
 | 앱이 config.yaml을 다시 쓰면 직접 단 주석과 이 버전이 모르는 키는 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장, 새 인증서 digest 기록, 예외 규칙 가져오기뿐이다 |
 | 로그는 마스킹하지 않은 원본을 보여준다 | 기본 verbosity에서는 비밀값이 출력되지 않음을 openfortivpn 소스에서 확인했다. 문제를 추적할 때는 원본이 가장 유용하다 |
@@ -48,7 +49,7 @@
 ### 3.2 구조와 기술
 | 결정 | 이유 |
 |---|---|
-| 공통 로직은 Rust로, macOS의 UI·OS 연동·Helper 껍데기는 Swift로 만든다 | 다른 OS와 VPN client를 붙일 때 공통 부분을 그대로 쓰기 위해서다. **macOS UI는 앞으로도 Swift로 만든다.** OS 기본 UI가 가장 단순하고 반응이 빠르며, OS에 의존하는 영역을 다른 언어로 옮기면 복잡도만 는다 |
+| 공통 로직은 Rust로, macOS의 UI·OS 연동·OS 연동 Helper는 Swift로 만든다 | 다른 OS와 VPN client를 붙일 때 공통 부분을 그대로 쓰기 위해서다. **macOS UI는 앞으로도 Swift로 만든다.** OS 기본 UI가 가장 단순하고 반응이 빠르며, OS에 의존하는 영역을 다른 언어로 옮기면 복잡도만 는다 |
 | Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 Helper entry)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
 | 메시지 타입은 Rust가 기준이다 | Swift 쪽 Codable 정의는 Rust가 만든 예시 JSON(fixture)으로 맞는지 테스트한다. gRPC, MessagePack, protobuf는 쓰지 않는다 |
 | UI 상태는 도메인 구역 단위로 보낸다 | 화면 모양의 전체 상태는 비효율적이고 공통 부분을 화면 변경에 묶는다. 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 구역 중 바뀐 것만 통째로 보내고, 로그는 추가분만 보낸다. 판단(버튼 상태, "다음 연결부터 적용" 등)은 공통 부분이 하고, 문장은 모두 UI가 만들어 번역한다 |
@@ -106,7 +107,6 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
-- 앱 크기를 줄이는 작업은 따로 한다.
 
 ## 5. 동작 원칙
 
@@ -251,7 +251,8 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
   - 단계마다 자동 테스트, 리뷰, 실제 설치를 거쳤다. 단계는 기반 검증(Rust 연결, socketpair, 통신, YAML 선택), 파일 이동, Helper 쪽, 앱 쪽(한 번에 전환), 문서 순서였다.
   - 강제 종료 시험은 SIGKILL로 한다. openfortivpn은 SIGTERM을 받으면 스스로 정상 종료해서 서버 종료 경로를 탄다(§6).
   - 설치는 VPN을 끊으므로, 터널이 돌아오지 않으면 이전 앱으로 되돌리는 단계를 넣었다(§4.4).
-- **저장소 호환**: config.yaml, state.json(실패 기록 포함), Keychain 항목, 로그 파일(위치, 줄 형식, 회전)을 그대로 쓴다. 앱 ↔ Helper의 XPC 메시지는 Swift만 있던 빌드와 같은 형식이다. 바뀐 것은 Helper 상태의 실행 파일 문제(아래 3)뿐이다.
+- **저장소 호환**: 전환할 때 config.yaml, state.json(실패 기록 포함), Keychain 항목, 로그 파일(위치, 줄 형식, 회전)을 그대로 이어받았다. 앱 ↔ Helper의 XPC 메시지도 Swift 빌드와 같은 형식으로 시작했고, 바뀐 것은 Helper 상태의 실행 파일 문제(아래 3)뿐이었다.
+- **Swift 빌드 호환 제거 (2026-11-09)**: 앱이 배포된 적이 없어서, Swift 빌드와 호환하려고만 둔 장치를 지웠다. state.json의 버전 키, Swift 표기를 흉내 낸 Helper 로그 문구, Swift 인코더에 맞춘 시각 표기가 여기에 해당한다. 그 대신 Rust 빌드끼리의 호환은 지킨다(§3.1).
 - **승인된 동작 변경**: 사용자가 보는 동작은 바꾸지 않는 것이 원칙이었고, 아래만 승인을 받아 바꿨다.
   1. config.yaml에 raw NEL·LS·PS가 있으면 오류로 처리한다. YAML 1.1과 1.2가 이 문자를 줄바꿈으로 볼지 다르게 정한다.
   2. YAML parser를 바꾸면서 일부 오류의 줄·열 위치와 드문 문법의 처리가 조금 달라졌다(block scalar와 일부 문법 오류의 위치, flow 중첩 255단계 제한, `key:<TAB>value`는 문법 오류, 따옴표 값이나 키의 tag 거부). 값을 다르게 읽는 경우는 없다.

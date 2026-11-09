@@ -1,4 +1,4 @@
-//! The scheduled hours: one window of local time on the selected days (SPEC F-CM-08).
+//! The scheduled hours: one window of local time on the selected days.
 
 use std::time::{Duration, SystemTime};
 

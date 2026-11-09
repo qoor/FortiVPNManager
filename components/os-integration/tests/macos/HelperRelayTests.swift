@@ -2,7 +2,7 @@ import Foundation
 import Synchronization
 import Testing
 
-/// The Keychain names, which must match the items earlier builds saved, and the Helper relay's rules
+/// The Keychain names, which must match the items already saved, and the Helper relay's rules
 /// for the build check, retries and Exit When Idle.
 /// Outgoing messages are only encoded, so they are compared as the JSON the runtime reads.
 private func json(_ value: some Encodable) -> String {

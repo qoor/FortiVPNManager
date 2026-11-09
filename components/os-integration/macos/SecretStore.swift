@@ -2,8 +2,8 @@ import Foundation
 import Security
 
 /// The app's secrets as generic passwords in the login Keychain, under the service and account each
-/// item names, so items saved before the runtime still match. The file-based login keychain: the
-/// data-protection keychain would need entitlements and a provisioning profile.
+/// item names. The file-based login keychain: the data-protection keychain would need entitlements
+/// and a provisioning profile.
 nonisolated enum SecretStore {
     static func read(_ item: AppInternal.SecretItem) -> AppInternal.PortResponse {
         var query = query(for: item)

@@ -25,7 +25,7 @@
     "portAction": {
       "_0": {
         "log": {
-          "category": "system",
+          "category": "connection",
           "level": "error",
           "message": "presence: away"
         }
@@ -94,17 +94,6 @@
           "category": "otp",
           "level": "info",
           "message": "code found"
-        }
-      }
-    }
-  },
-  {
-    "portAction": {
-      "_0": {
-        "log": {
-          "category": "imap",
-          "level": "info",
-          "message": "IDLE"
         }
       }
     }

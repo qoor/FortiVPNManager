@@ -135,7 +135,7 @@ pub enum LogLevel {
     Error,
 }
 
-/// The unified-log category, kept from the Swift Helper so existing log filters still match.
+/// The unified-log category.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LogCategory {

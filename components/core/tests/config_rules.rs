@@ -1,5 +1,5 @@
 //! The exception rule lists and the schedule in config.yaml, and the rules a changed config must
-//! pass before it is written (SPEC F-CF-01, F-CF-02, F-BR-01).
+//! pass before it is written.
 
 mod common;
 

@@ -1,4 +1,4 @@
-//! The IMAP commands and responses the OTP session uses (SPEC F-OT-03).
+//! The IMAP commands and responses the OTP session uses.
 //!
 //! Commands become the exact bytes to send; the bytes the server sends become responses through a
 //! resumable parser. Connections, TLS, time limits and matching responses to commands are the

@@ -1,5 +1,4 @@
-//! Google OAuth with PKCE and a loopback redirect, and the Desktop app client JSON
-//! (SPEC F-GA-01, F-GA-02).
+//! Google OAuth with PKCE and a loopback redirect, and the Desktop app client JSON.
 //!
 //! OAuth for installed apps (RFC 8252) with S256 PKCE (RFC 7636). Random bytes come from the
 //! runtime, which also opens the listener, the browser and the connections.
@@ -46,12 +45,6 @@ pub struct Pkce {
 impl Pkce {
     pub fn from_random(bytes: &[u8; VERIFIER_RANDOM_BYTES]) -> Self {
         Self::with_verifier(URL_SAFE_NO_PAD.encode(bytes))
-    }
-
-    /// `None` unless `verifier` is 43 to 128 characters of `A-Z a-z 0-9 - . _ ~`.
-    pub fn from_verifier(verifier: &str) -> Option<Self> {
-        ((43..=128).contains(&verifier.len()) && verifier.bytes().all(is_unreserved))
-            .then(|| Self::with_verifier(verifier.to_owned()))
     }
 
     fn with_verifier(verifier: String) -> Self {

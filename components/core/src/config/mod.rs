@@ -1,5 +1,4 @@
-//! config.yaml: strict reading and validation, and the settings the app writes back
-//! (SPEC F-CF-01, F-CF-02).
+//! config.yaml: strict reading and validation, and the settings the app writes back.
 //!
 //! The file text is the boundary: `read` checks everything in it, and the settings it returns hold
 //! only valid values. `update` decides what a write puts in the file. The runtime does the file

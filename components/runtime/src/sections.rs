@@ -1,4 +1,4 @@
-//! The domain sections the UI draws (SPEC F-RT-02 item 2), built from the core's view and the
+//! The domain sections the UI draws, built from the core's view and the
 //! runtime's own state. Only the ones that changed are sent.
 
 use fvm_contract::app_internal::MinutesSetting;

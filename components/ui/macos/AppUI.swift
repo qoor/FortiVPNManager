@@ -84,8 +84,9 @@ final class AccountDraft {
         username = state.username
         realm = state.realm
         gmailAddress = state.gmailAddress
-        vpnPassword = ""
-        appPassword = ""
+        // A password the runtime still holds stays typed, e.g. when the file changed other fields.
+        if !state.vpnPasswordEntered { vpnPassword = "" }
+        if !state.appPasswordEntered { appPassword = "" }
     }
 
     var form: AppInternal.AccountForm {
@@ -97,7 +98,7 @@ final class AccountDraft {
 }
 
 /// "Now" for the relative times in the menu and the Connection tab: set by every connection
-/// section, every 30 seconds, and every second while a reconnect countdown runs.
+/// section, on a slow timer, and every second while a reconnect countdown runs.
 @MainActor
 @Observable
 final class StatusClock {

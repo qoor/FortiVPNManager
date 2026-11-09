@@ -168,9 +168,8 @@ pub struct SecretStoreFailure {
 /// - `Status`, `ReadBypassRoutes` and `WriteBypassRoutes` are retried once on a fresh connection
 ///   when the connection fails, since repeating them is harmless. The other calls are never
 ///   retried or moved to another connection.
-/// - The runtime sends the next call only after the previous one was answered (SPEC F-RT-01
-///   item 2), except the route calls: the Helper handles routes apart from the tunnel, so they may
-///   run alongside (SPEC F-SW-03 item 4).
+/// - The runtime sends the next call only after the previous one was answered, except the route
+///   calls: the Helper handles routes apart from the tunnel, so they may run alongside.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum HelperCall {
@@ -253,20 +252,18 @@ pub enum LogLevel {
     Error,
 }
 
-/// The system log category, named as before the runtime so existing log filters still match.
+/// The system log category.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LogCategory {
     Connection,
     Readiness,
-    System,
     Config,
     State,
     Logfile,
     Import,
     Oauth,
     Otp,
-    Imap,
     BypassRoutes,
     LoginItem,
 }

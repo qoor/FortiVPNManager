@@ -62,7 +62,7 @@ nonisolated enum HelperInternal {
         case error
     }
 
-    /// The unified-log category, kept from the Swift Helper so existing log filters still match.
+    /// The unified-log category.
     enum LogCategory: String, Decodable, Sendable {
         case helper
         case routes

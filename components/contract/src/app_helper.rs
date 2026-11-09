@@ -1,10 +1,10 @@
-//! What the app and the Helper exchange. The JSON is what the Swift apps before the runtime encoded
-//! and decoded (`XPCCoding`): an enum value with data is an object keyed by its case name, data
-//! without a label uses the key `_0`, a case without data is `{}`, dates are seconds since 1970,
-//! and absent optional values are left out. Each type derives only the directions its two users
-//! need: the Helper receives the run request and sends everything else, and the app's runtime does
-//! the opposite. The bypass-route payloads are answered by the OS integration Helper (Swift), which
-//! reads and writes networksetup itself.
+//! What the app and the Helper exchange. Every message uses Swift's standard Codable coding
+//! (`XPCCoding`), since the OS integration Helper (Swift) answers the bypass-route payloads itself,
+//! reading and writing networksetup: an enum value with data is an object keyed by its case name,
+//! data without a label uses the key `_0`, a case without data is `{}`, dates are seconds since
+//! 1970, and absent optional values are left out. Each type derives only the directions its two
+//! users need: the Helper receives the run request and sends everything else, and the app's runtime
+//! does the opposite.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -370,19 +370,14 @@ pub enum BypassRoutesReply {
     },
 }
 
-/// Seconds since 1970 or durations in seconds, written as Swift's encoder writes a `Double`: whole
-/// seconds without a fraction.
+/// Seconds since 1970 or durations in seconds, as numbers.
 mod seconds {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use serde::{Deserialize, Deserializer, Serializer, de, ser};
 
     fn write<S: Serializer>(duration: Duration, serializer: S) -> Result<S::Ok, S::Error> {
-        if duration.subsec_nanos() == 0 {
-            serializer.serialize_u64(duration.as_secs())
-        } else {
-            serializer.serialize_f64(duration.as_secs_f64())
-        }
+        serializer.serialize_f64(duration.as_secs_f64())
     }
 
     pub fn time<S: Serializer>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {

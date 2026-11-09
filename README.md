@@ -69,17 +69,4 @@ Helper(root 데몬)는 `/Applications`에 설치된 앱에서만 등록됩니다
 
 ## 구조
 
-공통 로직은 Rust, macOS의 UI·OS 연동·Helper 껍데기는 Swift입니다. 자세한 역할은 [설계 §4](docs/DESIGN.md#4-구성과-역할)를 보세요.
-
-```
-components/contract/             공통 계약 (macos/: Swift 쪽 정의, XPC 연결 정의)
-components/core/                 판단 코어 (연결 state machine, config.yaml, 예외 규칙, OTP 메일 형식)
-components/runtime/              런타임 (조율, OTP 세션, Google 계정, 파일, 예외 규칙 동기화)
-components/backend-adapter/      VPN client별 처리 (openfortivpn/)
-components/watchdog/             VPN client 프로세스 실행과 감시
-components/helper-entry/macos/   Helper의 Rust 시작 함수
-components/ui/macos/             메뉴바와 설정창 (SwiftUI + AppKit, String Catalog)
-components/os-integration/macos/ 앱의 macOS 연동 (Keychain, XPC, 시스템 이벤트, 알림)
-components/os-integration-helper/macos/  Helper의 macOS 연동 (LaunchDaemon, XPC, route 복구, networksetup)
-packaging/macos/                 Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon plist
-```
+공통 로직은 Rust, macOS의 UI·OS 연동·OS 연동 Helper는 Swift입니다. 구성 요소와 역할은 [설계 §4](docs/DESIGN.md#4-구성과-역할)를 보세요.

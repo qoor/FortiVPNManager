@@ -1,4 +1,4 @@
-//! Retries, failure counting and limits (SPEC F-CM-03, F-CM-04).
+//! Retries, failure counting and limits.
 
 use std::time::Duration;
 

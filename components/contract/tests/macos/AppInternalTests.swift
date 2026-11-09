@@ -448,7 +448,6 @@ private extension AppInternal {
             .failed(failure: .imapUnreachable(failure: .rejected(
                 command: "SELECT", status: "NO", text: "[NONEXISTENT] Unknown Mailbox"
             ))),
-            .failed(failure: .imapUnreachable(failure: .closed)),
             .failed(failure: .noOAuthClient),
             .failed(failure: .notSignedIn),
             .failed(failure: .accessRevoked),
@@ -631,7 +630,6 @@ private extension AppInternal {
             problem(.scheduleEndNotAfterStart(start: TimeOfDay(hour: 18, minute: 0), end: TimeOfDay(hour: 9, minute: 0))),
             problem(.invalidCharacter(path: "vpn.username", scalar: 0x2028)),
             problem(.newerSchemaVersion(version: 2)),
-            problem(.invalidTrustedCert(index: 0)),
             problem(.invalidRouteEntry(
                 path: "routes.bypass_vpn", index: 1, raw: "10.30.170.5/24", problem: .hostBitsSet(network: "10.30.170.0/24")
             )),
@@ -686,14 +684,13 @@ private extension AppInternal {
         static let portActions: [FromRuntime] = [
             .portAction(.log(level: .info, category: .connection, message: "state: connected")),
             .portAction(.log(level: .notice, category: .readiness, message: "readiness: ready")),
-            .portAction(.log(level: .error, category: .system, message: "presence: away")),
+            .portAction(.log(level: .error, category: .connection, message: "presence: away")),
             .portAction(.log(level: .info, category: .config, message: "config changed")),
             .portAction(.log(level: .info, category: .state, message: "state saved")),
             .portAction(.log(level: .info, category: .logfile, message: "log file rotated")),
             .portAction(.log(level: .info, category: .import, message: "imported")),
             .portAction(.log(level: .info, category: .oauth, message: "token refreshed")),
             .portAction(.log(level: .info, category: .otp, message: "code found")),
-            .portAction(.log(level: .info, category: .imap, message: "IDLE")),
             .portAction(.log(level: .info, category: .bypassRoutes, message: "routes written")),
             .portAction(.log(level: .info, category: .loginItem, message: "registered")),
             .portAction(.postNotification(notification: .exceptionRulesNotApplied(retries: 3, failure: .routesNotKept))),

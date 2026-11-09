@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
     AttemptId, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind, HelperStatus,
-    Milestone, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
+    Milestone, RunRequest, StopReason,
 };
 use fvm_contract::backend::{Backend, ClientProblemKind};
 use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
@@ -512,8 +512,8 @@ where
 
     /// The gateway's IPv4 address, for the pidfile and the route repair. Looked up while the run
     /// starts, since DNS may not answer once a broken tunnel took the routes; off this thread, since
-    /// a slow answer must not hold up the app's requests. std cannot ask for IPv4 alone, so only the
-    /// first IPv4 answer counts, as in the Swift Helper's IPv4-only lookup.
+    /// a slow answer must not hold up the app's requests. The route repair is IPv4 only, and std
+    /// cannot ask for IPv4 alone, so the first IPv4 answer counts.
     fn resolve_gateway(&self, run: u64, host: String) {
         let events = self.sender.clone();
         thread::Builder::new()
@@ -659,11 +659,8 @@ where
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
-                "run {} exited: {}, initiator {}, furthest {}",
-                finished.attempt,
-                swift_exit_status(facts.exit_status),
-                swift_initiator(facts.stop_initiator),
-                swift_furthest(facts.furthest_milestone)
+                "run {} exited: {:?}, initiator {:?}, furthest {:?}",
+                finished.attempt, facts.exit_status, facts.stop_initiator, facts.furthest_milestone
             ),
         );
         match self.lifecycle {
@@ -683,44 +680,4 @@ fn error(code: HelperErrorCode, message: impl Into<String>) -> HelperError {
 
 fn to_json(value: &impl Serialize) -> String {
     serde_json::to_string(value).expect("contract types serialize")
-}
-
-// The run's end in the unified log, worded as the Swift Helper's description of its types so that
-// searches through older logs keep matching.
-
-fn swift_exit_status(status: ProcessExitStatus) -> String {
-    match status {
-        ProcessExitStatus::Exited { code } => format!("exited(code: {code})"),
-        ProcessExitStatus::Signaled { signal } => format!("signaled(signal: {signal})"),
-        ProcessExitStatus::SpawnFailed { errno } => format!("spawnFailed(errno: {errno})"),
-        ProcessExitStatus::Unknown {} => "unknown".to_owned(),
-    }
-}
-
-fn swift_initiator(initiator: StopInitiator) -> String {
-    match initiator {
-        StopInitiator::Client {} => "none".to_owned(),
-        StopInitiator::Helper { reason } => {
-            let raw = serde_json::to_value(reason).expect("a stop reason serializes");
-            let raw = raw
-                .as_str()
-                .expect("a stop reason serializes as its raw value");
-            format!("helper(FortiShared.StopReason.{raw})")
-        }
-    }
-}
-
-fn swift_furthest(milestone: Option<Milestone>) -> String {
-    let Some(milestone) = milestone else {
-        return "nil".to_owned();
-    };
-    let case = match milestone {
-        Milestone::Spawned => "spawned",
-        Milestone::ConnectedToGateway => "connectedToGateway",
-        Milestone::OtpPrompted => "otpPrompted",
-        Milestone::OtpSubmitted => "otpSubmitted",
-        Milestone::Authenticated => "authenticated",
-        Milestone::TunnelUp => "tunnelUp",
-    };
-    format!("Optional(FortiShared.Milestone.{case})")
 }

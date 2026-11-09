@@ -1,4 +1,4 @@
-//! Disconnect, quit and reconnect now (SPEC F-CM-01).
+//! Disconnect, quit and reconnect now.
 
 use fvm_contract::app_helper::{Milestone, StopReason};
 use fvm_contract::app_internal::ButtonState;

@@ -1,4 +1,4 @@
-//! Why a run ended without the app asking for it (SPEC F-CM-03). The VPN client's exit code and
+//! Why a run ended without the app asking for it. The VPN client's exit code and
 //! messages cannot tell, so the Helper's facts decide: how far the run got, who stopped it, how
 //! long the tunnel stayed up.
 
@@ -45,7 +45,7 @@ pub(super) enum Outcome {
     Fatal(Failure),
 }
 
-/// The first rule that matches, in SPEC order.
+/// The first rule that matches, in order.
 pub(super) fn classify(context: &ExitContext) -> Outcome {
     let facts = context.facts;
     let furthest = facts.furthest_milestone.max(context.seen_milestone);

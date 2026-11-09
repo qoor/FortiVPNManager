@@ -1,4 +1,4 @@
-//! Reading config.yaml values: defaults, scalars, ranges and structure (SPEC F-CF-01).
+//! Reading config.yaml values: defaults, scalars, ranges and structure.
 
 mod common;
 
@@ -614,7 +614,7 @@ fn wrong_node_kinds() {
             ValueKind::Integer,
             loc(2, 9),
         ),
-        // The parser places a block scalar at its content, not at `|` (DESIGN §7.2 approved change 2).
+        // The parser places a block scalar at its content, not at `|`.
         (
             "vpn:\n  port: |\n    443\n".to_owned(),
             "vpn.port",

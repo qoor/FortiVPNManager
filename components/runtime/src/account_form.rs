@@ -1,4 +1,4 @@
-//! The Account tab's draft (SPEC F-CF-02, F-CF-04): what the user typed, compared with the file it
+//! The Account tab's draft: what the user typed, compared with the file it
 //! started from. Saving writes only the fields the user changed, so a hand edit of the others
 //! survives, then the passwords under the account actually saved. Untouched fields follow the file
 //! when it changes elsewhere. An empty password field keeps the stored password.
@@ -206,10 +206,14 @@ impl Runtime {
         self.look_up_stored_secrets();
     }
 
-    /// The settings window closed: typed secrets do not linger in memory.
+    /// The settings window closed: typed secrets do not linger in memory, here or in the UI.
     pub(crate) fn forget_typed_passwords(&mut self) {
+        if self.forms.vpn_password.0.is_empty() && self.forms.app_password.0.is_empty() {
+            return;
+        }
         self.forms.vpn_password = SecretText(String::new());
         self.forms.app_password = SecretText(String::new());
+        self.forms.revision += 1;
     }
 
     pub(crate) fn revert_account(&mut self) {

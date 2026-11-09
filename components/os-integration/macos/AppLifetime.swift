@@ -44,8 +44,7 @@ final class AppLifetime {
     }
 }
 
-/// The unified log, under the categories the app used before the runtime so existing log filters
-/// still match.
+/// The unified log, under the runtime's categories.
 nonisolated enum SystemLog {
     static func write(_ level: AppInternal.LogLevel, _ category: AppInternal.LogCategory, _ message: String) {
         let logger = Logger(subsystem: FortiIdentifiers.logSubsystem, category: category.rawValue)

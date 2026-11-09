@@ -32,8 +32,8 @@ pub enum HeadParse {
     /// The blank line that ends the head has not arrived yet.
     Incomplete,
     Request(LoopbackRequest),
-    /// Not an HTTP/1.x request line, bad percent-encoding, or a head over 8 KiB. Answer it like
-    /// `CallbackDecision::Rejected`.
+    /// Not an HTTP/1.x request line, bad percent-encoding, or a head over the size limit. Answer
+    /// it like `CallbackDecision::Rejected`.
     Malformed,
 }
 

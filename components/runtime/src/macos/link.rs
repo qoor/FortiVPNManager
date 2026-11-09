@@ -1,6 +1,6 @@
 //! The threads that carry the stream to Swift, so the runtime never waits on Swift. Swift never
 //! closes its end on purpose: an unreadable message, the end of the stream and a failed write all
-//! stop the process (SPEC F-RT-02).
+//! stop the process.
 
 use std::io::{BufReader, Read, Write};
 use std::os::unix::net::UnixStream;

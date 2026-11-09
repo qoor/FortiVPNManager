@@ -1,4 +1,4 @@
-//! The core's timers on the wall clock (SPEC F-RT-01 item 3). A timer is due when the wall clock
+//! The core's timers on the wall clock. A timer is due when the wall clock
 //! reaches its time, so it also fires after a sleep or a clock change; the thread looks again at
 //! least every few seconds and whenever it is nudged.
 

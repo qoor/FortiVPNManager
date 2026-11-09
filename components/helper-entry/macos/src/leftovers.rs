@@ -10,9 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::backend::Backend;
-use fvm_contract::helper_internal::{
-    FromEntry, LogCategory, LogLevel, RouteRepairOutcome, ToEntry,
-};
+use fvm_contract::helper_internal::{FromEntry, LogCategory, LogLevel, ToEntry};
 use rustix::process::{Pid, Signal};
 
 use crate::entry::{Event, Swift};
@@ -83,10 +81,7 @@ pub(crate) fn clean_up(
         swift.log(
             LogLevel::Notice,
             LogCategory::Helper,
-            format!(
-                "cleaned up after an unfinished run (route repair: {})",
-                swift_outcome(outcome)
-            ),
+            format!("cleaned up after an unfinished run (route repair: {outcome:?})"),
         );
     }
     for leftover in run_directory::leftovers(directory) {
@@ -102,11 +97,7 @@ pub(crate) fn remove(path: &Path, swift: &Swift) {
         Err(error) => swift.log(
             LogLevel::Error,
             LogCategory::Helper,
-            format!(
-                "cannot delete {}: errno {}",
-                path.display(),
-                error.raw_os_error().expect("unlink fails with an errno")
-            ),
+            format!("cannot delete {}: {error}", path.display()),
         ),
     }
 }
@@ -158,16 +149,6 @@ fn wait_for_exit(processes: &[ProcessIdentity], limit: Duration) -> Vec<ProcessI
     remaining
 }
 
-/// Shown as the Swift Helper showed them: "[123, 456]".
 fn pids(processes: &[ProcessIdentity]) -> Vec<i32> {
     processes.iter().map(|process| process.pid).collect()
-}
-
-/// The outcome as the Swift Helper's description of it, for searches through older logs.
-fn swift_outcome(outcome: RouteRepairOutcome) -> &'static str {
-    match outcome {
-        RouteRepairOutcome::Repaired => "repaired",
-        RouteRepairOutcome::NotNeeded => "notNeeded",
-        RouteRepairOutcome::Failed => "failed",
-    }
 }

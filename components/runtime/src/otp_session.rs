@@ -1,9 +1,9 @@
-//! The OTP session of an attempt (SPEC F-OT-01..04): signed in to Gmail before the client starts,
+//! The OTP session of an attempt: signed in to Gmail before the client starts,
 //! it looks only at mail that arrived after it opened. The Gmail API is used when it is the
 //! method and the Google account is connected, IMAP otherwise. When the API is refused before the
 //! session is ready and an app password exists, the same attempt goes on over IMAP. After the code
 //! was submitted, the used mail go to the trash; a session closed after the OTP time limit
-//! looks in the spam folder once. Also the Account tab's Gmail test (SPEC F-OT-05).
+//! looks in the spam folder once. Also the Account tab's Gmail test.
 
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
@@ -90,7 +90,7 @@ impl Runtime {
         let saved = self.config.settings().otp.gmail_address.clone();
         let address = normalized(&saved);
         let method = self.config.settings().otp.method;
-        // The app password is stored under the address as saved; earlier builds did the same.
+        // The app password is stored under the address as saved, not normalized.
         let item = (!saved.is_empty()).then_some(SecretItem::GmailAppPassword { address: saved });
         let read = move |runtime: &mut Runtime, app_password: Option<SecretText>| {
             if method != OtpMethod::GmailApi {

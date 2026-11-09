@@ -1,4 +1,4 @@
-//! The text the app writes to config.yaml (SPEC F-CF-02).
+//! The text the app writes to config.yaml.
 
 mod common;
 

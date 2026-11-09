@@ -1,4 +1,4 @@
-//! Picking the OTP mail (SPEC F-OT-01..04).
+//! Picking the OTP mail.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -284,7 +284,6 @@ fn an_imap_message_needs_all_parts() {
 fn selects_a_fresh_gmail_message() {
     let selection = select_gmail(prompted_at(), &[fresh_gmail("19a01")], None).unwrap();
     assert_eq!(selection.code.0, "482913");
-    assert_eq!(selection.message_id, "19a01");
     assert_eq!(selection.arrived_at, offset(3.2));
     assert_eq!(selection.all_candidate_ids, vec!["19a01"]);
 }
@@ -301,11 +300,7 @@ fn gmail_date_window_boundary() {
     ] {
         let message = gmail("m", Some(seconds), Some("AuthCode: 482913"), &["INBOX"]);
         let selection = select_gmail(prompted_at(), &[message], None);
-        assert_eq!(
-            selection.is_some_and(|s| s.message_id == "m"),
-            included,
-            "{seconds}"
-        );
+        assert_eq!(selection.is_some(), included, "{seconds}");
     }
 }
 
@@ -321,7 +316,6 @@ fn newest_by_internal_date_wins_and_every_candidate_is_reported() {
     ];
     let selection = select_gmail(prompted_at(), &messages, None).unwrap();
     assert_eq!(selection.code.0, "333333");
-    assert_eq!(selection.message_id, "19a03");
     assert_eq!(selection.arrived_at, offset(6.0));
     assert_eq!(selection.all_candidate_ids, vec!["19a09", "19a05", "19a03"]);
 }
@@ -359,8 +353,9 @@ fn no_labels_still_count() {
     assert_eq!(
         select_gmail(prompted_at(), &[message], None)
             .unwrap()
-            .message_id,
-        "m"
+            .code
+            .0,
+        "482913"
     );
 }
 
@@ -369,7 +364,7 @@ fn a_missing_internal_date_is_a_candidate_but_never_selected() {
     let undated = gmail("m", None, Some("AuthCode: 482913"), &["INBOX"]);
     assert!(select_gmail(prompted_at(), std::slice::from_ref(&undated), None).is_none());
     let selection = select_gmail(prompted_at(), &[undated, fresh_gmail("n")], None).unwrap();
-    assert_eq!(selection.message_id, "n");
+    assert_eq!(selection.arrived_at, offset(3.2));
     assert_eq!(selection.all_candidate_ids, vec!["m", "n"]);
 }
 
@@ -384,7 +379,6 @@ fn candidates_not_before_limits_trashing_but_not_selection() {
     ];
     let selection = select_gmail(prompted_at(), &messages, Some(not_before)).unwrap();
     assert_eq!(selection.code.0, "444444");
-    assert_eq!(selection.message_id, "fresh");
     assert_eq!(selection.arrived_at, offset(1.0));
     assert_eq!(selection.all_candidate_ids, vec!["recent", "fresh"]);
     assert_eq!(

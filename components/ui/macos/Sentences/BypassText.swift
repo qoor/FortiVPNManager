@@ -98,8 +98,7 @@ extension AppInternal.BypassFailure {
         }
     }
 
-    /// A build mismatch has no sentence of its own: it reads as before the runtime, with the app's
-    /// English detail.
+    /// A build mismatch has no sentence of its own, only the app's English detail.
     private static func settingsNotChanged(detail: String) -> String {
         String(localized: "Couldn't change the macOS network settings (\(detail)).")
     }

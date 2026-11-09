@@ -1,5 +1,4 @@
-//! The Gmail API requests and responses the OTP session and the connection test use
-//! (SPEC F-OT-02, F-OT-05).
+//! The Gmail API requests and responses the OTP session and the connection test use.
 //!
 //! Requests are a method and a URL without a body; the runtime sends them with the access token
 //! as a bearer token. Responses are read from their HTTP status and body. Reading is lenient:
@@ -144,11 +143,6 @@ impl ApiError {
             }
             _ => ApiError::Server { status },
         })
-    }
-
-    /// The account's authorization does not allow the call; trying again cannot help.
-    pub fn is_authorization_failure(&self) -> bool {
-        matches!(self, ApiError::Unauthorized | ApiError::Forbidden { .. })
     }
 
     /// Worth another try before giving up.

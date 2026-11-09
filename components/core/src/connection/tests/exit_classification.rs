@@ -1,4 +1,4 @@
-//! Why a run ended without the app asking (SPEC F-CM-03).
+//! Why a run ended without the app asking.
 
 use std::time::Duration;
 

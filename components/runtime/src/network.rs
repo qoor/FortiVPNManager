@@ -1,4 +1,4 @@
-//! Looking at the network for the core (SPEC F-CM-06, F-CM-07): the gateway's address, the
+//! Looking at the network for the core: the gateway's address, the
 //! interface the route to it uses, the interfaces' addresses, and whether the VPN client still
 //! runs.
 

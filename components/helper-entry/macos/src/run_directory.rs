@@ -18,8 +18,8 @@ const RECORD: &str = "run.json";
 const RECORD_DRAFT: &str = "run.json.tmp";
 const CONFIG_PREFIX: &str = "config.";
 
-/// What a restarted Helper cleans up if this one dies during a run. The JSON is the Swift Helper's,
-/// so a pidfile it left behind is read too.
+/// What a restarted Helper cleans up if this one dies during a run. A Helper of another build may
+/// read it, so its keys stay as they are.
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct RunRecord {
     /// The client, and once the tunnel is up the processes it started that the backend owns.
@@ -29,8 +29,7 @@ pub(crate) struct RunRecord {
     pub gateway: Option<Ipv4Addr>,
 }
 
-/// A failed file operation, worded as the Swift Helper worded it:
-/// "mkdir <path>: Permission denied (errno 13)".
+/// A failed file operation: "mkdir <path>: Permission denied (os error 13)".
 pub(crate) struct Failure {
     operation: String,
     errno: i32,
@@ -48,11 +47,8 @@ impl Failure {
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let shown = io::Error::from_raw_os_error(self.errno).to_string();
-        let text = shown
-            .strip_suffix(&format!(" (os error {})", self.errno))
-            .expect("std shows an OS error as strerror's text and the code");
-        write!(f, "{}: {text} (errno {})", self.operation, self.errno)
+        let error = io::Error::from_raw_os_error(self.errno);
+        write!(f, "{}: {error}", self.operation)
     }
 }
 

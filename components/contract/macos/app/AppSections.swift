@@ -288,7 +288,6 @@ extension AppInternal {
         case serverClosed(text: String?)
         case `protocol`(detail: String)
         case rejected(command: String, status: String, text: String)
-        case closed
     }
 
     enum ImapStep: Decodable, Equatable, Sendable {

@@ -134,9 +134,6 @@ pub enum ConfigProblemKind {
     NewerSchemaVersion {
         version: i64,
     },
-    InvalidTrustedCert {
-        index: u32,
-    },
     InvalidRouteEntry {
         path: String,
         index: u32,

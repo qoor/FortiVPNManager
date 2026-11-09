@@ -1,4 +1,4 @@
-//! Scheduled hours and time away (SPEC F-CM-08).
+//! Scheduled hours and time away.
 
 use fvm_contract::app_helper::{HelperErrorCode, Milestone, StopReason};
 use fvm_contract::app_internal::section::{ConnectionIcon, ScheduleOutlook};

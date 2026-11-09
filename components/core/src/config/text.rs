@@ -67,9 +67,8 @@ fn without_bom(text: &str) -> &str {
     text.strip_prefix('\u{FEFF}').unwrap_or(text)
 }
 
-/// The characters libyaml reads, the parser of the earlier app, less NEL, LS and PS: YAML 1.1 reads
-/// those as line breaks and YAML 1.2 as text, so a file holding them raw could be read two ways
-/// (DESIGN §7.2, approved change 1).
+/// The printable characters of YAML 1.1, less NEL, LS and PS: YAML 1.1 reads those as line breaks
+/// and YAML 1.2 as text, so a file holding them raw could be read two ways.
 fn readable(character: char) -> bool {
     matches!(
         u32::from(character),
@@ -78,7 +77,7 @@ fn readable(character: char) -> bool {
 }
 
 /// Counts lines the way the parser does: CR, LF and CRLF each end a line. NEL, LS and PS end one
-/// too, as in the earlier app, which matters only for an invalid byte after one of them.
+/// too, which matters only for an invalid byte after one of them.
 #[derive(Default)]
 struct Position {
     line: u32,

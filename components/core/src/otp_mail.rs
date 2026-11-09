@@ -1,4 +1,4 @@
-//! Recognizing the OTP email and its code (SPEC F-OT-01).
+//! Recognizing the OTP email and its code.
 //!
 //! FortiGate's OTP email has the subject `AuthCode: NNNNNN` and no fixed sender, so only the
 //! subject counts. A message is the attempt's OTP when it arrived after the session opened (the
@@ -179,8 +179,7 @@ pub fn gmail_subject(message: &MessageMetadata) -> Option<String> {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct GmailSelection {
     pub code: SecretText,
-    /// The message the code came from, and when it arrived.
-    pub message_id: String,
+    /// When the code's message arrived.
     pub arrived_at: SystemTime,
     /// Oldest first: every message whose subject carries a code, stale ones included.
     pub all_candidate_ids: Vec<String>,
@@ -229,13 +228,12 @@ pub fn select_gmail(
             best = Some((message, date, code.to_owned()));
         }
     }
-    let (message, date, code) = best?;
+    let (_, date, code) = best?;
     candidates.sort_by(|(date, id), (other_date, other_id)| {
         (date, id_order(id)).cmp(&(other_date, id_order(other_id)))
     });
     Some(GmailSelection {
         code: SecretText(code),
-        message_id: message.id.clone(),
         arrived_at: date,
         all_candidate_ids: candidates
             .into_iter()

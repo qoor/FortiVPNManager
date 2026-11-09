@@ -1,4 +1,4 @@
-//! Parsing what the IMAP server sends, in any chunking (SPEC F-OT-03).
+//! Parsing what the IMAP server sends, in any chunking.
 
 use std::time::{Duration, UNIX_EPOCH};
 

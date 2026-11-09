@@ -469,6 +469,44 @@ fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_
 }
 
 #[test]
+fn a_typed_password_survives_a_file_change_but_not_closing_settings() {
+    let mut swift = Swift::new();
+    swift.write_config(ACCOUNT);
+    swift.launch();
+    swift.settle();
+    let account = swift.config_section().account.clone();
+    let form = AccountForm {
+        host: account.host.clone(),
+        port: account.port.clone(),
+        username: account.username.clone(),
+        realm: account.realm.clone(),
+        gmail_address: account.gmail_address.clone(),
+        vpn_password: SecretText("typed".into()),
+        app_password: SecretText(String::new()),
+    };
+    swift.command(Command::EditAccount {
+        revision: account.revision,
+        form,
+    });
+    swift.settle();
+    // The file changes a field the user did not touch: the UI replaces its fields, the password
+    // stays typed.
+    swift.write_config(&ACCOUNT.replace("alice\"\n  realm", "carol\"\n  realm"));
+    swift.settle_until("the merged username", |swift| {
+        swift.config_section().account.username == "carol"
+    });
+    let merged = swift.config_section().account.clone();
+    assert!(merged.revision > account.revision);
+    assert!(merged.vpn_password_entered);
+
+    swift.command(Command::SettingsClosed {});
+    swift.settle();
+    let closed = &swift.config_section().account;
+    assert!(closed.revision > merged.revision);
+    assert!(!closed.vpn_password_entered);
+}
+
+#[test]
 fn a_draft_typed_against_replaced_fields_is_dropped() {
     let mut swift = Swift::new();
     swift.write_config(ACCOUNT);

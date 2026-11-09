@@ -1,4 +1,4 @@
-//! The runtime's one queue (SPEC F-RT-01): every input is taken in turn, the judgment core decides,
+//! The runtime's one queue: every input is taken in turn, the judgment core decides,
 //! and its effects are carried out before the next input. Work that waits on the outside, such as a
 //! port answer or a network reply, comes back as another input.
 
@@ -264,7 +264,7 @@ impl Runtime {
 
     // MARK: Helper calls
 
-    /// Calls the Helper. Tunnel calls wait for the previous one's answer (SPEC F-RT-01 item 2);
+    /// Calls the Helper. Tunnel calls wait for the previous one's answer;
     /// route calls go at once.
     pub(crate) fn call_helper(
         &mut self,

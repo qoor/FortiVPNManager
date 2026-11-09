@@ -167,17 +167,6 @@
   {
     "failed": {
       "failure": {
-        "imapUnreachable": {
-          "failure": {
-            "closed": {}
-          }
-        }
-      }
-    }
-  },
-  {
-    "failed": {
-      "failure": {
         "noOAuthClient": {}
       }
     }

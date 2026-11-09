@@ -1,5 +1,5 @@
 //! config.yaml on disk: reading it when it changes, keeping the last settings that passed, and
-//! replacing it atomically when the app changes a setting (SPEC F-CF-02, F-CF-03).
+//! replacing it atomically when the app changes a setting.
 //!
 //! A symlinked file stays a symlink: the write replaces its target. A file a newer app wrote, or
 //! one that does not pass, is never written over. When the file changes between reading and

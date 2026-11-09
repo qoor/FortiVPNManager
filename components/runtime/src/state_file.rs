@@ -1,6 +1,4 @@
-//! state.json: what the device keeps that nobody edits (SPEC F-SR-01). The format is the one earlier
-//! builds wrote, so either can read the other's file: camelCase keys, times in whole seconds as ISO
-//! 8601 UTC, and failure reasons the way Swift encoded its enum.
+//! state.json: what the device keeps that nobody edits.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -81,19 +79,12 @@ fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Wire {
-    /// Never read, but builds before 2026-11-05 require the key and would otherwise drop the file.
-    #[serde(default = "schema_version")]
-    schema_version: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ledger: Option<WireLedger>,
     #[serde(default)]
     login_item_registered: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     applied_exception_routes: Option<BTreeMap<String, Vec<AdditionalRoute>>>,
-}
-
-fn schema_version() -> i64 {
-    1
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,7 +105,7 @@ struct WireLedger {
     recent_auth_attempts: Vec<SystemTime>,
 }
 
-/// Swift's enum coding: a case name holding its labelled values, or `_0` for an unlabelled one.
+/// A case name holding its values, as in the app's other JSON.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum WireFailure {
@@ -156,7 +147,6 @@ impl Wire {
 
     fn from_state(state: &State) -> Self {
         Self {
-            schema_version: 1,
             ledger: state.ledger.as_ref().map(|ledger| WireLedger {
                 profile_key: ledger.account_key.clone(),
                 consecutive_auth_failures: ledger.consecutive_auth_failures,
@@ -205,8 +195,7 @@ impl WireFailure {
     }
 }
 
-/// `2026-10-15T06:30:21Z`: Swift's ISO 8601 date coding, whole seconds in UTC. Earlier builds read
-/// nothing else.
+/// `2026-10-15T06:30:21Z`: whole seconds in UTC, readable when someone opens the file.
 fn format_time(time: SystemTime) -> String {
     let seconds = time
         .duration_since(UNIX_EPOCH)
@@ -279,8 +268,7 @@ mod times {
 mod tests {
     use super::*;
 
-    /// The shape earlier builds write.
-    const SWIFT_FILE: &str = r#"{
+    const SAVED_FILE: &str = r#"{
   "appliedExceptionRoutes" : {
     "F7929342-1853-4DEF-B9C0-9974F585CED1" : [
       {
@@ -303,8 +291,7 @@ mod tests {
       "2026-11-09T04:08:26Z"
     ]
   },
-  "loginItemRegistered" : true,
-  "schemaVersion" : 1
+  "loginItemRegistered" : true
 }"#;
 
     fn at(text: &str) -> SystemTime {
@@ -312,8 +299,8 @@ mod tests {
     }
 
     #[test]
-    fn a_file_earlier_builds_wrote_reads_whole() {
-        let state = serde_json::from_str::<Wire>(SWIFT_FILE)
+    fn a_saved_file_reads_whole() {
+        let state = serde_json::from_str::<Wire>(SAVED_FILE)
             .unwrap()
             .into_state();
         assert_eq!(
@@ -334,17 +321,17 @@ mod tests {
     }
 
     #[test]
-    fn writing_keeps_the_format_earlier_builds_read() {
-        let state = serde_json::from_str::<Wire>(SWIFT_FILE)
+    fn writing_gives_back_the_saved_file() {
+        let state = serde_json::from_str::<Wire>(SAVED_FILE)
             .unwrap()
             .into_state();
         let written: serde_json::Value = serde_json::to_value(Wire::from_state(&state)).unwrap();
-        let original: serde_json::Value = serde_json::from_str(SWIFT_FILE).unwrap();
+        let original: serde_json::Value = serde_json::from_str(SAVED_FILE).unwrap();
         assert_eq!(written, original);
     }
 
     #[test]
-    fn every_failure_round_trips_through_its_swift_name() {
+    fn every_failure_round_trips_through_its_name() {
         for (failure, json) in [
             (
                 Failure::AuthenticationRejected,
@@ -382,9 +369,6 @@ mod tests {
     #[test]
     fn an_empty_state_writes_only_the_required_keys() {
         let written = serde_json::to_value(Wire::from_state(&State::default())).unwrap();
-        assert_eq!(
-            written,
-            serde_json::json!({"schemaVersion": 1, "loginItemRegistered": false})
-        );
+        assert_eq!(written, serde_json::json!({"loginItemRegistered": false}));
     }
 }

@@ -319,17 +319,6 @@
   },
   {
     "kind": {
-      "invalidTrustedCert": {
-        "index": 0
-      }
-    },
-    "location": {
-      "column": 9,
-      "line": 2
-    }
-  },
-  {
-    "kind": {
       "invalidRouteEntry": {
         "index": 1,
         "path": "routes.bypass_vpn",

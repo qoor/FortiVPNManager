@@ -81,9 +81,8 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         format!("notice helper: run {ATTEMPT}: tunnel up"),
         format!("notice helper: run {ATTEMPT}: stop requested (userDisconnect)"),
         format!(
-            "notice helper: run {ATTEMPT} exited: exited(code: 0), initiator \
-             helper(FortiShared.StopReason.userDisconnect), furthest \
-             Optional(FortiShared.Milestone.tunnelUp)"
+            "notice helper: run {ATTEMPT} exited: Exited {{ code: 0 }}, initiator Helper {{ \
+             reason: UserDisconnect }}, furthest Some(TunnelUp)"
         ),
     ] {
         assert!(swift.has_log(&line), "{line} not in {:#?}", swift.logs());
@@ -116,8 +115,8 @@ fn a_failed_login_is_reported_as_the_client_ending_the_run() {
     assert_eq!(facts["exitStatus"], json!({"exited": {"code": 1}}));
     swift.wait_until("the exit log", |swift| {
         swift.has_log(&format!(
-            "notice helper: run {ATTEMPT} exited: exited(code: 1), initiator none, furthest \
-             Optional(FortiShared.Milestone.connectedToGateway)"
+            "notice helper: run {ATTEMPT} exited: Exited {{ code: 1 }}, initiator Client, furthest \
+             Some(ConnectedToGateway)"
         ))
     });
     assert!(swift.scratch.run_directory_names().is_empty());

@@ -1,4 +1,4 @@
-//! A forced termination reconnects at once, once until a session is stable (SPEC F-CM-03, F-CM-04).
+//! A forced termination reconnects at once, once until a session is stable.
 
 use std::time::Duration;
 

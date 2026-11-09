@@ -1,7 +1,7 @@
-//! The strict rules on the document and the reading of every field, in the earlier app's order: the
-//! root, the schema version (a newer app's file may break this version's rules), the structure
-//! (anchors, aliases, merge keys, tags, complex keys) anywhere in the file, then the fields in file
-//! order, then the rules across fields.
+//! The strict rules on the document and the reading of every field, in this order: the root, the
+//! schema version (a newer app's file may break this version's rules), the structure (anchors,
+//! aliases, merge keys, tags, complex keys) anywhere in the file, then the fields in file order,
+//! then the rules across fields.
 
 use std::ops::RangeInclusive;
 
@@ -12,7 +12,7 @@ use fvm_contract::app_internal::{TimeOfDay, Weekday};
 use saphyr_parser::ScalarStyle;
 
 use super::text::disallowed_in_value;
-use super::tree::{Kind, Node, Tree};
+use super::tree::{Kind, Node, Tree, scalar_text};
 use super::{
     AWAY_MINUTES, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_ROUTE_ENTRIES,
     MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect, ReconnectAfterSleep, Routes,
@@ -90,7 +90,7 @@ fn check_schema_version(node: &Node<'_>) -> Result<(), ConfigProblem> {
     }
 }
 
-/// In file order. Keys may carry a tag, as in the earlier app, which read keys by their text.
+/// In file order. Keys may carry a tag; keys are read by their text.
 fn check_structure(tree: &Tree<'_>, root: &Node<'_>) -> Result<(), ConfigProblem> {
     let mut pending: Vec<(&Node<'_>, bool)> = vec![(root, false)];
     while let Some((node, is_key)) = pending.pop() {
@@ -515,13 +515,6 @@ fn is_null(node: &Node<'_>) -> bool {
     )
 }
 
-fn scalar_text<'n>(node: &'n Node<'_>) -> Option<&'n str> {
-    match &node.kind {
-        Kind::Scalar { text, .. } => Some(text),
-        _ => None,
-    }
-}
-
 /// `None` for a null section, which keeps the defaults.
 fn section<'n>(node: &'n Node<'_>, path: &str) -> Result<Option<&'n Pairs>, ConfigProblem> {
     if is_null(node) {
@@ -701,7 +694,7 @@ fn looks_numeric(text: &str) -> bool {
         && text.bytes().any(|byte| byte.is_ascii_digit())
 }
 
-/// Trims tabs and space separators (Unicode category Zs), the earlier app's whitespace here.
+/// Trims tabs and space separators (Unicode category Zs).
 fn trim_spaces(text: &str) -> &str {
     text.trim_matches(|c: char| {
         matches!(

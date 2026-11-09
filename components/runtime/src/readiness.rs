@@ -1,4 +1,4 @@
-//! Gathering the readiness facts the core judges (SPEC F-CM-11): the settings file, the account,
+//! Gathering the readiness facts the core judges: the settings file, the account,
 //! the stored secrets and the Helper. A Helper of another build is asked to exit when idle, so the
 //! system starts this build's Helper, and is checked once more.
 

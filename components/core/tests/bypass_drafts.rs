@@ -1,4 +1,4 @@
-//! Edit drafts of the exception rule lists (SPEC F-BR-03).
+//! Edit drafts of the exception rule lists.
 
 use fvm_contract::app_internal::problem::AddressProblem;
 use fvm_contract::app_internal::section::RowProblem;

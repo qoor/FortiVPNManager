@@ -1,5 +1,4 @@
-//! Google OAuth formats: PKCE, URLs, token answers, client files and the loopback redirect
-//! (SPEC F-GA-01, F-GA-02).
+//! Google OAuth formats: PKCE, URLs, token answers, client files and the loopback redirect.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -46,11 +45,15 @@ fn get(path: &str, query: &[(&str, &str)]) -> HeadParse {
 // MARK: PKCE and URLs
 
 #[test]
-fn the_rfc7636_vector() {
-    let pkce = Pkce::from_verifier("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk").unwrap();
+fn the_challenge_is_the_s256_of_the_verifier() {
+    let pkce = Pkce::from_random(&[7; 48]);
+    assert_eq!(
+        pkce.verifier(),
+        "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+    );
     assert_eq!(
         pkce.challenge(),
-        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        "Ir8XyCKefo-uHOtECWrNwk4BiKfbSZNJ0CcQAZcvA9A"
     );
 }
 
@@ -68,30 +71,6 @@ fn verifiers_from_random_bytes_are_long_and_unreserved() {
     );
     assert_eq!(first.challenge().len(), 43);
     assert!(!first.challenge().contains(['=', '+', '/']));
-    assert_eq!(
-        Pkce::from_verifier(first.verifier()).unwrap().challenge(),
-        first.challenge()
-    );
-}
-
-#[test]
-fn verifier_length_and_alphabet() {
-    for (verifier, valid) in [
-        ("a".repeat(42), false),
-        ("a".repeat(43), true),
-        ("~".repeat(128), true),
-        ("a".repeat(129), false),
-        ("a".repeat(42) + "=", false),
-        ("a".repeat(42) + " ", false),
-        ("a".repeat(42) + "\u{E9}", false),
-        ("A-._~".to_owned() + &"0".repeat(40), true),
-    ] {
-        assert_eq!(
-            Pkce::from_verifier(&verifier).is_some(),
-            valid,
-            "{verifier}"
-        );
-    }
 }
 
 #[test]

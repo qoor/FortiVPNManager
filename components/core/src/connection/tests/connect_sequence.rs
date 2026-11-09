@@ -1,4 +1,4 @@
-//! One attempt from start to tunnel (SPEC F-CM-01, F-CM-02).
+//! One attempt from start to tunnel.
 
 use fvm_contract::app_helper::{Milestone, StopReason};
 use fvm_contract::app_internal::SecretText;

@@ -1,4 +1,4 @@
-//! Gmail API payloads and error classification (SPEC F-OT-02).
+//! Gmail API payloads and error classification.
 
 use std::time::{Duration, UNIX_EPOCH};
 
