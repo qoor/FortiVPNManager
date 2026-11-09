@@ -1,4 +1,3 @@
-import FortiShared
 import Testing
 
 @Suite struct NetworkSetupRoutesTests {

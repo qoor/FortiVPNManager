@@ -87,11 +87,11 @@ impl Runtime {
         if let Some(previous) = self.gmail.session.take() {
             let _ = previous.control.send(Control::Close { check_spam: false });
         }
-        let address = normalized(&self.config.settings().otp.gmail_address);
+        let saved = self.config.settings().otp.gmail_address.clone();
+        let address = normalized(&saved);
         let method = self.config.settings().otp.method;
-        let item = (!address.is_empty()).then(|| SecretItem::GmailAppPassword {
-            address: address.clone(),
-        });
+        // The app password is stored under the address as saved; earlier builds did the same.
+        let item = (!saved.is_empty()).then_some(SecretItem::GmailAppPassword { address: saved });
         let read = move |runtime: &mut Runtime, app_password: Option<SecretText>| {
             if method != OtpMethod::GmailApi {
                 return runtime.start_session(attempt, address, app_password, false);
@@ -286,7 +286,8 @@ impl Runtime {
         self.gmail.test_generation += 1;
         let generation = self.gmail.test_generation;
         let method = self.config.settings().otp.method;
-        let address = normalized(&self.forms.typed_gmail_address());
+        let typed_address = self.forms.typed_gmail_address();
+        let address = normalized(&typed_address);
         let finish = move |runtime: &mut Runtime, test: GmailTest| {
             // A result for a method no longer selected would mislead.
             if runtime.gmail.test_generation == generation {
@@ -306,7 +307,7 @@ impl Runtime {
             OtpMethod::Imap => {
                 let typed = self.forms.typed_app_password();
                 let item = SecretItem::GmailAppPassword {
-                    address: address.clone(),
+                    address: typed_address,
                 };
                 let test = move |runtime: &mut Runtime, password: String| {
                     runtime.gmail.test = Some(GmailTest::Running {});

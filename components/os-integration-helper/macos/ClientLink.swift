@@ -1,5 +1,4 @@
 import Foundation
-import FortiShared
 
 /// One accepted app connection: its number in messages to the Helper entry, who is calling, and
 /// the callback channel (`event`/`output`) for the runs it starts.

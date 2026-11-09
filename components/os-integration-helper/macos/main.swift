@@ -1,6 +1,5 @@
 import Dispatch
 import Foundation
-import FortiShared
 
 /// Accepts connections from the FortiVPNManager app (the listener pins its signing identity) and
 /// exports a `HelperService` bound to each one.

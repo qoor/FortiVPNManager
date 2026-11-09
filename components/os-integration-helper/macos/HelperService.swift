@@ -1,5 +1,4 @@
 import Foundation
-import FortiShared
 
 /// This helper's build (`CFBundleVersion`, bumped on every `make build`); the app compares it with its own.
 enum HelperBuild {

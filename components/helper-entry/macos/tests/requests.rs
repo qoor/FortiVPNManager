@@ -297,7 +297,6 @@ fn a_client_that_is_not_found_has_no_path_in_the_status() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "binaryProblem": message,
             "clientProblem": {"kind": {"notFound": {}}, "path": "/opt/homebrew/bin/openfortivpn"},
         })
     );
@@ -323,7 +322,6 @@ fn a_client_with_another_problem_keeps_its_path_in_the_status() {
         json!({
             "childAlive": false,
             "openfortivpnPath": path,
-            "binaryProblem": format!("openfortivpn is not executable: {path}"),
             "clientProblem": {"kind": {"notExecutable": {}}, "path": path},
         })
     );

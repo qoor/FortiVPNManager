@@ -1,5 +1,4 @@
 import Foundation
-import FortiShared
 import ServiceManagement
 
 /// The Helper's registration as a system service (SMAppService daemon) and the app's as a login item

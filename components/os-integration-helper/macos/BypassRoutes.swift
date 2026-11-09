@@ -1,5 +1,4 @@
 import Dispatch
-import FortiShared
 import SystemConfiguration
 
 /// Reads and replaces the additional IPv4 routes of the primary network service with networksetup.

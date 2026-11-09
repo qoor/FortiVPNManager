@@ -1,5 +1,4 @@
 import AppKit
-import FortiShared
 import os
 
 /// The app's lifetime as the runtime sees it: a quit waits for the runtime's approval, and activity

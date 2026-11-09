@@ -36,7 +36,6 @@ release:
 	$(MAKE) build CONFIG=Release
 
 test: gen
-	swift test --package-path Packages/FortiCore
 	$(CARGO) test --workspace
 	xcodebuild -project $(PROJECT) -scheme ContractTests -derivedDataPath $(DERIVED) test
 	xcodebuild -project $(PROJECT) -scheme HelperTests -derivedDataPath $(DERIVED) test

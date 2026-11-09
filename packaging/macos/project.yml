@@ -24,23 +24,25 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     MARKETING_VERSION: "0.1.0"
 
-packages:
-  FortiCore:
-    path: ../../Packages/FortiCore
-
 targets:
   FortiVPNManager:
     type: application
     platform: macOS
     sources:
-      - path: ../../App
+      # The Helper's messages to its entry are not the app's.
+      - path: ../../components/contract/macos
+        excludes:
+          - "HelperInternal.swift"
+      - path: ../../components/ui/macos
+      - path: ../../components/os-integration/macos
+      - path: ../../components/runtime/macos/swift
       - path: Support/LaunchDaemons/com.qoor.FortiVPNManager.Helper.plist
         buildPhase:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchDaemons
     info:
-      path: ../../App/Info.plist
+      path: Support/App-Info.plist
       properties:
         LSUIElement: true
         CFBundleDisplayName: FortiVPNManager
@@ -49,12 +51,26 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager
-        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
-        # UI text is English in code; Korean lives in App/Resources/Localizable.xcstrings.
+        # The sources state their isolation themselves, as the contract's types are nonisolated.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        # UI text is English in code; Korean lives in components/ui/macos/Localizable.xcstrings.
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
-        # The OAuth-client script below reads an optional, gitignored file.
+        # The Rust static library is built for Apple Silicon only.
+        ARCHS: arm64
+        # The header and module map of the Rust start function; scripts/build-rust.sh puts the
+        # library in BUILT_PRODUCTS_DIR.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/runtime/macos/include
+        LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
+        # cargo reads the source tree and writes under DerivedData, and the OAuth-client script below
+        # reads an optional, gitignored file: both outside declared inputs and outputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+    preBuildScripts:
+      - name: Build Rust runtime
+        basedOnDependencyAnalysis: false
+        script: '"$SRCROOT/../../scripts/build-rust.sh" fvm-runtime'
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/libfvm_runtime.a
     postBuildScripts:
       - name: Embed Google OAuth client
         basedOnDependencyAnalysis: false
@@ -70,8 +86,6 @@ targets:
             echo "warning: packaging/macos/Config/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
           fi
     dependencies:
-      - package: FortiCore
-        products: [FortiShared, FortiCore, FortiConfig]
       - target: FortiVPNManagerHelper
         embed: true
         link: false
@@ -114,9 +128,6 @@ targets:
         script: '"$SRCROOT/../../scripts/build-rust.sh" fvm-helper-entry-macos'
         outputFiles:
           - $(BUILT_PRODUCTS_DIR)/libfvm_helper_entry_macos.a
-    dependencies:
-      - package: FortiCore
-        products: [FortiShared]
 
   # The Swift side of the contract against the Rust fixtures; needs no Rust library.
   ContractTests:
@@ -131,10 +142,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
-  # The app's Swift parts (UI and OS integration) on the contract, without the Rust runtime. Not in
-  # the app target until the cutover. Nonisolated by default like the contract tests: the contract's
-  # Swift types do not compile with the app target's main-actor default yet, so these sources state
-  # their isolation themselves.
+  # The app's Swift parts (UI and OS integration) on the contract, without the Rust runtime.
   AppSwiftTests:
     type: bundle.unit-test
     platform: macOS
@@ -144,6 +152,8 @@ targets:
           - "HelperInternal.swift"
       - path: ../../components/ui/macos
       - path: ../../components/os-integration/macos
+        excludes:
+          - "AppEntry.swift"
       - path: ../../components/ui/tests/macos
       - path: ../../components/os-integration/tests/macos
     settings:
@@ -151,9 +161,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.AppSwiftTests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-    dependencies:
-      - package: FortiCore
-        products: [FortiShared]
 
   # Helper sources that are testable without the Helper process.
   HelperTests:
@@ -161,15 +168,14 @@ targets:
     platform: macOS
     sources:
       - path: ../../components/os-integration-helper/macos/NetworkSetupRoutes.swift
+      - path: ../../components/contract/macos/xpc/BypassRouteMessages.swift
+      - path: ../../components/contract/macos/xpc/HelperError.swift
       - path: ../../components/os-integration-helper/tests/macos
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.HelperTests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-    dependencies:
-      - package: FortiCore
-        products: [FortiShared]
 
 schemes:
   FortiVPNManager:

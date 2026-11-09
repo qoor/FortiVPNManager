@@ -1,0 +1,11 @@
+// `link` makes `import FVMRuntime` link the static library and the system libraries it uses
+// (`cargo rustc -- --print native-static-libs`), so the target needs only LIBRARY_SEARCH_PATHS.
+module FVMRuntime {
+    header "fvm_runtime.h"
+    link "fvm_runtime"
+    link framework "CoreFoundation"
+    link framework "Security"
+    link framework "SystemConfiguration"
+    link "iconv"
+    export *
+}

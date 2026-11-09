@@ -1,7 +1,7 @@
-//! The files in `fixtures/app-helper/` were captured from the phase-1 Swift app's XPC encoder
-//! (FortiShared `XPCCoding`); phase 2 replaces them. Never edit them by hand, with one exception:
-//! the Helper status files also hold the fields phase 2 added (`clientProblem`,
-//! `untestedVersion`), which the phase-1 app ignores. The Helper and the
+//! The files in `fixtures/app-helper/` were captured from the phase-1 Swift app's XPC encoder, so
+//! the wire format stayed the one installed Helpers and apps speak. Never edit them by hand, with
+//! one exception: the Helper status files follow the fields phase 2 changed (`clientProblem` and
+//! `untestedVersion` added, the English `binaryProblem` removed). The Helper and the
 //! app's runtime each write what the other reads, so every message is checked in both directions,
 //! except the bypass-route request and reply, which only the runtime writes or reads.
 
@@ -292,7 +292,6 @@ fn helper_statuses() {
         client_running: true,
         client_path: Some(CELLAR_PATH.into()),
         client_version: Some("1.24.1".into()),
-        client_problem_text: None,
         client_problem: None,
         untested_version: None,
     };
@@ -305,7 +304,6 @@ fn helper_statuses() {
         client_running: false,
         client_path: Some("/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn".into()),
         client_version: Some("1.25.0".into()),
-        client_problem_text: None,
         client_problem: None,
         untested_version: Some(UntestedVersion {
             tested_series: "1.24".into(),
@@ -320,10 +318,6 @@ fn helper_statuses() {
         client_running: false,
         client_path: None,
         client_version: None,
-        client_problem_text: Some(
-            "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn"
-                .into(),
-        ),
         client_problem: Some(ClientProblem {
             kind: ClientProblemKind::NotFound {},
             path: "/opt/homebrew/bin/openfortivpn".into(),

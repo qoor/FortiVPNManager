@@ -1,6 +1,5 @@
 import Darwin
 import Dispatch
-import FortiShared
 import Foundation
 
 /// Runs a system tool (`/sbin/route`, `/usr/sbin/networksetup`) synchronously with a fixed argv and
@@ -71,4 +70,13 @@ enum SystemCommand {
             errorOutput: String(decoding: errorOutputData, as: UTF8.self)
         )
     }
+}
+
+/// How a command ended.
+enum ProcessExitStatus: Sendable, Equatable {
+    case exited(code: Int32)
+    case signaled(signal: Int32)
+    case spawnFailed(errno: Int32)
+    /// The status could not be collected.
+    case unknown
 }

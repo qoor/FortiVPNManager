@@ -1,1 +1,1 @@
-{"binaryProblem":"openfortivpn not found at \/opt\/homebrew\/bin\/openfortivpn; install it with: brew install openfortivpn","childAlive":false,"clientProblem":{"kind":{"notFound":{}},"path":"\/opt\/homebrew\/bin\/openfortivpn"}}
+{"childAlive":false,"clientProblem":{"kind":{"notFound":{}},"path":"\/opt\/homebrew\/bin\/openfortivpn"}}

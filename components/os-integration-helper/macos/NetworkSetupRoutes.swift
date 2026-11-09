@@ -1,4 +1,3 @@
-import FortiShared
 import Foundation
 
 /// Text side of `networksetup -getadditionalroutes` / `-setadditionalroutes`.

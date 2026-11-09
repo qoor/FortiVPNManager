@@ -259,7 +259,6 @@ impl Swift {
                     client_running: false,
                     client_path: Some("/opt/homebrew/bin/openfortivpn".into()),
                     client_version: Some("1.23.1".into()),
-                    client_problem_text: None,
                     client_problem: None,
                     untested_version: None,
                 };

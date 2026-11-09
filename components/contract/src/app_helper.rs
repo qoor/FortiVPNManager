@@ -1,5 +1,5 @@
-//! What the app and the Helper exchange. The JSON is what the current Swift app encodes and decodes
-//! (FortiShared `XPCCoding`): an enum value with data is an object keyed by its case name, data
+//! What the app and the Helper exchange. The JSON is what the Swift apps before the runtime encoded
+//! and decoded (`XPCCoding`): an enum value with data is an object keyed by its case name, data
 //! without a label uses the key `_0`, a case without data is `{}`, dates are seconds since 1970,
 //! and absent optional values are left out. Each type derives only the directions its two users
 //! need: the Helper receives the run request and sends everything else, and the app's runtime does
@@ -280,8 +280,7 @@ pub struct OutputLine {
     pub text: String,
 }
 
-/// Answer to the app's status request. The phase-1 app reads only the first four fields and ignores
-/// the rest; the cutover removes `client_problem_text`.
+/// Answer to the app's status request.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct HelperStatus {
     #[serde(rename = "childAlive")]
@@ -293,9 +292,6 @@ pub struct HelperStatus {
         skip_serializing_if = "Option::is_none"
     )]
     pub client_version: Option<String>,
-    /// English text the phase-1 app shows as it is.
-    #[serde(rename = "binaryProblem", skip_serializing_if = "Option::is_none")]
-    pub client_problem_text: Option<String>,
     #[serde(rename = "clientProblem", skip_serializing_if = "Option::is_none")]
     pub client_problem: Option<ClientProblem>,
     /// The backend adapter's judgment of `client_version`.

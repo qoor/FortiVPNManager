@@ -1,5 +1,4 @@
 import AppKit
-import FortiShared
 
 /// Passes the runtime's messages on: sections, log lines and the Settings request to the UI, port
 /// requests and actions to the OS integration. Sends the UI's commands, the answers to port requests
@@ -27,6 +26,7 @@ final class AppRouter {
     /// the system's events.
     func start(_ facts: AppInternal.AppFacts) {
         send(.launched(facts: facts))
+        userNotifier.onOpen = { [ui] in ui.settings.show(.connection) }
         userNotifier.start()
         events.start()
     }

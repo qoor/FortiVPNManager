@@ -1,4 +1,3 @@
-import FortiShared
 import os
 
 /// os.Logger categories of the helper. Never log passwords, OTP codes or config file contents.

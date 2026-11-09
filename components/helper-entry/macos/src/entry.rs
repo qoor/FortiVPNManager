@@ -479,7 +479,6 @@ where
                     .as_deref()
                     .and_then(|version| self.backend.untested_version(version)),
                 client_version: client.version,
-                client_problem_text: None,
                 client_problem: None,
             },
             Err(problem) => HelperStatus {
@@ -488,7 +487,6 @@ where
                 client_path: (problem.kind != ClientProblemKind::NotFound {})
                     .then(|| problem.path.display().to_string()),
                 client_version: None,
-                client_problem_text: Some(self.backend.describe_problem(&problem)),
                 client_problem: Some(problem),
                 untested_version: None,
             },

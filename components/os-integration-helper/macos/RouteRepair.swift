@@ -1,5 +1,4 @@
 import Foundation
-import FortiShared
 import SystemConfiguration
 
 /// Repairs the IPv4 routing table after openfortivpn exited without restoring it: restores the
