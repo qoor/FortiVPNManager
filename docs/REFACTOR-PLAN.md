@@ -1,6 +1,6 @@
 # Rust 사전 리팩토링 계획
 
-상태: 1단계 진행 중 (2026-11-06 시작). 모든 단계가 끝나면 결정과 교훈을 [DESIGN.md](DESIGN.md)의 결정 이력으로 옮기고 이 문서는 지운다.
+상태: 2단계 진행 중 (1단계 2026-11-06 시작, 2026-11-09 완료). 모든 단계가 끝나면 결정과 교훈을 [DESIGN.md](DESIGN.md)의 결정 이력으로 옮기고 이 문서는 지운다.
 
 ## 1. 목적
 
@@ -77,15 +77,23 @@ docs/  scripts/  Cargo.toml  Makefile  README.md
 |---|---|---|---|
 | 0. 기반 검증 | 완료 | Rust 연결, socketpair, Rust 통신, YAML 선택, spike 설치 | 시험 프로그램 전부 통과, 설치 뒤 Helper 재승인 없음 |
 | 이동 | 완료 | `project.yml`·`Config/`·`Support/`를 `packaging/macos/`로, `Helper/`를 `components/os-integration-helper/macos/`로 옮긴다. 내용은 바꾸지 않는다 | 빌드, `make verify`, 기존 테스트 |
-| 1. Helper 쪽 | 진행 중 | 공통 계약, backend adapter(openfortivpn), watchdog, Helper entry를 만든다. OS 연동 Helper를 줄인다. SPEC F-VR-01~07, F-SW-03 | Helper 시나리오 Rust 테스트, 지금 앱과 XPC 양방향 fixture, Log 설명 줄 일치, `make verify`, DESIGN §10의 1·2·3·5·6·8·9·10과 재설치 |
-| 2. 앱 쪽 | 대기 | 판단 코어, 런타임, UI, OS 연동, macOS 쪽 공통 계약을 만들고 한 번에 전환한다 | 앱 시나리오와 YAML 사례, 저장소 호환, 구역별 UI 문장 일치, DESIGN §10 1~9 |
+| 1. Helper 쪽 | 완료 | 공통 계약, backend adapter(openfortivpn), watchdog, Helper entry를 만든다. OS 연동 Helper를 줄인다. SPEC F-VR-01~07, F-SW-03 | Helper 시나리오 Rust 테스트, 지금 앱과 XPC 양방향 fixture, Log 설명 줄 일치, `make verify`, DESIGN §10의 1·2·3·5·6·8·9·10과 재설치 |
+| 2. 앱 쪽 | 진행 중 | 판단 코어, 런타임, UI, OS 연동, macOS 쪽 공통 계약을 만들고 한 번에 전환한다 | 앱 시나리오와 YAML 사례, 저장소 호환, 구역별 UI 문장 일치, DESIGN §10 1~9 |
 | 3. 문서 | 대기 | DESIGN.md를 새 구조로 다시 쓰고(§9 정정 포함), README를 고친다 | |
+
+- **1단계 결과**: DESIGN §10의 2·3·8·9·10과 재설치를 실제 환경에서 확인했다. 6은 사용자 결정으로 단위 테스트 통과로 대신했고, 5(잠자기)는 사용자가 나중에 확인한다. 1은 앱 쪽 기능이라 2단계에서 확인한다.
+- **2단계 순서**: 각 순서마다 자동 테스트, 리뷰, 커밋을 거친다.
+  1. 기반: 앱 쪽 공통 계약(명령, 도메인 구역, 로그 추가분, port 요청·응답, 시스템 이벤트)과 Swift 쪽 정의, 판단 코어·런타임 crate 뼈대, 런타임 시작 함수
+  2. 병렬: (A) 판단 코어의 Connection Manager, (B) 판단 코어의 형식(config.yaml, 예외 규칙 계산과 편집 초안, IMAP·Gmail API·OAuth·OTP 메일), (C) 새 계약 위의 UI와 OS 연동
+  3. 런타임: 조율과 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화, UI 메시지
+  4. 전환: 앱이 런타임을 시작하게 하고 옛 `App/` 로직과 `Packages/`를 지운다. 전체 테스트, 실제 설치, DESIGN §10 1~9
 
 ## 5. 승인된 결정
 
 - **(a)** 아래 정리 항목 11개를 모두 적용한다.
 - **(b)** Log 탭 [모두 복사]는 UI가 화면에 가진 줄로 만든다.
 - **(c)** 실행 파일 문제는 종류와 경로로 넘기고, UI가 문장을 만들어 번역한다(2단계).
+- **1단계 중 추가된 동작 변경** (2026-11-09 사용자 승인): 강제 종료(터널이 올라온 뒤 Helper가 보내지 않은 signal로 client가 끝남, Helper 연결 끊김)는 곧바로 재연결하고, 안정 세션이 생길 때까지 한 번만 한다. 지금 앱에 먼저 반영했고(SPEC F-CM-03·04), 2단계에서 판단 코어가 같은 규칙을 구현한다.
 - **보류 조건**: watchdog의 프로세스 생성 조건을 unsafe 없이 지킬 수 없으면, 진행하기 전에 다시 묻는다.
 
 ## 6. 정리 항목
