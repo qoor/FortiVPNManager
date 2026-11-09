@@ -6,6 +6,10 @@ mod link;
 use std::io;
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream;
+use std::sync::mpsc;
+use std::thread;
+
+use crate::orchestration::{self, Input, Paths};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
@@ -14,12 +18,31 @@ pub extern "C" fn fvm_runtime_start() -> i32 {
     start().into_raw_fd()
 }
 
-/// Starts the runtime and returns Swift's end of the stream. Until the event loop exists, messages
-/// from Swift are read and dropped.
+/// Starts the runtime and returns Swift's end of the stream.
 pub fn start() -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
-    link::connect(ours, |_message| {});
+    let (inputs, received) = mpsc::channel();
+    let from_swift = inputs.clone();
+    let out = link::connect(ours, move |message| {
+        // The runtime thread lives as long as the process.
+        let _ = from_swift.send(Input::Swift(message));
+    });
+    thread::Builder::new()
+        .name("fvm-runtime".into())
+        .spawn(move || orchestration::run(paths(), inputs, received, out))
+        .expect("starting the runtime thread");
     theirs
+}
+
+/// Where the app has always kept its files.
+fn paths() -> Paths {
+    let home = std::env::home_dir().expect("a home folder");
+    Paths {
+        config: home.join(".config/FortiVPNManager/config.yaml"),
+        state: home.join("Library/Application Support/FortiVPNManager/state.json"),
+        log: home.join("Library/Logs/FortiVPNManager/openfortivpn.log"),
+        home,
+    }
 }
 
 /// Rust keeps the first end; Swift gets the second.

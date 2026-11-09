@@ -11,13 +11,25 @@ crate-type = ["staticlib", "lib"]
 fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
 fvm-core.workspace = true
+getrandom.workspace = true
+# The time zone database the OS keeps, for local times in the schedule and the log.
+jiff = { workspace = true, features = ["tzdb-zoneinfo"] }
+reqwest.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 socket2.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 rustix = { workspace = true, features = ["net"] }
-serde_json.workspace = true
 
 [lints]
 workspace = true

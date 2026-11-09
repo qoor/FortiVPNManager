@@ -22,15 +22,23 @@ fvm-core = { path = "components/core" }
 fvm-watchdog = { path = "components/watchdog" }
 # Civil time in a time zone the runtime resolved; nothing that reads the system database.
 jiff = { version = "0.2.41", default-features = false, features = ["std"] }
+getrandom = "0.3"
 libproc = "0.15"
 nix = "0.31"
 rustix = "1"
 saphyr-parser = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# TLS with ring only (no aws-lc-rs) and the OS's trust store; the HTTP client also follows the OS's
+# proxy settings.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-platform-verifier = "0.6"
 sha2 = "0.11"
 # `all` exposes set_nosigpipe.
 socket2 = { version = "0.6", features = ["all"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 zeroize = "1"
 
 [workspace.lints.rust]
