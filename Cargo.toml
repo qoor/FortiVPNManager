@@ -20,6 +20,8 @@ fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
 fvm-core = { path = "components/core" }
 fvm-watchdog = { path = "components/watchdog" }
+# Civil time in a time zone the runtime resolved; nothing that reads the system database.
+jiff = { version = "0.2.41", default-features = false, features = ["std"] }
 libproc = "0.15"
 nix = "0.31"
 rustix = "1"
