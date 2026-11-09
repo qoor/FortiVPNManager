@@ -48,15 +48,6 @@
     }
   },
   {
-    "noOAuthClient": {}
-  },
-  {
-    "enterAddress": {}
-  },
-  {
-    "alreadyInProgress": {}
-  },
-  {
     "listenerFailed": {
       "detail": "Address already in use (os error 48)"
     }

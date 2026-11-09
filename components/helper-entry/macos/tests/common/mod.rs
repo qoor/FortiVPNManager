@@ -14,7 +14,9 @@ use std::{env, fs, process};
 
 use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
 use fvm_contract::app_helper::RunRequest;
-use fvm_contract::backend::{Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy};
+use fvm_contract::backend::{
+    Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy, UntestedVersion,
+};
 use fvm_contract::stream;
 use serde_json::{Value, json};
 
@@ -59,6 +61,10 @@ impl Backend for TestBackend {
 
     fn describe_problem(&self, problem: &ClientProblem) -> String {
         OpenFortiVpn.describe_problem(problem)
+    }
+
+    fn untested_version(&self, version: &str) -> Option<UntestedVersion> {
+        OpenFortiVpn.untested_version(version)
     }
 
     fn launch_spec(

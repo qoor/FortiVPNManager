@@ -562,9 +562,10 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 | port | macOS 구현 |
 |---|---|
 | 비밀값 저장 | 로그인 Keychain(서비스 이름과 계정 키는 지금과 같음) |
-| 권한 있는 실행 통로 | SMAppService daemon, 양쪽 서명을 확인하는 XPC |
-| 시스템 이벤트 | NSWorkspace, `com.apple.screenIsLocked`/`Unlocked`, NWPathMonitor, SCDynamicStore |
-| 네트워크 정보 | getaddrinfo, `/sbin/route -n get`, getifaddrs, SCDynamicStore |
+| 권한 있는 실행 통로 | SMAppService daemon(등록, 상태, 승인 설정 열기), 양쪽 서명을 확인하는 XPC |
+| 시스템 이벤트 | NSWorkspace(잠자기, 깨어남, 디스플레이 잠자기), `com.apple.screenIsLocked`/`Unlocked`, NWPathMonitor, SCDynamicStore(네트워크 설정 변경), 앱 활성화, 시계·시간대 변경 알림 |
+| 화면 상태 | CGSession의 잠금 상태, 디스플레이 잠자기 여부 |
+| 네트워크 정보 | `/sbin/route -n get`, getifaddrs, SCDynamicStore |
 | 알림 | UserNotifications |
 | 브라우저 열기 | 기본 브라우저 |
 | 앱 수명 | ProcessInfo activity, 종료 확인, SMAppService main app(로그인 시 열기) |
@@ -592,7 +593,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 - **비밀값**: 비밀번호, OTP, token, client secret은 argv, 파일, 환경 변수, 로그에 남지 않는다. Helper에는 XPC로 메모리 안에서만 전달한다.
 - **fail fast**: Rust panic은 그 자리에서 중단하고 crash report를 남긴다. 있을 수 없는 상태를 위한 복구 경로를 만들지 않는다.
-- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 하나씩만). Swift에도 포인터 코드가 없다.
+- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 하나씩만). Swift와 Rust는 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. Swift가 OS API를 직접 부를 때는 지금처럼 그 API에 필요한 포인터 API를 쓸 수 있다.
 - **다른 OS 빌드**: 공통 crate는 macOS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 프로세스 처리와 port 구현뿐이다.
 - **영어**: 코드, 주석, 앱과 Helper의 로그는 영어로 쓴다.
 - **화면 문장은 UI에만**: Rust는 종류와 값만 넘기고, 문장과 번역은 UI (macOS)가 만든다.

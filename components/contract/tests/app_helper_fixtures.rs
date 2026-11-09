@@ -1,5 +1,7 @@
 //! The files in `fixtures/app-helper/` were captured from the phase-1 Swift app's XPC encoder
-//! (FortiShared `XPCCoding`); phase 2 replaces them. Never edit them by hand. The Helper and the
+//! (FortiShared `XPCCoding`); phase 2 replaces them. Never edit them by hand, with one exception:
+//! the Helper status files also hold the fields phase 2 added (`clientProblem`,
+//! `untestedVersion`), which the phase-1 app ignores. The Helper and the
 //! app's runtime each write what the other reads, so every message is checked in both directions,
 //! except the bypass-route request and reply, which only the runtime writes or reads.
 
@@ -8,6 +10,7 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::*;
+use fvm_contract::backend::{ClientProblem, ClientProblemKind, UntestedVersion};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, to_value};
@@ -289,21 +292,43 @@ fn helper_statuses() {
         client_running: true,
         client_path: Some(CELLAR_PATH.into()),
         client_version: Some("1.24.1".into()),
+        client_problem_text: None,
         client_problem: None,
+        untested_version: None,
     };
     both_ways(
         running,
         include_str!("fixtures/app-helper/helper_status.json"),
     );
 
+    let untested = HelperStatus {
+        client_running: false,
+        client_path: Some("/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn".into()),
+        client_version: Some("1.25.0".into()),
+        client_problem_text: None,
+        client_problem: None,
+        untested_version: Some(UntestedVersion {
+            tested_series: "1.24".into(),
+        }),
+    };
+    both_ways(
+        untested,
+        include_str!("fixtures/app-helper/helper_status_untested.json"),
+    );
+
     let missing = HelperStatus {
         client_running: false,
         client_path: None,
         client_version: None,
-        client_problem: Some(
+        client_problem_text: Some(
             "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn"
                 .into(),
         ),
+        client_problem: Some(ClientProblem {
+            kind: ClientProblemKind::NotFound {},
+            path: "/opt/homebrew/bin/openfortivpn".into(),
+        }),
+        untested_version: None,
     };
     both_ways(
         missing,

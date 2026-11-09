@@ -27,14 +27,14 @@ pub enum PortRequest {
     /// Answered by `Registered`, or `RegistrationFailed`.
     RegisterHelper {},
     /// The running Helper's build. Answered by `HelperBuild`, or `HelperUnreachable`. A connection
-    /// whose Helper answers with the app's build counts as verified.
+    /// whose Helper answers with the app's build counts as verified. Retried once on a fresh
+    /// connection when the connection fails: a Helper whose executable a reinstall replaced exits
+    /// instead of answering, and the system starts the new one for the next connection.
     HelperBuild {},
     /// Answered by `HelperReply` (`HelperReplyFlag` for `ExitWhenIdle`), `HelperUnreachable`, or
     /// `HelperBuildMismatch`.
     CallHelper { call: HelperCall },
 
-    /// The first IPv4 address of a host name. Answered by `Ipv4`.
-    ResolveIpv4 { host: String },
     /// The interface the routing table uses for `destination`. Answered by `RouteInterface`.
     RouteInterface { destination: Ipv4Addr },
     /// Answered by `InterfaceAddresses`.
@@ -92,9 +92,6 @@ pub enum PortResponse {
         helper_build: String,
     },
 
-    Ipv4 {
-        address: Option<Ipv4Addr>,
-    },
     RouteInterface {
         interface: Option<String>,
     },
@@ -123,8 +120,8 @@ pub enum PortAction {
         category: LogCategory,
         message: String,
     },
-    /// Shows a notification, replacing an earlier one of the same kind. The OS integration makes
-    /// its sentences.
+    /// Shows a notification, replacing an earlier one of the same kind. The UI's string code
+    /// builds its text; the OS integration only posts it.
     PostNotification { notification: UserNotification },
     /// Keeps the app from being suspended or throttled while a connection is wanted.
     HoldActivity { hold: bool },
@@ -160,11 +157,20 @@ pub struct SecretStoreFailure {
     pub description: String,
 }
 
-/// One call on the Helper. JSON payloads are the `app_helper` messages, written and read by the
-/// runtime only. `Connect`, `SubmitOtp`, `ReadBypassRoutes` and `WriteBypassRoutes` go only over a
-/// verified connection; the OS integration asks for the build first when it has not been verified.
-/// `Status`, `ReadBypassRoutes` and `WriteBypassRoutes` are retried once on a fresh connection when
-/// the connection fails, since repeating them is harmless.
+/// One call on the Helper, over the one connection the OS integration keeps. It opens a new one
+/// when there is none or the last one was lost, and reports `SystemEvent::HelperConnectionLost`
+/// when the connection that carries the runs goes away.
+///
+/// - JSON payloads are the `app_helper` messages, written and read by the runtime only.
+/// - `Connect`, `SubmitOtp`, `ReadBypassRoutes` and `WriteBypassRoutes` go only over a verified
+///   connection. When it is not verified yet, the OS integration asks for the build first and
+///   answers `HelperBuildMismatch` if it differs.
+/// - `Status`, `ReadBypassRoutes` and `WriteBypassRoutes` are retried once on a fresh connection
+///   when the connection fails, since repeating them is harmless. The other calls are never
+///   retried or moved to another connection.
+/// - The runtime sends the next call only after the previous one was answered (SPEC F-RT-01
+///   item 2), except the route calls: the Helper handles routes apart from the tunnel, so they may
+///   run alongside (SPEC F-SW-03 item 4).
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum HelperCall {
@@ -175,17 +181,18 @@ pub enum HelperCall {
         attempt: AttemptId,
         code: SecretText,
     },
-    /// `None` stops whatever runs. Replied to with nothing once the stop is accepted, or a
-    /// `HelperError`; the run's end is its exit event.
+    /// Replied to with nothing once the stop is accepted, or a `HelperError`; the run's end is
+    /// its exit event.
     Disconnect {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        attempt: Option<AttemptId>,
+        attempt: AttemptId,
         reason: StopReason,
     },
     /// Replied to with a `HelperStatus`.
     Status {},
     /// Asks a Helper with no run to exit, so the system starts this build's Helper next time.
-    /// Replied to with a flag: whether it will exit. Works across builds.
+    /// Replied to with a flag: whether it will exit. Works across builds. After the reply the OS
+    /// integration drops the connection, which clears its verified mark and reports
+    /// `SystemEvent::HelperConnectionLost`; the runtime expects that, as no run is going on.
     ExitWhenIdle {},
     /// Replied to with a `BypassRoutesReply`.
     ReadBypassRoutes {},

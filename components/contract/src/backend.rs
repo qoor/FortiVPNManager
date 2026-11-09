@@ -6,7 +6,7 @@ use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app_helper::{Milestone, OutputSource, RunRequest};
 
@@ -22,6 +22,10 @@ pub trait Backend {
 
     /// English description of `problem` that the current app shows as it is.
     fn describe_problem(&self, problem: &ClientProblem) -> String;
+
+    /// Whether `version`, as `locate_client` found it, is outside the versions this app was tested
+    /// with. The Helper reports it in its status, so the app warns without knowing the rule.
+    fn untested_version(&self, version: &str) -> Option<UntestedVersion>;
 
     /// Checks every value of `request` again, since the Helper does not trust the app, and builds
     /// the launch. The caller writes `LaunchSpec::config_file` to `config_path` with mode 0600
@@ -54,16 +58,25 @@ pub struct ClientExecutable {
     pub version: Option<String>,
 }
 
+/// The client's version is outside the series this app was tested with.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UntestedVersion {
+    /// Such as `1.24`.
+    pub tested_series: String,
+}
+
 /// Why the client executable cannot be used, as a kind and the path it concerns; wording is left
-/// to whoever shows it. The app's UI receives it in the Helper's section (`app_internal`).
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+/// to whoever shows it. The Helper reports it in its status, and the app's UI receives it in the
+/// Helper's section (`app_internal`).
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct ClientProblem {
     pub kind: ClientProblemKind,
     pub path: PathBuf,
 }
 
 /// Cases without data are empty structs so the JSON matches Swift's enum coding.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientProblemKind {
     /// Nothing usable at `path`, where the client is looked for. The Helper status leaves the

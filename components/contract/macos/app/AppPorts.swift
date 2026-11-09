@@ -10,11 +10,12 @@ extension AppInternal {
 
         case helperRegistration
         case registerHelper
-        /// A connection whose Helper answers with the app's build counts as verified.
+        /// A connection whose Helper answers with the app's build counts as verified. Retried once on
+        /// a fresh connection when the connection fails: a Helper replaced by a reinstall exits
+        /// instead of answering.
         case helperBuild
         case callHelper(call: HelperCall)
 
-        case resolveIpv4(host: String)
         case routeInterface(destination: String)
         case interfaceAddresses
         case primaryRouter
@@ -42,7 +43,6 @@ extension AppInternal {
         /// A call that needs a verified connection was not sent.
         case helperBuildMismatch(helperBuild: String)
 
-        case ipv4(address: String?)
         case routeInterface(interface: String?)
         case interfaceAddresses(addresses: [InterfaceAddress])
         case primaryRouter(router: String?)
@@ -54,7 +54,8 @@ extension AppInternal {
     /// Carried out without an answer.
     enum PortAction: Decodable, Equatable, Sendable {
         case log(level: LogLevel, category: LogCategory, message: String)
-        /// Replaces an earlier notification of the same kind.
+        /// Replaces an earlier notification of the same kind. The UI's string code builds the text;
+        /// the OS integration only posts it.
         case postNotification(notification: UserNotification)
         case holdActivity(hold: Bool)
         case openHelperApprovalSettings
@@ -73,16 +74,23 @@ extension AppInternal {
         var description: String
     }
 
-    /// One call on the Helper. JSON payloads and the attempt and reason values are relayed as they
-    /// are, never read. `connect`, `submitOtp`, `readBypassRoutes` and `writeBypassRoutes` go only
-    /// over a verified connection; `status`, `readBypassRoutes` and `writeBypassRoutes` are retried
-    /// once on a fresh connection when the connection fails.
+    /// One call on the Helper over the one connection the OS integration keeps (see
+    /// components/contract/src/app_internal/port.rs). JSON payloads and the attempt and reason
+    /// values are relayed as they are, never read.
+    /// - `connect`, `submitOtp`, `readBypassRoutes` and `writeBypassRoutes` go only over a verified
+    ///   connection; ask for the build first when it is not verified, and answer
+    ///   `helperBuildMismatch` if it differs.
+    /// - `status`, `readBypassRoutes` and `writeBypassRoutes` are retried once on a fresh connection
+    ///   when the connection fails; the other calls never are.
+    /// - Rust sends the next call only after the previous one was answered, except the route calls,
+    ///   which may run alongside.
     enum HelperCall: Decodable, Equatable, Sendable {
         case connect(json: String)
         case submitOtp(attempt: String, code: String)
-        /// nil stops whatever runs (the XPC call takes an empty string).
-        case disconnect(attempt: String?, reason: String)
+        case disconnect(attempt: String, reason: String)
         case status
+        /// After the reply, drop the connection: that clears the verified mark and reports
+        /// `SystemEvent.helperConnectionLost`, which Rust expects.
         case exitWhenIdle
         case readBypassRoutes
         case writeBypassRoutes(json: String)

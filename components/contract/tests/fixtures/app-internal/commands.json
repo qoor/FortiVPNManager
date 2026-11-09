@@ -38,6 +38,7 @@
     "command": {
       "_0": {
         "editAccount": {
+          "revision": 4,
           "form": {
             "host": "vpn.example.com",
             "port": "443",

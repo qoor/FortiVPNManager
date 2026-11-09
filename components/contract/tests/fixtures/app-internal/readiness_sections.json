@@ -12,23 +12,11 @@
         "build": "20261109120000"
       }
     },
-    "readiness": {
-      "ready": {}
-    },
     "registerHelper": "hidden"
   },
   {
     "helper": {
       "notRegistered": {}
-    },
-    "readiness": {
-      "needsSetup": {
-        "items": [
-          {
-            "helperApproval": {}
-          }
-        ]
-      }
     },
     "registerError": {
       "notInstalledCopy": {}
@@ -49,9 +37,6 @@
         "build": "20261109120000"
       }
     },
-    "readiness": {
-      "ready": {}
-    },
     "registerError": {
       "failed": {
         "description": "Operation not permitted"
@@ -63,9 +48,6 @@
     "helper": {
       "requiresApproval": {}
     },
-    "readiness": {
-      "ready": {}
-    },
     "registerHelper": "hidden"
   },
   {
@@ -74,9 +56,6 @@
         "appBuild": "20261109120000",
         "helperBuild": "20261108090000"
       }
-    },
-    "readiness": {
-      "ready": {}
     },
     "registerHelper": "hidden"
   },
@@ -87,9 +66,6 @@
           "noReply": {}
         }
       }
-    },
-    "readiness": {
-      "ready": {}
     },
     "registerHelper": "hidden"
   }

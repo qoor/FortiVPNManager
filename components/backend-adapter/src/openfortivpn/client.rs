@@ -4,13 +4,15 @@ use std::fs::{self, Metadata};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use fvm_contract::backend::{ClientExecutable, ClientProblem, ClientProblemKind};
+use fvm_contract::backend::{ClientExecutable, ClientProblem, ClientProblemKind, UntestedVersion};
 
 const HOMEBREW_LINK: &str = "/opt/homebrew/bin/openfortivpn";
 /// Only a file inside it is run, so the link cannot point root at something else.
 const CELLAR: &str = "/opt/homebrew/Cellar/openfortivpn/";
 /// The pppd openfortivpn starts; it can outlive openfortivpn when the Helper dies mid-run.
 const PPPD: &str = "/usr/sbin/pppd";
+/// The release series whose output wording the adapter was checked against.
+const TESTED_SERIES: &str = "1.24";
 
 pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
     let resolved = fs::canonicalize(HOMEBREW_LINK).map_err(|_| ClientProblem {
@@ -59,6 +61,15 @@ pub(super) fn describe(problem: &ClientProblem) -> String {
         ),
         ClientProblemKind::NotExecutable {} => format!("openfortivpn is not executable: {path}"),
     }
+}
+
+pub(super) fn untested_version(version: &str) -> Option<UntestedVersion> {
+    let tested = version
+        .strip_prefix(TESTED_SERIES)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'));
+    (!tested).then(|| UntestedVersion {
+        tested_series: TESTED_SERIES.into(),
+    })
 }
 
 pub(super) fn is_own_executable(path: &Path) -> bool {

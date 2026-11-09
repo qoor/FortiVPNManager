@@ -466,28 +466,32 @@ where
     }
 
     fn status(&self) -> HelperStatus {
-        let (client_path, client_version, client_problem) = match self.backend.locate_client() {
-            Ok(client) => (
-                Some(client.path.display().to_string()),
-                client.version,
-                None,
-            ),
-            Err(problem) => (
+        let client_running = self
+            .run
+            .as_ref()
+            .is_some_and(|current| current.run.process_id().is_some());
+        match self.backend.locate_client() {
+            Ok(client) => HelperStatus {
+                client_running,
+                client_path: Some(client.path.display().to_string()),
+                untested_version: client
+                    .version
+                    .as_deref()
+                    .and_then(|version| self.backend.untested_version(version)),
+                client_version: client.version,
+                client_problem_text: None,
+                client_problem: None,
+            },
+            Err(problem) => HelperStatus {
+                client_running,
                 // Nothing was found where the client is looked for, so there is no path to show.
-                (problem.kind != ClientProblemKind::NotFound {})
+                client_path: (problem.kind != ClientProblemKind::NotFound {})
                     .then(|| problem.path.display().to_string()),
-                None,
-                Some(self.backend.describe_problem(&problem)),
-            ),
-        };
-        HelperStatus {
-            client_running: self
-                .run
-                .as_ref()
-                .is_some_and(|current| current.run.process_id().is_some()),
-            client_path,
-            client_version,
-            client_problem,
+                client_version: None,
+                client_problem_text: Some(self.backend.describe_problem(&problem)),
+                client_problem: Some(problem),
+                untested_version: None,
+            },
         }
     }
 

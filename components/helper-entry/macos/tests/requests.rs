@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use common::*;
-use fvm_contract::backend::{ClientProblem, ClientProblemKind};
+use fvm_contract::backend::{ClientExecutable, ClientProblem, ClientProblemKind};
 use serde_json::{Value, json};
 
 #[test]
@@ -295,7 +295,11 @@ fn a_client_that_is_not_found_has_no_path_in_the_status() {
     assert!(swift.connect_app(1, 501));
     assert_eq!(
         swift.status(1),
-        json!({"childAlive": false, "binaryProblem": message})
+        json!({
+            "childAlive": false,
+            "binaryProblem": message,
+            "clientProblem": {"kind": {"notFound": {}}, "path": "/opt/homebrew/bin/openfortivpn"},
+        })
     );
     assert_eq!(
         swift.connect(1, ATTEMPT),
@@ -320,6 +324,28 @@ fn a_client_with_another_problem_keeps_its_path_in_the_status() {
             "childAlive": false,
             "openfortivpnPath": path,
             "binaryProblem": format!("openfortivpn is not executable: {path}"),
+            "clientProblem": {"kind": {"notExecutable": {}}, "path": path},
+        })
+    );
+}
+
+#[test]
+fn the_status_carries_the_adapters_version_judgment() {
+    let mut swift = Swift::start(Setup {
+        client: Ok(ClientExecutable {
+            path: PathBuf::from("/bin/sh"),
+            version: Some("1.25.0".to_owned()),
+        }),
+        ..Setup::fixture("success")
+    });
+    assert!(swift.connect_app(1, 501));
+    assert_eq!(
+        swift.status(1),
+        json!({
+            "childAlive": false,
+            "openfortivpnPath": "/bin/sh",
+            "openfortivpnVersion": "1.25.0",
+            "untestedVersion": {"testedSeries": "1.24"},
         })
     );
 }

@@ -7,11 +7,6 @@
     "reconnectNow": "enabled",
     "status": {
       "connected": {
-        "outlook": {
-          "reconnectsAt": {
-            "at": 1762422845250
-          }
-        },
         "proactiveReconnect": {
           "at": {
             "at": 1762422845250
@@ -30,29 +25,8 @@
     "reconnectNow": "disabled",
     "status": {
       "connected": {
-        "outlook": {
-          "wontReconnect": {}
-        },
         "proactiveReconnect": {
           "pausedBySchedule": {}
-        },
-        "since": 1762412345250
-      }
-    }
-  },
-  {
-    "accountAppliesNextConnection": false,
-    "connect": "enabled",
-    "disconnect": "hidden",
-    "icon": "disconnected",
-    "reconnectNow": "disabled",
-    "status": {
-      "connected": {
-        "outlook": {
-          "reconnectOnHold": {}
-        },
-        "proactiveReconnect": {
-          "off": {}
         },
         "since": 1762412345250
       }
@@ -78,7 +52,6 @@
     "connect": "hidden",
     "disconnect": "enabled",
     "icon": "inProgress",
-    "nextAttemptAt": 1762412435250,
     "reconnectNow": "enabled",
     "status": {
       "waitingToReconnect": {
@@ -93,8 +66,12 @@
   },
   {
     "accountAppliesNextConnection": false,
-    "attention": {
-      "needsSetup": {
+    "connect": "enabled",
+    "disconnect": "enabled",
+    "icon": "error",
+    "reconnectNow": "disabled",
+    "status": {
+      "setupRequired": {
         "items": [
           {
             "vpnPassword": {}
@@ -106,24 +83,10 @@
           }
         ]
       }
-    },
-    "connect": "enabled",
-    "disconnect": "enabled",
-    "icon": "error",
-    "reconnectNow": "disabled",
-    "status": {
-      "setupRequired": {}
     }
   },
   {
     "accountAppliesNextConnection": false,
-    "attention": {
-      "failed": {
-        "reason": {
-          "vpnLoginRejected": {}
-        }
-      }
-    },
     "connect": "enabled",
     "disconnect": "hidden",
     "icon": "error",
@@ -156,7 +119,12 @@
     "icon": "disconnected",
     "reconnectNow": "disabled",
     "status": {
-      "reconnectOnHold": {}
+      "reconnectOnHold": {
+        "until": 1762414145250
+      }
+    },
+    "waitReason": {
+      "userAway": {}
     }
   },
   {

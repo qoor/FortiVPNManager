@@ -17,7 +17,7 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{
     Backend, ClientExecutable, ClientProblem, Finding, LaunchSpec, OutputInterpreter, Prompt,
-    StopPolicy, StopScope,
+    StopPolicy, StopScope, UntestedVersion,
 };
 use fvm_contract::helper_internal::RouteRepairOutcome;
 use fvm_watchdog::{Report, Run, StageLimits, Timing};
@@ -68,6 +68,10 @@ impl Backend for FakeOpenFortiVpn {
 
     fn describe_problem(&self, _: &ClientProblem) -> String {
         unreachable!("the watchdog does not describe client problems")
+    }
+
+    fn untested_version(&self, _: &str) -> Option<UntestedVersion> {
+        unreachable!("the watchdog does not judge client versions")
     }
 
     fn launch_spec(

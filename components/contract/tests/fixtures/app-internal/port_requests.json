@@ -132,6 +132,7 @@
         "callHelper": {
           "call": {
             "disconnect": {
+              "attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F",
               "reason": "clientInvalidated"
             }
           }
@@ -185,16 +186,6 @@
               "json": "{\"expected\":{},\"routes\":[]}"
             }
           }
-        }
-      }
-    }
-  },
-  {
-    "portRequest": {
-      "id": 16,
-      "request": {
-        "resolveIpv4": {
-          "host": "vpn.example.com"
         }
       }
     }

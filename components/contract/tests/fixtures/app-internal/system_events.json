@@ -2,7 +2,9 @@
   {
     "event": {
       "_0": {
-        "willSleep": {}
+        "willSleep": {
+          "at": 1762412345250
+        }
       }
     }
   },
@@ -16,7 +18,9 @@
   {
     "event": {
       "_0": {
-        "screenLocked": {}
+        "screenLocked": {
+          "at": 1762412345500
+        }
       }
     }
   },
@@ -30,7 +34,9 @@
   {
     "event": {
       "_0": {
-        "displaysSlept": {}
+        "displaysSlept": {
+          "at": 1762412345750
+        }
       }
     }
   },

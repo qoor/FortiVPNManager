@@ -5,16 +5,18 @@
 //! - The UI sends user actions as commands and draws the domain sections and log lines it gets.
 //!   Sections carry values and kinds, never sentences: the UI builds and translates every sentence,
 //!   and the values it puts in them, such as time limits, come with the kinds. Descriptions from
-//!   outside (Google, the IMAP server, the Helper, macOS) are carried as they came. Button states
-//!   are decided here, not in the UI.
+//!   outside (Google, the IMAP server, the Helper, macOS) are carried as they came; so are the
+//!   English details of the runtime's own network and file failures, which the UI shows untranslated
+//!   (REFACTOR-PLAN §2, exception 4). Button states are decided here, not in the UI.
 //! - The OS integration answers port requests, carries out port actions and reports system events.
 //!   It reports facts only; combining them, such as into "away", is the runtime's job. Helper
 //!   payloads cross it as JSON text it never reads.
 //!
 //! The JSON follows Swift's enum coding: a case is an object keyed by its name, data without a label
 //! uses the key `_0`, a case without data is `{}` unless the whole enum has no data (then it is a
-//! string), and absent optional values are left out. Times are whole milliseconds since 1970;
-//! durations shown to the user are whole seconds. Each type derives only the direction it travels.
+//! string), and absent optional values are left out. Times are milliseconds since 1970, whole when
+//! Rust writes them; Swift may write a fraction. Durations shown to the user are whole seconds.
+//! Each type derives only the direction it travels.
 
 pub mod command;
 pub mod event;
@@ -79,8 +81,9 @@ pub struct AppFacts {
     /// This copy is the installed one, the only copy allowed to register the Helper and the login
     /// item.
     pub installed_copy: bool,
-    /// The OAuth client JSON built into the app, if this build has one.
-    pub built_in_oauth_client: Option<String>,
+    /// The OAuth client JSON built into the app, if this build has one. Its secret is not
+    /// confidential (PKCE protects the sign-in), but it stays out of debug output all the same.
+    pub built_in_oauth_client: Option<SecretText>,
     /// The system time zone's identifier, such as `Asia/Seoul`.
     pub time_zone: String,
     /// The pages the Google sign-in listener shows in the browser, in the UI's language: the UI
@@ -177,9 +180,9 @@ impl fmt::Debug for SecretText {
 }
 
 mod millis {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use serde::{Serializer, ser};
+    use serde::{Deserialize, Deserializer, Serializer, de, ser};
 
     pub fn time<S: Serializer>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {
         let since_1970 = time
@@ -189,13 +192,9 @@ mod millis {
         serializer.serialize_u64(millis)
     }
 
-    pub fn optional_time<S: Serializer>(
-        time: &Option<SystemTime>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        match time {
-            Some(time) => self::time(time, serializer),
-            None => serializer.serialize_none(),
-        }
+    pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
+        let millis = f64::deserialize(deserializer)?;
+        let since_1970 = Duration::try_from_secs_f64(millis / 1000.0).map_err(de::Error::custom)?;
+        Ok(UNIX_EPOCH + since_1970)
     }
 }

@@ -40,7 +40,37 @@
   },
   {
     "helper": {
+      "code": "busy"
+    }
+  },
+  {
+    "helper": {
+      "code": "invalidRequest"
+    }
+  },
+  {
+    "helper": {
+      "code": "unknownAttempt"
+    }
+  },
+  {
+    "helper": {
+      "code": "wrongPhase"
+    }
+  },
+  {
+    "helper": {
       "code": "binaryUnavailable"
+    }
+  },
+  {
+    "helper": {
+      "code": "notAuthorized"
+    }
+  },
+  {
+    "helper": {
+      "code": "internalError"
     }
   }
 ]

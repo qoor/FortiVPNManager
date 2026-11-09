@@ -58,9 +58,6 @@
             "helper": {
               "checking": {}
             },
-            "readiness": {
-              "unknown": {}
-            },
             "registerHelper": "hidden"
           }
         }
@@ -106,6 +103,7 @@
             "discard": "disabled",
             "hasChanges": false,
             "networks": {
+              "addRow": "enabled",
               "problemRows": [],
               "rows": []
             },
@@ -113,6 +111,7 @@
               "checking": {}
             },
             "targets": {
+              "addRow": "enabled",
               "problemRows": [],
               "rows": []
             }

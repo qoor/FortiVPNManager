@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use fvm_contract::app_helper::RunRequest;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy, StopScope,
+    Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy, StopScope, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -30,6 +30,10 @@ impl Backend for OpenFortiVpn {
 
     fn describe_problem(&self, problem: &ClientProblem) -> String {
         client::describe(problem)
+    }
+
+    fn untested_version(&self, version: &str) -> Option<UntestedVersion> {
+        client::untested_version(version)
     }
 
     fn launch_spec(

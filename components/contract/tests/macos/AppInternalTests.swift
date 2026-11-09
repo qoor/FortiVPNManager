@@ -185,8 +185,8 @@ private extension AppInternal {
 
         static func connectionSection(_ status: ConnectionStatus) -> ConnectionSection {
             ConnectionSection(
-                icon: .disconnected, status: status, waitReason: nil, attention: nil, nextAttemptAt: nil,
-                connect: .enabled, disconnect: .hidden, reconnectNow: .disabled, accountAppliesNextConnection: false
+                icon: .disconnected, status: status, waitReason: nil, connect: .enabled, disconnect: .hidden,
+                reconnectNow: .disabled, accountAppliesNextConnection: false
             )
         }
 
@@ -199,7 +199,7 @@ private extension AppInternal {
         }
 
         static func readinessSection(_ helper: HelperState) -> ReadinessSection {
-            ReadinessSection(readiness: .ready, helper: helper, registerHelper: .hidden, registerError: nil, client: nil)
+            ReadinessSection(helper: helper, registerHelper: .hidden, registerError: nil, client: nil)
         }
 
         static func gmailSection(_ test: GmailTest, account: GoogleAccountStatus = .notConnected) -> GmailSection {
@@ -216,8 +216,9 @@ private extension AppInternal {
             _ status: BypassStatus, notice: BypassNotice?, currentNetwork: CurrentNetwork? = nil
         ) -> BypassRulesSection {
             BypassRulesSection(
-                currentNetwork: currentNetwork, networks: RuleList(rows: [], problemRows: []),
-                targets: RuleList(rows: [], problemRows: []), notice: notice, status: status, hasChanges: false,
+                currentNetwork: currentNetwork, networks: RuleList(rows: [], problemRows: [], addRow: .enabled),
+                targets: RuleList(rows: [], problemRows: [], addRow: .enabled), notice: notice, status: status,
+                hasChanges: false,
                 addCurrentNetwork: .disabled, discard: .disabled, apply: .disabled
             )
         }
@@ -261,9 +262,7 @@ private extension AppInternal {
         static let fromRuntime: [FromRuntime] = [
             .section(.connection(connectionSection(.notConnected))),
             .section(.schedule(scheduleSection(enabled: false, outlook: nil, hoursError: nil))),
-            .section(.readiness(ReadinessSection(
-                readiness: .unknown, helper: .checking, registerHelper: .hidden, registerError: nil, client: nil
-            ))),
+            .section(.readiness(ReadinessSection(helper: .checking, registerHelper: .hidden, registerError: nil, client: nil))),
             .section(.gmail(gmailSection(.idle))),
             .section(.bypassRules(bypassSection(.checking, notice: nil))),
             .section(.config(configSection(accountForm(0)))),
@@ -280,34 +279,32 @@ private extension AppInternal {
             ConnectionSection(
                 icon: .connected,
                 status: .connected(
-                    since: at(t0), tunnelIp: "10.211.0.7", outlook: .reconnectsAt(at: at(t0 + 10_500_000)),
-                    proactiveReconnect: .at(at: at(t0 + 10_500_000))
+                    since: at(t0), tunnelIp: "10.211.0.7", proactiveReconnect: .at(at: at(t0 + 10_500_000))
                 ),
-                waitReason: nil, attention: nil, nextAttemptAt: nil, connect: .hidden, disconnect: .enabled,
-                reconnectNow: .enabled, accountAppliesNextConnection: true
+                waitReason: nil, connect: .hidden, disconnect: .enabled, reconnectNow: .enabled,
+                accountAppliesNextConnection: true
             ),
-            connectionSection(.connected(
-                since: at(t0), tunnelIp: nil, outlook: .wontReconnect, proactiveReconnect: .pausedBySchedule
-            )),
-            connectionSection(.connected(since: at(t0), tunnelIp: nil, outlook: .reconnectOnHold, proactiveReconnect: .off)),
-            connectionSection(.connected(since: at(t0), tunnelIp: nil, outlook: nil, proactiveReconnect: .off)),
+            connectionSection(.connected(since: at(t0), tunnelIp: nil, proactiveReconnect: .pausedBySchedule)),
+            connectionSection(.connected(since: at(t0), tunnelIp: nil, proactiveReconnect: .off)),
             ConnectionSection(
                 icon: .inProgress, status: .waitingToReconnect(until: at(t0 + 90_000)),
-                waitReason: .authCooldown(delaySeconds: 90), attention: nil, nextAttemptAt: at(t0 + 90_000),
-                connect: .hidden, disconnect: .enabled, reconnectNow: .enabled, accountAppliesNextConnection: false
+                waitReason: .authCooldown(delaySeconds: 90), connect: .hidden, disconnect: .enabled,
+                reconnectNow: .enabled, accountAppliesNextConnection: false
             ),
             ConnectionSection(
-                icon: .error, status: .setupRequired, waitReason: nil,
-                attention: .needsSetup(items: [.vpnPassword, .gmailCredential(method: .gmailApi)]), nextAttemptAt: nil,
-                connect: .enabled, disconnect: .enabled, reconnectNow: .disabled, accountAppliesNextConnection: false
+                icon: .error, status: .setupRequired(items: [.vpnPassword, .gmailCredential(method: .gmailApi)]),
+                waitReason: nil, connect: .enabled, disconnect: .enabled, reconnectNow: .disabled,
+                accountAppliesNextConnection: false
             ),
             ConnectionSection(
-                icon: .error, status: .failed(reason: .vpnLoginRejected), waitReason: nil,
-                attention: .failed(reason: .vpnLoginRejected), nextAttemptAt: nil, connect: .enabled,
+                icon: .error, status: .failed(reason: .vpnLoginRejected), waitReason: nil, connect: .enabled,
                 disconnect: .hidden, reconnectNow: .disabled, accountAppliesNextConnection: false
             ),
             connectionSection(.connecting(reconnecting: true, progress: .waitingForOtp)),
-            connectionSection(.reconnectOnHold),
+            ConnectionSection(
+                icon: .disconnected, status: .reconnectOnHold(until: at(t0 + 1_800_000)), waitReason: .userAway,
+                connect: .enabled, disconnect: .hidden, reconnectNow: .disabled, accountAppliesNextConnection: false
+            ),
             connectionSection(.waitingForNetwork),
             connectionSection(.disconnecting(then: .reconnect)),
         ]
@@ -323,7 +320,13 @@ private extension AppInternal {
             .gmailRejected(method: .imap),
             .tooManyReconnects(windowSeconds: 3600),
             .network,
+            .helper(code: .busy),
+            .helper(code: .invalidRequest),
+            .helper(code: .unknownAttempt),
+            .helper(code: .wrongPhase),
             .helper(code: .clientUnavailable),
+            .helper(code: .notAuthorized),
+            .helper(code: .internalError),
         ]
 
         static let waitReasons: [WaitReason] = [
@@ -349,18 +352,17 @@ private extension AppInternal {
 
         static let readinessSections: [ReadinessSection] = [
             ReadinessSection(
-                readiness: .ready, helper: .running(build: "20261109120000"), registerHelper: .hidden, registerError: nil,
+                helper: .running(build: "20261109120000"), registerHelper: .hidden, registerError: nil,
                 client: VpnClientInfo(
                     path: "/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn", version: "1.25.0",
                     untestedVersion: UntestedVersion(testedSeries: "1.24"), problem: nil
                 )
             ),
             ReadinessSection(
-                readiness: .needsSetup(items: [.helperApproval]), helper: .notRegistered, registerHelper: .enabled,
-                registerError: .notInstalledCopy, client: nil
+                helper: .notRegistered, registerHelper: .enabled, registerError: .notInstalledCopy, client: nil
             ),
             ReadinessSection(
-                readiness: .ready, helper: .running(build: "20261109120000"), registerHelper: .hidden,
+                helper: .running(build: "20261109120000"), registerHelper: .hidden,
                 registerError: .failed(description: "Operation not permitted"),
                 client: VpnClientInfo(
                     path: nil, version: nil, untestedVersion: nil,
@@ -409,9 +411,6 @@ private extension AppInternal {
             .clientFileInvalid(problem: .noDesktopClient),
             .clientFileInvalid(problem: .missingField(name: "client_secret")),
             .clientFileInvalid(problem: .invalidField(name: "client_id")),
-            .noOAuthClient,
-            .enterAddress,
-            .alreadyInProgress,
             .listenerFailed(detail: "Address already in use (os error 48)"),
             .browserUnavailable,
             .timedOut(afterSeconds: 300),
@@ -467,8 +466,10 @@ private extension AppInternal {
                 currentNetwork: CurrentNetwork(
                     serviceName: "Ethernet", address: "10.20.161.20", prefixLength: 24, within: "10.20.161.0/24"
                 ),
-                networks: RuleList(rows: ["10.20.161.0/24"], problemRows: []),
-                targets: RuleList(rows: ["10.30.161.16", "10.30.161", "10.30.161.16/32"], problemRows: [1, 2]),
+                networks: RuleList(rows: ["10.20.161.0/24"], problemRows: [], addRow: .enabled),
+                targets: RuleList(
+                    rows: ["10.30.161.16", "10.30.161", "10.30.161.16/32"], problemRows: [1, 2], addRow: .disabled
+                ),
                 notice: .rowProblem(row: "10.30.161", problem: .invalid(problem: .malformed)),
                 status: .applied(
                     serviceName: "Ethernet", router: "10.20.161.1", onLinkTargets: 1, notImported: 2,
@@ -513,6 +514,13 @@ private extension AppInternal {
             bypassSection(
                 .failed(
                     failure: .helperUnreachable(failure: .connectionLost), retryInSeconds: nil, stoppedAfterRetries: nil
+                ),
+                notice: nil
+            ),
+            bypassSection(
+                .failed(
+                    failure: .helperBuildMismatch(helperBuild: "20261108090000", appBuild: "20261109120000"),
+                    retryInSeconds: nil, stoppedAfterRetries: nil
                 ),
                 notice: nil
             ),
@@ -658,12 +666,11 @@ private extension AppInternal {
             ))),
             .portRequest(id: 9, request: .callHelper(call: .submitOtp(attempt: attempt, code: "123456"))),
             .portRequest(id: 10, request: .callHelper(call: .disconnect(attempt: attempt, reason: "userDisconnect"))),
-            .portRequest(id: 11, request: .callHelper(call: .disconnect(attempt: nil, reason: "clientInvalidated"))),
+            .portRequest(id: 11, request: .callHelper(call: .disconnect(attempt: attempt, reason: "clientInvalidated"))),
             .portRequest(id: 12, request: .callHelper(call: .status)),
             .portRequest(id: 13, request: .callHelper(call: .exitWhenIdle)),
             .portRequest(id: 14, request: .callHelper(call: .readBypassRoutes)),
             .portRequest(id: 15, request: .callHelper(call: .writeBypassRoutes(json: #"{"expected":{},"routes":[]}"#))),
-            .portRequest(id: 16, request: .resolveIpv4(host: "vpn.example.com")),
             .portRequest(id: 17, request: .routeInterface(destination: "203.0.113.10")),
             .portRequest(id: 18, request: .interfaceAddresses),
             .portRequest(id: 19, request: .primaryRouter),
@@ -715,7 +722,7 @@ private extension AppInternal {
             .command(.reconnectNow),
             .command(.settingsOpened),
             .command(.settingsClosed),
-            .command(.editAccount(form: AccountForm(
+            .command(.editAccount(revision: 4, form: AccountForm(
                 host: "vpn.example.com", port: "443", username: "alice", realm: "", gmailAddress: "alice@example.com",
                 vpnPassword: "p@ss", appPassword: ""
             ))),
@@ -780,8 +787,6 @@ private extension AppInternal {
                 description: "The data couldn’t be read because it is missing."
             ))),
             .portResponse(id: 8, response: .helperBuildMismatch(helperBuild: "20261108090000")),
-            .portResponse(id: 16, response: .ipv4(address: "203.0.113.10")),
-            .portResponse(id: 16, response: .ipv4(address: nil)),
             .portResponse(id: 17, response: .routeInterface(interface: "en0")),
             .portResponse(id: 17, response: .routeInterface(interface: nil)),
             .portResponse(id: 18, response: .interfaceAddresses(addresses: [
@@ -795,11 +800,11 @@ private extension AppInternal {
         ]
 
         static let systemEvents: [ToRuntime] = [
-            .event(.willSleep),
+            .event(.willSleep(at: at(t0))),
             .event(.didWake),
-            .event(.screenLocked),
+            .event(.screenLocked(at: at(t0 + 250))),
             .event(.screenUnlocked),
-            .event(.displaysSlept),
+            .event(.displaysSlept(at: at(t0 + 500))),
             .event(.displaysWoke),
             .event(.networkPathChanged(satisfied: true, interfaces: [
                 PathInterface(name: "en0", kind: .wiredEthernet),

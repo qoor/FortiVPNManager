@@ -1,7 +1,8 @@
 import Foundation
 
 extension AppInternal {
-    /// Domain sections, drawn as they are (components/contract/src/app_internal/section.rs).
+    /// Domain sections, drawn as they are (components/contract/src/app_internal/section.rs). Each
+    /// value appears once; the UI may show it in several places.
     enum Section: Decodable, Equatable, Sendable {
         case connection(ConnectionSection)
         case schedule(ScheduleSection)
@@ -17,8 +18,6 @@ extension AppInternal {
         var icon: ConnectionIcon
         var status: ConnectionStatus
         var waitReason: WaitReason?
-        var attention: Attention?
-        var nextAttemptAt: Date?
         var connect: ButtonState
         var disconnect: ButtonState
         var reconnectNow: ButtonState
@@ -35,13 +34,18 @@ extension AppInternal {
 
     enum ConnectionStatus: Decodable, Equatable, Sendable {
         case notConnected
-        case setupRequired
+        /// Also the line shown with the button that opens Settings.
+        case setupRequired(items: [SetupItem])
         case connecting(reconnecting: Bool, progress: ConnectProgress)
-        case connected(since: Date, tunnelIp: String?, outlook: SessionOutlook?, proactiveReconnect: ProactiveReconnect)
-        case reconnectOnHold
+        /// The status line ends with the planned proactive reconnect, or else with the schedule
+        /// outlook when it is `suspended` or `holdingWhileAway`.
+        case connected(since: Date, tunnelIp: String?, proactiveReconnect: ProactiveReconnect)
+        case reconnectOnHold(until: Date)
+        /// `until` is also the next attempt's time.
         case waitingToReconnect(until: Date)
         case waitingForNetwork
         case disconnecting(then: AfterDisconnect)
+        /// Also the line shown with the button that opens Settings.
         case failed(reason: FailureReason)
     }
 
@@ -53,12 +57,6 @@ extension AppInternal {
         case waitingForOtp
         case verifyingOtp
         case openingTunnel
-    }
-
-    enum SessionOutlook: Decodable, Equatable, Sendable {
-        case reconnectsAt(at: Date)
-        case wontReconnect
-        case reconnectOnHold
     }
 
     enum ProactiveReconnect: Decodable, Equatable, Sendable {
@@ -109,11 +107,6 @@ extension AppInternal {
         case userAway
     }
 
-    enum Attention: Decodable, Equatable, Sendable {
-        case needsSetup(items: [SetupItem])
-        case failed(reason: FailureReason)
-    }
-
     enum SetupItem: Decodable, Equatable, Sendable {
         case configFile
         case accountDetails
@@ -154,17 +147,10 @@ extension AppInternal {
     // MARK: Readiness and Helper
 
     struct ReadinessSection: Decodable, Equatable, Sendable {
-        var readiness: Readiness
         var helper: HelperState
         var registerHelper: ButtonState
         var registerError: RegistrationError?
         var client: VpnClientInfo?
-    }
-
-    enum Readiness: Decodable, Equatable, Sendable {
-        case unknown
-        case ready
-        case needsSetup(items: [SetupItem])
     }
 
     enum HelperState: Decodable, Equatable, Sendable {
@@ -242,9 +228,8 @@ extension AppInternal {
     enum GoogleError: Decodable, Equatable, Sendable {
         case clientFileUnreadable(problem: FileProblem)
         case clientFileInvalid(problem: OAuthClientFileProblem)
-        case noOAuthClient
-        case enterAddress
-        case alreadyInProgress
+        /// The details of this and the other network failures are Rust's English text, shown as
+        /// they are.
         case listenerFailed(detail: String)
         case browserUnavailable
         case timedOut(afterSeconds: Int)
@@ -336,6 +321,7 @@ extension AppInternal {
     struct RuleList: Decodable, Equatable, Sendable {
         var rows: [String]
         var problemRows: [Int]
+        var addRow: ButtonState
     }
 
     enum BypassNotice: Decodable, Equatable, Sendable {
@@ -367,6 +353,7 @@ extension AppInternal {
         case settingsNotChanged(message: String)
         case importNotSaved(error: ConfigFileError)
         case helperUnreachable(failure: HelperChannelFailure)
+        case helperBuildMismatch(helperBuild: String, appBuild: String)
     }
 
     // MARK: Settings

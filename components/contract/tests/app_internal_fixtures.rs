@@ -16,7 +16,7 @@ use fvm_contract::app_internal::port::*;
 use fvm_contract::app_internal::problem::*;
 use fvm_contract::app_internal::section::*;
 use fvm_contract::app_internal::*;
-use fvm_contract::backend::{ClientProblem, ClientProblemKind};
+use fvm_contract::backend::{ClientProblem, ClientProblemKind, UntestedVersion};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -94,8 +94,6 @@ fn connection_section(status: ConnectionStatus) -> ConnectionSection {
         icon: ConnectionIcon::Disconnected,
         status,
         wait_reason: None,
-        attention: None,
-        next_attempt_at: None,
         connect: ButtonState::Enabled,
         disconnect: ButtonState::Hidden,
         reconnect_now: ButtonState::Disabled,
@@ -112,38 +110,37 @@ fn messages_from_the_runtime() {
         [
             FromRuntime::Section {
                 section: Section::Connection {
-                    section: connection_section(ConnectionStatus::NotConnected {}),
+                    section: Box::new(connection_section(ConnectionStatus::NotConnected {})),
                 },
             },
             FromRuntime::Section {
                 section: Section::Schedule {
-                    section: schedule_section(false, None, None),
+                    section: Box::new(schedule_section(false, None, None)),
                 },
             },
             FromRuntime::Section {
                 section: Section::Readiness {
-                    section: ReadinessSection {
-                        readiness: Readiness::Unknown {},
+                    section: Box::new(ReadinessSection {
                         helper: HelperState::Checking {},
                         register_helper: ButtonState::Hidden,
                         register_error: None,
                         client: None,
-                    },
+                    }),
                 },
             },
             FromRuntime::Section {
                 section: Section::Gmail {
-                    section: gmail_section(GmailTest::Idle {}),
+                    section: Box::new(gmail_section(GmailTest::Idle {})),
                 },
             },
             FromRuntime::Section {
                 section: Section::BypassRules {
-                    section: bypass_section(BypassStatus::Checking {}, None),
+                    section: Box::new(bypass_section(BypassStatus::Checking {}, None)),
                 },
             },
             FromRuntime::Section {
                 section: Section::Config {
-                    section: config_section(account_form(0), None),
+                    section: Box::new(config_section(account_form(0), None)),
                 },
             },
             FromRuntime::LogLines {
@@ -186,16 +183,11 @@ fn connection_sections() {
                 status: ConnectionStatus::Connected {
                     since: at(T0),
                     tunnel_ip: Some(Ipv4Addr::new(10, 211, 0, 7)),
-                    outlook: Some(SessionOutlook::ReconnectsAt {
-                        at: at(T0 + 10_500_000),
-                    }),
                     proactive_reconnect: ProactiveReconnect::At {
                         at: at(T0 + 10_500_000),
                     },
                 },
                 wait_reason: None,
-                attention: None,
-                next_attempt_at: None,
                 connect: ButtonState::Hidden,
                 disconnect: ButtonState::Enabled,
                 reconnect_now: ButtonState::Enabled,
@@ -204,19 +196,11 @@ fn connection_sections() {
             connection_section(ConnectionStatus::Connected {
                 since: at(T0),
                 tunnel_ip: None,
-                outlook: Some(SessionOutlook::WontReconnect {}),
                 proactive_reconnect: ProactiveReconnect::PausedBySchedule {},
             }),
             connection_section(ConnectionStatus::Connected {
                 since: at(T0),
                 tunnel_ip: None,
-                outlook: Some(SessionOutlook::ReconnectOnHold {}),
-                proactive_reconnect: ProactiveReconnect::Off {},
-            }),
-            connection_section(ConnectionStatus::Connected {
-                since: at(T0),
-                tunnel_ip: None,
-                outlook: None,
                 proactive_reconnect: ProactiveReconnect::Off {},
             }),
             ConnectionSection {
@@ -225,8 +209,6 @@ fn connection_sections() {
                     until: at(T0 + 90_000),
                 },
                 wait_reason: Some(WaitReason::AuthCooldown { delay_seconds: 90 }),
-                attention: None,
-                next_attempt_at: Some(at(T0 + 90_000)),
                 connect: ButtonState::Hidden,
                 disconnect: ButtonState::Enabled,
                 reconnect_now: ButtonState::Enabled,
@@ -234,17 +216,15 @@ fn connection_sections() {
             },
             ConnectionSection {
                 icon: ConnectionIcon::Error,
-                status: ConnectionStatus::SetupRequired {},
-                wait_reason: None,
-                attention: Some(Attention::NeedsSetup {
+                status: ConnectionStatus::SetupRequired {
                     items: vec![
                         SetupItem::VpnPassword {},
                         SetupItem::GmailCredential {
                             method: OtpMethod::GmailApi,
                         },
                     ],
-                }),
-                next_attempt_at: None,
+                },
+                wait_reason: None,
                 connect: ButtonState::Enabled,
                 disconnect: ButtonState::Enabled,
                 reconnect_now: ButtonState::Disabled,
@@ -256,10 +236,6 @@ fn connection_sections() {
                     reason: FailureReason::VpnLoginRejected {},
                 },
                 wait_reason: None,
-                attention: Some(Attention::Failed {
-                    reason: FailureReason::VpnLoginRejected {},
-                }),
-                next_attempt_at: None,
                 connect: ButtonState::Enabled,
                 disconnect: ButtonState::Hidden,
                 reconnect_now: ButtonState::Disabled,
@@ -269,7 +245,12 @@ fn connection_sections() {
                 reconnecting: true,
                 progress: ConnectProgress::WaitingForOtp,
             }),
-            connection_section(ConnectionStatus::ReconnectOnHold {}),
+            ConnectionSection {
+                wait_reason: Some(WaitReason::UserAway {}),
+                ..connection_section(ConnectionStatus::ReconnectOnHold {
+                    until: at(T0 + 1_800_000),
+                })
+            },
             connection_section(ConnectionStatus::WaitingForNetwork {}),
             connection_section(ConnectionStatus::Disconnecting {
                 then: AfterDisconnect::Reconnect,
@@ -318,7 +299,25 @@ fn connection_kinds() {
             },
             FailureReason::Network {},
             FailureReason::Helper {
+                code: HelperErrorCode::Busy,
+            },
+            FailureReason::Helper {
+                code: HelperErrorCode::InvalidRequest,
+            },
+            FailureReason::Helper {
+                code: HelperErrorCode::UnknownAttempt,
+            },
+            FailureReason::Helper {
+                code: HelperErrorCode::WrongPhase,
+            },
+            FailureReason::Helper {
                 code: HelperErrorCode::ClientUnavailable,
+            },
+            FailureReason::Helper {
+                code: HelperErrorCode::NotAuthorized,
+            },
+            FailureReason::Helper {
+                code: HelperErrorCode::InternalError,
             },
         ],
     );
@@ -412,7 +411,6 @@ fn schedule_sections() {
 
 fn readiness_section(helper: HelperState) -> ReadinessSection {
     ReadinessSection {
-        readiness: Readiness::Ready {},
         helper,
         register_helper: ButtonState::Hidden,
         register_error: None,
@@ -426,7 +424,6 @@ fn readiness_sections() {
         "readiness_sections.json",
         [
             ReadinessSection {
-                readiness: Readiness::Ready {},
                 helper: HelperState::Running {
                     build: "20261109120000".into(),
                 },
@@ -442,16 +439,12 @@ fn readiness_sections() {
                 }),
             },
             ReadinessSection {
-                readiness: Readiness::NeedsSetup {
-                    items: vec![SetupItem::HelperApproval {}],
-                },
                 helper: HelperState::NotRegistered {},
                 register_helper: ButtonState::Enabled,
                 register_error: Some(RegistrationError::NotInstalledCopy {}),
                 client: None,
             },
             ReadinessSection {
-                readiness: Readiness::Ready {},
                 helper: HelperState::Running {
                     build: "20261109120000".into(),
                 },
@@ -626,9 +619,6 @@ fn google_errors() {
                     name: "client_id".into(),
                 },
             },
-            GoogleError::NoOAuthClient {},
-            GoogleError::EnterAddress {},
-            GoogleError::AlreadyInProgress {},
             GoogleError::ListenerFailed {
                 detail: "Address already in use (os error 48)".into(),
             },
@@ -752,10 +742,12 @@ fn bypass_section(status: BypassStatus, notice: Option<BypassNotice>) -> BypassR
         networks: RuleList {
             rows: vec![],
             problem_rows: vec![],
+            add_row: ButtonState::Enabled,
         },
         targets: RuleList {
             rows: vec![],
             problem_rows: vec![],
+            add_row: ButtonState::Enabled,
         },
         notice,
         status,
@@ -786,6 +778,7 @@ fn bypass_rules_sections() {
                 networks: RuleList {
                     rows: vec!["10.20.161.0/24".into()],
                     problem_rows: vec![],
+                    add_row: ButtonState::Enabled,
                 },
                 targets: RuleList {
                     rows: vec![
@@ -794,6 +787,7 @@ fn bypass_rules_sections() {
                         "10.30.161.16/32".into(),
                     ],
                     problem_rows: vec![1, 2],
+                    add_row: ButtonState::Disabled,
                 },
                 notice: Some(BypassNotice::RowProblem {
                     row: "10.30.161".into(),
@@ -890,6 +884,17 @@ fn bypass_rules_sections() {
                 failed(
                     BypassFailure::HelperUnreachable {
                         failure: HelperChannelFailure::ConnectionLost {},
+                    },
+                    None,
+                    None,
+                ),
+                None,
+            ),
+            bypass_section(
+                failed(
+                    BypassFailure::HelperBuildMismatch {
+                        helper_build: "20261108090000".into(),
+                        app_build: "20261109120000".into(),
                     },
                     None,
                     None,
@@ -1429,14 +1434,14 @@ fn port_requests() {
             call(
                 10,
                 HelperCall::Disconnect {
-                    attempt: Some(attempt()),
+                    attempt: attempt(),
                     reason: StopReason::UserDisconnect,
                 },
             ),
             call(
                 11,
                 HelperCall::Disconnect {
-                    attempt: None,
+                    attempt: attempt(),
                     reason: StopReason::AppDisconnected,
                 },
             ),
@@ -1447,12 +1452,6 @@ fn port_requests() {
                 15,
                 HelperCall::WriteBypassRoutes {
                     json: r#"{"expected":{},"routes":[]}"#.into(),
-                },
-            ),
-            request(
-                16,
-                PortRequest::ResolveIpv4 {
-                    host: "vpn.example.com".into(),
                 },
             ),
             request(
@@ -1525,9 +1524,9 @@ fn launched() {
             facts: AppFacts {
                 app_build: "20261109120000".into(),
                 installed_copy: true,
-                built_in_oauth_client: Some(
-                    r#"{"installed":{"client_id":"123-abc.apps.googleusercontent.com"}}"#.into(),
-                ),
+                built_in_oauth_client: Some(secret(
+                    r#"{"installed":{"client_id":"123-abc.apps.googleusercontent.com"}}"#,
+                )),
                 time_zone: "Asia/Seoul".into(),
                 sign_in_pages: SignInPages {
                     completed: "FortiVPNManager: you can close this window.".into(),
@@ -1555,6 +1554,7 @@ fn commands() {
             command(Command::SettingsOpened {}),
             command(Command::SettingsClosed {}),
             command(Command::EditAccount {
+                revision: 4,
                 form: AccountForm {
                     host: "vpn.example.com".into(),
                     port: "443".into(),
@@ -1703,13 +1703,6 @@ fn port_responses() {
                 },
             ),
             response(
-                16,
-                PortResponse::Ipv4 {
-                    address: Some(Ipv4Addr::new(203, 0, 113, 10)),
-                },
-            ),
-            response(16, PortResponse::Ipv4 { address: None }),
-            response(
                 17,
                 PortResponse::RouteInterface {
                     interface: Some("en0".into()),
@@ -1763,11 +1756,11 @@ fn system_events() {
     decodes(
         "system_events.json",
         &[
-            event(SystemEvent::WillSleep {}),
+            event(SystemEvent::WillSleep { at: at(T0) }),
             event(SystemEvent::DidWake {}),
-            event(SystemEvent::ScreenLocked {}),
+            event(SystemEvent::ScreenLocked { at: at(T0 + 250) }),
             event(SystemEvent::ScreenUnlocked {}),
-            event(SystemEvent::DisplaysSlept {}),
+            event(SystemEvent::DisplaysSlept { at: at(T0 + 500) }),
             event(SystemEvent::DisplaysWoke {}),
             event(SystemEvent::NetworkPathChanged {
                 satisfied: true,
@@ -1802,11 +1795,26 @@ fn system_events() {
 }
 
 #[test]
+fn swift_may_write_a_fraction_of_a_millisecond() {
+    let event: ToRuntime =
+        serde_json::from_str(r#"{"event":{"_0":{"willSleep":{"at":1762412345250.75}}}}"#).unwrap();
+    assert_eq!(
+        event,
+        ToRuntime::Event {
+            event: SystemEvent::WillSleep {
+                at: UNIX_EPOCH + Duration::from_secs_f64(1_762_412_345_250.75 / 1000.0),
+            },
+        }
+    );
+}
+
+#[test]
 fn debug_output_redacts_secrets() {
     let debug = format!(
         "{:?}",
         (
             Command::EditAccount {
+                revision: 0,
                 form: AccountForm {
                     host: "vpn.example.com".into(),
                     port: "443".into(),

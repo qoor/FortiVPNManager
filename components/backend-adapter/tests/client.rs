@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-use fvm_contract::backend::{Backend, ClientProblem, ClientProblemKind, StopPolicy, StopScope};
+use fvm_contract::backend::{
+    Backend, ClientProblem, ClientProblemKind, StopPolicy, StopScope, UntestedVersion,
+};
 
 const RESOLVED: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
 
@@ -13,6 +15,22 @@ fn describe(kind: ClientProblemKind, path: &str) -> String {
         kind,
         path: PathBuf::from(path),
     })
+}
+
+#[test]
+fn versions_outside_the_tested_series_are_untested() {
+    for tested in ["1.24", "1.24.1", "1.24.10"] {
+        assert_eq!(OpenFortiVpn.untested_version(tested), None, "{tested}");
+    }
+    for untested in ["1.25.0", "1.240.1", "1.2", "2.0.0"] {
+        assert_eq!(
+            OpenFortiVpn.untested_version(untested),
+            Some(UntestedVersion {
+                tested_series: "1.24".into()
+            }),
+            "{untested}"
+        );
+    }
 }
 
 #[test]

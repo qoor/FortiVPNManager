@@ -8,8 +8,9 @@ extension AppInternal {
         /// Passwords typed in the Account tab are forgotten.
         case settingsClosed
 
-        /// The Account tab's fields as typed, after any edit.
-        case editAccount(form: AccountForm)
+        /// The Account tab's fields as typed, after any edit, with the form's `revision` they were
+        /// typed against; Rust drops an edit against an older revision.
+        case editAccount(revision: UInt64, form: AccountForm)
         case saveAccount
         case revertAccount
         /// The VPN client's own settings file; nil is its default location.

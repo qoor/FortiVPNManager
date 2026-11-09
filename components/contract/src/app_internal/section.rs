@@ -13,38 +13,39 @@ use super::problem::{
 };
 use super::{ButtonState, MinutesSetting, OtpMethod, TimeOfDay, Weekday, millis};
 use crate::app_helper::HelperErrorCode;
-use crate::backend::ClientProblem;
+use crate::backend::{ClientProblem, UntestedVersion};
 
+/// Boxed, as the sections differ much in size.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Section {
     Connection {
         #[serde(rename = "_0")]
-        section: ConnectionSection,
+        section: Box<ConnectionSection>,
     },
     Schedule {
         #[serde(rename = "_0")]
-        section: ScheduleSection,
+        section: Box<ScheduleSection>,
     },
     /// Readiness and the Helper.
     Readiness {
         #[serde(rename = "_0")]
-        section: ReadinessSection,
+        section: Box<ReadinessSection>,
     },
     /// Gmail and the Google account.
     Gmail {
         #[serde(rename = "_0")]
-        section: GmailSection,
+        section: Box<GmailSection>,
     },
     /// The exception rules.
     BypassRules {
         #[serde(rename = "_0")]
-        section: BypassRulesSection,
+        section: Box<BypassRulesSection>,
     },
     /// The settings: the settings file, the Account tab's form and the connection options.
     Config {
         #[serde(rename = "_0")]
-        section: ConfigSection,
+        section: Box<ConfigSection>,
     },
 }
 
@@ -58,15 +59,6 @@ pub struct ConnectionSection {
     /// Why the connection waits, shown under the status.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wait_reason: Option<WaitReason>,
-    /// What needs the user, shown with the button that opens Settings.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attention: Option<Attention>,
-    /// When the next automatic attempt is due while waiting to retry.
-    #[serde(
-        serialize_with = "millis::optional_time",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub next_attempt_at: Option<SystemTime>,
     pub connect: ButtonState,
     pub disconnect: ButtonState,
     pub reconnect_now: ButtonState,
@@ -85,28 +77,35 @@ pub enum ConnectionIcon {
     Error,
 }
 
+/// Each value appears once; the UI may show it in several places.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ConnectionStatus {
     NotConnected {},
-    SetupRequired {},
+    /// Also the line shown with the button that opens Settings.
+    SetupRequired {
+        items: Vec<SetupItem>,
+    },
     Connecting {
         /// Replacing or retrying a connection rather than making a fresh one.
         reconnecting: bool,
         progress: ConnectProgress,
     },
+    /// The status line ends with the planned proactive reconnect when there is one; otherwise with
+    /// the schedule's outlook when it is `Suspended` or `HoldingWhileAway`. The two never coincide.
     Connected {
         #[serde(serialize_with = "millis::time")]
         since: SystemTime,
         #[serde(skip_serializing_if = "Option::is_none")]
         tunnel_ip: Option<Ipv4Addr>,
-        /// What happens to this session next, for the status line.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        outlook: Option<SessionOutlook>,
         proactive_reconnect: ProactiveReconnect,
     },
-    /// Waiting for an away user outside the scheduled hours.
-    ReconnectOnHold {},
+    /// Waiting for an away user outside the scheduled hours, until the time the wait ends.
+    ReconnectOnHold {
+        #[serde(serialize_with = "millis::time")]
+        until: SystemTime,
+    },
+    /// `until` is also the next attempt's time.
     WaitingToReconnect {
         #[serde(serialize_with = "millis::time")]
         until: SystemTime,
@@ -115,6 +114,7 @@ pub enum ConnectionStatus {
     Disconnecting {
         then: AfterDisconnect,
     },
+    /// Also the line shown with the button that opens Settings.
     Failed {
         reason: FailureReason,
     },
@@ -130,20 +130,6 @@ pub enum ConnectProgress {
     WaitingForOtp,
     VerifyingOtp,
     OpeningTunnel,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum SessionOutlook {
-    /// The proactive reconnect is planned.
-    ReconnectsAt {
-        #[serde(serialize_with = "millis::time")]
-        at: SystemTime,
-    },
-    /// Automatic reconnects stopped while the user was away; this session is kept until it ends.
-    WontReconnect {},
-    /// Automatic reconnects wait for the away user.
-    ReconnectOnHold {},
 }
 
 /// The next proactive reconnect of the session.
@@ -216,13 +202,6 @@ pub enum WaitReason {
     },
     Sleep {},
     UserAway {},
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum Attention {
-    NeedsSetup { items: Vec<SetupItem> },
-    Failed { reason: FailureReason },
 }
 
 /// Something to set up before connecting, in the order readiness checks it.
@@ -299,25 +278,14 @@ pub enum ScheduleHoursError {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadinessSection {
-    pub readiness: Readiness,
     pub helper: HelperState,
     pub register_helper: ButtonState,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub register_error: Option<RegistrationError>,
-    /// What the Helper reports about the VPN client, once it answers with this build.
+    /// What the Helper reports about the VPN client, once it answers with this build, as it
+    /// reports it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client: Option<VpnClientInfo>,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum Readiness {
-    /// Not checked yet.
-    Unknown {},
-    Ready {},
-    NeedsSetup {
-        items: Vec<SetupItem>,
-    },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -350,14 +318,6 @@ pub struct VpnClientInfo {
     pub untested_version: Option<UntestedVersion>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub problem: Option<ClientProblem>,
-}
-
-/// The client's version is outside the series this app was tested with.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UntestedVersion {
-    /// Such as `1.24`.
-    pub tested_series: String,
 }
 
 // MARK: Gmail and Google account
@@ -426,10 +386,8 @@ pub enum GoogleError {
     ClientFileInvalid {
         problem: OAuthClientFileProblem,
     },
-    NoOAuthClient {},
-    EnterAddress {},
-    AlreadyInProgress {},
-    /// The local listener for Google's answer could not start, as the OS describes it.
+    /// The local listener for Google's answer could not start. The detail is the runtime's English
+    /// text, shown as it is (REFACTOR-PLAN §2, exception 4); so are the other network details.
     ListenerFailed {
         detail: String,
     },
@@ -551,7 +509,8 @@ pub enum GmailTestFailure {
     },
 }
 
-/// Why an IMAP session failed. Details are carried as they came.
+/// Why an IMAP session failed. Server texts are carried as they came; the other details are the
+/// runtime's English text, shown as it is (REFACTOR-PLAN §2, exception 4).
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ImapFailure {
@@ -625,6 +584,8 @@ pub struct RuleList {
     pub rows: Vec<String>,
     /// Indexes of rows with a problem.
     pub problem_rows: Vec<u32>,
+    /// Adding a row; disabled once the list holds as many entries as the settings file allows.
+    pub add_row: ButtonState,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -716,6 +677,11 @@ pub enum BypassFailure {
     HelperUnreachable {
         failure: HelperChannelFailure,
     },
+    /// The Helper is another build, so the routes were not sent.
+    HelperBuildMismatch {
+        helper_build: String,
+        app_build: String,
+    },
 }
 
 // MARK: Settings
@@ -774,7 +740,7 @@ pub struct OpenAtLogin {
 pub struct AccountFormState {
     /// Changes only when the runtime replaces what was typed: on load, save, revert, import,
     /// closing Settings, or a settings file change merged into untouched fields. The UI replaces
-    /// its fields only then.
+    /// its fields only then, and sends the revision back with every edit.
     pub revision: u64,
     pub host: String,
     pub port: String,

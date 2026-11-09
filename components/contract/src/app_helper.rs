@@ -14,6 +14,8 @@ use std::time::{Duration, SystemTime};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 
+use crate::backend::{ClientProblem, UntestedVersion};
+
 /// One connection attempt, as the app's UUID text. Kept in uppercase, the form the app writes, so
 /// equal attempts compare equal however the text was cased.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -278,7 +280,8 @@ pub struct OutputLine {
     pub text: String,
 }
 
-/// Answer to the app's status request.
+/// Answer to the app's status request. The phase-1 app reads only the first four fields and ignores
+/// the rest; the cutover removes `client_problem_text`.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct HelperStatus {
     #[serde(rename = "childAlive")]
@@ -290,9 +293,14 @@ pub struct HelperStatus {
         skip_serializing_if = "Option::is_none"
     )]
     pub client_version: Option<String>,
-    /// English text the app shows as it is.
+    /// English text the phase-1 app shows as it is.
     #[serde(rename = "binaryProblem", skip_serializing_if = "Option::is_none")]
-    pub client_problem: Option<String>,
+    pub client_problem_text: Option<String>,
+    #[serde(rename = "clientProblem", skip_serializing_if = "Option::is_none")]
+    pub client_problem: Option<ClientProblem>,
+    /// The backend adapter's judgment of `client_version`.
+    #[serde(rename = "untestedVersion", skip_serializing_if = "Option::is_none")]
+    pub untested_version: Option<UntestedVersion>,
 }
 
 /// Error answer to an app request; `message` is English and reaches the app as it is.

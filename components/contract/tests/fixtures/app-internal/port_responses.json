@@ -235,24 +235,6 @@
   },
   {
     "portResponse": {
-      "id": 16,
-      "response": {
-        "ipv4": {
-          "address": "203.0.113.10"
-        }
-      }
-    }
-  },
-  {
-    "portResponse": {
-      "id": 16,
-      "response": {
-        "ipv4": {}
-      }
-    }
-  },
-  {
-    "portResponse": {
       "id": 17,
       "response": {
         "routeInterface": {

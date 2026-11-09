@@ -19,8 +19,11 @@ pub enum Command {
     SettingsClosed {},
 
     /// The Account tab's fields as typed, after any edit. The draft lives in the runtime, which
-    /// decides what changed and what Save writes.
+    /// decides what changed and what Save writes. `revision` is the form's revision the edit was
+    /// typed against; an edit against an older one is dropped, since the runtime has replaced
+    /// those fields since.
     EditAccount {
+        revision: u64,
         form: AccountForm,
     },
     SaveAccount {},

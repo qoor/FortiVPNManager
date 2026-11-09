@@ -1,18 +1,33 @@
-//! Facts the OS integration reports without being asked, in the order they happened. The runtime
-//! takes the time a message arrives as the time of the event.
+//! Facts the OS integration reports without being asked, in the order they happened. Events that
+//! can come just before the system sleeps carry the time the OS reported them: their message may
+//! be read only after the wake, which would make the sleep or the time away look shorter. For the
+//! other events the runtime takes the time a message arrives.
+
+use std::time::SystemTime;
 
 use serde::Deserialize;
+
+use super::millis;
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum SystemEvent {
     /// The system is about to sleep.
-    WillSleep {},
+    WillSleep {
+        #[serde(deserialize_with = "millis::read_time")]
+        at: SystemTime,
+    },
     DidWake {},
-    ScreenLocked {},
+    ScreenLocked {
+        #[serde(deserialize_with = "millis::read_time")]
+        at: SystemTime,
+    },
     ScreenUnlocked {},
     /// Every display went to sleep.
-    DisplaysSlept {},
+    DisplaysSlept {
+        #[serde(deserialize_with = "millis::read_time")]
+        at: SystemTime,
+    },
     DisplaysWoke {},
     /// The system's network path, as the OS reports it on every update, including the first.
     NetworkPathChanged {
@@ -39,7 +54,8 @@ pub enum SystemEvent {
     HelperOutput {
         json: String,
     },
-    /// That connection was interrupted or invalidated; no exit report follows for its runs.
+    /// That connection was interrupted or invalidated, or dropped after
+    /// `HelperCall::ExitWhenIdle`; no exit report follows for its runs.
     HelperConnectionLost {},
 }
 
