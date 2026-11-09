@@ -57,12 +57,7 @@ verify:
 
 ## Install a Release build into /Applications (the only copy allowed to register the helper).
 install: release
-	-osascript -e 'tell application id "$(APP_ID)" to quit'
-	@for i in $$(seq 1 15); do pgrep -x FortiVPNManager >/dev/null || break; sleep 1; done
-	rm -rf "$(INSTALLED)"
-	ditto "$(DERIVED)/Build/Products/Release/FortiVPNManager.app" "$(INSTALLED)"
-	@# The old helper exits by itself once its binary is replaced (components/os-integration-helper/macos/SelfUpdateWatcher.swift).
-	open "$(INSTALLED)"
+	scripts/install-app.sh "$(DERIVED)/Build/Products/Release/FortiVPNManager.app" "$(INSTALLED)" "$(APP_ID)"
 
 run:
 	open "$(APP)"
