@@ -10,3 +10,13 @@ pub mod gmail_api;
 pub mod imap;
 pub mod oauth;
 pub mod otp_mail;
+
+/// Tab and the Unicode space separators: what mail headers and IMAP response codes are trimmed of,
+/// unlike line breaks.
+pub(crate) fn is_blank(c: char) -> bool {
+    matches!(
+        c,
+        '\t' | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'
+            ..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}'
+    )
+}

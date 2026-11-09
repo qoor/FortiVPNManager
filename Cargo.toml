@@ -14,6 +14,8 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
+base64 = "0.23"
+encoding_rs = "0.8"
 fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
 fvm-core = { path = "components/core" }
@@ -23,6 +25,7 @@ nix = "0.31"
 rustix = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
 # `all` exposes set_nosigpipe.
 socket2 = { version = "0.6", features = ["all"] }
 zeroize = "1"
