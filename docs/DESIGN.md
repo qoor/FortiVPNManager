@@ -202,11 +202,11 @@
 큰 변경 뒤 실제 환경에서 확인할 시나리오다.
 1. config.yaml이 없는 상태로 첫 실행: 기존 openfortivpn 설정을 가져오고, Helper 승인과 Gmail 연결 후 openfortivpn 1회 실행으로 연결된다.
 2. `vpn.trusted_certs`를 비우고 연결: 인증서 거부 1회 뒤 즉시 재실행으로 연결되고 digest가 저장된다. 다음 연결부터는 거부 없이 1회에 연결된다.
-3. pppd 또는 openfortivpn을 강제로 종료: route가 복구되고 재연결된다.
+3. openfortivpn 또는 pppd를 강제로 종료: route가 복구되고 재연결된다. openfortivpn을 끝내면 곧바로, pppd만 끝내면 서버 종료처럼 잠시 뒤 재연결한다.
 4. 세션 최대 시간을 짧게 바꿔 사전 재연결이 동작하는지 확인한다.
 5. 짧은 잠자기, 긴 잠자기, 연결 중 잠자기, Wi-Fi 변경
 6. 잘못된 VPN 비밀번호, 잘못된 Gmail 인증, OTP 메일 차단: 각각 정해진 대로 멈춘다.
 7. config.yaml 직접 편집: 옵션 변경 반영, 잘못된 값 거부, 깨진 YAML에서 마지막 정상 설정 유지, symlink 유지
 8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다.
 9. 보안: `ps`와 로그에 비밀값이 없고, 렌더링된 openfortivpn 설정 파일은 0600이며 종료 후 삭제된다. config.yaml과 state.json은 0600이다. `make verify`가 통과한다.
-10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝내고 다음 앱 요청(예: [지금 재연결])을 일으킨다. 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그가 남고, 남아 있던 openfortivpn과 pppd가 사라지며 default route가 복원된다.
+10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝낸다. 앱이 곧바로 재연결을 시작하고, 새 Helper가 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그를 남긴다. 남아 있던 openfortivpn과 pppd가 사라지고 새 터널이 올라온다.
