@@ -268,7 +268,7 @@ pub enum OutputSource {
     Helper,
 }
 
-/// One line for the Log tab. The app receives them in batches (a JSON array).
+/// One line for the Log pane. The app receives them in batches (a JSON array).
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct OutputLine {
     #[serde(

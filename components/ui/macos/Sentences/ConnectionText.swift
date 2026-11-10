@@ -1,14 +1,7 @@
 import Foundation
 
-// The connection's sentences, shared by the menu and the Connection tab so both describe the same
+// The connection's sentences, shared by the menu and the General pane so both describe the same
 // state with the same words.
-
-/// Tabs of the settings window.
-enum SettingsTab: Hashable {
-    case account
-    case connection
-    case log
-}
 
 extension AppInternal.ConnectionSection {
     /// One line: "Connected · 1 hr 23 min · Reconnects in about 1 hr 32 min", "Waiting to reconnect (1:12)".
@@ -50,19 +43,6 @@ extension AppInternal.ConnectionSection {
             }
         case let .failed(reason):
             return String(localized: "Error: \(reason.summary)")
-        }
-    }
-
-    /// The line shown with "Open Settings", and the tab that button opens.
-    func attention(time: TimeStyle) -> (message: String, tab: SettingsTab)? {
-        switch status {
-        case let .setupRequired(items):
-            let names = items.map(\.summary).joined(separator: ", ")
-            return (String(localized: "Required: \(names)"), items.first?.settingsTab ?? .account)
-        case let .failed(reason):
-            return (reason.guidance(time: time), reason.settingsTab)
-        default:
-            return nil
         }
     }
 
@@ -143,21 +123,30 @@ extension AppInternal.FailureReason {
         case .network:
             String(localized: "Couldn't connect to the VPN server.")
         case .helper(.invalidRequest):
-            String(localized: "The connection request was rejected. Check the account details and VPN password. The Log tab shows why.")
+            String(localized: "The connection request was rejected. Check the account details and VPN password. The log shows why.")
         case let .helper(code):
             String(localized: "Helper error: \(code.summary)")
         }
     }
 
-    /// The tab "Open Settings" opens for this failure.
-    var settingsTab: SettingsTab {
+    /// The pane that helps with this failure, opened by the button shown with the guidance.
+    var settingsPane: SettingsPane {
         switch self {
-        // `.invalidRequest`: an account value or the VPN password the Helper refused (the Log tab
-        // shows which).
+        // `.invalidRequest`: an account value or the VPN password the Helper refused (the log shows
+        // which).
         case .vpnLoginRejected, .otpNotReceived, .gmailRejected, .helper(.invalidRequest): .account
-        case .helper: .connection
+        case .helper: .advanced
         case .otpRejected, .tunnelSetupFailed, .tunnelModeRejected, .droppedEarly, .certificateChangedAfterLogin,
              .tooManyReconnects, .network: .log
+        }
+    }
+
+    /// The title of that button, naming where it goes.
+    var actionTitle: String {
+        switch settingsPane {
+        case .account: String(localized: "Open Account Settings…")
+        case .advanced: String(localized: "Open Advanced Settings…")
+        default: String(localized: "Show Log")
         }
     }
 }
@@ -192,26 +181,28 @@ extension AppInternal.WaitReason {
 }
 
 extension AppInternal.SetupItem {
-    var summary: String {
+    /// The action offered for the item, one per item so it is clear what to fix and where; it opens
+    /// `settingsPane`.
+    var actionTitle: String {
         switch self {
-        case .configFile: String(localized: "Settings file error")
-        case .accountDetails: String(localized: "Account details")
-        case .vpnPassword: String(localized: "VPN password")
+        case .accountDetails: String(localized: "Enter Account Details…")
+        case .vpnPassword: String(localized: "Enter VPN Password…")
         case let .gmailCredential(method):
             switch method {
-            case .imap: String(localized: "Gmail app password")
-            case .gmailApi: String(localized: "Google account connection")
+            case .imap: String(localized: "Enter Gmail App Password…")
+            case .gmailApi: String(localized: "Connect Google Account…")
             }
-        case .helperApproval: String(localized: "Helper registration and approval")
-        case .helperVersion: String(localized: "Helper version mismatch")
+        case .configFile: String(localized: "Check Settings File Error…")
+        case .helperApproval: String(localized: "Register and Approve Helper…")
+        case .helperVersion: String(localized: "Check Helper Version…")
         }
     }
 
-    /// The tab where the item is set up.
-    var settingsTab: SettingsTab {
+    /// The pane where the item is set up.
+    var settingsPane: SettingsPane {
         switch self {
         case .accountDetails, .vpnPassword, .gmailCredential: .account
-        case .configFile, .helperApproval, .helperVersion: .connection
+        case .configFile, .helperApproval, .helperVersion: .advanced
         }
     }
 }

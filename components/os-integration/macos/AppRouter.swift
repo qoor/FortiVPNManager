@@ -26,7 +26,8 @@ final class AppRouter {
     /// the system's events.
     func start(_ facts: AppInternal.AppFacts) {
         send(.launched(facts: facts))
-        userNotifier.onOpen = { [ui] in ui.settings.show(.connection) }
+        // The only notification is about exception-rule routes that could not be written.
+        userNotifier.onOpen = { [ui] in ui.settings.show(.exceptionRules) }
         userNotifier.start()
         events.start()
     }

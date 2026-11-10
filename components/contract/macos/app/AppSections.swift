@@ -389,7 +389,7 @@ extension AppInternal {
         var error: RegistrationError?
     }
 
-    /// The Account tab's draft. Replace the typed fields only when `revision` changes.
+    /// The Account pane's draft. Replace the typed fields only when `revision` changes.
     struct AccountFormState: Decodable, Equatable, Sendable {
         var revision: UInt64
         var host: String

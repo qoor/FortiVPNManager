@@ -73,8 +73,8 @@ pub enum FromRuntime {
     /// Show the settings window. Sent at most once per launch, after the sections it rests on, and
     /// only when the first config section carries an import report (the automatic first-launch
     /// import) or the first readiness evaluation finds setup required. Setup that becomes required
-    /// later in the run opens nothing. The UI only picks the tab: Account when the config section
-    /// has an import report, otherwise the tab of the first setup item in the connection status.
+    /// later in the run opens nothing. The UI only picks the pane: Account when the config section
+    /// has an import report, otherwise the pane of the first setup item in the connection status.
     OpenSettings {},
 }
 
@@ -107,7 +107,7 @@ pub struct SignInPages {
     pub invalid: String,
 }
 
-/// One line for the Log tab. The UI keeps the lines it shows and makes "Copy All" from them, in the
+/// One line for the Log pane. The UI keeps the lines it shows and makes "Copy All" from them, in the
 /// log file's format.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 pub struct LogLine {

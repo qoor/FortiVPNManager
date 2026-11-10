@@ -249,7 +249,7 @@ impl Runtime {
         Queue(self.inputs.clone())
     }
 
-    /// A line for the Log tab and the log file, sent after the current input.
+    /// A line for the Log pane and the log file, sent after the current input.
     pub(crate) fn log_line(&mut self, line: LogLine) {
         self.pending_lines.push(line);
     }

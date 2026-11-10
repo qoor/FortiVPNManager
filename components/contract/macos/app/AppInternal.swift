@@ -25,8 +25,8 @@ nonisolated enum AppInternal {
         /// Carry out without an answer.
         case portAction(PortAction)
         /// Show the settings window, at most once per launch (the rule is in
-        /// components/contract/src/app_internal/mod.rs). Pick the tab only: Account when the config
-        /// section has an import report, otherwise the tab of the first setup item in the
+        /// components/contract/src/app_internal/mod.rs). Pick the pane only: Account when the config
+        /// section has an import report, otherwise the pane of the first setup item in the
         /// connection status.
         case openSettings
     }
@@ -50,7 +50,7 @@ nonisolated enum AppInternal {
         var invalid: String
     }
 
-    /// One line for the Log tab.
+    /// One line for the Log pane.
     struct LogLine: Decodable, Equatable, Sendable {
         var time: Date
         var source: LogSource

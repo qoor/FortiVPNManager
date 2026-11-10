@@ -3,7 +3,7 @@
 //! method and the Google account is connected, IMAP otherwise. When the API is refused before the
 //! session is ready and an app password exists, the same attempt goes on over IMAP. After the code
 //! was submitted, the used mail go to the trash; a session closed after the OTP time limit
-//! looks in the spam folder once. Also the Account tab's Gmail test.
+//! looks in the spam folder once. Also the Account pane's Gmail test.
 
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
@@ -1060,7 +1060,7 @@ async fn imap_wrap_up(
     Ok(())
 }
 
-// MARK: Tests of the Account tab
+// MARK: Tests of the Account pane
 
 async fn imap_test(address: &str, password: &SecretText) -> GmailTest {
     let failed = |failure| GmailTest::Failed { failure };

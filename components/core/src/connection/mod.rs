@@ -303,7 +303,7 @@ pub enum Effect {
     ProbeNetwork(NetworkProbe),
     /// Answer with [`Input::ScreenState`].
     ReadScreenState,
-    /// A line for the Log tab.
+    /// A line for the Log pane.
     Note(Note),
     /// Show the settings window (`FromRuntime::OpenSettings`), after the sections of this input.
     OpenSettings,
@@ -386,7 +386,7 @@ pub struct ProbeResult {
     pub client_running: Option<bool>,
 }
 
-/// Schedule decisions the Log tab shows, so that a quiet evening can be told from a failure.
+/// Schedule decisions the Log pane shows, so that a quiet evening can be told from a failure.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Note {
     ScheduledHoursStarted,

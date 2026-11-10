@@ -43,7 +43,7 @@ OTP 메일을 가장 빠르게 감지하는 Gmail API 방식은 Google Cloud의 
 3. 내려받은 JSON을 `packaging/macos/Config/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
    저장소에 올라가지 않습니다(client secret 포함).
 
-파일이 없으면 내장 클라이언트 없이 빌드되며, 설정창 계정 탭의 **OAuth 클라이언트 (고급)**에서 JSON을 직접
+파일이 없으면 내장 클라이언트 없이 빌드되며, 설정창 계정 pane의 **OAuth 클라이언트 (고급)**에서 JSON을 직접
 가져올 수 있습니다. 이 경우에도 앱 비밀번호(IMAP) 방식은 그대로 쓸 수 있습니다.
 
 ## 빌드와 설치

@@ -117,8 +117,8 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         buttons.segmentStyle = .smallSquare
         buttons.trackingMode = .momentary
         buttons.segmentCount = 2
-        buttons.setImage(NSImage(named: NSImage.addTemplateName), forSegment: Self.addSegment)
-        buttons.setImage(NSImage(named: NSImage.removeTemplateName), forSegment: Self.removeSegment)
+        buttons.setImage(NSImage(systemSymbolName: "plus", accessibilityDescription: String(localized: "Add")), forSegment: Self.addSegment)
+        buttons.setImage(NSImage(systemSymbolName: "minus", accessibilityDescription: String(localized: "Remove")), forSegment: Self.removeSegment)
         buttons.setToolTip(String(localized: "Remove the selected rows"), forSegment: Self.removeSegment)
         for segment in 0..<2 { buttons.setWidth(26, forSegment: segment) }
         buttons.target = self
@@ -171,6 +171,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
             field.stringValue = row < rows.count ? rows[row] : ""
             field.placeholderString = placeholder
             field.textColor = problemRows.contains(row) ? .systemRed : .labelColor
+            cell.imageView?.isHidden = !problemRows.contains(row)
             field.isEditable = false
             field.isSelectable = false
         }
@@ -181,6 +182,8 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         updateButtons()
     }
 
+    /// A problem row is marked by a warning icon at its end as well as by red text, so the colour is
+    /// not the only sign.
     private func makeCell() -> NSTableCellView {
         let cell = NSTableCellView()
         cell.identifier = Self.cellID
@@ -193,12 +196,22 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         field.cell?.wraps = false
         field.delegate = self
         field.translatesAutoresizingMaskIntoConstraints = false
+        let icon = NSImageView(image: NSImage(
+            systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: String(localized: "Problem")
+        ) ?? NSImage())
+        icon.contentTintColor = .systemOrange
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.setContentHuggingPriority(.required, for: .horizontal)
         cell.addSubview(field)
+        cell.addSubview(icon)
         cell.textField = field
+        cell.imageView = icon
         NSLayoutConstraint.activate([
             field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-            field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+            field.trailingAnchor.constraint(equalTo: icon.leadingAnchor, constant: -4),
             field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            icon.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
+            icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
     }

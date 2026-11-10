@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Account tab: the VPN account and the Gmail account that receives the OTP, saved together.
+/// The Account pane: the VPN account and the Gmail account that receives the OTP, saved together.
 /// No certificate fields: gateway certificates are trusted automatically. The OTP method and the
 /// Google account controls act at once instead of waiting for Save.
-struct AccountTab: View {
+struct AccountPane: View {
     let ui: AppUI
 
     @State private var showsAdvanced = false
@@ -105,7 +105,7 @@ struct AccountTab: View {
     }
 }
 
-/// A field of the Account tab: each edit is sent with all the fields as typed.
+/// A field of the Account pane: each edit is sent with all the fields as typed.
 @MainActor
 private func accountField(_ ui: AppUI, _ keyPath: ReferenceWritableKeyPath<AccountDraft, String>) -> Binding<String> {
     Binding(
@@ -129,6 +129,7 @@ private struct GmailSection: View {
     let gmail: AppInternal.GmailSection
     @Binding var showsIMAPFallback: Bool
     @Binding var showsOAuthClient: Bool
+    @State private var confirmsGoogleDisconnect = false
     @Environment(\.self) private var environment
 
     var body: some View {
@@ -145,8 +146,7 @@ private struct GmailSection: View {
                 .fixedSize()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Google account is recommended: the Gmail API detects the OTP email as soon as it arrives. Over IMAP, Gmail can show it several seconds later.")
-                .footnoteStyle()
+            .help("Google account is recommended: the Gmail API detects the OTP email as soon as it arrives. Over IMAP, Gmail can show it several seconds later.")
             if let error = gmail.methodError {
                 NoticeRow(text: error.message, style: .error)
             }
@@ -212,8 +212,15 @@ private struct GmailSection: View {
             googleAccountStatus
         } actions: {
             StateButton("Cancel", state: gmail.cancelSignIn) { ui.send(.cancelGoogleSignIn) }
-            StateButton("Disconnect", state: gmail.disconnectGoogle) { ui.send(.disconnectGoogleAccount) }
-            StateButton("Connect Google Account", state: gmail.connectGoogle) { ui.send(.connectGoogleAccount) }
+            StateButton("Disconnect", state: gmail.disconnectGoogle) { confirmsGoogleDisconnect = true }
+            StateButton("Connect Google Account…", state: gmail.connectGoogle) { ui.send(.connectGoogleAccount) }
+        }
+        // Undoing it takes a new sign-in in the browser.
+        .alert("Disconnect the Google account?", isPresented: $confirmsGoogleDisconnect) {
+            Button("Disconnect", role: .destructive) { ui.send(.disconnectGoogleAccount) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("To read OTP emails through the Gmail API again, you'll need to sign in to Google in the browser.")
         }
         if let blocker = gmail.connectBlocker {
             Text(blocker.message)
@@ -372,8 +379,9 @@ private struct ImportReportView: View {
 }
 
 /// A labelled row of status text with its buttons, laid out like `AccountRow`: the status starts at
-/// the left edge of the field column (a zero ideal width keeps the grouped form from widening the
-/// column for long text; it wraps instead), the buttons sit at the right and never truncate.
+/// the left edge of the field column and the buttons sit at the right. When both don't fit on one
+/// line, the buttons move under the status, so neither the text nor a button title is cut or split.
+/// A zero ideal width keeps the grouped form from widening the column for long text.
 private struct AccountStatusRow<Status: View, Actions: View>: View {
     let title: LocalizedStringKey
     let status: Status
@@ -387,13 +395,23 @@ private struct AccountStatusRow<Status: View, Actions: View>: View {
 
     var body: some View {
         LabeledContent(title) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                status
-                    .multilineTextAlignment(.leading)
-                    .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
-                actions
-                    .fixedSize()
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    status
+                        .fixedSize()
+                    Spacer(minLength: 0)
+                    actions
+                        .fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    status
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 8) { actions }
+                        .fixedSize()
+                }
             }
+            .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
     }
 }

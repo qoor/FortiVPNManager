@@ -1,5 +1,5 @@
 //! Keeping the primary network service's additional routes in line with the exception rules
-//!, and the Connection tab's list drafts. Routes added elsewhere
+//!, and the Exception Rules pane's list drafts. Routes added elsewhere
 //! through the router join the list before anything is recorded as applied, so a failed save leaves
 //! them looking added elsewhere rather than removed from the list. A failed write is retried a few
 //! times, then reported once as a notification.

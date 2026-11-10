@@ -13,7 +13,7 @@ use fvm_core::connection;
 
 use crate::orchestration::Runtime;
 
-/// The settings the Connection tab changes outside the Account draft, and the login item.
+/// The settings the General and Connection panes change outside the Account draft, and the login item.
 pub(crate) struct Options {
     pub(crate) options_error: Option<ConfigFileError>,
     pub(crate) hours_error: Option<ScheduleHoursError>,
@@ -87,7 +87,7 @@ impl Runtime {
         }
     }
 
-    /// Writes one setting the Connection tab changed and hands the result to the core.
+    /// Writes one setting the General or Connection pane changed and hands the result to the core.
     fn change_settings(&mut self, change: impl Fn(&mut Settings)) -> Result<(), ConfigFileError> {
         if self.config.update(change)? {
             self.config_reloaded();

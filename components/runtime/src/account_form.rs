@@ -1,4 +1,4 @@
-//! The Account tab's draft: what the user typed, compared with the file it
+//! The Account pane's draft: what the user typed, compared with the file it
 //! started from. Saving writes only the fields the user changed, so a hand edit of the others
 //! survives, then the passwords under the account actually saved. Untouched fields follow the file
 //! when it changes elsewhere. An empty password field keeps the stored password.

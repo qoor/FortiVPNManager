@@ -35,27 +35,43 @@ struct MenuContent: View {
             let time = TimeStyle(now: ui.clock.now, environment: environment)
             let outlook = ui.schedule?.outlook
             Text(connection.statusLine(outlook: outlook, time: time))
+            if case let .connected(since, tunnelIp, _) = connection.status {
+                Text("Tunnel IP \(tunnelIp ?? String(localized: "Unknown")) · since \(time.clockTime(since))")
+            }
             if let reason = connection.waitReason {
                 Text(reason.summary(time: time))
             }
             if let outlook {
                 Text("Schedule: \(outlook.summary(time: time))")
             }
-            if let attention = connection.attention(time: time) {
-                Text(attention.message)
-                Button("Open Settings") { ui.settings.show(attention.tab) }
+            switch connection.status {
+            case let .setupRequired(items):
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Button(item.actionTitle) { ui.settings.show(item.settingsPane) }
+                }
+            case let .failed(reason):
+                Text(reason.guidance(time: time))
+                Button(reason.actionTitle) { ui.settings.show(reason.settingsPane) }
+            default:
+                EmptyView()
             }
 
+            // Always listed; the ones that don't apply now are dimmed.
             Divider()
-            StateButton("Connect", state: connection.connect) { ui.send(.connect) }
-            StateButton("Disconnect", state: connection.disconnect) { ui.send(.disconnect) }
-            StateButton("Reconnect Now", state: connection.reconnectNow) { ui.send(.reconnectNow) }
+            Button("Connect") { ui.send(.connect) }
+                .disabled(connection.connect != .enabled)
+            Button("Disconnect") { ui.send(.disconnect) }
+                .disabled(connection.disconnect != .enabled)
+            Button("Reconnect Now") { ui.send(.reconnectNow) }
+                .disabled(connection.reconnectNow != .enabled)
         }
 
         Divider()
+        Button("Show Log") { ui.settings.show(.log) }
         Button("Settings…") { ui.settings.show() }
             .keyboardShortcut(",")
-        Button("Quit") { NSApp.terminate(nil) }
+        Divider()
+        Button("Quit FortiVPNManager") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }

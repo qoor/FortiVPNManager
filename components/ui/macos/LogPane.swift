@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// The Log tab: the VPN client's raw output and the explanation lines of the app and the Helper.
-struct LogTab: View {
+/// The Log pane: the VPN client's raw output and the explanation lines of the app and the Helper.
+/// Its buttons sit in the bar at the bottom, like Save and Apply in the other panes (the settings
+/// toolbar only switches panes).
+struct LogPane: View {
     let ui: AppUI
 
     @AppStorage("logAutoScroll") private var autoScroll = true
@@ -10,7 +12,14 @@ struct LogTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            LogTextView(
+                log: ui.log,
+                lastID: ui.log.entries.last?.id,
+                clearCount: ui.log.clearCount,
+                autoScroll: autoScroll
+            )
+            Divider()
+            HStack(spacing: 10) {
                 Toggle("Auto-scroll", isOn: $autoScroll)
                     .toggleStyle(.checkbox)
                 Spacer()
@@ -24,15 +33,7 @@ struct LogTab: View {
                 }
                 .disabled(ui.config == nil)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            Divider()
-            LogTextView(
-                log: ui.log,
-                lastID: ui.log.entries.last?.id,
-                clearCount: ui.log.clearCount,
-                autoScroll: autoScroll
-            )
+            .padding(12)
         }
     }
 }
@@ -69,6 +70,11 @@ struct LogTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.documentView = textView
         context.coordinator.textView = textView
+        scrollView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            context.coordinator, selector: #selector(Coordinator.scrollViewResized(_:)),
+            name: NSView.frameDidChangeNotification, object: scrollView
+        )
         return scrollView
     }
 
@@ -77,7 +83,7 @@ struct LogTextView: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator {
+    final class Coordinator: NSObject {
         static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         private static let markerFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         private static let timeFormatter: DateFormatter = {
@@ -97,6 +103,12 @@ struct LogTextView: NSViewRepresentable {
         private var shown: [(id: UInt64, length: Int)] = []
         private var clearCount: Int?
         private var autoScroll = false
+
+        /// The pane's view is first laid out after its lines are in, so the scroll to the end made
+        /// then, on a view without a size, has no effect; it is made again once the view has one.
+        @objc func scrollViewResized(_ notification: Notification) {
+            if autoScroll { textView?.scrollToEndOfDocument(nil) }
+        }
 
         func sync(with log: LogLines, clearCount: Int, autoScroll: Bool) {
             guard let textView, let storage = textView.textStorage, let scrollView = textView.enclosingScrollView else {

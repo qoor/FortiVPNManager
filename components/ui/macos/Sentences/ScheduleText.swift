@@ -1,7 +1,7 @@
 import Foundation
 
 extension AppInternal.ScheduleOutlook {
-    /// One line for the menu ("Schedule: …") and the Connection tab.
+    /// One line for the menu ("Schedule: …") and the Connection pane.
     func summary(time: TimeStyle) -> String {
         switch self {
         case let .connects(at):

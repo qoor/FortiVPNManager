@@ -5,10 +5,10 @@ extension AppInternal {
         case disconnect
         case reconnectNow
         case settingsOpened
-        /// Passwords typed in the Account tab are forgotten.
+        /// Passwords typed in the Account pane are forgotten.
         case settingsClosed
 
-        /// The Account tab's fields as typed, after any edit, with the form's `revision` they were
+        /// The Account pane's fields as typed, after any edit, with the form's `revision` they were
         /// typed against; Rust drops an edit against an older revision.
         case editAccount(revision: UInt64, form: AccountForm)
         case saveAccount

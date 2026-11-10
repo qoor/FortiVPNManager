@@ -1,5 +1,5 @@
 //! User actions, sent by the UI. Actions that stay inside the UI send nothing: clearing or copying
-//! the Log tab, revealing a file in Finder, choosing a file, opening the settings window. Quitting
+//! the Log pane, revealing a file in Finder, choosing a file, opening the settings window. Quitting
 //! goes through the app's normal termination, which the OS integration reports as
 //! `SystemEvent::QuitRequested`.
 
@@ -15,10 +15,10 @@ pub enum Command {
     ReconnectNow {},
     /// The settings window opened or came forward.
     SettingsOpened {},
-    /// The settings window closed: passwords typed in the Account tab are forgotten.
+    /// The settings window closed: passwords typed in the Account pane are forgotten.
     SettingsClosed {},
 
-    /// The Account tab's fields as typed, after any edit. The draft lives in the runtime, which
+    /// The Account pane's fields as typed, after any edit. The draft lives in the runtime, which
     /// decides what changed and what Save writes. `revision` is the form's revision the edit was
     /// typed against; an edit against an older one is dropped, since the runtime has replaced
     /// those fields since.
@@ -36,7 +36,7 @@ pub enum Command {
     SetOtpMethod {
         method: OtpMethod,
     },
-    /// Tests Gmail with the selected method and what the Account tab holds.
+    /// Tests Gmail with the selected method and what the Account pane holds.
     TestGmail {},
     ConnectGoogleAccount {},
     CancelGoogleSignIn {},
@@ -73,7 +73,7 @@ pub enum Command {
     ApplyBypassRules {},
 }
 
-/// The Account tab as typed. An empty password field keeps the stored password.
+/// The Account pane as typed. An empty password field keeps the stored password.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountForm {

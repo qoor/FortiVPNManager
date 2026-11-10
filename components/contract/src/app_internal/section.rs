@@ -1,5 +1,5 @@
 //! Domain sections: everything the menu and the settings window show, as values and kinds. The UI
-//! draws them as they are; only sentences, relative times and which tab "Open Settings" opens are
+//! draws them as they are; only sentences, relative times and which pane a button opens are
 //! left to it.
 
 use std::net::Ipv4Addr;
@@ -42,7 +42,7 @@ pub enum Section {
         #[serde(rename = "_0")]
         section: Box<BypassRulesSection>,
     },
-    /// The settings: the settings file, the Account tab's form and the connection options.
+    /// The settings: the settings file, the Account pane's form and the connection options.
     Config {
         #[serde(rename = "_0")]
         section: Box<ConfigSection>,
@@ -442,7 +442,7 @@ pub enum OAuthClientFileProblem {
     },
 }
 
-/// The Gmail connection test of the Account tab.
+/// The Gmail connection test of the Account pane.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum GmailTest {
@@ -733,7 +733,7 @@ pub struct OpenAtLogin {
     pub error: Option<RegistrationError>,
 }
 
-/// The Account tab's draft. Passwords never come back; only whether one is typed.
+/// The Account pane's draft. Passwords never come back; only whether one is typed.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountFormState {

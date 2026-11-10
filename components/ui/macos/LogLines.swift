@@ -1,13 +1,13 @@
 import Foundation
 import Observation
 
-/// One line of the Log tab. `id` is local, strictly increasing and never reused.
+/// One line of the Log pane. `id` is local, strictly increasing and never reused.
 struct LogEntry: Identifiable, Equatable {
     let id: UInt64
     let line: AppInternal.LogLine
 }
 
-/// The lines the Log tab shows, oldest first: the newest ones the runtime sent, within a line and a
+/// The lines the Log pane shows, oldest first: the newest ones the runtime sent, within a line and a
 /// size limit. The log file keeps everything; that is the runtime's.
 @MainActor
 @Observable
@@ -41,7 +41,7 @@ final class LogLines {
         return entries[(last + 1)...]
     }
 
-    /// "Clear": empties the tab only.
+    /// "Clear": empties the pane only.
     func clear() {
         entries.removeAll()
         byteCount = 0

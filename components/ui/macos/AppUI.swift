@@ -16,7 +16,7 @@ final class AppUI {
 
     let log = LogLines()
     let clock = StatusClock()
-    /// The Account tab's fields as typed.
+    /// The Account pane's fields as typed.
     let accountDraft = AccountDraft()
 
     @ObservationIgnored let send: (AppInternal.Command) -> Void
@@ -43,24 +43,24 @@ final class AppUI {
 
     /// The runtime asked to show Settings.
     func openSettings() {
-        settings.show(tabToOpen)
+        settings.show(paneToOpen)
     }
 
     /// Account when the config section has an import report (the automatic first-launch import),
-    /// otherwise the tab of the first setup item.
-    var tabToOpen: SettingsTab {
+    /// otherwise the pane of the first setup item; the last pane shown when neither applies.
+    var paneToOpen: SettingsPane? {
         if config?.account.importReport != nil { return .account }
-        if case let .setupRequired(items) = connection?.status, let first = items.first { return first.settingsTab }
-        return .account
+        if case let .setupRequired(items) = connection?.status, let first = items.first { return first.settingsPane }
+        return nil
     }
 
-    /// Sends the Account tab's fields after an edit, against the revision they were typed on.
+    /// Sends the Account pane's fields after an edit, against the revision they were typed on.
     func accountEdited() {
         send(.editAccount(revision: accountDraft.revision, form: accountDraft.form))
     }
 }
 
-/// The Account tab's fields as typed. The runtime keeps the draft that counts; these fields are
+/// The Account pane's fields as typed. The runtime keeps the draft that counts; these fields are
 /// replaced only when it replaces what was typed, which it marks with a new revision.
 @MainActor
 @Observable
@@ -97,7 +97,7 @@ final class AccountDraft {
     }
 }
 
-/// "Now" for the relative times in the menu and the Connection tab: set by every connection
+/// "Now" for the relative times in the menu and the General pane: set by every connection
 /// section, on a slow timer, and every second while a reconnect countdown runs.
 @MainActor
 @Observable

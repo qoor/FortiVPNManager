@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// The Log tab's lines: what it keeps, and Copy All against the shared fixture
+/// The Log pane's lines: what it keeps, and Copy All against the shared fixture
 /// `contract/tests/fixtures/app-internal/log_copy_all.json`, whose `copyAll` lines are also the log
 /// file's lines (each followed by a line break there; joined by line breaks in Copy All).
 @MainActor
