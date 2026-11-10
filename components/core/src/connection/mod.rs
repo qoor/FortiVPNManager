@@ -32,7 +32,7 @@ use fvm_contract::app_internal::port::{InterfaceAddress, RegistrationError};
 use fvm_contract::app_internal::{OtpMethod, SecretText};
 use jiff::tz::TimeZone;
 
-pub use certs::{TRUSTED_CERT_LIMIT, gateway_change_drops_certs, merge_trusted_certs};
+pub use certs::merge_trusted_certs;
 pub use ledger::{Failure, FailureLedger};
 pub use machine::ConnectionManager;
 pub use readiness::{HelperFacts, ReadinessFacts};
@@ -59,6 +59,39 @@ pub struct Settings {
     pub otp_method: OtpMethod,
 }
 
+impl From<&crate::config::Settings> for Settings {
+    /// The settings file's values, which its reader checked against these types' ranges.
+    fn from(settings: &crate::config::Settings) -> Self {
+        let connection = &settings.connection;
+        let minutes =
+            |value: i64| u32::try_from(value).expect("the settings file checks the minute ranges");
+        Self {
+            account: VpnAccount {
+                host: settings.vpn.host.clone(),
+                port: u16::try_from(settings.vpn.port)
+                    .expect("the settings file checks the port range"),
+                username: settings.vpn.username.clone(),
+                realm: settings.vpn.realm.clone(),
+                trusted_certs: settings.vpn.trusted_certs.clone(),
+            },
+            connection: ConnectionSettings {
+                session_max_minutes: minutes(connection.session_max_minutes),
+                proactive_reconnect: connection.proactive_reconnect.enabled,
+                proactive_margin_minutes: minutes(connection.proactive_reconnect.margin_minutes),
+                reconnect_after_sleep: connection.reconnect_after_sleep.enabled,
+                min_sleep_minutes: minutes(connection.reconnect_after_sleep.min_sleep_minutes),
+                schedule: connection.schedule.enabled.then(|| Schedule {
+                    days: connection.schedule.days.clone(),
+                    start: connection.schedule.start,
+                    end: connection.schedule.end,
+                    away_minutes: minutes(connection.schedule.away_minutes),
+                }),
+            },
+            otp_method: settings.otp.method,
+        }
+    }
+}
+
 /// The VPN account and the gateway certificate values trusted for it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VpnAccount {
@@ -67,7 +100,7 @@ pub struct VpnAccount {
     pub username: String,
     /// Empty for none.
     pub realm: String,
-    /// Newest first, at most [`TRUSTED_CERT_LIMIT`].
+    /// Newest first, at most [`crate::config::MAX_TRUSTED_CERTS`].
     pub trusted_certs: Vec<String>,
 }
 
@@ -130,7 +163,7 @@ pub struct Launch {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Input {
-    /// Always the first input.
+    /// The first input, apart from the settings a first-launch import hands over before it.
     Launched(Launch),
     /// The settings file changed. Changes that only the readiness facts reflect, such as the file
     /// becoming invalid or the Gmail address changing, come as [`Input::RecheckReadiness`].
@@ -217,10 +250,9 @@ pub enum OtpFailure {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Effect {
-    /// Gather the readiness facts and answer with [`Input::ReadinessChecked`]. A request made
-    /// while a check runs is served by one more check after it. On a Helper of another build, the
-    /// check asks [`ConnectionManager::should_restart_helper`] whether to have it exit when idle and
-    /// asks the build again.
+    /// Gather the readiness facts and answer with [`Input::ReadinessChecked`]. On a Helper of
+    /// another build, the check asks [`ConnectionManager::should_restart_helper`] whether to have
+    /// it exit when idle and asks the build again.
     CheckReadiness,
     /// Start the OTP session of `attempt`, taking its starting point in the mailbox.
     OpenOtpSession {

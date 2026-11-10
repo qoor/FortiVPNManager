@@ -145,6 +145,8 @@ extension AppInternal.ConfigWarningKind {
             String(localized: "In \(SettingsKey.trustedCerts), entry \(index + 1) is not a SHA-256 digest (64 hex digits) and is ignored.")
         case let .duplicateTrustedCert(index):
             String(localized: "In \(SettingsKey.trustedCerts), entry \(index + 1) duplicates an earlier entry and is ignored.")
+        case let .tooManyTrustedCerts(limit):
+            String(localized: "\(SettingsKey.trustedCerts) keeps at most \(limit) entries; the entries after them are ignored.")
         case let .duplicateRouteEntry(path, index):
             String(localized: "In \(path), entry \(index + 1) duplicates an earlier entry and is ignored.")
         case let .multipleHardLinks(count):

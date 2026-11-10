@@ -27,10 +27,8 @@ pub const SESSION_MAX_MINUTES: RangeInclusive<i64> = 10..=1440;
 pub const MARGIN_MINUTES: RangeInclusive<i64> = 1..=60;
 pub const MIN_SLEEP_MINUTES: RangeInclusive<i64> = 1..=1440;
 pub const AWAY_MINUTES: RangeInclusive<i64> = 1..=1440;
-/// Certificate values kept in `vpn.trusted_certs`, as the file's comments promise.
+/// Certificate values kept in `vpn.trusted_certs`, newest first.
 pub const MAX_TRUSTED_CERTS: usize = 4;
-/// Entries in each of `routes.networks` and `routes.bypass_vpn`.
-pub const MAX_ROUTE_ENTRIES: usize = 100;
 
 /// The `schema_version` this build reads and writes.
 const SCHEMA_VERSION: i64 = 1;
@@ -249,7 +247,7 @@ pub fn update(
 }
 
 /// Without repeats, Monday first.
-fn normalized_days(days: &[Weekday]) -> Vec<Weekday> {
+pub fn normalized_days(days: &[Weekday]) -> Vec<Weekday> {
     WEEKDAYS
         .iter()
         .map(|&(_, day)| day)

@@ -1,6 +1,6 @@
 //! Disconnect, quit and reconnect now.
 
-use fvm_contract::app_helper::{Milestone, StopReason};
+use fvm_contract::app_helper::{HelperErrorCode, Milestone, StopReason};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::ConnectionIcon;
 
@@ -95,6 +95,19 @@ fn a_disconnect_before_the_tunnel_started_is_immediate() {
         connection_effects(&h.send(Input::ReadinessChecked(ready()))),
         []
     );
+    assert_eq!(h.cm.phase, Phase::Idle);
+}
+
+#[test]
+fn a_disconnect_before_the_run_left_drops_the_run() {
+    let mut h = Harness::new();
+    h.launch();
+    let id = h.start_tunnel();
+    assert!(h.cm.wants_run(&id));
+    h.send(Input::Disconnect);
+    assert!(!h.cm.wants_run(&id));
+    // The runtime drops the run instead of sending its Connect after the stop.
+    h.send(Input::RunRejected(id, HelperErrorCode::InternalError));
     assert_eq!(h.cm.phase, Phase::Idle);
 }
 

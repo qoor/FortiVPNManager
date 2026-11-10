@@ -181,6 +181,16 @@
         }
       }
     },
+    "%@ keeps at most %lld entries; the entries after them are ignored.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에는 최대 %lld개까지만 두며, 그 뒤의 항목은 무시합니다."
+          }
+        }
+      }
+    },
     "%@ rejected (%@): %@": {
       "localizations": {
         "ko": {

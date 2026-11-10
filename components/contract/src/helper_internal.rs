@@ -9,6 +9,8 @@ use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::backend::RouteRepairOutcome;
+
 /// Sent by Swift.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,7 +48,7 @@ pub enum AppRequest {
         attempt: String,
         code: String,
     },
-    /// An empty `attempt` means whatever runs; `reason` is a `StopReason` raw value.
+    /// `reason` is a `StopReason` raw value.
     Disconnect {
         attempt: String,
         reason: String,
@@ -76,14 +78,6 @@ impl fmt::Debug for AppRequest {
             Self::ExitWhenIdle {} => f.write_str("ExitWhenIdle"),
         }
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RouteRepairOutcome {
-    Repaired,
-    NotNeeded,
-    Failed,
 }
 
 /// Sent by Rust. Swift passes events and output to each app connection in the order they arrive,

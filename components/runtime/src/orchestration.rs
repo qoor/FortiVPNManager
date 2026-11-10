@@ -75,8 +75,6 @@ pub(crate) struct Runtime {
     pub(crate) time_zone: TimeZone,
     pub(crate) home: PathBuf,
     pub(crate) cm: ConnectionManager,
-    /// The account the core was last given.
-    applied_account: connection::VpnAccount,
     pub(crate) config: ConfigFile,
     pub(crate) state: StateFile,
     log: LogFile,
@@ -131,8 +129,7 @@ impl Runtime {
         let (state, state_problem) = StateFile::open(paths.state);
         let mut attempt_seed = [0u8; 16];
         getrandom::fill(&mut attempt_seed).expect("random bytes from the OS");
-        let settings = core_settings(config.settings());
-        let applied_account = settings.account.clone();
+        let settings = connection::Settings::from(config.settings());
         let cm = ConnectionManager::new(Startup {
             app_build: facts.app_build.clone(),
             attempt_seed,
@@ -153,7 +150,6 @@ impl Runtime {
             time_zone,
             home: paths.home,
             cm,
-            applied_account,
             config,
             state,
             log: LogFile::new(paths.log),
@@ -408,6 +404,15 @@ impl Runtime {
         self.request(
             PortRequest::ReadSecret { item },
             move |runtime, response| {
+                if !runtime.cm.wants_run(&attempt) {
+                    // Settled like a run the Helper could not start: the stop already decided,
+                    // or else the network's failure.
+                    runtime.feed(connection::Input::RunRejected(
+                        attempt,
+                        fvm_contract::app_helper::HelperErrorCode::InternalError,
+                    ));
+                    return;
+                }
                 let password = match response {
                     PortResponse::Secret {
                         value: Some(SecretText(password)),
@@ -454,39 +459,24 @@ impl Runtime {
             );
             return;
         }
-        if let Err(error) = self
+        match self
             .config
             .update(|settings| settings.vpn.trusted_certs = certs.clone())
         {
-            self.system_log(
+            // The next input: this runs among the effects of the current one.
+            Ok(_) => self.queue().run(Runtime::settings_changed),
+            // The core keeps the values it learned; the file's older ones would undo that.
+            Err(error) => self.system_log(
                 LogLevel::Error,
                 LogCategory::Config,
                 format!("saving the server certificate failed: {error:?}"),
-            );
+            ),
         }
-        self.settings_changed();
     }
 
-    /// Hands the settings in use to the core after the file changed. A new server address or port
-    /// drops the certificate values the old gateway left, unless they changed with it.
+    /// Hands the settings in use to the core after the file changed.
     pub(crate) fn settings_changed(&mut self) {
-        let mut settings = core_settings(self.config.settings());
-        if connection::gateway_change_drops_certs(&self.applied_account, &settings.account)
-            && !settings.account.trusted_certs.is_empty()
-        {
-            match self
-                .config
-                .update(|settings| settings.vpn.trusted_certs.clear())
-            {
-                Ok(_) => settings = core_settings(self.config.settings()),
-                Err(error) => self.system_log(
-                    LogLevel::Error,
-                    LogCategory::Config,
-                    format!("clearing the old gateway's certificates failed: {error:?}"),
-                ),
-            }
-        }
-        self.applied_account = settings.account.clone();
+        let settings = connection::Settings::from(self.config.settings());
         self.feed(connection::Input::SettingsChanged(settings));
     }
 
@@ -562,16 +552,31 @@ impl Runtime {
             .spawn(move || {
                 loop {
                     std::thread::sleep(crate::config_file::POLL_INTERVAL);
-                    queue.run(Runtime::poll_config);
+                    queue.run(|runtime| {
+                        // The core checks again for the changes it sees; a hand edit that makes
+                        // the file invalid or valid again, or changes the Gmail address, shows
+                        // only in the readiness facts.
+                        let facts = |runtime: &Runtime| {
+                            let address = runtime.config.settings().otp.gmail_address.clone();
+                            (runtime.config.is_valid(), address)
+                        };
+                        let before = facts(runtime);
+                        if runtime.poll_config() && facts(runtime) != before {
+                            runtime.feed(connection::Input::RecheckReadiness);
+                        }
+                    });
                 }
             })
             .expect("starting the config poll thread");
     }
 
-    pub(crate) fn poll_config(&mut self) {
-        if self.config.poll() {
+    /// Whether the file changed outside the app since it was last read.
+    pub(crate) fn poll_config(&mut self) -> bool {
+        let changed = self.config.poll();
+        if changed {
             self.config_reloaded();
         }
+        changed
     }
 
     /// The file changed outside the app, or the app wrote it.
@@ -663,37 +668,4 @@ pub(crate) fn helper_failure(
         }
         other => panic!("a Helper call answered with {other:?}"),
     }
-}
-
-/// What the core needs from the settings file.
-pub(crate) fn core_settings(settings: &fvm_core::config::Settings) -> connection::Settings {
-    let connection = &settings.connection;
-    connection::Settings {
-        account: connection::VpnAccount {
-            host: settings.vpn.host.clone(),
-            port: u16::try_from(settings.vpn.port)
-                .expect("the settings file checks the port range"),
-            username: settings.vpn.username.clone(),
-            realm: settings.vpn.realm.clone(),
-            trusted_certs: settings.vpn.trusted_certs.clone(),
-        },
-        connection: connection::ConnectionSettings {
-            session_max_minutes: minutes(connection.session_max_minutes),
-            proactive_reconnect: connection.proactive_reconnect.enabled,
-            proactive_margin_minutes: minutes(connection.proactive_reconnect.margin_minutes),
-            reconnect_after_sleep: connection.reconnect_after_sleep.enabled,
-            min_sleep_minutes: minutes(connection.reconnect_after_sleep.min_sleep_minutes),
-            schedule: connection.schedule.enabled.then(|| connection::Schedule {
-                days: connection.schedule.days.clone(),
-                start: connection.schedule.start,
-                end: connection.schedule.end,
-                away_minutes: minutes(connection.schedule.away_minutes),
-            }),
-        },
-        otp_method: settings.otp.method,
-    }
-}
-
-fn minutes(value: i64) -> u32 {
-    u32::try_from(value).expect("the settings file checks the minute ranges")
 }

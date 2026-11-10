@@ -44,7 +44,8 @@ pub trait Backend {
     /// A fresh interpreter for one run.
     fn interpreter(&self) -> Self::Interpreter;
 
-    fn stop_policy(&self) -> StopPolicy;
+    /// How long the client may take to end after SIGTERM before it is killed.
+    fn stop_grace_period(&self) -> Duration;
 
     /// Whether an executable belongs to this client, so that a process of it left behind by an
     /// earlier Helper may be stopped.
@@ -55,7 +56,7 @@ pub trait Backend {
 pub struct ClientExecutable {
     /// Fully resolved, without symlinks.
     pub path: PathBuf,
-    pub version: Option<String>,
+    pub version: String,
 }
 
 /// The client's version is outside the series this app was tested with.
@@ -139,18 +140,11 @@ pub trait OutputInterpreter {
     fn routes_left_unrestored(&self) -> bool;
 }
 
-/// How to stop the client: a graceful stop (SIGTERM), then after the grace period a forced one
-/// (SIGKILL) if it still runs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct StopPolicy {
-    pub graceful: StopScope,
-    pub grace_period: Duration,
-    pub forced: StopScope,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum StopScope {
-    Process,
-    /// The client process, then its whole process group.
-    ProcessThenGroup,
+/// What became of the routes a client left unrestored, as the OS integration reports it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RouteRepairOutcome {
+    Repaired,
+    NotNeeded,
+    Failed,
 }

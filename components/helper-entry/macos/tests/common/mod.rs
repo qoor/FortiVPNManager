@@ -15,7 +15,7 @@ use std::{env, fs, process};
 use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
 use fvm_contract::app_helper::RunRequest;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy, UntestedVersion,
+    Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
 use fvm_contract::stream;
 use serde_json::{Value, json};
@@ -94,11 +94,8 @@ impl Backend for TestBackend {
         OpenFortiVpn.interpreter()
     }
 
-    fn stop_policy(&self) -> StopPolicy {
-        StopPolicy {
-            grace_period: self.grace_period,
-            ..OpenFortiVpn.stop_policy()
-        }
+    fn stop_grace_period(&self) -> Duration {
+        self.grace_period
     }
 
     /// Every path, so that only the process identity keeps a leftover alive.
@@ -121,9 +118,9 @@ impl Setup {
             args: Vec::new(),
             client: Ok(ClientExecutable {
                 path: PathBuf::from("/bin/sh"),
-                version: Some("1.24.1".to_owned()),
+                version: "1.24.1".to_owned(),
             }),
-            grace_period: OpenFortiVpn.stop_policy().grace_period,
+            grace_period: OpenFortiVpn.stop_grace_period(),
         }
     }
 

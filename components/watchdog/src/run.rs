@@ -16,9 +16,9 @@ use fvm_contract::app_helper::{
     ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
     ProcessExitStatus, StopInitiator, StopReason,
 };
-use fvm_contract::backend::{Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, StopPolicy};
-use fvm_contract::helper_internal::RouteRepairOutcome;
-use rustix::process::Signal;
+use fvm_contract::backend::{
+    Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome,
+};
 use zeroize::Zeroizing;
 
 use crate::lines::{LineAssembler, MAX_LINE_BYTES};
@@ -118,7 +118,7 @@ impl Run {
         let watch = Watch {
             client_name,
             interpreter: backend.interpreter(),
-            stop_policy: backend.stop_policy(),
+            grace_period: backend.stop_grace_period(),
             timing,
             on_report,
             inputs: inputs.clone(),
@@ -230,7 +230,7 @@ fn report_spawn_failure(text: String, errno: i32, mut on_report: impl FnMut(Repo
 struct Watch<I, R> {
     client_name: &'static str,
     interpreter: I,
-    stop_policy: StopPolicy,
+    grace_period: Duration,
     timing: Timing,
     on_report: R,
     /// For the route repair's answer.
@@ -604,7 +604,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         if self.stop.is_some() {
             return;
         }
-        child.signal(Signal::TERM, self.stop_policy.graceful);
+        child.terminate();
         self.stop = Some(reason);
         self.stage = None;
         let raw = serde_json::to_value(reason).expect("a stop reason serializes");
@@ -612,7 +612,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             .as_str()
             .expect("a stop reason serializes as its raw value");
         self.meta(format!("‹sent SIGTERM (reason: {raw})›"));
-        self.kill_deadline = Some(Instant::now() + self.stop_policy.grace_period);
+        self.kill_deadline = Some(Instant::now() + self.grace_period);
     }
 
     fn grace_period_expired(&mut self) {
@@ -622,10 +622,10 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         }
         self.meta(format!(
             "‹sent SIGKILL: still running {} after SIGTERM›",
-            seconds(self.stop_policy.grace_period)
+            seconds(self.grace_period)
         ));
         if let Phase::Running(child) = &self.phase {
-            child.signal(Signal::KILL, self.stop_policy.forced);
+            child.kill();
         }
     }
 

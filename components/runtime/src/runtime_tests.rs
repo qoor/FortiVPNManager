@@ -351,6 +351,40 @@ fn a_launch_with_everything_in_place_shows_the_helper_running_and_waits_for_conn
 }
 
 #[test]
+fn a_hand_edit_that_breaks_or_fixes_the_file_updates_the_setup_list() {
+    let mut swift = Swift::new();
+    swift.write_config(ACCOUNT);
+    swift
+        .secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    swift
+        .secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    swift.launch();
+    swift.settle_until("the Helper's build", |swift| {
+        matches!(swift.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
+    });
+    swift.settle();
+    assert_eq!(
+        swift.connection_status(),
+        Some(&ConnectionStatus::NotConnected {})
+    );
+
+    swift.write_config(&ACCOUNT.replace("port: 443", "port: 0443"));
+    swift.settle_until("the broken file in the setup list", |swift| {
+        matches!(
+            swift.connection_status(),
+            Some(ConnectionStatus::SetupRequired { items })
+                if items.contains(&fvm_contract::app_internal::section::SetupItem::ConfigFile {})
+        )
+    });
+    swift.write_config(ACCOUNT);
+    swift.settle_until("the fixed file", |swift| {
+        swift.connection_status() == Some(&ConnectionStatus::NotConnected {})
+    });
+}
+
+#[test]
 fn a_launch_with_a_missing_password_asks_for_setup_and_opens_settings_once() {
     let mut swift = Swift::new();
     swift.write_config(ACCOUNT);

@@ -7,6 +7,8 @@ use std::net::Ipv4Addr;
 use fvm_contract::app_helper::{Milestone, OutputSource};
 use fvm_contract::backend::{Finding, OutputInterpreter, Prompt};
 
+use super::request::certificate_value;
+
 // read_password() prints these with no line break and then blocks reading stdin.
 const PASSWORD_PROMPT: &[u8] = b"VPN account password: "; // main.c
 const OTP_PROMPT: &[u8] = b"Two-factor authentication token: "; // http.c
@@ -116,12 +118,8 @@ impl Interpreter {
     /// `value` is the SHA-256 digest in hex, from the advice line openfortivpn prints with the
     /// rejection (tunnel.c).
     fn certificate_rejected(&mut self, value: &str) -> Option<Finding> {
-        let value = value.trim_matches(' ');
-        if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return None;
-        }
-        // Lowercase is what the next run accepts as a trusted value.
-        let value = value.to_ascii_lowercase();
+        // In the form the next run accepts as a trusted value.
+        let value = certificate_value(value.trim_matches(' '))?;
         if self.rejected_certificates.contains(&value) {
             return None;
         }

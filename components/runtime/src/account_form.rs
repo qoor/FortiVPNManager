@@ -25,7 +25,6 @@ use crate::orchestration::Runtime;
 
 /// An openfortivpn config file is small; anything larger is not one.
 const MAX_IMPORT_BYTES: u64 = 64 * 1024;
-const MAX_TRUSTED_CERTS: usize = 4;
 
 /// The non-secret fields as the file holds them, in the form's spelling.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
@@ -476,19 +475,13 @@ impl Runtime {
                 settings.vpn.username.clone_from(username);
             }
             settings.vpn.realm = imported.realm.clone().unwrap_or_default();
-            settings.vpn.trusted_certs = if same_gateway {
-                connection::merge_trusted_certs(
-                    &imported.trusted_certs,
-                    &settings.vpn.trusted_certs,
-                )
+            let kept: &[String] = if same_gateway {
+                &settings.vpn.trusted_certs
             } else {
-                imported
-                    .trusted_certs
-                    .iter()
-                    .take(MAX_TRUSTED_CERTS)
-                    .cloned()
-                    .collect()
+                &[]
             };
+            settings.vpn.trusted_certs =
+                connection::merge_trusted_certs(&imported.trusted_certs, kept);
         });
         if let Err(error) = written {
             return self.finish_import(

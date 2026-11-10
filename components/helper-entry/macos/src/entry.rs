@@ -391,8 +391,7 @@ where
             LogCategory::Helper,
             format!(
                 "run {} started for uid {uid} with {client_name} {}",
-                request.attempt_id,
-                client.version.as_deref().unwrap_or("unknown")
+                request.attempt_id, client.version
             ),
         );
         self.resolve_gateway(number, request.host.clone());
@@ -418,12 +417,8 @@ where
         current.run.submit_otp(mem::take(&mut *code))
     }
 
-    /// An empty `attempt` means whatever runs.
     fn disconnect(&self, app: u64, attempt: &str, reason: &str) -> Result<(), HelperError> {
         let uid = self.app_uid(app)?;
-        if attempt.is_empty() && self.run.is_none() {
-            return Ok(());
-        }
         let current = self.controllable_run(attempt, uid)?;
         let reason = reason.parse().unwrap_or(StopReason::UserDisconnect);
         let raw = serde_json::to_value(reason).expect("a stop reason serializes");
@@ -439,16 +434,15 @@ where
         Ok(())
     }
 
-    /// The current run if `attempt` names it or is empty, and `uid` owns it.
+    /// The current run if `attempt` names it and `uid` owns it.
     fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun, HelperError> {
         let current = self
             .run
             .as_ref()
             .filter(|current| {
-                attempt.is_empty()
-                    || attempt
-                        .parse::<AttemptId>()
-                        .is_ok_and(|id| id == current.attempt)
+                attempt
+                    .parse::<AttemptId>()
+                    .is_ok_and(|id| id == current.attempt)
             })
             .ok_or_else(|| {
                 error(
@@ -474,11 +468,8 @@ where
             Ok(client) => HelperStatus {
                 client_running,
                 client_path: Some(client.path.display().to_string()),
-                untested_version: client
-                    .version
-                    .as_deref()
-                    .and_then(|version| self.backend.untested_version(version)),
-                client_version: client.version,
+                untested_version: self.backend.untested_version(&client.version),
+                client_version: Some(client.version),
                 client_problem: None,
             },
             Err(problem) => HelperStatus {

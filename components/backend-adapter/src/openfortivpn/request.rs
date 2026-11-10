@@ -241,8 +241,14 @@ pub(super) fn check_vpn_password(password: &str) -> Result<(), AccountSaveError>
     Ok(())
 }
 
+/// `text` as openfortivpn compares it, if it is a SHA-256 digest in hex of either case.
+pub(super) fn certificate_value(text: &str) -> Option<String> {
+    let value = text.to_ascii_lowercase();
+    is_certificate_value(&value).then_some(value)
+}
+
 /// openfortivpn compares the gateway's SHA-256 digest as lowercase hex.
-pub(super) fn is_certificate_value(value: &str) -> bool {
+fn is_certificate_value(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()

@@ -36,7 +36,7 @@ fn with(change: impl FnOnce(&mut RunRequest)) -> RunRequest {
 fn launch(request: &RunRequest) -> Result<LaunchSpec, String> {
     let client = ClientExecutable {
         path: CLIENT_PATH.into(),
-        version: Some("1.24.1".into()),
+        version: "1.24.1".into(),
     };
     OpenFortiVpn.launch_spec(&client, request, Path::new(CONFIG_PATH))
 }

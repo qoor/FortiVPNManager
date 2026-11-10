@@ -189,7 +189,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
         ),
         (
             3,
-            disconnect("", "userDisconnect"),
+            disconnect(ATTEMPT, "userDisconnect"),
             error("notAuthorized", "the VPN run belongs to another user"),
         ),
         (
@@ -225,7 +225,13 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
         )
     );
     swift.wait_for_milestone(1, TUNNEL_UP);
-    let id = swift.request(2, disconnect("", "notAReason"));
+    // A stop names the run it is for.
+    let id = swift.request(2, disconnect("", "userDisconnect"));
+    assert_eq!(
+        swift.reply(id),
+        error("unknownAttempt", "not the active connection attempt")
+    );
+    let id = swift.request(2, disconnect(ATTEMPT, "notAReason"));
     assert_eq!(swift.reply(id), None);
     let facts = swift.wait_for_exit(1);
     // An unknown reason counts as the user's.
@@ -235,9 +241,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     );
     assert!(swift.events(2).is_empty());
 
-    // With no run, an empty attempt is fine and a named one is unknown.
-    let id = swift.request(1, disconnect("", "userDisconnect"));
-    assert_eq!(swift.reply(id), None);
+    // With no run, every attempt is unknown.
     let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(
         swift.reply(id),
@@ -331,7 +335,7 @@ fn the_status_carries_the_adapters_version_judgment() {
     let mut swift = Swift::start(Setup {
         client: Ok(ClientExecutable {
             path: PathBuf::from("/bin/sh"),
-            version: Some("1.25.0".to_owned()),
+            version: "1.25.0".to_owned(),
         }),
         ..Setup::fixture("success")
     });
@@ -379,7 +383,7 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
     let gone = error("notAuthorized", "the app connection is closed");
     let connect = swift.request(1, connect_request(ATTEMPT));
     let otp = swift.request(1, submit_otp(ATTEMPT, OTP));
-    let stop = swift.request(1, disconnect("", "userDisconnect"));
+    let stop = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
     let status = swift.request(1, json!({"status": {}}));
     assert_eq!(swift.reply(connect), gone);
     assert_eq!(swift.reply(otp), gone);

@@ -13,6 +13,7 @@ use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_internal::problem::{
     ConfigFileError, ConfigProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind,
 };
+use fvm_contract::backend::Backend;
 use fvm_core::config::{self, ClientRules, Settings, Update, UpdateError};
 
 use crate::files;
@@ -40,16 +41,10 @@ pub(crate) struct ConfigFile {
     seen: Option<Fingerprint>,
 }
 
-/// The openfortivpn adapter's rule for a certificate value, kept lowercase.
-fn certificate_value(text: &str) -> Option<String> {
-    let lower = text.to_ascii_lowercase();
-    OpenFortiVpn.is_certificate_value(&lower).then_some(lower)
-}
-
 pub(crate) fn client_rules() -> ClientRules<'static> {
     ClientRules {
-        name: "openfortivpn",
-        certificate_value: &certificate_value,
+        name: OpenFortiVpn.client_name(),
+        certificate_value: &|text| OpenFortiVpn.certificate_value(text),
     }
 }
 

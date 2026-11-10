@@ -82,8 +82,6 @@ pub struct ConnectionManager {
     pub(super) gateway_ip: Option<(String, Ipv4Addr)>,
     pub(super) screen_locked: bool,
     pub(super) displays_asleep: bool,
-    pub(super) system_asleep: bool,
-    pub(super) reported_away: bool,
     pub(super) lock_poll_at: Option<SystemTime>,
     pub(super) sleep_reported_at: Option<SystemTime>,
 
@@ -304,8 +302,6 @@ impl ConnectionManager {
             gateway_ip: None,
             screen_locked: false,
             displays_asleep: false,
-            system_asleep: false,
-            reported_away: false,
             lock_poll_at: None,
             sleep_reported_at: None,
             setup_needed: None,
@@ -617,7 +613,9 @@ impl ConnectionManager {
 
     fn account_changed(&mut self, old: &VpnAccount) {
         let account = &mut self.settings.account;
-        if !account.trusted_certs.is_empty() && super::gateway_change_drops_certs(old, account) {
+        if !account.trusted_certs.is_empty()
+            && super::certs::gateway_change_drops_certs(old, account)
+        {
             // The next connection learns the new gateway's certificate.
             account.trusted_certs.clear();
             self.effects.push(Effect::SaveTrustedCerts(Vec::new()));
@@ -1023,6 +1021,21 @@ impl ConnectionManager {
         }
     }
 
+    /// Whether the run of attempt `id` is still to be started: no stop was decided since it was
+    /// asked for. A stop decided before the run's Connect left would reach the Helper first and
+    /// find nothing to stop, so such a run is dropped instead.
+    pub fn wants_run(&self, id: &AttemptId) -> bool {
+        matches!(&self.phase, Phase::Connecting(attempt)
+            if attempt.id == *id && attempt.stage == Stage::Run && attempt.stop_requested.is_none())
+    }
+
+    /// Whether attempt `id`'s OTP session is still to be opened: it was not closed while the
+    /// session's secrets were read.
+    pub fn wants_otp_session(&self, id: &AttemptId) -> bool {
+        matches!(&self.phase, Phase::Connecting(attempt)
+            if attempt.id == *id && attempt.otp_session_open)
+    }
+
     /// Whether a readiness check that found the Helper at `helper_build` should have it exit when
     /// idle, so the system starts this build's Helper: only another build, and only while no run
     /// is going on.
@@ -1125,7 +1138,6 @@ impl ConnectionManager {
     // MARK: Sleep, wake and the network path
 
     pub(super) fn will_sleep(&mut self) {
-        self.sleeping = true;
         match self.take_phase() {
             Phase::Connecting(attempt) => {
                 self.abort_attempt(*attempt, StopReason::Sleep, AfterStop::ResumeAfterSleep);

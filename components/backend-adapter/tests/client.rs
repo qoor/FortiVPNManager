@@ -1,12 +1,10 @@
-//! The client's name, executable problems, stop policy and leftover executables.
+//! The client's name, executable problems, stop grace period and leftover executables.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-use fvm_contract::backend::{
-    Backend, ClientProblem, ClientProblemKind, StopPolicy, StopScope, UntestedVersion,
-};
+use fvm_contract::backend::{Backend, ClientProblem, ClientProblemKind, UntestedVersion};
 
 const RESOLVED: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
 
@@ -83,15 +81,8 @@ fn describes_problems_as_the_current_app_shows_them() {
 }
 
 #[test]
-fn stops_the_client_alone_first_and_its_group_only_by_force() {
-    assert_eq!(
-        OpenFortiVpn.stop_policy(),
-        StopPolicy {
-            graceful: StopScope::Process,
-            grace_period: Duration::from_secs(10),
-            forced: StopScope::ProcessThenGroup,
-        }
-    );
+fn gives_the_client_ten_seconds_to_stop() {
+    assert_eq!(OpenFortiVpn.stop_grace_period(), Duration::from_secs(10));
 }
 
 #[test]

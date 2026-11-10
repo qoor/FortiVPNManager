@@ -68,7 +68,7 @@ pub(crate) fn clean_up(
                     pids(&orphans)
                 ),
             );
-            terminate(&orphans, backend.stop_policy().grace_period, swift);
+            terminate(&orphans, backend.stop_grace_period(), swift);
         }
         swift.send(&FromEntry::RepairRoutes {
             gateway: record.gateway,

@@ -188,6 +188,10 @@ pub enum ConfigWarningKind {
     DuplicateTrustedCert {
         index: u32,
     },
+    /// Only the first `limit` values are used; the app keeps the newest at the front.
+    TooManyTrustedCerts {
+        limit: u32,
+    },
     DuplicateRouteEntry {
         path: String,
         index: u32,

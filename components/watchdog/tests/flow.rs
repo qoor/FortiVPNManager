@@ -9,7 +9,7 @@ use fvm_contract::app_helper::{
     ExitFacts, HelperErrorCode, HelperEventKind, Milestone, OutputSource, ProcessExitStatus,
     StopInitiator, StopReason,
 };
-use fvm_contract::helper_internal::RouteRepairOutcome;
+use fvm_contract::backend::RouteRepairOutcome;
 
 fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
     ExitFacts {

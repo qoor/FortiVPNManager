@@ -17,7 +17,7 @@ use std::thread;
 use std::time::Duration;
 
 use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine};
-use fvm_contract::helper_internal::RouteRepairOutcome;
+use fvm_contract::backend::RouteRepairOutcome;
 
 pub use run::Run;
 

@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use fvm_contract::app_internal::SecretText;
 
-use super::request::{is_certificate_value, is_forbidden};
+use super::request::{certificate_value, is_forbidden};
 
 /// The port openfortivpn uses when the file sets none.
 const DEFAULT_PORT: u16 = 443;
@@ -159,8 +159,7 @@ pub(super) fn read(bytes: &[u8]) -> ImportedSettings {
                 None => settings.unreadable_lines.push(number),
             },
             "trusted-cert" => {
-                let value = text.unwrap_or_default().to_lowercase();
-                if is_certificate_value(&value) {
+                if let Some(value) = certificate_value(&text.unwrap_or_default()) {
                     push_once(&mut settings.trusted_certs, value);
                 } else {
                     settings.unreadable_lines.push(number);

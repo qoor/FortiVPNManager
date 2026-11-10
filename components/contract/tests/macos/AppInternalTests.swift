@@ -642,6 +642,7 @@ private extension AppInternal {
             ConfigWarning(kind: .unknownKey(path: "vpn.colour"), location: LineColumn(line: 4, column: 5)),
             ConfigWarning(kind: .invalidTrustedCert(index: 1), location: LineColumn(line: 4, column: 5)),
             ConfigWarning(kind: .duplicateTrustedCert(index: 2), location: LineColumn(line: 4, column: 5)),
+            ConfigWarning(kind: .tooManyTrustedCerts(limit: 4), location: LineColumn(line: 4, column: 5)),
             ConfigWarning(kind: .duplicateRouteEntry(path: "routes.networks", index: 3), location: LineColumn(line: 4, column: 5)),
             ConfigWarning(kind: .multipleHardLinks(count: 2), location: nil),
             ConfigWarning(kind: .insecurePermissions(mode: 0o644), location: nil),

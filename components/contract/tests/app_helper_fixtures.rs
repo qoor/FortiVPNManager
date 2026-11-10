@@ -1,7 +1,8 @@
 //! The files in `fixtures/app-helper/` are the wire format between the app and the Helper; they
 //! change with the contract. The Helper and the app's runtime each write what the other reads, so
-//! every message is checked in both directions, except the bypass-route request and reply, which
-//! only the runtime writes or reads.
+//! every message is checked in both directions, except the bypass-route request and replies: the
+//! runtime only writes or reads them, and the Helper's Swift side, which handles the other end,
+//! is checked against the same files by the Swift contract tests.
 
 use std::fmt::Debug;
 use std::net::Ipv4Addr;

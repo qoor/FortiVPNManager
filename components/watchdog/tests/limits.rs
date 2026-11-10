@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use fvm_contract::app_helper::{Milestone, ProcessExitStatus, StopInitiator, StopReason};
-use fvm_contract::helper_internal::RouteRepairOutcome;
+use fvm_contract::backend::RouteRepairOutcome;
 use fvm_watchdog::StageLimits;
 use rustix::process::Pid;
 

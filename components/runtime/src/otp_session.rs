@@ -102,7 +102,9 @@ impl Runtime {
             });
         };
         match item {
-            None => read(self, None),
+            // On an input of its own, like the Keychain's answer: a failure feeds the core, which
+            // is in the middle of this effect's input.
+            None => self.queue().run(move |runtime| read(runtime, None)),
             Some(item) => self.request(
                 PortRequest::ReadSecret { item },
                 move |runtime, response| {
@@ -125,6 +127,9 @@ impl Runtime {
         app_password: Option<SecretText>,
         api_available: bool,
     ) {
+        if !self.cm.wants_otp_session(&attempt) {
+            return;
+        }
         let method = self.config.settings().otp.method;
         let backend = match (api_available, method, app_password.is_some()) {
             (true, _, _) => Backend::GmailApi,

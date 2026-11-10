@@ -1320,6 +1320,7 @@ fn settings_file_problems() {
             }),
             warning(ConfigWarningKind::InvalidTrustedCert { index: 1 }),
             warning(ConfigWarningKind::DuplicateTrustedCert { index: 2 }),
+            warning(ConfigWarningKind::TooManyTrustedCerts { limit: 4 }),
             warning(ConfigWarningKind::DuplicateRouteEntry {
                 path: "routes.networks".into(),
                 index: 3,

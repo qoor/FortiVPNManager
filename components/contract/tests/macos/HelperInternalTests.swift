@@ -16,7 +16,7 @@ struct HelperInternalTests {
             .appConnected(app: 1, uid: 501),
             .request(id: 1, app: 1, request: .connect(json: #"{"attemptID":"\#(attempt)","host":"vpn.example.com"}"#)),
             .request(id: 2, app: 1, request: .submitOtp(attempt: attempt, code: "123456")),
-            .request(id: 3, app: 1, request: .disconnect(attempt: "", reason: "userDisconnect")),
+            .request(id: 3, app: 1, request: .disconnect(attempt: attempt, reason: "userDisconnect")),
             .request(id: 4, app: 1, request: .status),
             .request(id: 5, app: 1, request: .exitWhenIdle),
             .appDisconnected(app: 1),

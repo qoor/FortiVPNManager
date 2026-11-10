@@ -45,8 +45,12 @@ fn user_file_shape() -> String {
 
 #[test]
 fn the_fixture_digests_are_certificate_values() {
-    assert!(OpenFortiVpn.is_certificate_value(DIGEST_A));
-    assert!(OpenFortiVpn.is_certificate_value(DIGEST_B));
+    for digest in [DIGEST_A, DIGEST_B] {
+        assert_eq!(
+            OpenFortiVpn.certificate_value(digest),
+            Some(digest.to_owned())
+        );
+    }
 }
 
 #[test]

@@ -13,7 +13,7 @@ import Foundation
     func connect(_ request: Data, reply: @escaping @Sendable (Data?) -> Void)
     /// Reply: `nil` on success or encoded `HelperError`.
     func submitOTP(attemptID: String, code: String, reply: @escaping @Sendable (Data?) -> Void)
-    /// `attemptID` may be empty to stop whatever is running. `reason` is a `StopReason` raw value.
+    /// `reason` is a `StopReason` raw value.
     /// Reply: `nil` once the stop has been accepted (not when it has finished).
     func disconnect(attemptID: String, reason: String, reply: @escaping @Sendable (Data?) -> Void)
     /// Reply: encoded `HelperStatus`.

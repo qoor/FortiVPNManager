@@ -13,7 +13,7 @@ use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, StopPolicy, StopScope, UntestedVersion,
+    Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -35,10 +35,10 @@ impl OpenFortiVpn {
         settings::read(contents)
     }
 
-    /// Whether `value` is a gateway certificate value openfortivpn compares: a SHA-256 digest in
-    /// 64 lowercase hex characters.
-    pub fn is_certificate_value(&self, value: &str) -> bool {
-        request::is_certificate_value(value)
+    /// `text` as a gateway certificate value openfortivpn compares, a SHA-256 digest in 64
+    /// lowercase hex characters, or `None` when it is no digest.
+    pub fn certificate_value(&self, text: &str) -> Option<String> {
+        request::certificate_value(text)
     }
 
     /// Why openfortivpn would refuse the account's server address, username or realm, the first
@@ -96,13 +96,8 @@ impl Backend for OpenFortiVpn {
         Interpreter::default()
     }
 
-    fn stop_policy(&self) -> StopPolicy {
-        StopPolicy {
-            // Its children, such as /sbin/route restoring the routes, must be left to finish.
-            graceful: StopScope::Process,
-            grace_period: Duration::from_secs(10),
-            forced: StopScope::ProcessThenGroup,
-        }
+    fn stop_grace_period(&self) -> Duration {
+        Duration::from_secs(10)
     }
 
     fn is_own_executable(&self, path: &Path) -> bool {

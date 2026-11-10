@@ -5,6 +5,7 @@
 
 use std::net::Ipv4Addr;
 
+use fvm_contract::backend::RouteRepairOutcome;
 use fvm_contract::helper_internal::*;
 use serde_json::Value;
 
@@ -39,7 +40,7 @@ fn messages_to_the_entry() {
             request(
                 3,
                 AppRequest::Disconnect {
-                    attempt: String::new(),
+                    attempt: ATTEMPT.into(),
                     reason: "userDisconnect".into(),
                 },
             ),

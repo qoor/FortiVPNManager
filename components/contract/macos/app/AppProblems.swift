@@ -69,6 +69,7 @@ extension AppInternal {
         case unknownKey(path: String)
         case invalidTrustedCert(index: Int)
         case duplicateTrustedCert(index: Int)
+        case tooManyTrustedCerts(limit: Int)
         case duplicateRouteEntry(path: String, index: Int)
         case multipleHardLinks(count: Int)
         case insecurePermissions(mode: UInt32)

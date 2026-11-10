@@ -1,14 +1,14 @@
 //! The UI's commands and the settings they change directly: the connection
 //! options and the schedule, the OTP method, the login item and the Helper's registration.
 
+use fvm_contract::app_internal::TimeOfDay;
 use fvm_contract::app_internal::command::{Command, ConnectionOption};
 use fvm_contract::app_internal::port::{
     LogCategory, LogLevel, PortAction, PortRequest, PortResponse, RegistrationStatus,
 };
 use fvm_contract::app_internal::problem::ConfigFileError;
 use fvm_contract::app_internal::section::{OpenAtLogin, ScheduleHoursError};
-use fvm_contract::app_internal::{TimeOfDay, Weekday};
-use fvm_core::config::Settings;
+use fvm_core::config::{Settings, normalized_days};
 use fvm_core::connection;
 
 use crate::orchestration::Runtime;
@@ -107,7 +107,7 @@ impl Runtime {
                     days.retain(|other| *other != day);
                     if selected {
                         days.push(day);
-                        days.sort_by_key(|day| weekday_index(*day));
+                        *days = normalized_days(days);
                     }
                 }
                 ConnectionOption::AwayMinutes { minutes } => {
@@ -160,7 +160,6 @@ impl Runtime {
         self.gmail.method_error = result.err();
         self.google.error = None;
         self.reset_gmail_test();
-        self.feed(connection::Input::RecheckReadiness);
     }
 
     // MARK: Login item
@@ -228,17 +227,5 @@ impl Runtime {
                 runtime.refresh_login_item();
             },
         );
-    }
-}
-
-fn weekday_index(day: Weekday) -> u8 {
-    match day {
-        Weekday::Mon => 0,
-        Weekday::Tue => 1,
-        Weekday::Wed => 2,
-        Weekday::Thu => 3,
-        Weekday::Fri => 4,
-        Weekday::Sat => 5,
-        Weekday::Sun => 6,
     }
 }

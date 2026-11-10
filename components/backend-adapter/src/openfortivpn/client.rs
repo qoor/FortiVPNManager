@@ -38,7 +38,7 @@ pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
         }),
         None => Ok(ClientExecutable {
             path: resolved,
-            version: Some(version),
+            version,
         }),
     }
 }

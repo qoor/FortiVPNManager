@@ -14,11 +14,12 @@ use saphyr_parser::ScalarStyle;
 use super::text::disallowed_in_value;
 use super::tree::{Kind, Node, Tree, scalar_text};
 use super::{
-    AWAY_MINUTES, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_ROUTE_ENTRIES,
+    AWAY_MINUTES, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_TRUSTED_CERTS,
     MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect, ReconnectAfterSleep, Routes,
     SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn, WEEKDAYS, minutes,
     normalized_days,
 };
+use crate::bypass_rules::MAX_ENTRIES;
 
 type Pairs = [(usize, usize)];
 
@@ -367,8 +368,9 @@ impl<'t, 'a> Fields<'t, 'a> {
         Ok(())
     }
 
-    /// Certificate values the client does not accept, and repeats, are dropped with a warning
-    /// rather than failing the file: the app manages the list and learns a value again.
+    /// Certificate values the client does not accept, repeats and values past the limit are
+    /// dropped with a warning rather than failing the file: the app manages the list and learns a
+    /// value again.
     fn trusted_certs(&mut self, node: &Node<'_>) -> Result<Vec<String>, ConfigProblem> {
         let Some(items) = sequence(node, "vpn.trusted_certs")? else {
             return Ok(Vec::new());
@@ -380,13 +382,23 @@ impl<'t, 'a> Fields<'t, 'a> {
                 .filter(|_| !is_null(item))
                 .and_then(self.client.certificate_value);
             let kind = match value {
-                Some(value) if !values.contains(&value) => {
+                Some(value) if values.contains(&value) => ConfigWarningKind::DuplicateTrustedCert {
+                    index: index as u32,
+                },
+                Some(_) if values.len() == MAX_TRUSTED_CERTS => {
+                    // Newest first: the rest are older values.
+                    self.warn(
+                        ConfigWarningKind::TooManyTrustedCerts {
+                            limit: MAX_TRUSTED_CERTS as u32,
+                        },
+                        item,
+                    );
+                    break;
+                }
+                Some(value) => {
                     values.push(value);
                     continue;
                 }
-                Some(_) => ConfigWarningKind::DuplicateTrustedCert {
-                    index: index as u32,
-                },
                 None => ConfigWarningKind::InvalidTrustedCert {
                     index: index as u32,
                 },
@@ -445,12 +457,12 @@ impl<'t, 'a> Fields<'t, 'a> {
             }
             entries.push(entry);
         }
-        if entries.len() > MAX_ROUTE_ENTRIES {
+        if entries.len() > MAX_ENTRIES {
             return Err(problem(
                 ConfigProblemKind::TooManyRouteEntries {
                     path: path.to_owned(),
                     count: entries.len() as u32,
-                    limit: MAX_ROUTE_ENTRIES as u32,
+                    limit: MAX_ENTRIES as u32,
                 },
                 node,
             ));

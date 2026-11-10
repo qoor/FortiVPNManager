@@ -31,7 +31,7 @@
 | 비밀번호와 OTP는 stdin pipe로만 전달한다 | argv, 설정 파일, 환경 변수, 로그 어디에도 비밀값을 남기지 않는다. PTY를 쓰지 않고 기본 verbosity로 고정하면 openfortivpn 원본 로그에도 비밀값이 나오지 않는다 |
 | 종료 원인은 openfortivpn 출력이 아니라 Helper가 기록한 사실로 판단한다 | openfortivpn의 exit code와 pppd 메시지만으로는 원인을 구분할 수 없다(§6). 대신 어느 단계까지 진행했는지, 누가 종료시켰는지, 터널이 얼마나 유지됐는지를 본다 |
 | 서버 인증서는 무조건 자동 신뢰한다 | 사용자가 인증서를 신경 쓰지 않기를 원했다. openfortivpn이 인증서를 거부하면서 출력하는 SHA-256 digest를 config.yaml `vpn.trusted_certs`에 저장하고, 이후 연결부터는 이 값을 넘긴다. 그래서 평소에는 openfortivpn을 한 번만 실행한다. 거부는 비밀번호를 보내기 전에 일어나므로 계정 잠금과는 무관하다 |
-| OTP는 Gmail API(OAuth)로 읽고, 실패하면 IMAP IDLE(앱 비밀번호)로 전환한다 | IMAP은 메일이 Gmail에 도착한 뒤 IMAP에서 보이기까지 약 7초가 늦었다. Gmail API는 도착 즉시 감지한다. API 인증이 실패하고 앱 비밀번호가 있으면 같은 시도 안에서 IMAP으로 넘어간다. IMAP은 설정이 더 쉽고 일반적이라 계속 둔다 |
+| OTP는 Gmail API(OAuth)로 읽고, 실패하면 IMAP IDLE(앱 비밀번호)로 전환한다 | IMAP은 메일이 Gmail에 도착한 뒤 IMAP에서 보이기까지 약 7초가 늦었다. Gmail API는 그보다 빠르지만 즉시는 아니다(2026-11 로그에서 도착 후 감지까지 중앙값 약 4.6초, 3~12초). API 인증이 실패하고 앱 비밀번호가 있으면 같은 시도 안에서 IMAP으로 넘어간다. IMAP은 설정이 더 쉽고 일반적이라 계속 둔다 |
 | OAuth Desktop client는 빌드할 때 앱에 넣는다 | client는 사용자가 아니라 앱을 식별하는 값이므로 사용자가 직접 가져올 이유가 없다. Desktop client의 secret은 비밀로 취급되지 않고 PKCE로 보호된다. 다른 client를 쓰고 싶으면 계정 탭의 고급 항목에서 가져와 덮어쓸 수 있다 |
 | 사용한 OTP 메일은 휴지통으로 옮긴다 | 다음 시도에서 이전 코드를 잘못 고르지 않게 하고, 받은편지함에 OTP 메일이 쌓이지 않게 한다 |
 | 수동 OTP 입력 창은 만들지 않는다 | 자동화가 목적이다. OTP를 읽지 못하면 실패로 처리한다 |
@@ -89,7 +89,7 @@ components/
   core/                         판단 코어: 연결 state machine, config.yaml, 예외 규칙 계산, IMAP·Gmail API·OAuth·OTP 메일 형식. I/O 없음
   runtime/                      런타임: 조율과 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화, UI 메시지
                                 (src/macos/, macos/: macOS 앱이 런타임을 시작하는 부분)
-  backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 방식, 검증된 버전, 기존 설정 가져오기
+  backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 유예 시간, 검증된 버전, 기존 설정 가져오기
   watchdog/                     watchdog: 프로세스 실행, stdin, 출력, 단계별 시간 제한, 종료, 종료 사실 (unix/)
   helper-entry/macos/           Helper entry: backend adapter를 골라 watchdog에 연결하는 Helper의 시작 함수
   ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
@@ -233,6 +233,10 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
   - kill 테스트에서 재연결이 정해진 대기 시간만큼 늦었다. openfortivpn을 SIGKILL로 끝내면 서버 종료로 분류돼 잠시 기다렸고, 터널이 올라온 직후였다면 "너무 빨리 끊김"으로 인증 실패에 세어져 더 오래 기다렸다. signal 종료는 서버나 계정과 무관하므로 강제 종료로 따로 분류하고 곧바로 재연결한다. 터널이 올라오기 전의 signal 종료는 FortiGate의 IP 잠금 때문에 단계 규칙을 그대로 둔다. pppd만 끝내면 openfortivpn이 signal 없이 스스로 끝나서 서버 종료와 구분할 수 없어 그대로 둔다.
   - Helper를 `kill -9`로 끝내면 네트워크 오류로 다뤄 backoff만큼 기다렸다. Helper와의 연결은 Mac 안에만 있어서 끊겼다면 언제나 Helper 프로세스가 끝난 것이지 네트워크 문제가 아니다. 그래서 강제 종료로 다룬다.
   - Helper는 내부 오류에서 곧바로 중단한다(fail fast). 연결할 때마다 중단되면 곧바로 재연결이 VPN 로그인과 OTP 메일을 끝없이 반복하므로, 안정 세션이 생길 때까지 곧바로 재연결은 한 번만 한다.
+- **2026-11-10 구조 단순화 검토**
+  - crate 구성, 메시지 방식, 상태 소유는 그대로 두었다. 같은 판단·상수·상태의 사본을 지우고, 앱이 쓰지 않던 Helper 기능(빈 시도 ID로 실행 중인 것을 아무거나 멈춤)을 뺐다.
+  - 교훈: 비밀번호를 읽는 사이에 정해진 중단 요청이 연결 요청보다 먼저 Helper에 가서, 이미 포기한 시도가 실행될 수 있었다. 준비를 기다린 뒤 보내는 요청은 보내기 직전에 판단 코어가 아직 원하는지 확인한다.
+  - 재연결 시간의 대부분은 OTP 메일 감지 대기다. 앱 코드의 대기는 1초 미만이라, 더 줄이려면 Gmail 쪽 감지 방식을 먼저 측정해야 한다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**

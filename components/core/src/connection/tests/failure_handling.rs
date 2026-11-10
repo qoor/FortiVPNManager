@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use fvm_contract::app_helper::{AttemptId, Milestone, StopReason};
+use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus};
 
@@ -340,6 +340,18 @@ fn a_gmail_failure_while_the_tunnel_runs_stops_it() {
         assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
         assert_eq!(h.cm.ledger.recent_auth_attempts.len(), 1);
     }
+}
+
+#[test]
+fn a_gmail_failure_before_the_run_left_drops_the_run_as_that_failure() {
+    let mut h = Harness::new();
+    h.launch();
+    let id = h.start_tunnel();
+    h.send(Input::OtpSessionFailed(id.clone(), OtpFailure::Network));
+    assert!(!h.cm.wants_run(&id));
+    h.send(Input::RunRejected(id, HelperErrorCode::InternalError));
+    assert_eq!(wait_reason(&h), Some(RetryReason::Network));
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
 }
 
 #[test]

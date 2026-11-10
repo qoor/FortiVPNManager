@@ -2,14 +2,13 @@
 //! the backend adapter's: values reach here only as it reported or accepted them.
 
 use super::VpnAccount;
+use crate::config::MAX_TRUSTED_CERTS;
 
-pub const TRUSTED_CERT_LIMIT: usize = 4;
-
-/// `learned` in front of `existing`, without repeats, the newest [`TRUSTED_CERT_LIMIT`].
+/// `learned` in front of `existing`, without repeats, the newest [`MAX_TRUSTED_CERTS`].
 pub fn merge_trusted_certs(learned: &[String], existing: &[String]) -> Vec<String> {
-    let mut merged: Vec<String> = Vec::with_capacity(TRUSTED_CERT_LIMIT);
+    let mut merged: Vec<String> = Vec::with_capacity(MAX_TRUSTED_CERTS);
     for value in learned.iter().chain(existing) {
-        if merged.len() == TRUSTED_CERT_LIMIT {
+        if merged.len() == MAX_TRUSTED_CERTS {
             break;
         }
         if !merged.contains(value) {
@@ -23,6 +22,6 @@ pub fn merge_trusted_certs(learned: &[String], existing: &[String]) -> Vec<Strin
 /// new server address or port makes them the old gateway's, unless they were changed with it.
 /// Values the user supplied for the new gateway are kept. Both the settings window's save and a
 /// change of the settings file follow this rule.
-pub fn gateway_change_drops_certs(before: &VpnAccount, after: &VpnAccount) -> bool {
+pub(super) fn gateway_change_drops_certs(before: &VpnAccount, after: &VpnAccount) -> bool {
     !before.same_gateway(after) && after.trusted_certs == before.trusted_certs
 }

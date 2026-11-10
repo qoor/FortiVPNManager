@@ -82,9 +82,8 @@ impl ConnectionManager {
         } else if self.lock_poll_at.is_none() {
             self.lock_poll_at = Some(self.now + policy::LOCK_POLL);
         }
-        let away = self.screen_locked || self.displays_asleep || self.system_asleep;
-        if away != self.reported_away {
-            self.reported_away = away;
+        let away = self.screen_locked || self.displays_asleep || self.sleeping;
+        if away != self.away_since.is_some() {
             self.presence_changed(away, at);
         }
     }
@@ -99,7 +98,7 @@ impl ConnectionManager {
     pub(super) fn will_sleep_reported(&mut self, at: SystemTime) {
         self.sleep_reported_at = Some(at);
         self.wake_settle = None;
-        self.system_asleep = true;
+        self.sleeping = true;
         self.update_presence(at);
         self.will_sleep();
     }
@@ -111,7 +110,6 @@ impl ConnectionManager {
             .map_or(Duration::ZERO, |at| elapsed(at, self.now));
         self.did_wake(slept_for);
         // Whether the screen is locked after the wake decides presence; the answer judges it.
-        self.system_asleep = false;
         self.effects.push(Effect::ReadScreenState);
         self.wake_settle = Some(WakeSettle {
             deadline: self.now + policy::WAKE_SETTLE_TIMEOUT,
@@ -195,6 +193,15 @@ impl ConnectionManager {
         });
         self.path_settle_at = Some(self.now + policy::PATH_SETTLE);
         self.path_probe = None;
+        // Back after a wake: look now rather than at the next poll.
+        if satisfied
+            && self
+                .wake_settle
+                .as_ref()
+                .is_some_and(|settle| !settle.late && matches!(settle.step, SettleStep::Waiting(_)))
+        {
+            self.wake_look_due();
+        }
     }
 
     pub(super) fn path_settled(&mut self) {

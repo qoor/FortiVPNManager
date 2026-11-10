@@ -17,9 +17,8 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{
     Backend, ClientExecutable, ClientProblem, Finding, LaunchSpec, OutputInterpreter, Prompt,
-    StopPolicy, StopScope, UntestedVersion,
+    RouteRepairOutcome, UntestedVersion,
 };
-use fvm_contract::helper_internal::RouteRepairOutcome;
 use fvm_watchdog::{Report, Run, StageLimits, Timing};
 
 pub const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -41,18 +40,12 @@ pub const FULL_FLOW: [Milestone; 6] = [
 // The backend
 
 pub struct FakeOpenFortiVpn {
-    pub stop_policy: StopPolicy,
+    pub grace_period: Duration,
 }
 
-/// openfortivpn's stop policy with a test's grace period.
+/// openfortivpn with a test's grace period.
 pub fn fake_backend(grace_period: Duration) -> FakeOpenFortiVpn {
-    FakeOpenFortiVpn {
-        stop_policy: StopPolicy {
-            graceful: StopScope::Process,
-            grace_period,
-            forced: StopScope::ProcessThenGroup,
-        },
-    }
+    FakeOpenFortiVpn { grace_period }
 }
 
 impl Backend for FakeOpenFortiVpn {
@@ -91,8 +84,8 @@ impl Backend for FakeOpenFortiVpn {
         FakeInterpreter::default()
     }
 
-    fn stop_policy(&self) -> StopPolicy {
-        self.stop_policy
+    fn stop_grace_period(&self) -> Duration {
+        self.grace_period
     }
 
     fn is_own_executable(&self, _: &Path) -> bool {

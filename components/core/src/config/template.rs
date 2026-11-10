@@ -9,11 +9,11 @@ use fvm_contract::app_internal::problem::ConfigProblemKind;
 
 use super::text::disallowed_in_value;
 use super::{
-    AWAY_MINUTES, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_ROUTE_ENTRIES, MAX_TRUSTED_CERTS,
-    MIN_SLEEP_MINUTES, OTP_METHODS, PORTS, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, WEEKDAYS,
-    minutes, normalized_days,
+    AWAY_MINUTES, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES,
+    OTP_METHODS, PORTS, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, WEEKDAYS, minutes,
+    normalized_days,
 };
-use crate::bypass_rules::{MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
+use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
 
 /// Settings that pass come back unchanged when the text is read. The certificate values are not
 /// checked again: only the client's rule produces them.
@@ -84,11 +84,11 @@ pub(super) fn write(settings: &Settings, client_name: &str) -> Result<String, Co
         ("routes.bypass_vpn", &settings.routes.bypass_vpn),
     ];
     for (path, list) in lists {
-        if list.len() > MAX_ROUTE_ENTRIES {
+        if list.len() > MAX_ENTRIES {
             return Err(ConfigProblemKind::TooManyRouteEntries {
                 path: path.to_owned(),
                 count: list.len() as u32,
-                limit: MAX_ROUTE_ENTRIES as u32,
+                limit: MAX_ENTRIES as u32,
             });
         }
         for (index, entry) in list.iter().enumerate() {
@@ -142,6 +142,10 @@ fn render(settings: &Settings, client_name: &str) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     let time = |time: TimeOfDay| quoted(&format!("{:02}:{:02}", time.hour, time.minute));
+    assert!(
+        vpn.trusted_certs.len() <= MAX_TRUSTED_CERTS,
+        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values"
+    );
     let trusted_certs = list(&vpn.trusted_certs);
     let networks = list(&settings.routes.networks);
     let bypass_vpn = list(&settings.routes.bypass_vpn);
@@ -187,9 +191,9 @@ connection:
   # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the Mac asleep) and stop once you have been away for away_minutes minutes ({away_range}).
   schedule: {{ enabled: {schedule_enabled}, days: [{days}], start: {start}, end: {end}, away_minutes: {away_minutes} }}
 routes:
-  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ROUTE_ENTRIES} entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
+  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
   networks:{networks}
-  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to {MAX_ROUTE_ENTRIES} entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
+  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
   # The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.
   bypass_vpn:{bypass_vpn}
 "#,

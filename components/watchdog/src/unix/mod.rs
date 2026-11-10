@@ -8,7 +8,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::time::Duration;
 
 use fvm_contract::app_helper::ProcessExitStatus;
-use fvm_contract::backend::{LaunchSpec, StopScope};
+use fvm_contract::backend::LaunchSpec;
 use nix::libc;
 use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, PosixSpawnFlags, posix_spawn};
 use nix::sys::signal::{SigSet, Signal as SpawnSignal};
@@ -105,13 +105,20 @@ impl Child {
         self.0.as_raw_nonzero().get().unsigned_abs()
     }
 
-    pub(crate) fn signal(&self, signal: Signal, scope: StopScope) {
+    /// SIGTERM to the client alone: what it started, such as /sbin/route restoring the routes,
+    /// must be left to finish.
+    pub(crate) fn terminate(&self) {
         // An unreaped child takes a signal even after it exited.
-        rustix::process::kill_process(self.0, signal).expect("signalling the unreaped client");
-        if scope == StopScope::ProcessThenGroup {
-            // Fails when nothing is left in the group but the client itself, which already got it.
-            let _ = rustix::process::kill_process_group(self.0, signal);
-        }
+        rustix::process::kill_process(self.0, Signal::TERM)
+            .expect("signalling the unreaped client");
+    }
+
+    /// SIGKILL to the client, then to its whole process group.
+    pub(crate) fn kill(&self) {
+        rustix::process::kill_process(self.0, Signal::KILL)
+            .expect("signalling the unreaped client");
+        // Fails when nothing is left in the group but the client itself, which already got it.
+        let _ = rustix::process::kill_process_group(self.0, Signal::KILL);
     }
 
     pub(crate) fn exit_watch(&self) -> ExitWatch {

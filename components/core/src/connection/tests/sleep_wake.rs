@@ -287,6 +287,24 @@ fn a_wake_without_network_keeps_waiting() {
 }
 
 #[test]
+fn the_network_coming_back_after_a_wake_is_looked_at_at_once() {
+    let mut h = Harness::new();
+    h.launch_connected();
+    h.sleep();
+    h.send(Input::NetworkPathChanged {
+        satisfied: false,
+        interfaces: Vec::new(),
+    });
+    assert!(!h.wake().contains(&Effect::ReadRouter));
+    h.advance(0.3);
+    let effects = h.send(Input::NetworkPathChanged {
+        satisfied: true,
+        interfaces: Vec::new(),
+    });
+    assert!(effects.contains(&Effect::ReadRouter), "{effects:?}");
+}
+
+#[test]
 fn sleep_before_the_tunnel_started_just_waits() {
     for session_open in [false, true] {
         let mut h = Harness::new();

@@ -350,6 +350,28 @@ fn invalid_certificate_values_are_dropped_with_warnings() {
 }
 
 #[test]
+fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
+    let values: Vec<String> = ('a'..='f')
+        .map(|fill| fill.to_string().repeat(64))
+        .collect();
+    // A repeat after the limit is still a repeat.
+    let items: String = [&values[..4], &values[..1], &values[4..]]
+        .concat()
+        .iter()
+        .map(|value| format!("    - {value}\n"))
+        .collect();
+    let loaded = decode(&format!("vpn:\n  trusted_certs:\n{items}"));
+    assert_eq!(loaded.settings.vpn.trusted_certs, values[..4]);
+    assert_eq!(
+        loaded.warnings,
+        [
+            warning(ConfigWarningKind::DuplicateTrustedCert { index: 4 }, 7, 7),
+            warning(ConfigWarningKind::TooManyTrustedCerts { limit: 4 }, 8, 7),
+        ]
+    );
+}
+
+#[test]
 fn an_all_digit_certificate_value_stays_text() {
     let digits = "0123456789".repeat(6) + "0123";
     assert_eq!(

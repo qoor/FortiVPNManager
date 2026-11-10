@@ -92,7 +92,6 @@ impl Runtime {
         let answered = matches!(&helper, HelperFacts::Answered { build, .. } if *build == self.facts.app_build);
         if answered && !self.bypass.helper_ready {
             // A Helper registered, approved or updated since: the routes can be synced now.
-            self.bypass.helper_ready = true;
             self.sync_bypass_routes();
         }
         self.bypass.helper_ready = answered;

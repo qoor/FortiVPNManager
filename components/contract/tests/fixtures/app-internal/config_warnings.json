@@ -34,6 +34,17 @@
   },
   {
     "kind": {
+      "tooManyTrustedCerts": {
+        "limit": 4
+      }
+    },
+    "location": {
+      "column": 5,
+      "line": 4
+    }
+  },
+  {
+    "kind": {
       "duplicateRouteEntry": {
         "index": 3,
         "path": "routes.networks"

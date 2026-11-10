@@ -29,10 +29,13 @@ targets:
     type: application
     platform: macOS
     sources:
-      # The Helper's messages to its entry are not the app's.
+      # The Helper's messages to its entry, and the XPC payloads only the Helper's Swift side
+      # handles, are not the app's.
       - path: ../../components/contract/macos
         excludes:
           - "HelperInternal.swift"
+          - "xpc/BypassRouteMessages.swift"
+          - "xpc/HelperError.swift"
       - path: ../../components/ui/macos
       - path: ../../components/os-integration/macos
       - path: ../../components/runtime/macos/swift
@@ -150,6 +153,8 @@ targets:
       - path: ../../components/contract/macos
         excludes:
           - "HelperInternal.swift"
+          - "xpc/BypassRouteMessages.swift"
+          - "xpc/HelperError.swift"
       - path: ../../components/ui/macos
       - path: ../../components/os-integration/macos
         excludes:
