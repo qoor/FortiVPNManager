@@ -13,6 +13,7 @@ mod commands;
 mod config_file;
 mod files;
 mod google_account;
+mod link;
 mod log_file;
 #[cfg(target_os = "macos")]
 pub mod macos;

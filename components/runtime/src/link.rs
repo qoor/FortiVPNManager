@@ -1,22 +1,21 @@
-//! The threads that carry the stream to Swift, so the runtime never waits on Swift. Swift never
-//! closes its end on purpose: an unreadable message, the end of the stream and a failed write all
-//! stop the process.
+//! The threads that carry the stream to the app's OS side (Swift on macOS), so the runtime never
+//! waits on it. The app never closes its end on purpose: an unreadable message, the end of the
+//! stream and a failed write all stop the process.
 
 use std::io::{BufReader, Read, Write};
-use std::os::unix::net::UnixStream;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use fvm_contract::app_internal::{FromRuntime, ToRuntime};
 use fvm_contract::stream;
 
-/// Starts reading `socket`, handing each message to `deliver` in arrival order, and returns the
-/// sender whose messages are written to `socket` in order.
+/// Starts reading `reader`, handing each message to `deliver` in arrival order, and returns the
+/// sender whose messages are written to `writer` in order.
 pub(crate) fn connect(
-    socket: UnixStream,
+    reader: impl Read + Send + 'static,
+    writer: impl Write + Send + 'static,
     deliver: impl FnMut(ToRuntime) + Send + 'static,
 ) -> Sender<FromRuntime> {
-    let reader = socket.try_clone().expect("cloning the socket to Swift");
     thread::Builder::new()
         .name("fvm-runtime-read".into())
         .spawn(move || read(BufReader::new(reader), deliver))
@@ -24,20 +23,20 @@ pub(crate) fn connect(
     let (outgoing, messages) = mpsc::channel();
     thread::Builder::new()
         .name("fvm-runtime-write".into())
-        .spawn(move || write(socket, messages))
+        .spawn(move || write(writer, messages))
         .expect("starting the runtime's writer thread");
     outgoing
 }
 
 fn read(mut reader: impl Read, mut deliver: impl FnMut(ToRuntime)) {
     loop {
-        deliver(stream::receive(&mut reader).expect("reading a message from Swift"));
+        deliver(stream::receive(&mut reader).expect("reading a message from the app"));
     }
 }
 
 fn write(mut writer: impl Write, messages: Receiver<FromRuntime>) {
     for message in messages {
-        stream::send(&mut writer, &message).expect("writing a message to Swift");
+        stream::send(&mut writer, &message).expect("writing a message to the app");
     }
 }
 
@@ -54,7 +53,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "reading a message from Swift")]
+    #[should_panic(expected = "reading a message from the app")]
     fn an_unreadable_message_stops_the_process() {
         read(
             Cursor::new(frame(br#"{"command":{"_0":{"fly":{}}}}"#)),
@@ -63,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "reading a message from Swift")]
+    #[should_panic(expected = "reading a message from the app")]
     fn the_end_of_the_stream_stops_the_process() {
         read(
             Cursor::new(frame(br#"{"command":{"_0":{"connect":{}}}}"#)),

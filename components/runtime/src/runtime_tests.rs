@@ -1,4 +1,4 @@
-//! The runtime as the app drives it: a fake Swift side answers the port requests from an in-memory
+//! The runtime as the app drives it: a fake app side answers the port requests from an in-memory
 //! secret store, a fake Helper and a fake network, with the runtime's files in a scratch folder.
 
 use std::fs;
@@ -41,7 +41,7 @@ connection:
   auto_connect_on_launch: false
 "#;
 
-struct Swift {
+struct App {
     folder: PathBuf,
     inputs: Sender<Input>,
     out: Receiver<FromRuntime>,
@@ -77,7 +77,7 @@ fn app_password_item() -> SecretItem {
     }
 }
 
-impl Swift {
+impl App {
     /// A Mac with a registered Helper of the app's build, before launch.
     fn new() -> Self {
         let (inputs, _) = mpsc::channel();
@@ -138,7 +138,7 @@ impl Swift {
     }
 
     fn send(&self, message: ToRuntime) {
-        self.inputs.send(Input::Swift(message)).unwrap();
+        self.inputs.send(Input::App(message)).unwrap();
     }
 
     fn command(&self, command: Command) {
@@ -330,57 +330,53 @@ impl Swift {
 
 #[test]
 fn a_launch_with_everything_in_place_shows_the_helper_running_and_waits_for_connect() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift
-        .secrets
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
         .push((vpn_password_item(), SecretText("vpn secret".into())));
-    swift
-        .secrets
+    app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    swift.launch();
-    swift.settle_until("the Helper's build", |swift| {
-        matches!(swift.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
+    app.launch();
+    app.settle_until("the Helper's build", |app| {
+        matches!(app.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
     });
-    swift.settle();
+    app.settle();
     assert_eq!(
-        swift.connection_status(),
+        app.connection_status(),
         Some(&ConnectionStatus::NotConnected {})
     );
-    assert_eq!(swift.open_settings, 0);
+    assert_eq!(app.open_settings, 0);
 }
 
 #[test]
 fn a_hand_edit_that_breaks_or_fixes_the_file_updates_the_setup_list() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift
-        .secrets
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
         .push((vpn_password_item(), SecretText("vpn secret".into())));
-    swift
-        .secrets
+    app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    swift.launch();
-    swift.settle_until("the Helper's build", |swift| {
-        matches!(swift.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
+    app.launch();
+    app.settle_until("the Helper's build", |app| {
+        matches!(app.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
     });
-    swift.settle();
+    app.settle();
     assert_eq!(
-        swift.connection_status(),
+        app.connection_status(),
         Some(&ConnectionStatus::NotConnected {})
     );
 
-    swift.write_config(&ACCOUNT.replace("port: 443", "port: 0443"));
-    swift.settle_until("the broken file in the setup list", |swift| {
+    app.write_config(&ACCOUNT.replace("port: 443", "port: 0443"));
+    app.settle_until("the broken file in the setup list", |app| {
         matches!(
-            swift.connection_status(),
+            app.connection_status(),
             Some(ConnectionStatus::SetupRequired { items })
                 if items.contains(&fvm_contract::app_internal::section::SetupItem::ConfigFile {})
         )
     });
-    swift.write_config(ACCOUNT);
-    swift.settle_until("the fixed file", |swift| {
-        swift.connection_status() == Some(&ConnectionStatus::NotConnected {})
+    app.write_config(ACCOUNT);
+    app.settle_until("the fixed file", |app| {
+        app.connection_status() == Some(&ConnectionStatus::NotConnected {})
     });
 }
 
@@ -394,78 +390,77 @@ fn a_new_server_address_empties_both_certificate_lists() {
         "  trusted_certs: []\n",
         &format!("  trusted_certs: [\"{digest}\"]\n  trusted_cert_pins: [\"{pin}\"]\n"),
     );
-    let mut swift = Swift::new();
-    swift.write_config(&with_values);
-    swift.launch();
-    swift.settle();
-    assert!(swift.config_text().contains(&pin));
-    swift.write_config(&with_values.replace("vpn.example.com", "vpn2.example.com"));
-    swift.settle_until("the emptied lists", |swift| {
-        let text = swift.config_text();
+    let mut app = App::new();
+    app.write_config(&with_values);
+    app.launch();
+    app.settle();
+    assert!(app.config_text().contains(&pin));
+    app.write_config(&with_values.replace("vpn.example.com", "vpn2.example.com"));
+    app.settle_until("the emptied lists", |app| {
+        let text = app.config_text();
         text.contains("  trusted_certs: []\n") && text.contains("  trusted_cert_pins: []\n")
     });
-    assert!(swift.config_text().contains("vpn2.example.com"));
+    assert!(app.config_text().contains("vpn2.example.com"));
 }
 
 #[test]
 fn a_launch_with_a_missing_password_asks_for_setup_and_opens_settings_once() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift
-        .secrets
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    swift.launch();
-    swift.settle_until("the setup list", |swift| {
+    app.launch();
+    app.settle_until("the setup list", |app| {
         matches!(
-            swift.connection_status(),
+            app.connection_status(),
             Some(ConnectionStatus::SetupRequired { .. })
         )
     });
-    swift.settle();
-    let Some(ConnectionStatus::SetupRequired { items }) = swift.connection_status() else {
+    app.settle();
+    let Some(ConnectionStatus::SetupRequired { items }) = app.connection_status() else {
         unreachable!()
     };
     assert_eq!(
         items,
         &vec![fvm_contract::app_internal::section::SetupItem::VpnPassword {}]
     );
-    assert_eq!(swift.open_settings, 1);
+    assert_eq!(app.open_settings, 1);
 }
 
 #[test]
 fn a_helper_of_another_build_is_asked_to_exit_and_checked_again() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift.helper_build = "99".into();
-    swift.launch();
-    swift.settle_until("the restarted Helper", |swift| {
-        matches!(swift.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.helper_build = "99".into();
+    app.launch();
+    app.settle_until("the restarted Helper", |app| {
+        matches!(app.helper_state(), Some(HelperState::Running { build }) if build == APP_BUILD)
     });
-    assert!(swift.asked_helper(|call| matches!(call, HelperCall::ExitWhenIdle {})));
+    assert!(app.asked_helper(|call| matches!(call, HelperCall::ExitWhenIdle {})));
 }
 
 #[test]
 fn the_first_launch_imports_the_openfortivpn_config_with_its_password() {
-    let mut swift = Swift::new();
-    let client_config = swift.folder.join("home/.config/openfortivpn/config");
+    let mut app = App::new();
+    let client_config = app.folder.join("home/.config/openfortivpn/config");
     fs::create_dir_all(client_config.parent().unwrap()).unwrap();
     fs::write(
         &client_config,
         "host = vpn.example.com\nport = 10443\nusername = alice\npassword = vpn secret\n",
     )
     .unwrap();
-    swift.launch();
-    swift.settle_until("the import report", |swift| {
-        swift.sections.iter().any(|section| matches!(section, Section::Config { section } if section.account.import_report.is_some()))
+    app.launch();
+    app.settle_until("the import report", |app| {
+        app.sections.iter().any(|section| matches!(section, Section::Config { section } if section.account.import_report.is_some()))
     });
-    swift.settle();
+    app.settle();
     let Some(ClientSettingsImport::Imported { report }) =
-        &swift.config_section().account.import_report
+        &app.config_section().account.import_report
     else {
         panic!("an import report")
     };
     assert_eq!(report.password, Some(ImportedPassword::Saved {}));
-    let text = swift.config_text();
+    let text = app.config_text();
     for line in [
         "  host: \"vpn.example.com\"\n",
         "  port: 10443\n",
@@ -474,7 +469,7 @@ fn the_first_launch_imports_the_openfortivpn_config_with_its_password() {
         assert!(text.contains(line), "{text}");
     }
     assert_eq!(
-        swift.secret(&vpn_password_item()),
+        app.secret(&vpn_password_item()),
         Some(SecretText("vpn secret".into()))
     );
     // The client's file is only read.
@@ -487,11 +482,11 @@ fn the_first_launch_imports_the_openfortivpn_config_with_its_password() {
 
 #[test]
 fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_account() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift.launch();
-    swift.settle();
-    let account = &swift.config_section().account;
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let account = &app.config_section().account;
     let form = AccountForm {
         host: account.host.clone(),
         port: account.port.clone(),
@@ -501,17 +496,17 @@ fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_
         vpn_password: SecretText("new secret".into()),
         app_password: SecretText(String::new()),
     };
-    swift.command(Command::EditAccount {
+    app.command(Command::EditAccount {
         revision: account.revision,
         form,
     });
     // Edited elsewhere meanwhile: the field the user did not change keeps the edit.
-    swift.write_config(&ACCOUNT.replace("method: \"imap\"", "method: \"gmail_api\""));
-    swift.command(Command::SaveAccount {});
-    swift.settle_until("the saved feedback", |swift| {
-        swift.config_section().account.feedback == Some(AccountFeedback::Saved {})
+    app.write_config(&ACCOUNT.replace("method: \"imap\"", "method: \"gmail_api\""));
+    app.command(Command::SaveAccount {});
+    app.settle_until("the saved feedback", |app| {
+        app.config_section().account.feedback == Some(AccountFeedback::Saved {})
     });
-    let text = swift.config_text();
+    let text = app.config_text();
     assert!(text.contains("  username: \"bob\"\n"), "{text}");
     assert!(text.contains("  method: \"gmail_api\"\n"), "{text}");
     let saved_under = SecretItem::VpnPassword {
@@ -519,19 +514,19 @@ fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_
         host: "vpn.example.com".into(),
     };
     assert_eq!(
-        swift.secret(&saved_under),
+        app.secret(&saved_under),
         Some(SecretText("new secret".into()))
     );
-    assert!(!swift.config_section().account.vpn_password_entered);
+    assert!(!app.config_section().account.vpn_password_entered);
 }
 
 #[test]
 fn a_typed_password_survives_a_file_change_but_not_closing_settings() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift.launch();
-    swift.settle();
-    let account = swift.config_section().account.clone();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let account = app.config_section().account.clone();
     let form = AccountForm {
         host: account.host.clone(),
         port: account.port.clone(),
@@ -541,37 +536,37 @@ fn a_typed_password_survives_a_file_change_but_not_closing_settings() {
         vpn_password: SecretText("typed".into()),
         app_password: SecretText(String::new()),
     };
-    swift.command(Command::EditAccount {
+    app.command(Command::EditAccount {
         revision: account.revision,
         form,
     });
-    swift.settle();
+    app.settle();
     // The file changes a field the user did not touch: the UI replaces its fields, the password
     // stays typed.
-    swift.write_config(&ACCOUNT.replace("alice\"\n  realm", "carol\"\n  realm"));
-    swift.settle_until("the merged username", |swift| {
-        swift.config_section().account.username == "carol"
+    app.write_config(&ACCOUNT.replace("alice\"\n  realm", "carol\"\n  realm"));
+    app.settle_until("the merged username", |app| {
+        app.config_section().account.username == "carol"
     });
-    let merged = swift.config_section().account.clone();
+    let merged = app.config_section().account.clone();
     assert!(merged.revision > account.revision);
     assert!(merged.vpn_password_entered);
 
-    swift.command(Command::SettingsClosed {});
-    swift.settle();
-    let closed = &swift.config_section().account;
+    app.command(Command::SettingsClosed {});
+    app.settle();
+    let closed = &app.config_section().account;
     assert!(closed.revision > merged.revision);
     assert!(!closed.vpn_password_entered);
 }
 
 #[test]
 fn a_draft_typed_against_replaced_fields_is_dropped() {
-    let mut swift = Swift::new();
-    swift.write_config(ACCOUNT);
-    swift.launch();
-    swift.settle();
-    let account = swift.config_section().account.clone();
-    swift.command(Command::RevertAccount {});
-    swift.settle();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let account = app.config_section().account.clone();
+    app.command(Command::RevertAccount {});
+    app.settle();
     let form = AccountForm {
         host: account.host.clone(),
         port: account.port.clone(),
@@ -581,21 +576,21 @@ fn a_draft_typed_against_replaced_fields_is_dropped() {
         vpn_password: SecretText(String::new()),
         app_password: SecretText(String::new()),
     };
-    swift.command(Command::EditAccount {
+    app.command(Command::EditAccount {
         revision: account.revision,
         form,
     });
-    swift.settle();
-    assert_eq!(swift.config_section().account.username, "alice");
+    app.settle();
+    assert_eq!(app.config_section().account.username, "alice");
 }
 
 #[test]
 fn exception_rules_write_the_routes_and_remember_them() {
-    let mut swift = Swift::new();
-    swift.write_config(&format!(
+    let mut app = App::new();
+    app.write_config(&format!(
         "{ACCOUNT}routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n"
     ));
-    swift.service = Some(BypassRoutesSnapshot {
+    app.service = Some(BypassRoutesSnapshot {
         service_id: "SERVICE-1".into(),
         service_name: "Wi-Fi".into(),
         router: "192.168.0.1".into(),
@@ -603,17 +598,17 @@ fn exception_rules_write_the_routes_and_remember_them() {
         subnet_mask: "255.255.255.0".into(),
         routes: Vec::new(),
     });
-    swift.launch();
-    swift.settle_until("the applied rules", |swift| {
-        matches!(swift.bypass_status(), Some(BypassStatus::Applied { .. }))
+    app.launch();
+    app.settle_until("the applied rules", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Applied { .. }))
     });
     let route = AdditionalRoute {
         destination: "10.30.0.0".into(),
         subnet_mask: "255.255.0.0".into(),
         gateway: "192.168.0.1".into(),
     };
-    assert_eq!(swift.service.as_ref().unwrap().routes, vec![route]);
-    let state = fs::read_to_string(swift.folder.join("state/state.json")).unwrap();
+    assert_eq!(app.service.as_ref().unwrap().routes, vec![route]);
+    let state = fs::read_to_string(app.folder.join("state/state.json")).unwrap();
     let state: serde_json::Value = serde_json::from_str(&state).unwrap();
     assert_eq!(
         state["appliedExceptionRoutes"]["SERVICE-1"][0]["destination"],
@@ -623,16 +618,16 @@ fn exception_rules_write_the_routes_and_remember_them() {
 
 #[test]
 fn a_rule_removed_from_the_file_takes_its_route_away() {
-    let mut swift = Swift::new();
+    let mut app = App::new();
     let with_rule =
         format!("{ACCOUNT}routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n");
-    swift.write_config(&with_rule);
+    app.write_config(&with_rule);
     let other = AdditionalRoute {
         destination: "172.16.0.0".into(),
         subnet_mask: "255.255.0.0".into(),
         gateway: "192.168.0.254".into(),
     };
-    swift.service = Some(BypassRoutesSnapshot {
+    app.service = Some(BypassRoutesSnapshot {
         service_id: "SERVICE-1".into(),
         service_name: "Wi-Fi".into(),
         router: "192.168.0.1".into(),
@@ -640,17 +635,17 @@ fn a_rule_removed_from_the_file_takes_its_route_away() {
         subnet_mask: "255.255.255.0".into(),
         routes: vec![other.clone()],
     });
-    swift.launch();
-    swift.settle_until("the applied rules", |swift| {
-        swift.service.as_ref().unwrap().routes.len() == 2
+    app.launch();
+    app.settle_until("the applied rules", |app| {
+        app.service.as_ref().unwrap().routes.len() == 2
     });
-    swift.write_config(&with_rule.replace("bypass_vpn: [10.30.0.0/16]", "bypass_vpn: []"));
-    swift.send(ToRuntime::Event {
+    app.write_config(&with_rule.replace("bypass_vpn: [10.30.0.0/16]", "bypass_vpn: []"));
+    app.send(ToRuntime::Event {
         event: fvm_contract::app_internal::event::SystemEvent::AppActivated {},
     });
-    swift.settle_until("the route removed", |swift| {
-        swift.service.as_ref().unwrap().routes.len() == 1
+    app.settle_until("the route removed", |app| {
+        app.service.as_ref().unwrap().routes.len() == 1
     });
     // A route through another gateway was never the rules' to take.
-    assert_eq!(swift.service.as_ref().unwrap().routes, vec![other]);
+    assert_eq!(app.service.as_ref().unwrap().routes, vec![other]);
 }

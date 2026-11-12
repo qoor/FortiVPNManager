@@ -28,7 +28,8 @@ use crate::timers::Timers;
 
 /// One thing for the runtime to take in turn.
 pub(crate) enum Input {
-    Swift(ToRuntime),
+    /// From the app's OS side: Swift on macOS.
+    App(ToRuntime),
     Timer(TimerId),
     /// Work that finished elsewhere, carried on in the queue.
     Done(Box<dyn FnOnce(&mut Runtime) + Send>),
@@ -99,7 +100,7 @@ pub(crate) struct Runtime {
     pub(crate) bypass: crate::bypass_sync::Bypass,
 }
 
-/// Takes the inputs until the process ends. The first message from Swift is always the launch.
+/// Takes the inputs until the process ends. The first message from the app is always the launch.
 pub(crate) fn run(
     paths: Paths,
     inputs: Sender<Input>,
@@ -107,8 +108,8 @@ pub(crate) fn run(
     out: Sender<FromRuntime>,
 ) {
     let facts = match received.recv().expect("the input queue stays open") {
-        Input::Swift(ToRuntime::Launched { facts }) => facts,
-        _ => panic!("the first message from Swift is the launch"),
+        Input::App(ToRuntime::Launched { facts }) => facts,
+        _ => panic!("the first message from the app is the launch"),
     };
     let mut runtime = Runtime::launch(facts, paths, inputs, out);
     runtime.publish();
@@ -197,22 +198,22 @@ impl Runtime {
 
     fn take(&mut self, input: Input) {
         match input {
-            Input::Swift(ToRuntime::Launched { .. }) => panic!("Swift launches the runtime once"),
-            Input::Swift(ToRuntime::Command { command }) => self.command(command),
-            Input::Swift(ToRuntime::PortResponse { id, response }) => {
+            Input::App(ToRuntime::Launched { .. }) => panic!("the app launches the runtime once"),
+            Input::App(ToRuntime::Command { command }) => self.command(command),
+            Input::App(ToRuntime::PortResponse { id, response }) => {
                 let reply = self
                     .port_replies
                     .remove(&id)
                     .expect("an answer to a request the runtime sent");
                 reply(self, response);
             }
-            Input::Swift(ToRuntime::Event { event }) => self.system_event(event),
+            Input::App(ToRuntime::Event { event }) => self.system_event(event),
             Input::Timer(timer) => self.feed(connection::Input::TimerFired(timer)),
             Input::Done(work) => work(self),
         }
     }
 
-    // MARK: Talking to Swift
+    // MARK: Talking to the app
 
     pub(crate) fn send(&self, message: FromRuntime) {
         // The writer thread lives as long as the process.

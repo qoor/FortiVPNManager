@@ -1,14 +1,13 @@
 //! How the macOS app starts the runtime: Swift calls `fvm_runtime_start` once and talks to the
 //! runtime only through the stream it returns, with the messages in `fvm_contract::app_internal`.
 
-mod link;
-
 use std::io;
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::thread;
 
+use crate::link;
 use crate::orchestration::{self, Input, Paths};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
@@ -23,9 +22,10 @@ pub fn start() -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
     let (inputs, received) = mpsc::channel();
     let from_swift = inputs.clone();
-    let out = link::connect(ours, move |message| {
+    let reader = ours.try_clone().expect("cloning the socket to Swift");
+    let out = link::connect(reader, ours, move |message| {
         // The runtime thread lives as long as the process.
-        let _ = from_swift.send(Input::Swift(message));
+        let _ = from_swift.send(Input::App(message));
     });
     thread::Builder::new()
         .name("fvm-runtime".into())
@@ -81,7 +81,10 @@ mod tests {
     fn messages_cross_the_stream_both_ways() {
         let (ours, theirs) = socket_pair().unwrap();
         let (delivered, received) = mpsc::channel();
-        let outgoing = link::connect(ours, move |message| delivered.send(message).unwrap());
+        let reader = ours.try_clone().unwrap();
+        let outgoing = link::connect(reader, ours, move |message| {
+            delivered.send(message).unwrap()
+        });
 
         stream::send(
             &mut &theirs,
