@@ -3,9 +3,10 @@ import SwiftUI
 /// The Advanced pane: the Helper, the VPN client it runs, and the settings file.
 struct AdvancedPane: View {
     let ui: AppUI
+    let navigation: SettingsNavigation
 
     var body: some View {
-        Form {
+        SettingsForm(navigation: navigation) {
             if let readiness = ui.readiness, let config = ui.config {
                 helperSection(readiness)
                 if let client = readiness.client {
@@ -14,7 +15,6 @@ struct AdvancedPane: View {
                 settingsFileSection(config.file)
             }
         }
-        .formStyle(.grouped)
     }
 
     private func helperSection(_ readiness: AppInternal.ReadinessSection) -> some View {
@@ -22,14 +22,19 @@ struct AdvancedPane: View {
             LabeledContent("Status") {
                 NoticeRow(text: readiness.helper.label, style: readiness.helper.style)
             }
+            .searchAnchor("Helper", navigation)
             StateButton("Register Helper", state: readiness.registerHelper) { ui.send(.registerHelper) }
-            if readiness.helper == .requiresApproval {
-                Text("Allow background activity for FortiVPNManager in System Settings.")
-                    .footnoteStyle()
-            }
-            LabeledContent("General > Login Items & Extensions > App Background Activity") {
+                .searchAnchor("Register Helper", navigation)
+            LabeledContent {
                 Button("Open System Settings…") { ui.send(.openHelperApprovalSettings) }
+            } label: {
+                // While approval is needed the location becomes the instruction, instead of a second
+                // row repeating it.
+                RowTitle("App Background Activity", detail: readiness.helper == .requiresApproval
+                    ? Text("Allow background activity for FortiVPNManager in General › Login Items & Extensions.")
+                    : Text("General › Login Items & Extensions"))
             }
+            .searchAnchor("App Background Activity", navigation)
             if let error = readiness.registerError {
                 NoticeRow(text: error.helperMessage, style: .error)
             }
@@ -38,9 +43,16 @@ struct AdvancedPane: View {
 
     /// The VPN client the Helper runs.
     private func clientSection(_ client: AppInternal.VpnClientInfo) -> some View {
-        Section("VPN Client") {
-            LabeledContent("openfortivpn", value: client.path ?? String(localized: "Not found"))
+        Section("VPN client") {
+            LabeledContent("openfortivpn") {
+                Text(verbatim: client.path ?? String(localized: "Not found"))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .searchAnchor("openfortivpn", navigation)
             LabeledContent("Version", value: client.version ?? String(localized: "Unknown"))
+                .searchAnchor("Version", navigation)
             if let untested = client.untestedVersion {
                 NoticeRow(text: untested.message, style: .warning)
             }
@@ -52,10 +64,16 @@ struct AdvancedPane: View {
 
     private func settingsFileSection(_ file: AppInternal.ConfigFileState) -> some View {
         Section("Settings File") {
-            LabeledContent(displayPath(file.path)) {
+            LabeledContent {
                 Button("Show in Finder") { revealInFinder(file.path) }
                     .disabled(!file.exists)
+            } label: {
+                Text(verbatim: displayPath(file.path))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            .searchAnchor("Settings File", navigation)
             if !file.exists {
                 Text("Not created yet. Saving the account creates it.")
                     .footnoteStyle()

@@ -1,22 +1,32 @@
 import AppKit
+import Observation
 import SwiftUI
 
-/// One list of the Exception Rules: a single column with + / − below. Every finished edit reports the
-/// whole list through `onChange`; nothing is saved here. `onEditingChanged` tells whether a row is
-/// being typed (its text reaches `onChange` only when the edit ends).
+/// One list of the Exception Rules: a single column without a border that spans its form row, with
+/// + and − in the row below (`AddressListButtons`), as in the settings mockup. Every finished edit
+/// reports the whole list through `onChange`; nothing is saved here. `onEditingChanged` tells whether a
+/// row is being typed (its text reaches `onChange` only when the edit ends).
 struct AddressListEditor: NSViewRepresentable {
     let rows: [String]
     let problemRows: Set<Int>
-    /// The + button: off once the list holds as many entries as the settings file allows.
+    /// What is wrong with a problem row, shown beside it (the runtime explains one problem at a time).
+    let problemMessages: [Int: RowMessage]
+    /// Off once the list holds as many entries as the settings file allows.
     let canAdd: Bool
     /// Shown over the empty list.
     let emptyText: String
     /// Shown in a row being typed.
     let placeholder: String
-    /// Help tag of the + button.
-    let addHelp: String
+    let actions: AddressListActions
     let onChange: ([String]) -> Void
     let onEditingChanged: (Bool) -> Void
+
+    struct RowMessage: Equatable {
+        /// The short form beside the row.
+        let text: String
+        /// The full explanation, as its help tag.
+        let help: String
+    }
 
     func makeNSView(context: Context) -> AddressListEditorView {
         let view = AddressListEditorView()
@@ -27,28 +37,72 @@ struct AddressListEditor: NSViewRepresentable {
     func updateNSView(_ view: AddressListEditorView, context: Context) {
         view.onChange = onChange
         view.onEditingChanged = onEditingChanged
-        view.configure(emptyText: emptyText, placeholder: placeholder, addHelp: addHelp)
+        // Each update reloads the list and reports its selection again; only a change is passed on,
+        // so the update doesn't invalidate the buttons for nothing.
+        view.onSelectionChanged = { [weak actions] selected in
+            if let actions, actions.hasSelection != selected { actions.hasSelection = selected }
+        }
+        actions.view = view
+        view.configure(emptyText: emptyText, placeholder: placeholder)
         view.canAdd = canAdd
-        view.show(rows: rows, problemRows: problemRows)
+        view.show(rows: rows, problemRows: problemRows, messages: problemMessages)
+    }
+}
+
+/// The + and − of a list, borderless in the form row below it.
+struct AddressListButtons: View {
+    let actions: AddressListActions
+    let canAdd: Bool
+    let addTitle: LocalizedStringKey
+    let removeTitle: LocalizedStringKey
+    /// Help tag of the + button.
+    let addHelp: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(addTitle, systemImage: "plus") { actions.add() }
+                .disabled(!canAdd)
+                .help(addHelp)
+            Button(removeTitle, systemImage: "minus") { actions.removeSelected() }
+                .disabled(!actions.hasSelection)
+                .help("Remove the selected rows")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+    }
+}
+
+/// Connects a list with its buttons in the row below.
+@MainActor
+@Observable
+final class AddressListActions {
+    fileprivate(set) var hasSelection = false
+    @ObservationIgnored fileprivate weak var view: AddressListEditorView?
+
+    func add() {
+        view?.addRow()
+    }
+
+    func removeSelected() {
+        view?.removeSelected()
     }
 }
 
 final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     var onChange: (([String]) -> Void)?
     var onEditingChanged: ((Bool) -> Void)?
-    var canAdd = true {
-        didSet { if canAdd != oldValue { updateButtons() } }
-    }
+    var onSelectionChanged: ((Bool) -> Void)?
+    var canAdd = true
 
     private let scrollView = NSScrollView()
     private let tableView = RulesTableView()
-    private let buttons = NSSegmentedControl()
     private let emptyLabel = PassthroughLabel(labelWithString: "")
     private var placeholder = ""
 
     /// The rows as last shown.
     private var rows: [String] = []
     private var problemRows: Set<Int> = []
+    private var messages: [Int: AddressListEditor.RowMessage] = [:]
     /// A row added with + or a double-click, shown after `rows` until its edit ends.
     private var hasNewRow = false
     /// Row being edited and its text before the edit (`nil` for the new row).
@@ -56,11 +110,11 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     private var editingOriginal: String?
     private var cancelsEdit = false
     /// Rows that arrived while an edit was in progress; shown when it ends.
-    private var pending: (rows: [String], problemRows: Set<Int>)?
+    private var pending: (rows: [String], problemRows: Set<Int>, messages: [Int: AddressListEditor.RowMessage])?
 
     private static let cellID = NSUserInterfaceItemIdentifier("addressRow")
-    private static let addSegment = 0
-    private static let removeSegment = 1
+    /// Where a row's text starts: the inset of the other rows' labels, the list spanning the form row.
+    static let textInset: CGFloat = 10
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -74,20 +128,20 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
 
     private var displayCount: Int { rows.count + (hasNewRow ? 1 : 0) }
 
-    func configure(emptyText: String, placeholder: String, addHelp: String) {
+    func configure(emptyText: String, placeholder: String) {
         if emptyLabel.stringValue != emptyText { emptyLabel.stringValue = emptyText }
         self.placeholder = placeholder
-        buttons.setToolTip(addHelp, forSegment: Self.addSegment)
     }
 
-    func show(rows newRows: [String], problemRows newProblems: Set<Int>) {
+    func show(rows newRows: [String], problemRows newProblems: Set<Int>, messages newMessages: [Int: AddressListEditor.RowMessage]) {
         if editingRow != nil {
-            pending = (newRows, newProblems)
+            pending = (newRows, newProblems, newMessages)
             return
         }
-        guard newRows != rows || newProblems != problemRows else { return }
+        guard newRows != rows || newProblems != problemRows || newMessages != messages else { return }
         rows = newRows
         problemRows = newProblems
+        messages = newMessages
         reload()
     }
 
@@ -99,7 +153,9 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.style = .fullWidth
-        tableView.usesAlternatingRowBackgroundColors = true
+        // Rows on the form's own background; `AddressRowView` shades every other one.
+        tableView.backgroundColor = .clear
+        tableView.intercellSpacing = .zero
         tableView.allowsMultipleSelection = true
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         tableView.dataSource = self
@@ -112,23 +168,14 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.borderType = .bezelBorder
-
-        buttons.segmentStyle = .smallSquare
-        buttons.trackingMode = .momentary
-        buttons.segmentCount = 2
-        buttons.setImage(NSImage(systemSymbolName: "plus", accessibilityDescription: String(localized: "Add")), forSegment: Self.addSegment)
-        buttons.setImage(NSImage(systemSymbolName: "minus", accessibilityDescription: String(localized: "Remove")), forSegment: Self.removeSegment)
-        buttons.setToolTip(String(localized: "Remove the selected rows"), forSegment: Self.removeSegment)
-        for segment in 0..<2 { buttons.setWidth(26, forSegment: segment) }
-        buttons.target = self
-        buttons.action = #selector(buttonClicked)
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
 
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
         emptyLabel.lineBreakMode = .byWordWrapping
 
-        for view in [scrollView, buttons, emptyLabel] as [NSView] {
+        for view in [scrollView, emptyLabel] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -136,9 +183,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            buttons.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: -1),
-            buttons.leadingAnchor.constraint(equalTo: leadingAnchor),
-            buttons.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
             emptyLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor, constant: 16),
             emptyLabel.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor, constant: -16),
@@ -151,12 +196,11 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         tableView.reloadData()
         tableView.selectRowIndexes(selection, byExtendingSelection: false)
         emptyLabel.isHidden = displayCount > 0
-        updateButtons()
+        selectionChanged()
     }
 
-    private func updateButtons() {
-        buttons.setEnabled(canAdd, forSegment: Self.addSegment)
-        buttons.setEnabled(!tableView.selectedRowIndexes.isEmpty, forSegment: Self.removeSegment)
+    private func selectionChanged() {
+        onSelectionChanged?(!tableView.selectedRowIndexes.isEmpty)
     }
 
     // MARK: - Table
@@ -165,66 +209,34 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         displayCount
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let view = AddressRowView()
+        view.isShaded = row % 2 == 1
+        return view
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = tableView.makeView(withIdentifier: Self.cellID, owner: self) as? NSTableCellView ?? makeCell()
-        if let field = cell.textField {
-            field.stringValue = row < rows.count ? rows[row] : ""
-            field.placeholderString = placeholder
-            field.textColor = problemRows.contains(row) ? .systemRed : .labelColor
-            cell.imageView?.isHidden = !problemRows.contains(row)
-            field.isEditable = false
-            field.isSelectable = false
-        }
+        let cell = tableView.makeView(withIdentifier: Self.cellID, owner: self) as? AddressCellView ?? makeCell()
+        cell.field.stringValue = row < rows.count ? rows[row] : ""
+        cell.field.placeholderString = placeholder
+        cell.field.isEditable = false
+        cell.field.isSelectable = false
+        cell.showProblem(problemRows.contains(row), message: messages[row])
         return cell
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        updateButtons()
+        selectionChanged()
     }
 
-    /// A problem row is marked by a warning icon at its end as well as by red text, so the colour is
-    /// not the only sign.
-    private func makeCell() -> NSTableCellView {
-        let cell = NSTableCellView()
+    private func makeCell() -> AddressCellView {
+        let cell = AddressCellView()
         cell.identifier = Self.cellID
-        let field = NSTextField()
-        field.isBordered = false
-        field.drawsBackground = false
-        field.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-        field.lineBreakMode = .byTruncatingTail
-        field.cell?.isScrollable = true
-        field.cell?.wraps = false
-        field.delegate = self
-        field.translatesAutoresizingMaskIntoConstraints = false
-        let icon = NSImageView(image: NSImage(
-            systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: String(localized: "Problem")
-        ) ?? NSImage())
-        icon.contentTintColor = .systemOrange
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.setContentHuggingPriority(.required, for: .horizontal)
-        cell.addSubview(field)
-        cell.addSubview(icon)
-        cell.textField = field
-        cell.imageView = icon
-        NSLayoutConstraint.activate([
-            field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
-            field.trailingAnchor.constraint(equalTo: icon.leadingAnchor, constant: -4),
-            field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            icon.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
-            icon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-        ])
+        cell.field.delegate = self
         return cell
     }
 
     // MARK: - Actions
-
-    @objc private func buttonClicked() {
-        switch buttons.selectedSegment {
-        case Self.addSegment: addRow()
-        case Self.removeSegment: removeSelected()
-        default: break
-        }
-    }
 
     /// A double-click below the last row reports row -1.
     @objc private func doubleClicked() {
@@ -236,7 +248,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         }
     }
 
-    private func addRow() {
+    fileprivate func addRow() {
         if editingRow != nil { window?.makeFirstResponder(tableView) }
         guard canAdd else { return }
         if !hasNewRow {
@@ -251,7 +263,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         if selected.count == 1, let row = selected.first { beginEditing(row) }
     }
 
-    private func removeSelected() {
+    fileprivate func removeSelected() {
         guard editingRow == nil else { return }
         let selected = tableView.selectedRowIndexes
         guard !selected.isEmpty else { return }
@@ -264,6 +276,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         }
         rows = remaining
         problemRows = []
+        messages = [:]
         reload()
         onChange?(remaining)
     }
@@ -272,14 +285,13 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         guard row < displayCount else { return }
         tableView.scrollRowToVisible(row)
         tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? NSTableCellView,
-              let field = cell.textField
-        else { return }
+        guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: true) as? AddressCellView else { return }
+        let field = cell.field
         editingRow = row
         editingOriginal = row < rows.count ? rows[row] : nil
         field.isEditable = true
         field.isSelectable = true
-        field.textColor = .labelColor
+        cell.showProblem(false, message: nil)
         window?.makeFirstResponder(field)
         onEditingChanged?(true)
     }
@@ -309,6 +321,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
             rowMoved = pending.rows != rows
             rows = pending.rows
             problemRows = pending.problemRows
+            messages = pending.messages
             self.pending = nil
         }
 
@@ -331,6 +344,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         if let proposed {
             rows = proposed
             problemRows = []
+            messages = [:]
         }
         reload()
         // Return keeps the keyboard in the list; a click elsewhere keeps its own focus.
@@ -357,4 +371,70 @@ private final class RulesTableView: NSTableView {
 /// A label over the empty table that lets clicks through to it.
 private final class PassthroughLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// A row of a list, every other one shaded on the form's background, as the settings mockup's list.
+private final class AddressRowView: NSTableRowView {
+    var isShaded = false
+
+    override func drawBackground(in dirtyRect: NSRect) {
+        guard isShaded else { return }
+        NSColor.labelColor.withAlphaComponent(0.04).setFill()
+        bounds.fill()
+    }
+}
+
+/// A row's address, and for a problem row a red mark with what is wrong beside it, so the colour is
+/// not the only sign.
+private final class AddressCellView: NSTableCellView {
+    let field = NSTextField()
+    private let mark = NSImageView(image: NSImage(
+        systemSymbolName: "exclamationmark.circle.fill", accessibilityDescription: String(localized: "Problem")
+    ) ?? NSImage())
+    private let message = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        field.isBordered = false
+        field.drawsBackground = false
+        field.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        field.lineBreakMode = .byTruncatingTail
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        textField = field
+        mark.contentTintColor = .systemRed
+        mark.setContentHuggingPriority(.required, for: .horizontal)
+        message.font = .systemFont(ofSize: NSFont.smallSystemFontSize + 1)
+        message.textColor = .systemRed
+        message.lineBreakMode = .byTruncatingTail
+        message.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let problem = NSStackView(views: [mark, message])
+        problem.spacing = 4
+        for view in [field, problem] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            field.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AddressListEditorView.textInset - 2),
+            field.centerYAnchor.constraint(equalTo: centerYAnchor),
+            problem.leadingAnchor.constraint(greaterThanOrEqualTo: field.trailingAnchor, constant: 8),
+            problem.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AddressListEditorView.textInset),
+            problem.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    func showProblem(_ isProblem: Bool, message problemMessage: AddressListEditor.RowMessage?) {
+        mark.isHidden = !isProblem
+        message.isHidden = !isProblem || problemMessage == nil
+        message.stringValue = problemMessage?.text ?? ""
+        let help = isProblem ? problemMessage?.help : nil
+        mark.toolTip = help
+        message.toolTip = help
+    }
 }

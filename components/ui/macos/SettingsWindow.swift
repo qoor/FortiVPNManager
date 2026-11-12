@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Panes of the settings window, in toolbar order. The settings panes come first; the log comes last
+/// Panes of the settings window, in sidebar order. The settings panes come first; the log comes last
 /// because it is not a setting (the user chose it as a pane over a separate window).
 enum SettingsPane: String, CaseIterable {
     case general
@@ -11,31 +11,23 @@ enum SettingsPane: String, CaseIterable {
     case advanced
     case log
 
-    /// Every pane has the same width, so only the height changes when switching.
-    static let width: CGFloat = 680
-
-    /// Each pane's fixed size, which the window takes when the pane is shown (a pane with more
-    /// content scrolls).
-    var size: CGSize {
-        let height: CGFloat = switch self {
-        case .general: 470
-        case .account: 740
-        case .connection: 600
-        case .exceptionRules: 660
-        case .advanced: 470
-        case .log: 560
-        }
-        return CGSize(width: Self.width, height: height)
+    var title: String {
+        String(localized: titleResource)
     }
 
-    var title: String {
+    /// The English name, which the settings search matches as well as `title`.
+    var englishTitle: String {
+        titleResource.key
+    }
+
+    private var titleResource: LocalizedStringResource {
         switch self {
-        case .general: String(localized: "General")
-        case .account: String(localized: "Account")
-        case .connection: String(localized: "Connection")
-        case .exceptionRules: String(localized: "Exception Rules")
-        case .advanced: String(localized: "Advanced")
-        case .log: String(localized: "Log")
+        case .general: "General"
+        case .account: "Account"
+        case .connection: "Connection"
+        case .exceptionRules: "Exception Rules"
+        case .advanced: "Advanced"
+        case .log: "Log"
         }
     }
 
@@ -45,21 +37,25 @@ enum SettingsPane: String, CaseIterable {
         case .account: "person.crop.circle"
         case .connection: "network"
         case .exceptionRules: "arrow.triangle.branch"
-        case .advanced: "gearshape.2"
+        case .advanced: "wrench.and.screwdriver"
         case .log: "doc.plaintext"
         }
     }
 }
 
-/// The settings window in the macOS settings style: a toolbar switches the panes, the window takes
-/// each pane's size and its name as title, and it reopens on the last pane shown. While it is open
-/// the app is a regular app (Dock icon, key focus, the standard menus); closing it returns the app
-/// to the menu bar only.
+/// The settings window in the style of macOS System Settings (`SettingsView`). Like System Settings it
+/// keeps one size on every pane, can't go full screen, opens centered the first time and then where it
+/// was left, on the last pane shown. While it is open the app is a regular app (Dock icon, key focus,
+/// the standard menus); closing it returns the app to the menu bar only.
 @MainActor
-final class SettingsWindowController: NSObject, NSWindowDelegate {
+final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemValidation {
+    /// System Settings' window size on macOS 27 (measured).
+    static let size = CGSize(width: 740, height: 625)
+    static let windowID = NSUserInterfaceItemIdentifier("settings")
+
+    let navigation = SettingsNavigation()
     private let ui: AppUI
     private var window: NSWindow?
-    private var panes: SettingsPanesController?
     private lazy var menus = StandardMenus.make(settings: self)
 
     init(ui: AppUI) {
@@ -79,7 +75,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func present(_ pane: SettingsPane?) {
         let window = self.window ?? makeWindow()
         self.window = window
-        if let pane { panes?.select(pane) }
+        if let pane { navigation.select(pane) }
         ui.send(.settingsOpened)
 
         if NSApp.mainMenu !== menus { NSApp.mainMenu = menus }
@@ -97,27 +93,48 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if !window.isKeyWindow {
             window.orderFrontRegardless()
         }
-        panes?.placeFocus()
+        // After SwiftUI has laid out the pane.
+        DispatchQueue.main.async { [self] in placeFocus() }
     }
 
     private func makeWindow() -> NSWindow {
-        // Read first: loading the panes selects the first one, which is recorded like any selection.
-        let lastPane = SettingsPanesController.lastPane
-        let panes = SettingsPanesController(ui: ui)
-        self.panes = panes
-        // Not resizable and not minimizable: the window follows the pane, and ⌘, reopens it.
-        let window = NSWindow(contentViewController: panes)
-        window.styleMask = [.titled, .closable]
-        window.toolbarStyle = .preference
+        let content = NSHostingController(rootView: SettingsView(ui: ui, navigation: navigation))
+        // The window keeps its size and takes the toolbar from SwiftUI; the title is set below (a
+        // navigation title inside the split view doesn't reach an AppKit window).
+        content.sizingOptions = []
+        content.sceneBridgingOptions = [.toolbars]
+        let window = NSWindow(contentViewController: content)
+        window.identifier = Self.windowID
+        window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        // The saved frame gives the position; selecting the pane then fits the size to it.
-        if !window.setFrameUsingName(Self.frameName) {
-            window.setContentSize(lastPane.size)
-            window.center()
+        window.title = navigation.pane.title
+        navigation.onPaneChange = { [weak window] in window?.title = $0.title }
+        navigation.onPaneWillChange = { [weak window] in
+            // Not the search field's typing, which goes on in the sidebar.
+            guard let window, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+                  !(editor.delegate is NSSearchField) else { return }
+            window.makeFirstResponder(nil)
+        }
+        navigation.isShown = { [weak ui] in ui?.showsSettings(when: $0) ?? false }
+        // The content extends under the toolbar, so this is the whole window.
+        window.setContentSize(Self.size)
+        // Where it was left; AppKit brings a saved frame back on screen when the displays changed.
+        if window.setFrameUsingName(Self.frameName) {
+            // At this size, from the same top edge, and still on the screen.
+            var frame = NSRect(origin: NSPoint(x: window.frame.minX, y: window.frame.maxY - Self.size.height), size: Self.size)
+            if let visible = window.screen?.visibleFrame {
+                frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+                frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+            }
+            window.setFrame(frame, display: false)
+        } else if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+            // Exactly centered, as System Settings opens the first time (`center()` sits higher).
+            window.setFrameOrigin(NSPoint(x: visible.midX - Self.size.width / 2, y: visible.midY - Self.size.height / 2))
         }
         window.setFrameAutosaveName(Self.frameName)
-        panes.select(lastPane)
         return window
     }
 
@@ -126,133 +143,194 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
     }
 
-    /// Not the name the resizable tab window used: its saved size does not fit the panes.
-    private static let frameName = "SettingsPanesWindow"
+    /// Not the names the earlier toolbar windows used ("SettingsWindow", "SettingsPanesWindow"): their
+    /// saved sizes don't fit this window.
+    private static let frameName = "SettingsSidebarWindow"
+
+    /// No control takes the keyboard when the window opens, so a stray Space cannot press a button
+    /// such as Disconnect; Tab still reaches them. On the Log pane its text view does, so Edit > Find
+    /// (⌘F) opens its find bar.
+    private func placeFocus() {
+        guard let window, window.isVisible else { return }
+        window.makeFirstResponder(navigation.pane == .log ? logTextView : nil)
+    }
+
+    private var logTextView: NSTextView? {
+        window?.contentView?.firstDescendant(NSTextView.self) { $0.usesFindBar }
+    }
+
+    // MARK: - Menu commands
+
+    @objc func goBack(_ sender: Any?) {
+        navigation.goBack()
+    }
+
+    @objc func goForward(_ sender: Any?) {
+        navigation.goForward()
+    }
+
+    @objc func searchSettings(_ sender: Any?) {
+        navigation.focusSearch()
+    }
+
+    /// File > Save and Revert act on the shown pane's changes: the account, or the exception rules
+    /// (Apply and Discard Changes).
+    @objc func saveChanges(_ sender: Any?) {
+        guard changesButton(save: true) == .enabled else { return }
+        switch navigation.pane {
+        case .account: ui.send(.saveAccount)
+        case .exceptionRules: ui.applyBypassRules()
+        default: break
+        }
+    }
+
+    @objc func revertChanges(_ sender: Any?) {
+        guard changesButton(save: false) == .enabled else { return }
+        switch navigation.pane {
+        case .account: ui.send(.revertAccount)
+        case .exceptionRules: ui.discardBypassChanges()
+        default: break
+        }
+    }
+
+    /// The report of the import shows in the General pane.
+    @objc func importClientSettings(_ sender: Any?) {
+        navigation.select(.general)
+        Task { await ui.importClientSettings() }
+    }
+
+    @objc func showLogInFinder(_ sender: Any?) {
+        if let logFile = ui.config?.logFile { revealInFinder(logFile) }
+    }
+
+    @objc func copyEntireLog(_ sender: Any?) {
+        ui.copyEntireLog()
+    }
+
+    @objc func clearLog(_ sender: Any?) {
+        ui.log.clear()
+    }
+
+    /// Edit > Find: on the Log pane it acts on the log, wherever the keyboard is; elsewhere Find…
+    /// searches the settings. Sent here rather than along the responder chain, where the search
+    /// field's editor would take it.
+    @objc func find(_ sender: Any?) {
+        if navigation.pane == .log, let logTextView {
+            // The keyboard stays in the log's find bar, so Find Next leaves the typing there.
+            let inLog = logTextView.enclosingScrollView.map { (window?.firstResponder as? NSView)?.isDescendant(of: $0) == true }
+            if inLog != true { window?.makeFirstResponder(logTextView) }
+            logTextView.performTextFinderAction(sender)
+        } else if (sender as? NSMenuItem)?.tag == NSTextFinder.Action.showFindInterface.rawValue {
+            navigation.focusSearch()
+        }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(goBack(_:)): !navigation.backHistory.isEmpty
+        case #selector(goForward(_:)): !navigation.forwardHistory.isEmpty
+        case #selector(saveChanges(_:)):
+            validate(item, title: navigation.pane == .exceptionRules ? String(localized: "Apply") : String(localized: "Save"),
+                     state: changesButton(save: true))
+        case #selector(revertChanges(_:)):
+            validate(item, title: navigation.pane == .exceptionRules ? String(localized: "Discard Changes") : String(localized: "Revert"),
+                     state: changesButton(save: false))
+        case #selector(importClientSettings(_:)): ui.config != nil
+        case #selector(showLogInFinder(_:)): ui.config?.logFile != nil
+        case #selector(copyEntireLog(_:)), #selector(clearLog(_:)): navigation.pane == .log
+        case #selector(find(_:)):
+            navigation.pane == .log || item.tag == NSTextFinder.Action.showFindInterface.rawValue
+        default: true
+        }
+    }
+
+    private func validate(_ item: NSMenuItem, title: String, state: AppInternal.ButtonState) -> Bool {
+        item.title = title
+        return state == .enabled
+    }
+
+    /// The state of the shown pane's Save or Apply (`save`), or Revert or Discard Changes.
+    private func changesButton(save: Bool) -> AppInternal.ButtonState {
+        switch navigation.pane {
+        case .account:
+            guard let account = ui.config?.account else { return .hidden }
+            return save ? account.save : account.revert
+        case .exceptionRules:
+            guard let rules = ui.bypassRules else { return .hidden }
+            return rules.whileEditing(save ? rules.apply : rules.discard, navigation.isEditingRuleRow)
+        default:
+            return .hidden
+        }
+    }
 }
 
-/// The panes as toolbar items. Selecting one fits the window to it, keeping the top edge in place,
-/// and remembers it for the next opening.
-private final class SettingsPanesController: NSTabViewController {
-    static var lastPane: SettingsPane {
-        UserDefaults.standard.string(forKey: lastPaneKey).flatMap(SettingsPane.init(rawValue:)) ?? .general
-    }
-
-    private static let lastPaneKey = "settingsPane"
-
-    init(ui: AppUI) {
-        super.init(nibName: nil, bundle: nil)
-        tabStyle = .toolbar
-        for pane in SettingsPane.allCases {
-            let controller = Self.controller(for: pane, ui: ui)
-            controller.title = pane.title
-            let item = NSTabViewItem(viewController: controller)
-            item.identifier = pane.rawValue
-            item.label = pane.title
-            item.image = NSImage(systemSymbolName: pane.symbolName, accessibilityDescription: nil)
-            addTabViewItem(item)
+extension AppUI {
+    /// Whether the panes now show the settings that are shown only when `condition` holds.
+    func showsSettings(when condition: SettingsSearch.Condition) -> Bool {
+        switch condition {
+        case .connected:
+            if case .connected? = connection?.status { true } else { false }
+        case .gmailApi:
+            gmail?.method == .gmailApi
+        case .vpnClientFound:
+            readiness?.client != nil
         }
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    func select(_ pane: SettingsPane) {
-        guard let index = SettingsPane.allCases.firstIndex(of: pane) else { return }
-        if selectedTabViewItemIndex == index {
-            fitWindow(to: pane)
-        } else {
-            selectedTabViewItemIndex = index
+    /// The VPN client's settings file at its default location, or one the user picks when there is
+    /// none. Its report shows in the General pane.
+    func importClientSettings() async {
+        guard let account = config?.account else { return }
+        if account.defaultImportFile != nil {
+            send(.importClientSettings(file: nil))
+            return
         }
+        let panel = NSOpenPanel()
+        panel.message = String(localized: "Choose an openfortivpn config file.")
+        panel.prompt = String(localized: "Import")
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config")
+        guard let url = await chooseFile(panel) else { return }
+        send(.importClientSettings(file: url.path))
     }
 
-    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        super.tabView(tabView, didSelect: tabViewItem)
-        guard let pane = (tabViewItem?.identifier as? String).flatMap(SettingsPane.init(rawValue:)) else { return }
-        UserDefaults.standard.set(pane.rawValue, forKey: Self.lastPaneKey)
-        fitWindow(to: pane)
-        placeFocus()
+    /// Finishes a row being typed so its text is sent first (buttons do not take focus).
+    func applyBypassRules() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        send(.applyBypassRules)
     }
 
-    /// No control takes the keyboard when a pane appears, so a stray Space cannot press a button
-    /// such as Disconnect; Tab still reaches them. The log's text view does take it, so Edit > Find
-    /// (⌘F) opens its find bar.
-    func placeFocus() {
-        guard let window = view.window else { return }
-        let paneView = tabViewItems[selectedTabViewItemIndex].viewController?.view
-        window.makeFirstResponder(paneView.flatMap(Self.textView(in:)))
+    func discardBypassChanges() {
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        send(.discardBypassChanges)
     }
 
-    /// The window's content takes the pane's size, keeping the top edge in place. A hidden window
-    /// is sized by AppKit; a visible one animates, with the title bar and toolbar height measured
-    /// from its current frame.
-    private func fitWindow(to pane: SettingsPane) {
-        guard let window = view.window, let content = window.contentView else { return }
-        window.title = pane.title
-        guard content.frame.size != pane.size else { return }
-        let top = window.frame.maxY
-        if window.isVisible {
-            let chrome = window.frame.height - content.frame.height
-            let height = pane.size.height + chrome
-            let frame = NSRect(x: window.frame.minX, y: top - height, width: pane.size.width, height: height)
-            window.setFrame(Self.onScreen(frame, of: window), display: true, animate: true)
-        } else {
-            window.setContentSize(pane.size)
-            window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX, y: top))
-            window.setFrame(Self.onScreen(window.frame, of: window), display: false)
-        }
+    func copyEntireLog(timeZone: TimeZone = .current) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(log.copyAllText(timeZone: timeZone), forType: .string)
     }
+}
 
-    /// A taller pane moves the window up instead of past the bottom of the screen: the window
-    /// cannot be resized, so what falls below the screen would be out of reach.
-    private static func onScreen(_ frame: NSRect, of window: NSWindow) -> NSRect {
-        guard let visible = (window.screen ?? NSScreen.main)?.visibleFrame, frame.minY < visible.minY else { return frame }
-        var frame = frame
-        frame.origin.y = min(visible.minY, visible.maxY - frame.height)
-        return frame
-    }
-
-    private static func textView(in view: NSView) -> NSTextView? {
-        if let textView = view as? NSTextView, textView.usesFindBar { return textView }
-        for subview in view.subviews {
-            if let found = textView(in: subview) { return found }
-        }
-        return nil
-    }
-
-    private static func controller(for pane: SettingsPane, ui: AppUI) -> NSViewController {
-        switch pane {
-        case .general: host(GeneralPane(ui: ui), pane)
-        case .account: host(AccountPane(ui: ui), pane)
-        case .connection: host(ConnectionPane(ui: ui), pane)
-        case .exceptionRules: host(ExceptionRulesPane(ui: ui), pane)
-        case .advanced: host(AdvancedPane(ui: ui), pane)
-        case .log: host(LogPane(ui: ui), pane)
-        }
-    }
-
-    /// The pane's view at its fixed size. No size options: the window is fitted to the pane here,
-    /// not by the hosting controller.
-    private static func host(_ view: some View, _ pane: SettingsPane) -> NSViewController {
-        let controller = NSHostingController(rootView: view.frame(width: pane.size.width, height: pane.size.height))
-        controller.sizingOptions = []
-        return controller
+extension AppInternal.BypassRulesSection {
+    /// Apply and Discard Changes take clicks while a row is typed, whose text the runtime hasn't seen.
+    func whileEditing(_ state: AppInternal.ButtonState, _ isEditing: Bool) -> AppInternal.ButtonState {
+        isEditing && state == .disabled ? .enabled : state
     }
 }
 
 /// The menu bar's standard menus, shown while the settings window makes the app a regular app, so
-/// the editing, find and close shortcuts work as in any Mac app.
+/// the editing, find and close shortcuts work as in any Mac app. Every action of the window's toolbar
+/// is here too (HIG Toolbars, macOS).
 @MainActor
 private enum StandardMenus {
     static func make(settings: SettingsWindowController) -> NSMenu {
         let main = NSMenu()
-        let settingsItem = item(String(localized: "Settings…"), #selector(SettingsWindowController.showFromMenu(_:)), ",")
-        settingsItem.target = settings
         main.addItem(menu("FortiVPNManager", [
             item(String(localized: "About FortiVPNManager"), #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             .separator(),
-            settingsItem,
+            item(String(localized: "Settings…"), #selector(SettingsWindowController.showFromMenu(_:)), ",", target: settings),
             .separator(),
             item(String(localized: "Hide FortiVPNManager"), #selector(NSApplication.hide(_:)), "h"),
             item(String(localized: "Hide Others"), #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
@@ -261,6 +339,12 @@ private enum StandardMenus {
             item(String(localized: "Quit FortiVPNManager"), #selector(NSApplication.terminate(_:)), "q"),
         ]))
         main.addItem(menu(String(localized: "File"), [
+            item(String(localized: "Save"), #selector(SettingsWindowController.saveChanges(_:)), "s", target: settings),
+            item(String(localized: "Revert"), #selector(SettingsWindowController.revertChanges(_:)), target: settings),
+            .separator(),
+            item(String(localized: "Import openfortivpn Settings…"), #selector(SettingsWindowController.importClientSettings(_:)), target: settings),
+            item(String(localized: "Show Log in Finder"), #selector(SettingsWindowController.showLogInFinder(_:)), target: settings),
+            .separator(),
             item(String(localized: "Close"), #selector(NSWindow.performClose(_:)), "w"),
         ]))
         main.addItem(menu(String(localized: "Edit"), [
@@ -273,13 +357,29 @@ private enum StandardMenus {
             item(String(localized: "Select All"), #selector(NSText.selectAll(_:)), "a"),
             .separator(),
             menu(String(localized: "Find"), [
-                find(String(localized: "Find…"), .showFindInterface, "f"),
-                find(String(localized: "Find Next"), .nextMatch, "g"),
-                find(String(localized: "Find Previous"), .previousMatch, "g", [.command, .shift]),
-                find(String(localized: "Use Selection for Find"), .setSearchString, "e"),
+                find(String(localized: "Find…"), .showFindInterface, "f", settings: settings),
+                find(String(localized: "Find Next"), .nextMatch, "g", settings: settings),
+                find(String(localized: "Find Previous"), .previousMatch, "g", [.command, .shift], settings: settings),
+                find(String(localized: "Use Selection for Find"), .setSearchString, "e", settings: settings),
+                .separator(),
+                item(String(localized: "Search Settings…"), #selector(SettingsWindowController.searchSettings(_:)), "f", [.command, .option], target: settings),
             ]),
+            .separator(),
+            item(String(localized: "Copy Entire Log"), #selector(SettingsWindowController.copyEntireLog(_:)), target: settings),
+            item(String(localized: "Clear Log"), #selector(SettingsWindowController.clearLog(_:)), "k", target: settings),
         ]))
-        let window = menu(String(localized: "Window"), [])
+        main.addItem(menu(String(localized: "View"), [
+            item(String(localized: "Back"), #selector(SettingsWindowController.goBack(_:)), "[", target: settings),
+            item(String(localized: "Forward"), #selector(SettingsWindowController.goForward(_:)), "]", target: settings),
+        ]))
+        // The window can be minimized like System Settings; AppKit adds the tiling items and the
+        // window list.
+        let window = menu(String(localized: "Window"), [
+            item(String(localized: "Minimize"), #selector(NSWindow.performMiniaturize(_:)), "m"),
+            item(String(localized: "Zoom"), #selector(NSWindow.performZoom(_:))),
+            .separator(),
+            item(String(localized: "Bring All to Front"), #selector(NSApplication.arrangeInFront(_:))),
+        ])
         main.addItem(window)
         NSApp.windowsMenu = window.submenu
         return main
@@ -294,17 +394,21 @@ private enum StandardMenus {
     }
 
     private static func item(
-        _ title: String, _ action: Selector, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = .command
+        _ title: String, _ action: Selector, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = .command,
+        target: AnyObject? = nil
     ) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.keyEquivalentModifierMask = modifiers
+        item.target = target
         return item
     }
 
+    /// The text finder action is the tag; the settings window's controller passes it to the log.
     private static func find(
-        _ title: String, _ action: NSTextFinder.Action, _ key: String, _ modifiers: NSEvent.ModifierFlags = .command
+        _ title: String, _ action: NSTextFinder.Action, _ key: String, _ modifiers: NSEvent.ModifierFlags = .command,
+        settings: SettingsWindowController
     ) -> NSMenuItem {
-        let item = item(title, #selector(NSResponder.performTextFinderAction(_:)), key, modifiers)
+        let item = item(title, #selector(SettingsWindowController.find(_:)), key, modifiers, target: settings)
         item.tag = action.rawValue
         return item
     }
@@ -359,9 +463,10 @@ extension View {
             .multilineTextAlignment(.leading)
     }
 
-    /// A setting that belongs to the switch above it, indented under it.
+    /// A setting that belongs to the switch or disclosure above it, indented under it (16pt, as the
+    /// settings mockup the user chose).
     func subordinate() -> some View {
-        padding(.leading, 20)
+        padding(.leading, 16)
     }
 }
 
@@ -387,7 +492,7 @@ func displayPath(_ path: String) -> String {
 @MainActor
 func chooseFile(_ panel: NSOpenPanel) async -> URL? {
     let host = NSApp.windows.first {
-        $0.contentViewController is SettingsPanesController && $0.isVisible && $0.attachedSheet == nil
+        $0.identifier == SettingsWindowController.windowID && $0.isVisible && $0.attachedSheet == nil
     }
     let response = if let host {
         await panel.beginSheetModal(for: host)

@@ -49,7 +49,7 @@ extension AppInternal.RegistrationError {
     var loginItemMessage: String {
         switch self {
         case .notInstalledCopy:
-            String(localized: "Launch at Login can only be set from the app installed in /Applications.")
+            String(localized: "Only available for the app installed in /Applications.")
         case let .failed(description):
             description
         }
@@ -58,7 +58,7 @@ extension AppInternal.RegistrationError {
 
 extension AppInternal.UntestedVersion {
     var message: String {
-        String(localized: "This isn't a tested version (\(testedSeries).x). Its output may differ and connections may fail.")
+        String(localized: "Not a tested version (\(testedSeries).x), so connecting may fail.")
     }
 }
 
@@ -66,9 +66,9 @@ extension AppInternal.ClientProblem {
     var message: String {
         switch kind {
         case .notFound:
-            String(localized: "openfortivpn not found at \(path); install it with: brew install openfortivpn")
+            String(localized: "Not found at \(path). Install it with brew install openfortivpn.")
         case .outsideAllowedLocation:
-            String(localized: "openfortivpn resolves outside the Homebrew Cellar (/opt/homebrew/Cellar/openfortivpn/): \(path)")
+            String(localized: "Points outside the Homebrew Cellar: \(path)")
         case .notRegularFile:
             String(localized: "openfortivpn is not a regular file: \(path)")
         case let .writableByOthers(mode):

@@ -116,14 +116,14 @@ extension AppInternal.FailureReason {
             case .imap:
                 String(localized: "Gmail rejected the login. Check the app password and that IMAP is enabled.")
             case .gmailApi:
-                String(localized: "Couldn't read Gmail with the Google account. Connect the Google account again, or check the fallback app password.")
+                String(localized: "Couldn't read Gmail. Connect the Google account again.")
             }
         case let .tooManyReconnects(windowSeconds):
             String(localized: "Automatic reconnection stopped after too many sign-in attempts within \(time.spelledOut(seconds: windowSeconds)).")
         case .network:
             String(localized: "Couldn't connect to the VPN server.")
         case .helper(.invalidRequest):
-            String(localized: "The connection request was rejected. Check the account details and VPN password. The log shows why.")
+            String(localized: "The connection request was rejected. Check the account and VPN password.")
         case let .helper(code):
             String(localized: "Helper error: \(code.summary)")
         }

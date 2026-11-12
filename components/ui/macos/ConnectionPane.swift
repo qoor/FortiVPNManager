@@ -1,18 +1,20 @@
+import AppKit
 import SwiftUI
 
 /// The Connection pane: the schedule and the reconnect options, saved as they change.
 struct ConnectionPane: View {
     let ui: AppUI
+    let navigation: SettingsNavigation
     @Environment(\.self) private var environment
 
     var body: some View {
-        Form {
+        SettingsForm(navigation: navigation) {
             if let schedule = ui.schedule, let config = ui.config {
                 scheduleSection(schedule, time: TimeStyle(now: ui.clock.now, environment: environment))
                 reconnectSection(config)
             }
         }
-        .formStyle(.grouped)
+        .toggleStyle(.switch)
     }
 
     // MARK: - Schedule
@@ -21,6 +23,7 @@ struct ConnectionPane: View {
     private func scheduleSection(_ schedule: AppInternal.ScheduleSection, time: TimeStyle) -> some View {
         Section {
             Toggle("Connect on a schedule", isOn: option(schedule.enabled) { .scheduleEnabled(enabled: $0) })
+                .searchAnchor("Connect on a schedule", navigation)
             Group {
                 LabeledContent("Days") {
                     HStack(spacing: 4) {
@@ -32,13 +35,15 @@ struct ConnectionPane: View {
                         }
                     }
                 }
-                ScheduleHoursFields(start: schedule.start, end: schedule.end, error: schedule.hoursError) { start, end in
+                .searchAnchor("Days", navigation)
+                ScheduleHoursFields(start: schedule.start, end: schedule.end, error: schedule.hoursError, navigation: navigation) { start, end in
                     ui.send(.setScheduleHours(start: start, end: end))
                 }
                 MinutesField(title: "Stop reconnecting after being away", setting: schedule.awayMinutes) {
                     ui.send(.setConnectionOption(option: .awayMinutes(minutes: $0)))
                 }
-                .help("After the end time, reconnects wait while you're away (screen locked or off, or the Mac asleep) and stop once you've been away this long. The same applies when you connect yourself.")
+                .help("After the end time, reconnects wait while you're away (screen locked or off, Mac asleep) and stop after this long.")
+                .searchAnchor("Stop reconnecting after being away", navigation)
                 if schedule.enabled, let outlook = schedule.outlook {
                     LabeledContent("Next", value: outlook.summary(time: time))
                 }
@@ -57,29 +62,36 @@ struct ConnectionPane: View {
 
     private func reconnectSection(_ config: AppInternal.ConfigSection) -> some View {
         let options = config.options
-        return Section("Reconnect") {
+        return Section {
             MinutesField(title: "Maximum session length", setting: options.sessionMaxMinutes) {
                 ui.send(.setConnectionOption(option: .sessionMaxMinutes(minutes: $0)))
             }
+            .searchAnchor("Maximum session length", navigation)
             Toggle("Proactive reconnect", isOn: option(options.proactiveReconnect) { .proactiveReconnect(enabled: $0) })
-                .controlSize(.mini)
-                .help("Connects again before the server ends the session (maximum session length − margin).")
+                .searchAnchor("Proactive reconnect", navigation)
             MinutesField(title: "Margin", setting: options.marginMinutes) {
                 ui.send(.setConnectionOption(option: .proactiveMarginMinutes(minutes: $0)))
             }
+            .searchAnchor("Margin", navigation)
             .subordinate()
             .disabled(!options.proactiveReconnect)
             Toggle("Reconnect after sleep", isOn: option(options.reconnectAfterSleep) { .reconnectAfterSleep(enabled: $0) })
-                .controlSize(.mini)
                 .help("Starts a new connection when the Mac wakes from sleeping at least the minimum sleep time.")
+                .searchAnchor("Reconnect after sleep", navigation)
             MinutesField(title: "Minimum sleep time", setting: options.minSleepMinutes) {
                 ui.send(.setConnectionOption(option: .minSleepMinutes(minutes: $0)))
             }
+            .searchAnchor("Minimum sleep time", navigation)
             .subordinate()
             .disabled(!options.reconnectAfterSleep)
             if let error = config.optionsError {
                 NoticeRow(text: error.message, style: .error)
             }
+        } header: {
+            Text("Reconnect")
+        } footer: {
+            Text("Connects again before the server ends the session (maximum session length − margin).")
+                .footnoteStyle()
         }
     }
 
@@ -98,6 +110,7 @@ private struct ScheduleHoursFields: View {
     let start: AppInternal.TimeOfDay
     let end: AppInternal.TimeOfDay
     let error: AppInternal.ScheduleHoursError?
+    let navigation: SettingsNavigation
     let send: (AppInternal.TimeOfDay, AppInternal.TimeOfDay) -> Void
 
     @State private var draftStart = Date()
@@ -106,7 +119,9 @@ private struct ScheduleHoursFields: View {
     var body: some View {
         Group {
             DatePicker("Start time", selection: $draftStart, displayedComponents: .hourAndMinute)
+                .searchAnchor("Start time", navigation)
             DatePicker("End time", selection: $draftEnd, displayedComponents: .hourAndMinute)
+                .searchAnchor("End time", navigation)
             if let error {
                 NoticeRow(text: error.message, style: .error)
             }
@@ -145,7 +160,8 @@ private struct ScheduleHoursFields: View {
 
 /// A minutes setting: a text field that commits on Return or when it loses focus (never per
 /// keystroke, which would save intermediate values such as `18` on the way to `180`), plus a stepper
-/// within the range the settings file accepts.
+/// within the range the settings file accepts. Shift-click steps by 10 across ranges that wide
+/// (HIG Steppers, macOS).
 private struct MinutesField: View {
     let title: LocalizedStringKey
     let setting: AppInternal.MinutesSetting
@@ -160,16 +176,15 @@ private struct MinutesField: View {
                 TextField(title, text: $draft)
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 64)
+                    .frame(width: 60)
                     .focused($isFocused)
                     .onSubmit(commitDraft)
                 Text("min")
-                Stepper(
-                    title,
-                    value: Binding(get: { setting.value }, set: { commit($0) }),
-                    in: setting.minimum...setting.maximum
-                )
-                .labelsHidden()
+                    .foregroundStyle(.secondary)
+                // Bound to the value, so the arrows stop at the range's ends and VoiceOver reads it.
+                Stepper(title, value: stepped, in: setting.minimum...setting.maximum)
+                    .labelsHidden()
+                    .help("Shift-click to change by 10 minutes")
             }
         }
         .onAppear { draft = String(setting.value) }
@@ -177,6 +192,20 @@ private struct MinutesField: View {
         .onChange(of: isFocused) {
             if !isFocused { commitDraft() }
         }
+        // Going to another pane takes the field away before its focus change is seen.
+        .onDisappear(perform: commitDraft)
+    }
+
+    /// The stepper's value: a step it makes is 10 minutes while Shift is held.
+    private var stepped: Binding<Int> {
+        Binding(
+            get: { setting.value },
+            set: { value in
+                let size = NSEvent.modifierFlags.contains(.shift) ? 10 : 1
+                let next = min(max(setting.value + (value - setting.value).signum() * size, setting.minimum), setting.maximum)
+                if next != setting.value { commit(next) }
+            }
+        )
     }
 
     /// A rejected number stays in the field with the reason below it until the setting changes.

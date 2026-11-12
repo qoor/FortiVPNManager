@@ -110,7 +110,7 @@ extension AppInternal.ConfigProblemKind {
         case let .newerSchemaVersion(version):
             return [
                 String(localized: "This config file was written by a newer version of the app (schema_version \(version))."),
-                String(localized: "Update the app. Until then, this file is treated as read-only and is never overwritten."),
+                String(localized: "Update the app. Until then, this file won't be overwritten."),
             ].joined(separator: " ")
         case let .invalidRouteEntry(path, index, raw, problem):
             return String(localized: "In \(path), entry \(index + 1): \(problem.message(for: raw))")
@@ -150,7 +150,7 @@ extension AppInternal.ConfigWarningKind {
         case let .duplicateRouteEntry(path, index):
             String(localized: "In \(path), entry \(index + 1) duplicates an earlier entry and is ignored.")
         case let .multipleHardLinks(count):
-            String(localized: "The config file has \(count) hard links. When the app saves, only this path is replaced with a new file; the other links keep the old contents.")
+            String(localized: "The config file has \(count) hard links. Saving won't update the other links.")
         case let .insecurePermissions(mode):
             String(localized: "The config file permissions are \(octal(mode)). They will be changed to 0600 on the next save.")
         case let .permissionsCorrected(previousMode):

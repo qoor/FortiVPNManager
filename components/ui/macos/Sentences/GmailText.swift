@@ -24,11 +24,11 @@ extension AppInternal.GoogleError {
         case .noRefreshToken:
             String(localized: "Google did not return a refresh token. Sign in again.")
         case .scopeNotGranted:
-            String(localized: "Gmail access was not granted. Sign in again and allow access to Gmail.")
+            String(localized: "Gmail access wasn't allowed. Sign in again and allow it.")
         case let .wrongAccount(expected, actual):
             String(localized: "You signed in as \(actual), but the Gmail address is \(expected). Sign in with that account.")
         case let .gmailApiRefused(reason):
-            String(localized: "The Gmail API refused access (\(reason)). Check that the Gmail API is enabled for the Google Cloud project.")
+            String(localized: "The Gmail API refused access (\(reason)). Check that it's enabled in Google Cloud.")
         case let .network(detail):
             String(localized: "Couldn't reach Google: \(detail)")
         case let .secretStore(failure):
@@ -45,9 +45,9 @@ extension AppInternal.OAuthClientFileProblem {
         case .notJson:
             String(localized: "This file is not a Google OAuth client JSON.")
         case .webClient:
-            String(localized: "This is a Web application client. Create an OAuth client of type Desktop app in Google Cloud Console and download its JSON.")
+            String(localized: "This is a Web application client. Import a Desktop app client JSON.")
         case .noDesktopClient:
-            String(localized: "This file has no Desktop app client. Download the JSON of an OAuth client of type Desktop app.")
+            String(localized: "This file has no Desktop app client.")
         case let .missingField(name), let .invalidField(name):
             String(localized: "The OAuth client JSON has a missing or invalid \(name) field.")
         }
@@ -84,7 +84,7 @@ private func fileOperationFailure(_ operation: String, _ path: String, _ errno: 
 extension AppInternal.GoogleConnectBlocker {
     var message: String {
         switch self {
-        case .noOAuthClient: String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced.")
+        case .noOAuthClient: String(localized: "No built-in OAuth client. Import a client JSON.")
         case .enterAddress: String(localized: "Enter the Gmail address.")
         case .saveAddressFirst: String(localized: "Save the Gmail address first.")
         }
@@ -95,7 +95,7 @@ extension AppInternal.OAuthClientSource {
     /// The status line of the OAuth client row.
     var label: String {
         switch self {
-        case .builtIn: String(localized: "Built-in client")
+        case .builtIn: String(localized: "Built into the app")
         case let .imported(clientId): String(localized: "Imported (\(Self.tail(of: clientId)))")
         case .notConfigured: String(localized: "Not configured")
         }
@@ -137,16 +137,16 @@ extension AppInternal.GmailTestFailure {
             String(localized: "Couldn't read the app password from Keychain: \(failure.description)")
         case let .imapLoginRejected(serverText):
             if let serverText, !serverText.isEmpty {
-                String(localized: "Gmail rejected the sign-in. Check the Gmail address, the app password and that IMAP is enabled. (Server response: \(serverText))")
+                String(localized: "Gmail rejected the sign-in. Check the address, app password and IMAP setting. (\(serverText))")
             } else {
-                String(localized: "Gmail rejected the sign-in. Check the Gmail address, the app password and that IMAP is enabled.")
+                String(localized: "Gmail rejected the sign-in. Check the address, app password and IMAP setting.")
             }
         case let .mailboxesMissing(allMail, trash):
             Self.missingMailboxes(allMail: allMail, trash: trash)
         case let .imapUnreachable(failure):
             String(localized: "Could not reach the Gmail server: \(failure.message)")
         case .noOAuthClient:
-            String(localized: "This build has no built-in OAuth client. Import a client JSON under Advanced.")
+            String(localized: "No built-in OAuth client. Import a client JSON.")
         case .notSignedIn:
             String(localized: "Sign in with Google first.")
         case .accessRevoked:
@@ -156,11 +156,11 @@ extension AppInternal.GmailTestFailure {
         case let .secretStore(failure):
             String(localized: "Keychain error: \(failure.description)")
         case let .otherAccount(authorized, expected):
-            String(localized: "The Google authorization belongs to \(authorized), not \(expected). Sign in with Google again.")
+            String(localized: "Connected as \(authorized). Connect again with \(expected).")
         case .accessTokenRejected:
             String(localized: "Google rejected the access token. Sign in with Google again.")
         case let .gmailApiRefused(reason):
-            String(localized: "The Gmail API refused access (\(reason)). Check that the Gmail API is enabled for the Google Cloud project.")
+            String(localized: "The Gmail API refused access (\(reason)). Check that it's enabled in Google Cloud.")
         case .rateLimited:
             String(localized: "The Gmail API rate limit was reached. Try again in a minute.")
         case let .googleUnreachable(detail):

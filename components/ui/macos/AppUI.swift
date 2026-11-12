@@ -24,6 +24,9 @@ final class AppUI {
 
     init(send: @escaping (AppInternal.Command) -> Void) {
         self.send = send
+        // The settings window can't go full screen, so its View menu has no Enter Full Screen, as in
+        // System Settings. AppKit reads this while the app launches, before the window exists.
+        UserDefaults.standard.register(defaults: ["NSFullScreenMenuItemEverywhere": false])
     }
 
     func apply(_ section: AppInternal.Section) {
@@ -46,10 +49,11 @@ final class AppUI {
         settings.show(paneToOpen)
     }
 
-    /// Account when the config section has an import report (the automatic first-launch import),
-    /// otherwise the pane of the first setup item; the last pane shown when neither applies.
+    /// General, where the import is, when the config section has an import report (the automatic
+    /// first-launch import), otherwise the pane of the first setup item; the last pane shown when
+    /// neither applies.
     var paneToOpen: SettingsPane? {
-        if config?.account.importReport != nil { return .account }
+        if config?.account.importReport != nil { return .general }
         if case let .setupRequired(items) = connection?.status, let first = items.first { return first.settingsPane }
         return nil
     }

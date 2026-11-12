@@ -4,7 +4,7 @@ extension AppInternal.AccountValueProblem {
     var message: String {
         switch self {
         case .invalidHost:
-            String(localized: "Enter only a host name or IPv4 address as the server address (no https://, :port, or /). Enter the port in the Port field.")
+            String(localized: "Enter only a host name or IPv4 address (no https://, :port or /).")
         case let .tooLong(field, maxBytes):
             String(localized: "\(field.name) is too long (at most \(maxBytes) bytes).")
         case let .leadingOrTrailingSpace(field):
@@ -32,9 +32,9 @@ extension AppInternal.AccountSaveError {
         case .invalidPort:
             String(localized: "The port must be a number from 1 to 65535.")
         case .passwordNeedsAccount:
-            String(localized: "Enter the server address and username to save the VPN password.")
+            String(localized: "Enter the server address and username first.")
         case .appPasswordNeedsAddress:
-            String(localized: "Enter the Gmail address to save the app password.")
+            String(localized: "Enter the Gmail address first.")
         case let .accountValue(problem):
             problem.message
         case let .invalidVpnPassword(maxBytes):
@@ -65,7 +65,7 @@ extension AppInternal.ImportError {
 extension AppInternal.ImportReport {
     /// "Server: vpn.example.com:443 · Username: alice · Server certificates: 1".
     var summary: String {
-        var parts = [String(localized: "Server: \(host):\(port)")]
+        var parts = [String(localized: "Server: \(host):\(String(port))")]
         if !username.isEmpty { parts.append(String(localized: "Username: \(username)")) }
         if !realm.isEmpty { parts.append(String(localized: "Realm: \(realm)")) }
         parts.append(String(localized: "Server certificates: \(trustedCerts)"))
@@ -74,10 +74,7 @@ extension AppInternal.ImportReport {
 
     var unknownKeysMessage: String? {
         guard !unknownKeys.isEmpty else { return nil }
-        return String(localized: """
-            Ignored unknown keys: \(unknownKeys.joined(separator: ", ")). \
-            openfortivpn doesn't read the settings after such keys.
-            """)
+        return String(localized: "Ignored unknown keys: \(unknownKeys.joined(separator: ", "))")
     }
 
     var ignoredKeysMessage: String? {
@@ -95,9 +92,9 @@ extension AppInternal.ImportReport {
         switch password {
         case .saved: (String(localized: "Saved the password to Keychain."), .success)
         case .notSavedWithoutUsername:
-            (String(localized: "The password was not saved to the Keychain because there is no username."), .warning)
+            (String(localized: "Password not saved: no username."), .warning)
         case let .notSaved(failure): (failure.description, .warning)
-        case nil: (String(localized: "The file has no password. Enter the VPN password above."), .info)
+        case nil: (String(localized: "The file has no password. Enter it in Account."), .info)
         }
     }
 }

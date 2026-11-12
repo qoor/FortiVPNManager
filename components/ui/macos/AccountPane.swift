@@ -2,106 +2,92 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Account pane: the VPN account and the Gmail account that receives the OTP, saved together.
-/// No certificate fields: gateway certificates are trusted automatically. The OTP method and the
-/// Google account controls act at once instead of waiting for Save.
+/// The Account pane: the VPN account and the Gmail account that receives the OTP, saved together
+/// with Save in the toolbar (and File > Save). No certificate fields: gateway certificates are trusted
+/// automatically. The OTP method and the Google account controls act at once instead of waiting for
+/// Save.
 struct AccountPane: View {
     let ui: AppUI
-
-    @State private var showsAdvanced = false
-    @State private var showsIMAPFallback = false
-    @State private var showsOAuthClient = false
+    @Bindable var navigation: SettingsNavigation
 
     var body: some View {
         if let config = ui.config, let gmail = ui.gmail {
-            VStack(spacing: 0) {
-                Form {
-                    if ui.connection?.accountAppliesNextConnection == true {
-                        Section {
-                            NoticeRow(text: String(localized: "Account changes apply from the next connection."), style: .info)
-                        }
-                    }
-                    if let report = config.account.importReport {
-                        Section("Imported openfortivpn Settings") {
-                            ImportReportView(report: report)
-                            Button("Close") { ui.send(.dismissImportReport) }
-                        }
-                    }
-                    vpnSection(config.account)
-                    GmailSection(ui: ui, account: config.account, gmail: gmail,
-                                 showsIMAPFallback: $showsIMAPFallback, showsOAuthClient: $showsOAuthClient)
+            SettingsForm(navigation: navigation) {
+                if config.account.feedback != nil || config.account.savedAccountProblem != nil {
+                    feedbackSection(config.account)
                 }
-                .formStyle(.grouped)
-
-                Divider()
-                footer(config.account)
-                    .padding(12)
+                vpnSection(config.account)
+                GmailSection(ui: ui, navigation: navigation, account: config.account, gmail: gmail)
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    StateButton("Revert", state: config.account.revert) { ui.send(.revertAccount) }
+                    StateButton("Save", state: config.account.save) { ui.send(.saveAccount) }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .help("Save account settings (⌘S)")
+                }
             }
         }
     }
 
-    private func vpnSection(_ account: AppInternal.AccountFormState) -> some View {
-        Section("VPN") {
+    /// What the last Save did, and a saved account the runtime can't connect with.
+    private func feedbackSection(_ account: AppInternal.AccountFormState) -> some View {
+        Section {
             if let problem = account.savedAccountProblem {
-                NoticeRow(text: String(localized: "Can't connect with the saved account details. \(problem.message)"), style: .error)
+                NoticeRow(text: String(localized: "Saved account error: \(problem.message)"), style: .error)
             }
-            AccountRow("Server address") {
-                TextField("Server address", text: accountField(ui, \.host), prompt: Text(verbatim: "vpn.example.com"))
-            }
-            AccountRow("Port") {
-                TextField("Port", text: accountField(ui, \.port), prompt: Text(verbatim: "443"))
-            }
-            AccountRow("Username") {
-                TextField("Username", text: accountField(ui, \.username))
-            }
-            AccountRow("Password") {
-                SecureField("Password", text: accountField(ui, \.vpnPassword), prompt: storedPrompt(account.vpnPasswordStored))
-            }
-            DisclosureGroup("Advanced", isExpanded: $showsAdvanced) {
-                AccountRow("Realm") {
-                    TextField("Realm", text: accountField(ui, \.realm), prompt: Text("None"))
-                }
-            }
-        }
-    }
-
-    private func footer(_ account: AppInternal.AccountFormState) -> some View {
-        HStack(spacing: 10) {
-            Button("Import openfortivpn Settings…") {
-                Task { await importClientSettings(defaultFile: account.defaultImportFile) }
-            }
-            Spacer()
             switch account.feedback {
             case .saved?:
                 NoticeRow(text: String(localized: "Saved."), style: .success)
             case let .failed(error)?:
                 NoticeRow(text: error.message, style: .error)
-                    .lineLimit(3)
             case nil:
                 EmptyView()
             }
-            StateButton("Revert", state: account.revert) { ui.send(.revertAccount) }
-            StateButton("Save", state: account.save) { ui.send(.saveAccount) }
-                .keyboardShortcut(.defaultAction)
         }
     }
 
-    /// The VPN client's settings file at its default location, or one the user picks when there is
-    /// none.
-    private func importClientSettings(defaultFile: String?) async {
-        if defaultFile != nil {
-            ui.send(.importClientSettings(file: nil))
-            return
+    private func vpnSection(_ account: AppInternal.AccountFormState) -> some View {
+        Section {
+            AccountRow("Server address") {
+                TextField("Server address", text: accountField(ui, \.host), prompt: Text(verbatim: "vpn.example.com"))
+            }
+            .searchAnchor("Server address", navigation)
+            AccountRow("Port") {
+                // Sized for a port number, in the column the other fields start at (HIG Text fields).
+                HStack {
+                    TextField("Port", text: accountField(ui, \.port), prompt: Text(verbatim: "443"))
+                        .frame(width: 80)
+                    Spacer(minLength: 0)
+                }
+            }
+            .searchAnchor("Port", navigation)
+            AccountRow("Username") {
+                TextField("Username", text: accountField(ui, \.username))
+            }
+            .searchAnchor("Username", navigation)
+            AccountRow("Password") {
+                SecureField("Password", text: accountField(ui, \.vpnPassword), prompt: storedPrompt(account.vpnPasswordStored))
+            }
+            .searchAnchor("Password", navigation)
+            // A disclosed setting is a row of its own, separated like the others, with its label
+            // indented under the disclosure and its field in the shared column (HIG Layout).
+            DisclosureGroup("Realm (advanced)", isExpanded: $navigation.showsRealm) {}
+            if navigation.showsRealm {
+                AccountRow("Realm", indented: true) {
+                    TextField("Realm", text: accountField(ui, \.realm), prompt: Text("Optional"))
+                }
+                .searchAnchor("Realm", navigation)
+            }
+        } header: {
+            Text("VPN")
+        } footer: {
+            if ui.connection?.accountAppliesNextConnection == true {
+                Text("Account changes apply from the next connection.")
+                    .footnoteStyle()
+            }
         }
-        let panel = NSOpenPanel()
-        panel.message = String(localized: "Choose an openfortivpn config file.")
-        panel.prompt = String(localized: "Import")
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.showsHiddenFiles = true
-        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config")
-        guard let url = await chooseFile(panel) else { return }
-        ui.send(.importClientSettings(file: url.path))
     }
 }
 
@@ -119,16 +105,15 @@ private func accountField(_ ui: AppUI, _ keyPath: ReferenceWritableKeyPath<Accou
 }
 
 private func storedPrompt(_ stored: Bool) -> Text {
-    stored ? Text("Saved in Keychain · enter only to change") : Text("Required")
+    stored ? Text("Saved in Keychain · type to change") : Text("Required")
 }
 
 /// The Gmail account that receives the OTP, and how it is read.
 private struct GmailSection: View {
     let ui: AppUI
+    @Bindable var navigation: SettingsNavigation
     let account: AppInternal.AccountFormState
     let gmail: AppInternal.GmailSection
-    @Binding var showsIMAPFallback: Bool
-    @Binding var showsOAuthClient: Bool
     @State private var confirmsGoogleDisconnect = false
     @Environment(\.self) private var environment
 
@@ -137,37 +122,44 @@ private struct GmailSection: View {
             AccountRow("Gmail address") {
                 TextField("Gmail address", text: accountField(ui, \.gmailAddress), prompt: Text(verbatim: "name@example.com"))
             }
-            AccountRow("Connection method") {
-                Picker("Connection method", selection: method) {
-                    Text("Google account (Gmail API)").tag(AppInternal.OtpMethod.gmailApi)
-                    Text("App password (IMAP)").tag(AppInternal.OtpMethod.imap)
-                }
-                .pickerStyle(.menu)
-                .fixedSize()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .searchAnchor("Gmail address", navigation)
+            Picker("Connection method", selection: method) {
+                Text("Google account (Gmail API)").tag(AppInternal.OtpMethod.gmailApi)
+                Text("App password (IMAP)").tag(AppInternal.OtpMethod.imap)
             }
-            .help("Google account is recommended: the Gmail API detects the OTP email as soon as it arrives. Over IMAP, Gmail can show it several seconds later.")
+            .help("Google account is recommended: it sees the OTP email at once. IMAP can be several seconds late.")
+            .searchAnchor("Connection method", navigation)
             if let error = gmail.methodError {
                 NoticeRow(text: error.message, style: .error)
             }
             switch gmail.method {
             case .gmailApi:
                 googleAccountRows
-                DisclosureGroup("IMAP fallback (optional)", isExpanded: $showsIMAPFallback) {
-                    appPasswordRow(required: false)
-                    Text("If the Gmail API can't be used during a connection, the OTP email is read over IMAP with this app password instead.")
-                        .footnoteStyle()
+                DisclosureGroup("IMAP fallback (optional)", isExpanded: $navigation.showsIMAPFallback) {}
+                    .searchAnchor("IMAP fallback (optional)", navigation)
+                if navigation.showsIMAPFallback {
+                    // The explanation runs under the field, so it doesn't widen the label column.
+                    VStack(alignment: .leading, spacing: 4) {
+                        appPasswordRow(required: false, indented: true)
+                        Text("When the Gmail API is unavailable, this app password reads the OTP email.")
+                            .footnoteStyle()
+                            .subordinate()
+                    }
+                    .searchAnchor("App password", navigation)
                 }
-                DisclosureGroup("OAuth client (advanced)", isExpanded: oauthClientExpanded) {
+                DisclosureGroup("OAuth client (advanced)", isExpanded: oauthClientExpanded) {}
+                if oauthClientExpanded.wrappedValue {
                     googleClientRows
                 }
             case .imap:
-                appPasswordRow(required: true)
+                appPasswordRow(required: true, indented: false)
+                    .searchAnchor("App password", navigation)
             }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 StateButton("Test Gmail Connection", state: gmail.testButton) { ui.send(.testGmail) }
                 gmailTestResult
             }
+            .searchAnchor("Test Gmail Connection", navigation)
         } header: {
             Text("2-Step Verification (Gmail)")
         } footer: {
@@ -176,9 +168,9 @@ private struct GmailSection: View {
                 case .gmailApi:
                     Text("Connecting opens Google sign-in in your web browser. Sign in with the Gmail address above.")
                 case .imap:
-                    Text("The app password is the 16-character code created under Google Account > Security > 2-Step Verification > App passwords. Spaces are ignored.")
+                    Text("Uses a 16-character app password created in your Google Account. Spaces are ignored.")
                 }
-                Text("Recommended: create a Gmail filter (search `subject:AuthCode` → Never send it to Spam). If the OTP email lands in Spam, automatic entry fails.")
+                Text("Recommended: create a Gmail filter for subject:AuthCode that never sends it to Spam.")
             }
             .footnoteStyle()
         }
@@ -194,14 +186,15 @@ private struct GmailSection: View {
     }
 
     /// The IMAP app password: required for the IMAP method, an optional fallback for the Gmail API.
-    private func appPasswordRow(required: Bool) -> some View {
-        AccountRow("App password") {
-            SecureField(
-                "App password",
-                text: accountField(ui, \.appPassword),
-                prompt: account.appPasswordStored || required ? storedPrompt(account.appPasswordStored) : Text("Optional")
-            )
+    private func appPasswordRow(required: Bool, indented: Bool) -> some View {
+        AccountRow("App password", indented: indented) {
+            SecureField("App password", text: accountField(ui, \.appPassword), prompt: appPasswordPrompt(required: required))
         }
+    }
+
+    private func appPasswordPrompt(required: Bool) -> Text {
+        if account.appPasswordStored { return storedPrompt(true) }
+        return required ? Text("16-character app password") : Text("Optional")
     }
 
     // MARK: - Google account
@@ -215,12 +208,14 @@ private struct GmailSection: View {
             StateButton("Disconnect", state: gmail.disconnectGoogle) { confirmsGoogleDisconnect = true }
             StateButton("Connect Google Account…", state: gmail.connectGoogle) { ui.send(.connectGoogleAccount) }
         }
-        // Undoing it takes a new sign-in in the browser.
+        .searchAnchor("Google account", navigation)
+        // Undoing it takes a new sign-in in the browser. The person chose to disconnect, so the
+        // confirming button isn't styled destructive (HIG Alerts).
         .alert("Disconnect the Google account?", isPresented: $confirmsGoogleDisconnect) {
-            Button("Disconnect", role: .destructive) { ui.send(.disconnectGoogleAccount) }
+            Button("Disconnect") { ui.send(.disconnectGoogleAccount) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("To read OTP emails through the Gmail API again, you'll need to sign in to Google in the browser.")
+            Text("To connect again, you'll sign in to Google in your web browser.")
         }
         if let blocker = gmail.connectBlocker {
             Text(blocker.message)
@@ -236,10 +231,13 @@ private struct GmailSection: View {
     private var googleAccountStatus: some View {
         switch gmail.googleAccount {
         case .signingIn:
-            HStack(spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Waiting for Google sign-in in the browser…")
+                // Wraps in the narrow field column rather than being cut.
+                Text("Signing in via browser…")
                     .foregroundStyle(.secondary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         case .disconnecting:
             HStack(spacing: 6) {
@@ -258,32 +256,39 @@ private struct GmailSection: View {
     /// Expanded on its own when the build has no built-in client, so the import is easy to find.
     private var oauthClientExpanded: Binding<Bool> {
         Binding(
-            get: { showsOAuthClient || gmail.oauthClient == .notConfigured },
-            set: { showsOAuthClient = $0 }
+            get: { navigation.showsOAuthClient || gmail.oauthClient == .notConfigured },
+            set: { navigation.showsOAuthClient = $0 }
         )
     }
 
+    /// The client in use, and under it its buttons, each a row of its own.
     @ViewBuilder
     private var googleClientRows: some View {
-        AccountStatusRow("OAuth client") {
+        LabeledContent {
             switch gmail.oauthClient {
             case let .builtIn(clientId), let .imported(clientId):
-                NoticeRow(text: gmail.oauthClient.label, style: .success)
+                Text(verbatim: gmail.oauthClient.label)
                     .help(clientId)
             case .notConfigured:
                 NoticeRow(text: gmail.oauthClient.label, style: .warning)
             }
-        } actions: {
+        } label: {
+            RowTitle("OAuth client", detail: Text("Changing the client requires connecting the Google account again."))
+                .subordinate()
+        }
+        .searchAnchor("OAuth client", navigation)
+        HStack {
+            Spacer()
             StateButton("Use Built-in Client", state: gmail.useBuiltInClient) { ui.send(.useBuiltInOAuthClient) }
             StateButton("Import JSON…", state: gmail.importClient) {
                 Task { await importOAuthClient() }
             }
+            .help("Use a Desktop app OAuth client JSON instead of the built-in client.")
         }
+        .searchAnchor(SettingsSearch.oauthClientButtons, navigation)
         if gmail.importedClientSecretMissing {
             NoticeRow(text: String(localized: "The imported client's secret is missing from Keychain. Import the JSON again."), style: .warning)
         }
-        Text("Importing a Desktop app OAuth client JSON from another Google Cloud project replaces the built-in client. Changing the client requires connecting the Google account again.")
-            .footnoteStyle()
     }
 
     @ViewBuilder
@@ -338,46 +343,6 @@ private struct GmailSection: View {
     }
 }
 
-/// What an import of the VPN client's settings did. The source file is never modified.
-private struct ImportReportView: View {
-    let report: AppInternal.ClientSettingsImport
-
-    var body: some View {
-        switch report {
-        case let .imported(report):
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Imported from \(displayPath(report.source)).")
-                Text(verbatim: report.summary)
-                    .foregroundStyle(.secondary)
-                let password = report.passwordStatus
-                NoticeRow(text: password.text, style: password.style)
-                if report.password != nil {
-                    HStack(alignment: .firstTextBaseline) {
-                        NoticeRow(
-                            text: String(localized: "The original file contains the password in plain text. The app never changes that file, so delete the password yourself if you don't need it."),
-                            style: .warning
-                        )
-                        Spacer()
-                        Button("Show in Finder") { revealInFinder(report.source) }
-                    }
-                }
-                if let message = report.unknownKeysMessage {
-                    NoticeRow(text: message, style: .info)
-                }
-                if let message = report.ignoredKeysMessage {
-                    NoticeRow(text: message, style: .info)
-                }
-                if let message = report.unreadableLinesMessage {
-                    NoticeRow(text: message, style: .warning)
-                }
-            }
-            .textSelection(.enabled)
-        case let .failed(error):
-            NoticeRow(text: error.message, style: .error)
-        }
-    }
-}
-
 /// A labelled row of status text with its buttons, laid out like `AccountRow`: the status starts at
 /// the left edge of the field column and the buttons sit at the right. When both don't fit on one
 /// line, the buttons move under the status, so neither the text nor a button title is cut or split.
@@ -418,22 +383,31 @@ private struct AccountStatusRow<Status: View, Actions: View>: View {
 
 /// A labelled input row. Credentials read best in ordinary input boxes with the prompt and the typed
 /// text both left-aligned; the grouped form style right-aligns fields it lays out itself, so the field
-/// is wrapped in `LabeledContent` and styled here.
+/// is wrapped in `LabeledContent` and styled here. An indented row (a disclosed setting) indents only
+/// its label, so its field stays in the column of the others.
 private struct AccountRow<Field: View>: View {
     let title: LocalizedStringKey
+    let indented: Bool
     let field: Field
 
-    init(_ title: LocalizedStringKey, @ViewBuilder field: () -> Field) {
+    init(_ title: LocalizedStringKey, indented: Bool = false, @ViewBuilder field: () -> Field) {
         self.title = title
+        self.indented = indented
         self.field = field()
     }
 
     var body: some View {
-        LabeledContent(title) {
+        LabeledContent {
             field
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.leading)
+        } label: {
+            if indented {
+                Text(title).subordinate()
+            } else {
+                Text(title)
+            }
         }
     }
 }

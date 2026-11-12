@@ -1,21 +1,17 @@
 import Foundation
 
 extension AppInternal.BypassRulesSection {
-    /// "Ethernet · 10.20.161.20/24 — in 10.20.161.0/24".
+    /// "Ethernet · 10.20.161.20/24". Whether the rules apply on it, the status line says.
     var currentNetworkText: String {
         guard let network = currentNetwork else { return String(localized: "Unknown") }
         let prefix = network.prefixLength.map { "/\($0)" } ?? ""
-        let place = "\(network.serviceName) · \(network.address)\(prefix)"
-        if let within = network.within {
-            return String(localized: "\(place) — in \(within)")
-        }
-        return String(localized: "\(place) — outside the networks below")
+        return "\(network.serviceName) · \(network.address)\(prefix)"
     }
 
     /// Set once the retries of a failed write ran out.
     var stoppedRetryingMessage: String? {
         guard case let .failed(_, _, retries?) = status else { return nil }
-        return String(localized: "Writing the routes still failed after \(retries) retries, so the app stopped trying. It tries again when the network or the exception rules change.")
+        return String(localized: "Stopped after \(retries) failed retries. Tries again when the network or rules change.")
     }
 }
 
@@ -36,6 +32,28 @@ extension AppInternal.RowProblem {
         case let .overlap(other): String(localized: "'\(preview(row))' overlaps \(other), which is already in the list.")
         }
     }
+
+    /// The short form beside the row, which already shows the entry.
+    var rowMessage: String {
+        switch self {
+        case let .invalid(problem): problem.rowMessage
+        case .duplicate: String(localized: "This address is already in the list.")
+        case let .overlap(other): String(localized: "Overlaps \(other).")
+        }
+    }
+}
+
+extension AppInternal.AddressProblem {
+    /// The short form beside the row; `message(for:)` is the full one.
+    var rowMessage: String {
+        switch self {
+        case .malformed: String(localized: "Not an IPv4 address or CIDR block.")
+        case let .prefixOutOfRange(_, minimum, maximum): String(localized: "Use a prefix length from /\(minimum) to /\(maximum).")
+        case .nonContiguousMask: String(localized: "The subnet mask isn't contiguous.")
+        case .unroutable: String(localized: "Loopback, multicast and reserved addresses can't be routed.")
+        case let .hostBitsSet(network): String(localized: "Did you mean \(network)?")
+        }
+    }
 }
 
 extension AppInternal.BypassStatus {
@@ -51,19 +69,19 @@ extension AppInternal.BypassStatus {
                 parts.append(String(localized: "\(onLinkTargets) target(s) are on this network and need no route."))
             }
             if notImported > 0 {
-                parts.append(String(localized: "The list is full, so \(notImported) route(s) added elsewhere were not added to it."))
+                parts.append(String(localized: "List full: \(notImported) route(s) added elsewhere weren't imported."))
             }
             return (Self.adding(kept: kept, to: parts), .success)
         case let .outsideNetworks(kept):
-            let parts = [String(localized: "Not applied here: this Mac is outside the networks above, so everything goes through the VPN.")]
+            let parts = [String(localized: "Not applied: outside the networks above. Everything goes through the VPN.")]
             return (Self.adding(kept: kept, to: parts), .info)
         case let .noNetworksListed(kept):
-            let parts = [String(localized: "No networks are listed, so the exception rules apply nowhere.")]
+            let parts = [String(localized: "No networks listed, so the rules apply nowhere.")]
             return (Self.adding(kept: kept, to: parts), .info)
         case .configInvalid:
             return (String(localized: "The settings file has an error, so the routes are left as they are."), .warning)
         case .noNetwork:
-            return (String(localized: "No active network with an IPv4 router. The rules are applied once one is connected."), .warning)
+            return (String(localized: "No network with an IPv4 router. Applies once one connects."), .warning)
         case let .failed(failure, retryInSeconds, _):
             guard let retryInSeconds else { return (failure.message, .error) }
             let retry = String(localized: "Trying again in \(time.spelledOut(seconds: retryInSeconds)).")

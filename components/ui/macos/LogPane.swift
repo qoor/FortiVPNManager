@@ -1,39 +1,49 @@
 import AppKit
 import SwiftUI
 
-/// The Log pane: the VPN client's raw output and the explanation lines of the app and the Helper.
-/// Its buttons sit in the bar at the bottom, like Save and Apply in the other panes (the settings
-/// toolbar only switches panes).
+/// The Log pane: the VPN client's raw output and the explanation lines of the app and the Helper,
+/// in a box like the other panes' groups. Its actions sit in the toolbar (and the Edit and File menus).
 struct LogPane: View {
     let ui: AppUI
+    let navigation: SettingsNavigation
+    let logView: LogTextView.Coordinator
 
     @AppStorage("logAutoScroll") private var autoScroll = true
     @Environment(\.timeZone) private var timeZone
+    @State private var findRequest = 0
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle("Auto-scroll", isOn: $autoScroll)
+                .toggleStyle(.checkbox)
+                .searchAnchor("Auto-scroll", navigation)
             LogTextView(
                 log: ui.log,
                 lastID: ui.log.entries.last?.id,
                 clearCount: ui.log.clearCount,
-                autoScroll: autoScroll
+                autoScroll: autoScroll,
+                findRequest: findRequest,
+                coordinator: logView
             )
-            Divider()
-            HStack(spacing: 10) {
-                Toggle("Auto-scroll", isOn: $autoScroll)
-                    .toggleStyle(.checkbox)
-                Spacer()
-                Button("Clear") { ui.log.clear() }
-                Button("Copy All") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(ui.log.copyAllText(timeZone: timeZone), forType: .string)
-                }
-                Button("Show in Finder") {
+            .padding(4)
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .padding(20)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("Find", systemImage: "magnifyingglass") { findRequest += 1 }
+                    .help("Find in log (⌘F)")
+                Button("Clear", systemImage: "trash") { ui.log.clear() }
+                    .help("Clear the log view (⌘K) — the log file is kept")
+                Button("Copy All", systemImage: "doc.on.doc") { ui.copyEntireLog(timeZone: timeZone) }
+                    .help("Copy Entire Log")
+                Button("Show in Finder", systemImage: "folder") {
                     if let logFile = ui.config?.logFile { revealInFinder(logFile) }
                 }
                 .disabled(ui.config == nil)
+                .help("Show the log file in Finder")
             }
-            .padding(12)
         }
     }
 }
@@ -46,10 +56,17 @@ struct LogTextView: NSViewRepresentable {
     let lastID: UInt64?
     let clearCount: Int
     let autoScroll: Bool
+    /// Counts the toolbar's Find clicks; each opens the find bar.
+    let findRequest: Int
+    /// Kept by the settings window with the text view it made, which shows again when the pane does.
+    let coordinator: Coordinator
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { coordinator }
 
     func makeNSView(context: Context) -> NSScrollView {
+        // The count starts again with the pane.
+        context.coordinator.findRequest = findRequest
+        if let scrollView = context.coordinator.scrollView { return scrollView }
         let textView = NSTextView(usingTextLayoutManager: false)
         textView.isEditable = false
         textView.isSelectable = true
@@ -57,6 +74,8 @@ struct LogTextView: NSViewRepresentable {
         textView.isIncrementalSearchingEnabled = true
         textView.font = Coordinator.font
         textView.textContainerInset = NSSize(width: 6, height: 6)
+        // On the pane's box, as the settings mockup's log.
+        textView.drawsBackground = false
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -68,7 +87,9 @@ struct LogTextView: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
         scrollView.documentView = textView
+        context.coordinator.scrollView = scrollView
         context.coordinator.textView = textView
         scrollView.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(
@@ -80,12 +101,13 @@ struct LogTextView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.sync(with: log, clearCount: clearCount, autoScroll: autoScroll)
+        context.coordinator.find(request: findRequest)
     }
 
     @MainActor
     final class Coordinator: NSObject {
-        static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        private static let markerFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+        static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        private static let markerFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         private static let timeFormatter: DateFormatter = {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -97,12 +119,28 @@ struct LogTextView: NSViewRepresentable {
         /// everything below it, while appending only lays out the new lines.
         private static let trimChunk = 500
 
+        /// Held here, as the view outlives the pane that shows it.
+        var scrollView: NSScrollView?
         weak var textView: NSTextView?
 
         /// Entries currently shown, oldest first, with their length in UTF-16 units.
         private var shown: [(id: UInt64, length: Int)] = []
         private var clearCount: Int?
         private var autoScroll = false
+        fileprivate var findRequest = 0
+
+        /// Opens the find bar, as Edit > Find does, with the keyboard in the log.
+        func find(request: Int) {
+            guard request != findRequest else { return }
+            findRequest = request
+            DispatchQueue.main.async { [weak self] in
+                guard let textView = self?.textView, let window = textView.window else { return }
+                window.makeFirstResponder(textView)
+                let item = NSMenuItem()
+                item.tag = NSTextFinder.Action.showFindInterface.rawValue
+                textView.performTextFinderAction(item)
+            }
+        }
 
         /// The pane's view is first laid out after its lines are in, so the scroll to the end made
         /// then, on a view without a size, has no effect; it is made again once the view has one.
