@@ -32,6 +32,8 @@ use fvm_contract::app_internal::port::{InterfaceAddress, RegistrationError};
 use fvm_contract::app_internal::{OtpMethod, SecretText};
 use jiff::tz::TimeZone;
 
+use crate::config::CertificateList;
+
 pub use certs::merge_trusted_certs;
 pub use ledger::{Failure, FailureLedger};
 pub use machine::ConnectionManager;
@@ -48,6 +50,9 @@ pub struct Startup {
     pub settings: Settings,
     /// The system time zone, which the schedule's times are read in.
     pub time_zone: TimeZone,
+    /// Whether a client killed by someone else shows it as a signal in its exit status (Unix).
+    /// Without signals (Windows) such a kill cannot be told from other ends.
+    pub kills_show_as_signals: bool,
 }
 
 /// The settings the manager acts on, as the settings file holds them.
@@ -59,9 +64,10 @@ pub struct Settings {
     pub otp_method: OtpMethod,
 }
 
-impl From<&crate::config::Settings> for Settings {
-    /// The settings file's values, which its reader checked against these types' ranges.
-    fn from(settings: &crate::config::Settings) -> Self {
+impl Settings {
+    /// The settings file's values, which its reader checked against these types' ranges, with the
+    /// certificate values of the list `certificates` that the VPN client trusts.
+    pub fn new(settings: &crate::config::Settings, certificates: CertificateList) -> Self {
         let connection = &settings.connection;
         let minutes =
             |value: i64| u32::try_from(value).expect("the settings file checks the minute ranges");
@@ -72,7 +78,7 @@ impl From<&crate::config::Settings> for Settings {
                     .expect("the settings file checks the port range"),
                 username: settings.vpn.username.clone(),
                 realm: settings.vpn.realm.clone(),
-                trusted_certs: settings.vpn.trusted_certs.clone(),
+                trusted_certs: settings.vpn.trusted(certificates).to_vec(),
             },
             connection: ConnectionSettings {
                 session_max_minutes: minutes(connection.session_max_minutes),
@@ -285,8 +291,11 @@ pub enum Effect {
         attempt: AttemptId,
         reason: StopReason,
     },
-    /// Write `vpn.trusted_certs` with exactly these values.
+    /// Write the VPN client's certificate list with exactly these values.
     SaveTrustedCerts(Vec<String>),
+    /// Empty both certificate lists: the server address or port changed, so the values, the other
+    /// OS's included, belong to the old gateway.
+    ClearTrustedCerts,
     /// Write the ledger to state.json.
     SaveLedger(FailureLedger),
     /// Replaces any pending timer of the same kind.

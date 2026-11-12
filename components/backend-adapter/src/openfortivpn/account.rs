@@ -25,12 +25,27 @@ pub(super) fn check_account(
     username: &str,
     realm: &str,
 ) -> Result<(), AccountValueProblem> {
-    values::account_value(AccountField::Host, host, MAX_HOST_BYTES)?;
+    values::account_value(
+        AccountField::Host,
+        host,
+        MAX_HOST_BYTES,
+        values::any_character,
+    )?;
     if !host.is_empty() && !values::is_host(host) {
         return Err(AccountValueProblem::InvalidHost {});
     }
-    values::account_value(AccountField::Username, username, MAX_USERNAME_BYTES)?;
-    values::account_value(AccountField::Realm, realm, MAX_REALM_BYTES)
+    values::account_value(
+        AccountField::Username,
+        username,
+        MAX_USERNAME_BYTES,
+        values::any_character,
+    )?;
+    values::account_value(
+        AccountField::Realm,
+        realm,
+        MAX_REALM_BYTES,
+        values::any_character,
+    )
 }
 
 /// The app's check of a typed VPN password before it is saved. An empty one is left to the

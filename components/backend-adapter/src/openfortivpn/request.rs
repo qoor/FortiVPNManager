@@ -32,6 +32,7 @@ pub(super) fn launch_spec(
         args: vec!["-c".to_owned(), config_path.to_owned()],
         env: vec![("PATH".to_owned(), PATH.to_owned())],
         config_file: Some(config_file(request)),
+        session: None,
     })
 }
 
@@ -41,9 +42,14 @@ fn check(request: &RunRequest) -> Result<(), String> {
     if !(1..=65_535).contains(&request.port) {
         return Err("port must be between 1 and 65535".to_owned());
     }
-    values::check_text("username", &request.username, MAX_USERNAME_BYTES)?;
+    values::check_text(
+        "username",
+        &request.username,
+        MAX_USERNAME_BYTES,
+        values::any_character,
+    )?;
     if let Some(realm) = realm(request) {
-        values::check_text("realm", realm, MAX_REALM_BYTES)?;
+        values::check_text("realm", realm, MAX_REALM_BYTES, values::any_character)?;
     }
     if request.trusted_certs.len() > MAX_TRUSTED_CERTS {
         return Err(format!(

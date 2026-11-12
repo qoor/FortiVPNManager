@@ -33,6 +33,7 @@ pub struct ConnectionManager {
     attempts_issued: u64,
     pub(super) settings: Settings,
     pub(super) time_zone: TimeZone,
+    kills_show_as_signals: bool,
     /// The time of the input being handled, or of the last one.
     pub(super) now: SystemTime,
     /// The effects of the input being handled.
@@ -272,6 +273,7 @@ impl ConnectionManager {
             attempts_issued: 0,
             settings: startup.settings,
             time_zone: startup.time_zone,
+            kills_show_as_signals: startup.kills_show_as_signals,
             now: SystemTime::UNIX_EPOCH,
             effects: Vec::new(),
             wants_connection: false,
@@ -613,12 +615,10 @@ impl ConnectionManager {
 
     fn account_changed(&mut self, old: &VpnAccount) {
         let account = &mut self.settings.account;
-        if !account.trusted_certs.is_empty()
-            && super::certs::gateway_change_drops_certs(old, account)
-        {
+        if super::certs::gateway_change_drops_certs(old, account) {
             // The next connection learns the new gateway's certificate.
             account.trusted_certs.clear();
-            self.effects.push(Effect::SaveTrustedCerts(Vec::new()));
+            self.effects.push(Effect::ClearTrustedCerts);
         }
         if account.host != old.host {
             self.gateway_ip = None;
@@ -935,6 +935,7 @@ impl ConnectionManager {
                     path_changed: attempt.path_changed,
                     within_wake_grace: self.started_within_wake_grace(&attempt),
                     observed_up: None,
+                    kills_show_as_signals: self.kills_show_as_signals,
                 });
                 self.apply(outcome);
             }
@@ -958,6 +959,7 @@ impl ConnectionManager {
                     path_changed: false,
                     within_wake_grace: false,
                     observed_up: Some(up),
+                    kills_show_as_signals: self.kills_show_as_signals,
                 });
                 self.apply(outcome);
             }

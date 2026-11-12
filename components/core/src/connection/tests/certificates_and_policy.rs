@@ -170,6 +170,41 @@ fn a_gateway_change_drops_the_values() {
     assert!(!gateway_change_drops_certs(&account(), &supplied));
 }
 
+/// The values belong to the old gateway, the other OS's list included, so both lists are cleared
+/// even when this client's list is already empty.
+#[test]
+fn a_new_gateway_clears_both_certificate_lists() {
+    let mut h = Harness::new();
+    h.launch_with(false, None);
+    let clears = |effects: &[Effect]| {
+        effects
+            .iter()
+            .filter(|effect| matches!(effect, Effect::ClearTrustedCerts))
+            .count()
+    };
+    let mut moved = account();
+    moved.host = "vpn2.example.com".into();
+    assert_eq!(
+        clears(&h.send(Input::SettingsChanged(with_account(moved.clone())))),
+        1
+    );
+    assert!(h.cm.settings.account.trusted_certs.is_empty());
+    moved.trusted_certs.clear();
+    moved.port = 443;
+    assert_eq!(
+        clears(&h.send(Input::SettingsChanged(with_account(moved.clone())))),
+        1
+    );
+    // Values supplied with the new address are the new gateway's.
+    moved.host = "vpn3.example.com".into();
+    moved.trusted_certs = vec![digest('c')];
+    assert_eq!(
+        clears(&h.send(Input::SettingsChanged(with_account(moved)))),
+        0
+    );
+    assert_eq!(h.cm.settings.account.trusted_certs, [digest('c')]);
+}
+
 #[test]
 fn hand_edited_values_are_used_for_the_next_connect() {
     let mut h = Harness::new();

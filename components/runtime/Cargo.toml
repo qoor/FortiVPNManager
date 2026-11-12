@@ -12,8 +12,9 @@ fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
 fvm-core.workspace = true
 getrandom.workspace = true
-# The time zone database the OS keeps, for local times in the schedule and the log.
-jiff = { workspace = true, features = ["tzdb-zoneinfo"] }
+# The time zone database the OS keeps, for local times in the schedule and the log; Windows keeps
+# none, so there a copy is bundled.
+jiff = { workspace = true, features = ["tzdb-zoneinfo", "tzdb-bundle-platform"] }
 reqwest.workspace = true
 rustls.workspace = true
 rustls-platform-verifier.workspace = true

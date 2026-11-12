@@ -9,14 +9,12 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_internal::problem::{
     ConfigFileError, ConfigProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind,
 };
-use fvm_contract::backend::Backend;
-use fvm_core::config::{self, ClientRules, Settings, Update, UpdateError};
+use fvm_core::config::{self, Settings, Update, UpdateError};
 
-use crate::files;
+use crate::{client, files};
 
 /// How often the file is looked at for edits made elsewhere; also on app activation.
 pub(crate) const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
@@ -39,13 +37,6 @@ pub(crate) struct ConfigFile {
     load_error: Option<ConfigFileError>,
     warnings: Vec<ConfigWarning>,
     seen: Option<Fingerprint>,
-}
-
-pub(crate) fn client_rules() -> ClientRules<'static> {
-    ClientRules {
-        name: OpenFortiVpn.client_name(),
-        certificate_value: &|text| OpenFortiVpn.certificate_value(text),
-    }
 }
 
 impl ConfigFile {
@@ -111,7 +102,7 @@ impl ConfigFile {
             }
             Ok(Some((bytes, file_warnings))) => {
                 self.exists = true;
-                match config::read(&bytes, &client_rules()) {
+                match config::read(&bytes, &client::rules()) {
                     Ok(loaded) => {
                         self.settings = loaded.settings;
                         self.load_error = None;
@@ -160,7 +151,7 @@ impl ConfigFile {
             let current = read(&self.path)?;
             let result = config::update(
                 current.as_ref().map(|(bytes, _)| bytes.as_slice()),
-                &client_rules(),
+                &client::rules(),
                 &change,
             );
             let (settings, text) = match result {

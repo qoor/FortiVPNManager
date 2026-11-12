@@ -14,10 +14,10 @@ use saphyr_parser::ScalarStyle;
 use super::text::disallowed_in_value;
 use super::tree::{Kind, Node, Tree, scalar_text};
 use super::{
-    AWAY_MINUTES, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_TRUSTED_CERTS,
-    MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect, ReconnectAfterSleep, Routes,
-    SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn, WEEKDAYS, minutes,
-    normalized_days,
+    AWAY_MINUTES, CertificateList, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES,
+    MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect,
+    ReconnectAfterSleep, Routes, SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn,
+    WEEKDAYS, minutes, normalized_days,
 };
 use crate::bypass_rules::MAX_ENTRIES;
 
@@ -195,7 +195,12 @@ impl<'t, 'a> Fields<'t, 'a> {
                     &mut vpn.realm,
                     string(value, "vpn.realm")?.map(str::to_owned),
                 ),
-                "trusted_certs" => vpn.trusted_certs = self.trusted_certs(value)?,
+                "trusted_certs" => {
+                    vpn.trusted_certs = self.trusted(value, CertificateList::Digests)?;
+                }
+                "trusted_cert_pins" => {
+                    vpn.trusted_cert_pins = self.trusted(value, CertificateList::Pins)?;
+                }
                 _ => self.unknown_key(Some("vpn"), key),
             }
         }
@@ -368,31 +373,42 @@ impl<'t, 'a> Fields<'t, 'a> {
         Ok(())
     }
 
-    /// Certificate values the client does not accept, repeats and values past the limit are
-    /// dropped with a warning rather than failing the file: the app manages the list and learns a
-    /// value again.
-    fn trusted_certs(&mut self, node: &Node<'_>) -> Result<Vec<String>, ConfigProblem> {
-        let Some(items) = sequence(node, "vpn.trusted_certs")? else {
+    /// Values that are not of the list's format, repeats and values past the limit are dropped
+    /// rather than failing the file: the app manages the lists and learns a value again. Only the
+    /// client's own list warns.
+    fn trusted(
+        &mut self,
+        node: &Node<'_>,
+        list: CertificateList,
+    ) -> Result<Vec<String>, ConfigProblem> {
+        let (path, value_of) = match list {
+            CertificateList::Digests => ("vpn.trusted_certs", self.client.digest_value),
+            CertificateList::Pins => ("vpn.trusted_cert_pins", self.client.pin_value),
+        };
+        let Some(items) = sequence(node, path)? else {
             return Ok(Vec::new());
         };
+        let warns = list == self.client.certificate_list;
         let mut values: Vec<String> = Vec::new();
         for (index, &item) in items.iter().enumerate() {
             let item = self.tree.node(item);
             let value = scalar_text(item)
                 .filter(|_| !is_null(item))
-                .and_then(self.client.certificate_value);
+                .and_then(value_of);
             let kind = match value {
                 Some(value) if values.contains(&value) => ConfigWarningKind::DuplicateTrustedCert {
                     index: index as u32,
                 },
                 Some(_) if values.len() == MAX_TRUSTED_CERTS => {
                     // Newest first: the rest are older values.
-                    self.warn(
-                        ConfigWarningKind::TooManyTrustedCerts {
-                            limit: MAX_TRUSTED_CERTS as u32,
-                        },
-                        item,
-                    );
+                    if warns {
+                        self.warn(
+                            ConfigWarningKind::TooManyTrustedCerts {
+                                limit: MAX_TRUSTED_CERTS as u32,
+                            },
+                            item,
+                        );
+                    }
                     break;
                 }
                 Some(value) => {
@@ -403,7 +419,9 @@ impl<'t, 'a> Fields<'t, 'a> {
                     index: index as u32,
                 },
             };
-            self.warn(kind, item);
+            if warns {
+                self.warn(kind, item);
+            }
         }
         Ok(values)
     }

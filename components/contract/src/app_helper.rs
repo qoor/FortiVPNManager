@@ -168,6 +168,8 @@ pub enum StopReason {
     AppDisconnected,
     /// A step of the run took too long.
     Watchdog,
+    /// The client asked again for the password or the OTP it was given: the gateway rejected it.
+    PromptRepeated,
     HelperShutdown,
 }
 

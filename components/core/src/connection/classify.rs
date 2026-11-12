@@ -27,6 +27,8 @@ pub(super) struct ExitContext<'a> {
     pub(super) within_wake_grace: bool,
     /// Measured by the manager, for when the Helper reported no up time.
     pub(super) observed_up: Option<Duration>,
+    /// See [`super::Startup::kills_show_as_signals`].
+    pub(super) kills_show_as_signals: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -80,8 +82,12 @@ pub(super) fn classify(context: &ExitContext) -> Outcome {
     if furthest == Some(Milestone::TunnelUp) && unrequested {
         // A signal nobody here sent is a kill, not the server or the account, whatever the up
         // time. Only the client's own death shows: when only its helper process is killed, the
-        // client exits normally, like a server end.
-        if matches!(facts.exit_status, ProcessExitStatus::Signaled { .. }) {
+        // client exits normally, like a server end. Where a kill shows no signal, every such end
+        // counts as one: the login succeeded, so the gateway's IP block is not at stake, and the
+        // one immediate retry and the attempt limit stop a loop (user decision 2026-11-11).
+        if !context.kills_show_as_signals
+            || matches!(facts.exit_status, ProcessExitStatus::Signaled { .. })
+        {
             return Outcome::ForcedTermination;
         }
         if up >= policy::STABLE_SESSION {

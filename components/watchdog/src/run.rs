@@ -1,8 +1,11 @@
 //! One run: a thread that owns everything about the client and handles, in order, its output, its
 //! exit, the caller's requests and the time limits. Reader threads and an exit thread only forward
-//! what they see.
+//! what they see. A client that logs in and opens the tunnel in separate runs has two processes, one
+//! after the other; their inputs carry which one they come from. When the Helper had to end the
+//! tunnel run by force, or never started it, the run sends the client's logout request before it
+//! reports the exit.
 
-use std::io::{self, PipeWriter, Write};
+use std::io::{self, PipeReader, PipeWriter, Read, Write};
 use std::iter;
 use std::mem;
 use std::net::Ipv4Addr;
@@ -17,12 +20,13 @@ use fvm_contract::app_helper::{
     ProcessExitStatus, StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
-    Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome,
+    Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs,
+    SessionLaunch,
 };
 use zeroize::Zeroizing;
 
 use crate::lines::{LineAssembler, MAX_LINE_BYTES};
-use crate::os::{self, Child};
+use crate::os::{self, Child, Spawned};
 use crate::{Report, RouteRepair, Timing};
 
 /// Controls a started run. Dropping it does not stop the run.
@@ -84,37 +88,8 @@ impl Run {
         };
 
         let process_id = Arc::new(AtomicU32::new(spawned.child.id()));
-        let exit = spawned.child.exit_watch();
-        let exited = inputs.clone();
-        thread::Builder::new()
-            .name("fvm-watchdog-exit".to_owned())
-            .spawn(move || {
-                exit.wait();
-                let _ = exited.send(Input::Exited);
-            })
-            .expect("starting the watchdog's exit thread");
-        let wake = Arc::new(spawned.wake_read);
-        for (source, pipe) in [
-            (OutputSource::Stdout, spawned.stdout),
-            (OutputSource::Stderr, spawned.stderr),
-        ] {
-            let wake = Arc::clone(&wake);
-            let forwarded = inputs.clone();
-            thread::Builder::new()
-                .name("fvm-watchdog-output".to_owned())
-                .spawn(move || {
-                    os::read_output(pipe, &wake, |bytes| {
-                        forwarded.send(Input::Output(source, bytes)).is_ok()
-                    });
-                    let _ = forwarded.send(Input::End(source));
-                })
-                .expect("starting a watchdog output thread");
-        }
-
-        let command = iter::once(launch.program.display().to_string())
-            .chain(launch.args.iter().cloned())
-            .collect::<Vec<_>>()
-            .join(" ");
+        let command = command_line(launch);
+        let (child, stdin, wake_write) = watch_process(spawned, 0, &inputs);
         let watch = Watch {
             client_name,
             interpreter: backend.interpreter(),
@@ -123,8 +98,13 @@ impl Run {
             on_report,
             inputs: inputs.clone(),
             process_id: Arc::clone(&process_id),
-            phase: Phase::Running(spawned.child),
-            stdin: Some(spawned.stdin),
+            phase: Phase::Running(child),
+            generation: 0,
+            later_runs: launch.session.clone(),
+            session: None,
+            tunnel_started: false,
+            forced: false,
+            stdin: Some(stdin),
             password: Some(password_line),
             otp_submitted: false,
             furthest: Milestone::Spawned,
@@ -136,7 +116,7 @@ impl Run {
             stop: None,
             stdout: Stream::new(timing.line_idle_flush),
             stderr: Stream::new(timing.line_idle_flush),
-            wake_readers: Some(spawned.wake_write),
+            wake_readers: Some(wake_write),
             batch: Vec::new(),
             batch_deadline: None,
             stage: None,
@@ -196,15 +176,63 @@ impl Run {
     }
 }
 
+/// Starts the threads that forward what process number `generation` of the run does, and returns
+/// what the run itself keeps of it.
+fn watch_process(
+    spawned: Spawned,
+    generation: u32,
+    inputs: &Sender<Input>,
+) -> (Child, PipeWriter, PipeWriter) {
+    let exit = spawned.child.exit_watch();
+    let exited = inputs.clone();
+    thread::Builder::new()
+        .name("fvm-watchdog-exit".to_owned())
+        .spawn(move || {
+            exit.wait();
+            let _ = exited.send(Input::Exited(generation));
+        })
+        .expect("starting the watchdog's exit thread");
+    let wake = Arc::new(spawned.wake_read);
+    for (source, pipe) in [
+        (OutputSource::Stdout, spawned.stdout),
+        (OutputSource::Stderr, spawned.stderr),
+    ] {
+        let wake = Arc::clone(&wake);
+        let forwarded = inputs.clone();
+        thread::Builder::new()
+            .name("fvm-watchdog-output".to_owned())
+            .spawn(move || {
+                os::read_output(pipe, &wake, |bytes| {
+                    forwarded
+                        .send(Input::Output(generation, source, bytes))
+                        .is_ok()
+                });
+                let _ = forwarded.send(Input::End(generation, source));
+            })
+            .expect("starting a watchdog output thread");
+    }
+    (spawned.child, spawned.stdin, spawned.wake_write)
+}
+
+fn command_line(launch: &LaunchSpec) -> String {
+    iter::once(launch.program.display().to_string())
+        .chain(launch.args.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub(crate) enum Input {
-    Output(OutputSource, Vec<u8>),
-    End(OutputSource),
-    Exited,
+    /// From process number `.0` of the run, as all three of these.
+    Output(u32, OutputSource, Vec<u8>),
+    End(u32, OutputSource),
+    Exited(u32),
     SubmitOtp {
         code: Zeroizing<String>,
         reply: SyncSender<Result<(), HelperError>>,
     },
     Stop(StopReason),
+    /// The log line about the logout request.
+    LoggedOut(String),
     RoutesRepaired(RouteRepairOutcome),
 }
 
@@ -237,6 +265,16 @@ struct Watch<I, R> {
     inputs: Sender<Input>,
     process_id: Arc<AtomicU32>,
     phase: Phase,
+    /// Which of the run's processes is the current one, counting from 0.
+    generation: u32,
+    /// What follows the login run of a client that logs in and opens the tunnel in separate runs.
+    later_runs: Option<Box<SessionLaunch>>,
+    /// The session the login run printed.
+    session: Option<SessionInputs>,
+    tunnel_started: bool,
+    /// The current process could not log out: it was killed rather than asked to stop, or it never
+    /// started.
+    forced: bool,
 
     stdin: Option<PipeWriter>,
     /// The password and a line break, until written.
@@ -274,6 +312,8 @@ enum Phase {
         exited_at: Duration,
         deadline: Instant,
     },
+    /// The client could not log out; waiting for its logout request.
+    LoggingOut(ExitFacts),
     RepairingRoutes(ExitFacts),
     Reported,
 }
@@ -309,6 +349,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         };
         let pid = child.id();
         self.meta(format!("‹attempt started: pid {pid}, {command}›"));
+        self.client_started();
         self.reach(Milestone::Spawned);
         while !matches!(self.phase, Phase::Reported) {
             let input = match self.next_deadline() {
@@ -336,20 +377,25 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
 
     fn handle(&mut self, input: Input) {
         match input {
-            Input::Output(source, bytes) => {
+            Input::Output(generation, _, _)
+            | Input::End(generation, _)
+            | Input::Exited(generation)
+                if generation != self.generation => {}
+            Input::Output(_, source, bytes) => {
                 if matches!(self.phase, Phase::Running(_) | Phase::Draining { .. }) {
                     self.read(source, &bytes);
                 }
             }
-            Input::End(source) => {
+            Input::End(_, source) => {
                 self.stream(source).open = false;
                 self.finish_if_drained();
             }
-            Input::Exited => self.exited(),
+            Input::Exited(_) => self.exited(),
             Input::SubmitOtp { code, reply } => {
                 let _ = reply.send(self.submit_otp(&code));
             }
             Input::Stop(reason) => self.stop(reason),
+            Input::LoggedOut(text) => self.logged_out(text),
             Input::RoutesRepaired(outcome) => self.routes_repaired(outcome),
         }
     }
@@ -437,7 +483,11 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
 
     fn line(&mut self, source: OutputSource, text: String) {
         let finding = self.interpreter.line(source, &text);
-        self.output(source, text);
+        match finding {
+            Some(Finding::Session(_)) => self.meta("‹session received; its line is not shown›"),
+            Some(Finding::Hidden) => self.meta("‹a line holding a secret is not shown›"),
+            _ => self.output(source, text),
+        }
         match finding {
             Some(Finding::Milestone(milestone)) => self.advance(milestone),
             Some(Finding::TunnelIp(ip)) => self.tunnel_ip = Some(ip),
@@ -446,7 +496,11 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
                 self.rejected_certificates.push(value);
             }
             Some(Finding::TunnelModeRejected) => self.tunnel_mode_rejected = true,
-            None => {}
+            Some(Finding::Session(session)) => {
+                self.session = Some(session);
+                self.advance(Milestone::Authenticated);
+            }
+            Some(Finding::Hidden) | None => {}
         }
     }
 
@@ -508,21 +562,28 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             });
     }
 
+    /// A prompt for what was already sent means the gateway rejected it. The client would wait
+    /// for an answer it never gets, so the run ends at once rather than at the stage's limit.
     fn prompt(&mut self, prompt: Prompt) {
+        let answering = self.running() && self.stop.is_none();
         match prompt {
+            Prompt::Password if answering && self.password.is_none() => {
+                self.meta("‹password asked again: the gateway rejected the login›");
+                self.stop(StopReason::PromptRepeated);
+            }
+            Prompt::Otp if answering && self.otp_submitted => {
+                self.meta("‹OTP asked again: the gateway rejected the OTP›");
+                self.stop(StopReason::PromptRepeated);
+            }
             Prompt::Password => {
-                let expected = self.interpreter.password_expected(self.furthest)
-                    && self.running()
-                    && self.stop.is_none();
+                let expected = answering && self.interpreter.password_expected(self.furthest);
                 match self.password.take_if(|_| expected) {
                     Some(line) => {
                         if self.write_stdin(&line) {
                             self.meta("‹password sent›");
                         }
                     }
-                    None => self.meta(
-                        "‹password prompt ignored: already answered or not expected at this stage›",
-                    ),
+                    None => self.meta("‹password prompt ignored: not expected at this stage›"),
                 }
             }
             Prompt::Otp => self.advance(Milestone::OtpPrompted),
@@ -597,14 +658,22 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         self.stop(StopReason::Watchdog);
     }
 
+    /// Between the login run and the tunnel run only the reason is kept, so the tunnel run does not
+    /// start.
     fn stop(&mut self, reason: StopReason) {
-        let Phase::Running(child) = &self.phase else {
-            return;
-        };
         if self.stop.is_some() {
             return;
         }
-        let done = child.terminate();
+        let done = match &self.phase {
+            Phase::Running(child) => {
+                let (done, forced) = child.terminate();
+                self.forced = forced;
+                self.kill_deadline = Some(Instant::now() + self.grace_period);
+                done
+            }
+            Phase::Draining { .. } if self.tunnel_pending() => "tunnel run not started",
+            _ => return,
+        };
         self.stop = Some(reason);
         self.stage = None;
         let raw = serde_json::to_value(reason).expect("a stop reason serializes");
@@ -612,7 +681,6 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             .as_str()
             .expect("a stop reason serializes as its raw value");
         self.meta(format!("‹{done} (reason: {raw})›"));
-        self.kill_deadline = Some(Instant::now() + self.grace_period);
     }
 
     fn grace_period_expired(&mut self) {
@@ -621,6 +689,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             return;
         };
         let done = child.kill();
+        self.forced = true;
         self.meta(format!(
             "‹{done}: still running {} after {}›",
             seconds(self.grace_period),
@@ -644,9 +713,17 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         };
         self.stdin = None;
         self.password = None;
-        self.stage = None;
+        // The tunnel run's stage goes on from the login run's.
+        if !self.tunnel_pending() {
+            self.stage = None;
+        }
         self.kill_deadline = None;
         self.finish_if_drained();
+    }
+
+    /// A login run printed its session, or may still, and the tunnel run has not started.
+    fn tunnel_pending(&self) -> bool {
+        self.later_runs.is_some() && !self.tunnel_started
     }
 
     fn finish_if_drained(&mut self) {
@@ -685,7 +762,14 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
                 seconds(self.timing.pipe_drain)
             ));
         }
-        self.meta(format!("‹exited: {}›", describe(status)));
+        if !matches!(status, ProcessExitStatus::SpawnFailed { .. }) {
+            self.meta(format!("‹exited: {}›", describe(status)));
+        }
+        if self.tunnel_pending() && self.session.is_some() && self.stop.is_none() {
+            self.start_tunnel();
+            return;
+        }
+        self.stage = None;
         let facts = ExitFacts {
             furthest_milestone: Some(self.furthest),
             stop_initiator: match self.stop {
@@ -698,6 +782,90 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             up_duration: self.tunnel_up_at.map(|up| exited_at.saturating_sub(up)),
             exit_status: status,
         };
+        // A tunnel run that ended by itself or after the stop request logged out on its own.
+        let logout_needed = self.session.is_some() && (!self.tunnel_started || self.forced);
+        match (self.later_runs.take(), self.session.take()) {
+            (Some(later_runs), Some(session)) if logout_needed => {
+                self.flush_batch();
+                self.phase = Phase::LoggingOut(facts);
+                let inputs = self.inputs.clone();
+                thread::Builder::new()
+                    .name("fvm-watchdog-logout".to_owned())
+                    .spawn(move || {
+                        let text = send_logout(&later_runs.logout, &session.logout);
+                        let _ = inputs.send(Input::LoggedOut(text));
+                    })
+                    .expect("starting the watchdog's logout thread");
+            }
+            _ => self.repair_routes_or_report(facts),
+        }
+    }
+
+    /// Starts the tunnel run with the session on its stdin, as the run's next process.
+    fn start_tunnel(&mut self) {
+        let launch = self
+            .later_runs
+            .as_ref()
+            .expect("a tunnel run follows a login run")
+            .tunnel
+            .clone();
+        let input = self
+            .session
+            .as_ref()
+            .expect("the login run printed a session")
+            .tunnel
+            .clone();
+        let command = command_line(&launch);
+        self.tunnel_started = true;
+        self.forced = false;
+        self.generation += 1;
+        let spawned = match os::spawn(&launch) {
+            Ok(spawned) => spawned,
+            Err(errno) => {
+                self.meta(format!(
+                    "‹spawn failed: {}: {}›",
+                    launch.program.display(),
+                    describe_errno(errno)
+                ));
+                self.forced = true;
+                self.phase = Phase::Draining {
+                    status: ProcessExitStatus::SpawnFailed { errno },
+                    exited_at: os::time_including_sleep(),
+                    deadline: Instant::now(),
+                };
+                self.finish(false);
+                return;
+            }
+        };
+        self.process_id.store(spawned.child.id(), Ordering::Relaxed);
+        let (child, stdin, wake_write) = watch_process(spawned, self.generation, &self.inputs);
+        let pid = child.id();
+        self.phase = Phase::Running(child);
+        self.stdin = Some(stdin);
+        self.stdout = Stream::new(self.timing.line_idle_flush);
+        self.stderr = Stream::new(self.timing.line_idle_flush);
+        self.wake_readers = Some(wake_write);
+        self.meta(format!("‹tunnel run started: pid {pid}, {command}›"));
+        self.client_started();
+        // The client reads nothing after the session.
+        self.write_stdin(&input);
+        self.stdin = None;
+    }
+
+    fn client_started(&mut self) {
+        self.flush_batch();
+        (self.on_report)(Report::ClientStarted);
+    }
+
+    fn logged_out(&mut self, text: String) {
+        let Phase::LoggingOut(facts) = mem::replace(&mut self.phase, Phase::Reported) else {
+            unreachable!("the logout request answers only when sent")
+        };
+        self.meta(text);
+        self.repair_routes_or_report(facts);
+    }
+
+    fn repair_routes_or_report(&mut self, facts: ExitFacts) {
         if self.interpreter.routes_left_unrestored() {
             self.flush_batch();
             self.phase = Phase::RepairingRoutes(facts);
@@ -739,8 +907,75 @@ fn describe(status: ProcessExitStatus) -> String {
     }
 }
 
+/// How long the logout request may take before it is killed; longer than its own time limit.
+const LOGOUT_LIMIT: Duration = Duration::from_secs(15);
+/// Of the logout request's output, only so much of the first line goes to the log.
+const LOGOUT_OUTPUT_BYTES: u64 = 256;
+
+/// Runs the logout request with `input` on its stdin and returns the log line about it: its first
+/// line of output, or why there is none.
+fn send_logout(launch: &LaunchSpec, input: &[u8]) -> String {
+    let spawned = match os::spawn(launch) {
+        Ok(spawned) => spawned,
+        Err(errno) => {
+            return format!(
+                "‹logout request not sent: {}: {}›",
+                launch.program.display(),
+                describe_errno(errno)
+            );
+        }
+    };
+    let Spawned {
+        child,
+        mut stdin,
+        stdout,
+        stderr,
+        ..
+    } = spawned;
+    // A few hundred bytes fit in the pipe, so this never waits for the request to read them. A
+    // request that exited at once is reported by its exit status.
+    let _ = stdin.write_all(input);
+    drop(stdin);
+    let output = thread::spawn(move || read_some(stdout));
+    let errors = thread::spawn(move || read_some(stderr));
+    let (exited, exit_seen) = mpsc::channel();
+    let exit = child.exit_watch();
+    thread::spawn(move || {
+        exit.wait();
+        let _ = exited.send(());
+    });
+    let timed_out = exit_seen.recv_timeout(LOGOUT_LIMIT).is_err();
+    if timed_out {
+        child.kill();
+    }
+    let status = child.reap();
+    let output = output
+        .join()
+        .expect("the logout output reader never panics");
+    drop(errors);
+    let output = String::from_utf8_lossy(&output);
+    let answer = output.lines().next().map_or("", str::trim);
+    if timed_out {
+        format!(
+            "‹logout request did not finish within {}; killed›",
+            seconds(LOGOUT_LIMIT)
+        )
+    } else if status == (ProcessExitStatus::Exited { code: 0 }) {
+        format!("‹logout request sent: {answer}›")
+    } else {
+        format!("‹logout request failed: {answer} ({})›", describe(status))
+    }
+}
+
+/// The start of what `pipe` carries until it ends.
+fn read_some(pipe: PipeReader) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let _ = pipe.take(LOGOUT_OUTPUT_BYTES).read_to_end(&mut bytes);
+    bytes
+}
+
 /// The OS's text and the number, as the Log tab shows OS errors: "No such file or directory
-/// (errno 2)".
+/// (errno 2)". On Windows the number is a Windows error code.
 fn describe_errno(errno: i32) -> String {
     let shown = io::Error::from_raw_os_error(errno).to_string();
     let text = shown

@@ -9,15 +9,18 @@ use fvm_contract::app_internal::problem::ConfigProblemKind;
 
 use super::text::disallowed_in_value;
 use super::{
-    AWAY_MINUTES, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES,
-    OTP_METHODS, PORTS, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, WEEKDAYS, minutes,
-    normalized_days,
+    AWAY_MINUTES, ClientRules, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS,
+    MIN_SLEEP_MINUTES, OTP_METHODS, PORTS, Platform, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings,
+    WEEKDAYS, minutes, normalized_days,
 };
 use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
 
 /// Settings that pass come back unchanged when the text is read. The certificate values are not
-/// checked again: only the client's rule produces them.
-pub(super) fn write(settings: &Settings, client_name: &str) -> Result<String, ConfigProblemKind> {
+/// checked again: only the clients' rules produce them.
+pub(super) fn write(
+    settings: &Settings,
+    client: &ClientRules<'_>,
+) -> Result<String, ConfigProblemKind> {
     let strings = [
         ("vpn.host", &settings.vpn.host),
         ("vpn.username", &settings.vpn.username),
@@ -108,7 +111,7 @@ pub(super) fn write(settings: &Settings, client_name: &str) -> Result<String, Co
             }
         }
     }
-    let text = render(settings, client_name);
+    let text = render(settings, client);
     if text.len() > MAX_FILE_BYTES {
         return Err(ConfigProblemKind::FileTooLarge {
             byte_count: text.len() as u64,
@@ -118,7 +121,55 @@ pub(super) fn write(settings: &Settings, client_name: &str) -> Result<String, Co
     Ok(text)
 }
 
-fn render(settings: &Settings, client_name: &str) -> String {
+/// The comments that describe the OS the app runs on: where secrets live and how exception routes
+/// are kept.
+struct Wording {
+    secret_store: &'static str,
+    secret_store_long: &'static str,
+    device: &'static str,
+    network: &'static str,
+    router: &'static str,
+    port: String,
+    route_storage: &'static str,
+}
+
+fn wording(client: &ClientRules<'_>) -> Wording {
+    match client.platform {
+        Platform::MacOs => Wording {
+            secret_store: "the Keychain",
+            secret_store_long: "the macOS login Keychain",
+            device: "Mac",
+            network: "network service",
+            router: "router",
+            port: format!(
+                "Filled in on first launch from an existing {} config, if any (e.g. 8443). 443 is the default when the file has no value.",
+                client.name
+            ),
+            route_storage: "The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.",
+        },
+        Platform::Windows => Wording {
+            secret_store: "Credential Manager",
+            secret_store_long: "Windows Credential Manager",
+            device: "PC",
+            network: "network interface",
+            router: "gateway",
+            port: "VPN gateway port (e.g. 8443). 443 is the default when the file has no value."
+                .to_owned(),
+            route_storage: "The app keeps them as persistent routes of that interface whether or not the VPN is connected, so they also survive a reboot. On a network listed above, persistent routes added outside the app through the same gateway are added here unless they overlap a target; routes through other gateways are left alone.",
+        },
+    }
+}
+
+fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
+    let Wording {
+        secret_store,
+        secret_store_long,
+        device,
+        network,
+        router,
+        port: port_comment,
+        route_storage,
+    } = wording(client);
     let vpn = &settings.vpn;
     let otp = &settings.otp;
     let connection = &settings.connection;
@@ -143,18 +194,21 @@ fn render(settings: &Settings, client_name: &str) -> String {
         .join(", ");
     let time = |time: TimeOfDay| quoted(&format!("{:02}:{:02}", time.hour, time.minute));
     assert!(
-        vpn.trusted_certs.len() <= MAX_TRUSTED_CERTS,
-        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values"
+        vpn.trusted_certs.len() <= MAX_TRUSTED_CERTS
+            && vpn.trusted_cert_pins.len() <= MAX_TRUSTED_CERTS,
+        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values per list"
     );
     let trusted_certs = list(&vpn.trusted_certs);
+    let trusted_cert_pins = list(&vpn.trusted_cert_pins);
     let networks = list(&settings.routes.networks);
     let bypass_vpn = list(&settings.routes.bypass_vpn);
     let (shortest_prefix, longest_prefix) = (MIN_PREFIX_LENGTH, MAX_PREFIX_LENGTH);
     format!(
         r#"# FortiVPNManager configuration file
 #
-# - Passwords (VPN password, Gmail app password) and the Google sign-in live in the macOS login Keychain, not in this file.
-# - The app rewrites this file when you save in Settings, when it records a new server certificate, and when it adds routes found on the network service to routes.bypass_vpn. Comments you added and unknown keys are removed then.
+# - Passwords (VPN password, Gmail app password) and the Google sign-in live in {secret_store_long}, not in this file.
+# - The app rewrites this file when you save in Settings, when it records a new server certificate, and when it adds routes found on the {network} to routes.bypass_vpn. Comments you added and unknown keys are removed then.
+# - The same file works on macOS and Windows.
 # - Do not write leading zeros in numbers (0443 is an error). Write numbers and true/false without quotes.
 # - This file contains the server and account details, so do not commit it to a public repository (dotfiles etc.).
 # - Changes take effect from the next connection. The session max time and proactive reconnect margin are recalculated immediately, and the routes section is applied right away.
@@ -162,21 +216,24 @@ schema_version: {SCHEMA_VERSION}
 vpn:
   # VPN gateway address (host name or IPv4 address).
   host: {host}
-  # Filled in on first launch from an existing {client_name} config, if any (e.g. 8443). 443 is the default when the file has no value.
+  # {port_comment}
   port: {port}
-  # VPN username. The password is stored in the Keychain per 'username@server address'.
+  # VPN username. The password is stored in {secret_store} per 'username@server address'.
   username: {username}
   # Authentication realm. Leave it empty ("") if not needed.
   realm: {realm}
-  # SHA-256 digests of the server certificate. The app fills these in on the first connection and manages them; no need to edit by hand.
-  # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries).
+  # Server certificate values the app trusts. It fills them in on the first connection and manages them; no need to edit by hand.
+  # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries per list). A new server address or port clears both lists.
+  # SHA-256 digests of the certificate, used on macOS.
   trusted_certs:{trusted_certs}
+  # Public key pins of the certificate (pin-sha256:...), used on Windows.
+  trusted_cert_pins:{trusted_cert_pins}
 otp:
-  # Gmail (Google Workspace) address that receives the OTP emails. The app password is in the Keychain.
+  # Gmail (Google Workspace) address that receives the OTP emails. The app password is in {secret_store}.
   gmail_address: {gmail_address}
   # How the app reads the OTP emails: "imap" (Gmail app password) or "gmail_api" (Gmail API with Google sign-in; falls back to IMAP when the sign-in fails and an app password is stored).
   method: {method}
-  # OAuth client ID of the Google Cloud desktop app used by "gmail_api". Set by importing the client JSON in Settings; its client secret is in the Keychain.
+  # OAuth client ID of the Google Cloud desktop app used by "gmail_api". Set by importing the client JSON in Settings; its client secret is in {secret_store}.
   google_client_id: {google_client_id}
 connection:
   # Connect automatically when the app starts.
@@ -188,13 +245,13 @@ connection:
   # When enabled is true, reconnect on wake after sleeping for at least min_sleep_minutes minutes ({min_sleep_range}) while connected.
   reconnect_after_sleep: {{ enabled: {after_sleep_enabled}, min_sleep_minutes: {min_sleep_minutes} }}
   # Scheduled hours. When enabled is true, connect at start ("HH:mm") on the listed days (mon, tue, wed, thu, fri, sat, sun); start must be earlier than end.
-  # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the Mac asleep) and stop once you have been away for away_minutes minutes ({away_range}).
+  # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the {device} asleep) and stop once you have been away for away_minutes minutes ({away_range}).
   schedule: {{ enabled: {schedule_enabled}, days: [{days}], start: {start}, end: {end}, away_minutes: {away_minutes} }}
 routes:
-  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this Mac's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
+  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this {device}'s IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
   networks:{networks}
-  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the router of the active network service (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this Mac's own network need no route and are skipped.
-  # The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.
+  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the {router} of the active {network} (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this {device}'s own network need no route and are skipped.
+  # {route_storage}
   bypass_vpn:{bypass_vpn}
 "#,
         host = quoted(&vpn.host),

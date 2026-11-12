@@ -1,4 +1,5 @@
 //! Whole runs against the fake openfortivpn scripts.
+#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
 
 mod common;
 
@@ -381,6 +382,7 @@ fn output_is_batched_and_delivered_before_events() {
     for delivered in &session.delivered {
         match delivered {
             Delivered::Output(_) => output_since_event = true,
+            Delivered::ClientStarted => {}
             Delivered::Event(kind) => {
                 let otp_prompt = matches!(
                     kind,

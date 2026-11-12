@@ -371,6 +371,60 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
     );
 }
 
+/// The app on each OS warns only about its own client's list; the other is kept for the app on the
+/// other OS, without the values that list cannot use.
+#[test]
+fn only_the_clients_own_list_warns() {
+    let yaml = format!(
+        "vpn:\n  trusted_certs:\n    - {a}\n    - not-a-digest\n    - {a}\n  trusted_cert_pins:\n    - {pin}\n    - not-a-pin\n    - {pin}\n",
+        a = digest_a(),
+        pin = pin_a(),
+    );
+    let on_macos = decode(&yaml);
+    let on_windows = config::read(yaml.as_bytes(), &windows_client()).unwrap();
+    for loaded in [&on_macos, &on_windows] {
+        assert_eq!(loaded.settings.vpn.trusted_certs, [digest_a()]);
+        assert_eq!(loaded.settings.vpn.trusted_cert_pins, [pin_a()]);
+    }
+    let expected = |first_line| {
+        vec![
+            warning(
+                ConfigWarningKind::InvalidTrustedCert { index: 1 },
+                first_line,
+                7,
+            ),
+            warning(
+                ConfigWarningKind::DuplicateTrustedCert { index: 2 },
+                first_line + 1,
+                7,
+            ),
+        ]
+    };
+    assert_eq!(on_macos.warnings, expected(4));
+    assert_eq!(on_windows.warnings, expected(8));
+}
+
+#[test]
+fn pins_past_the_limit_are_dropped() {
+    let pins: Vec<String> = ['A', 'B', 'C', 'D', 'E']
+        .iter()
+        .map(|fill| format!("pin-sha256:{}=", fill.to_string().repeat(43)))
+        .collect();
+    let items: String = pins.iter().map(|pin| format!("    - {pin}\n")).collect();
+    let yaml = format!("vpn:\n  trusted_cert_pins:\n{items}");
+    let loaded = config::read(yaml.as_bytes(), &windows_client()).unwrap();
+    assert_eq!(loaded.settings.vpn.trusted_cert_pins, pins[..4]);
+    assert_eq!(
+        loaded.warnings,
+        [warning(
+            ConfigWarningKind::TooManyTrustedCerts { limit: 4 },
+            7,
+            7
+        )]
+    );
+    assert!(decode(&yaml).warnings.is_empty());
+}
+
 #[test]
 fn an_all_digit_certificate_value_stays_text() {
     let digits = "0123456789".repeat(6) + "0123";

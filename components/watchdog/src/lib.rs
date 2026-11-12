@@ -2,7 +2,7 @@
 //! stage time limits, stopping, and the exit report. Everything that depends on the client, its
 //! name, prompts, output wording and how it is stopped, comes from the caller's `Backend`.
 //!
-//! The process this runs in must ignore SIGPIPE. The password and the OTP go to the client's stdin
+//! On Unix the process this runs in must ignore SIGPIPE. The password and the OTP go to the client's stdin
 //! pipe, and a write after the client exited must fail with EPIPE instead of killing the process.
 //! macOS can switch SIGPIPE off for a single pipe only through an fcntl that no safe Rust API
 //! offers. A Rust `main` ignores SIGPIPE by itself; the macOS Helper's Swift `main` does it
@@ -12,9 +12,13 @@ mod lines;
 mod run;
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod windows;
 
 #[cfg(unix)]
 use unix as os;
+#[cfg(windows)]
+use windows as os;
 
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -29,6 +33,9 @@ pub use run::Run;
 pub enum Report {
     /// Log lines, at least one.
     Output(Vec<OutputLine>),
+    /// A client process started: the first one, or the tunnel run of a client that logs in and
+    /// opens the tunnel in separate runs. `Run::process_id` gives its pid until it exits.
+    ClientStarted,
     /// A milestone, or `Exited`, the run's last report.
     Event(HelperEventKind),
     /// The client exited without restoring the routes it changed. The run reports its exit once

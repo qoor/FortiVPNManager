@@ -1,5 +1,6 @@
 //! A test-only backend that reads output the way openfortivpn 1.24.1 prints it (the fixture
-//! scripts copy its strings), and a session that runs a fixture and records what the run reports.
+//! scripts copy its strings), plus a session line like openconnect's login run prints, and a session
+//! that runs a fixture and records what the run reports.
 
 #![allow(dead_code)] // Each test file uses a different part.
 
@@ -17,9 +18,10 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{
     Backend, ClientExecutable, ClientProblem, Finding, LaunchSpec, OutputInterpreter, Prompt,
-    RouteRepairOutcome, UntestedVersion,
+    RouteRepairOutcome, SessionInputs, UntestedVersion,
 };
 use fvm_watchdog::{Report, Run, StageLimits, Timing};
+use zeroize::Zeroizing;
 
 pub const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 pub const REJECTED_DIGEST: &str =
@@ -129,6 +131,17 @@ impl OutputInterpreter for FakeInterpreter {
         if source != OutputSource::Stdout {
             return None;
         }
+        if let Some(quoted) = text.find("COOKIE=").map(|at| &text[at + "COOKIE=".len()..]) {
+            let cookie = quoted
+                .strip_prefix('\'')
+                .and_then(|rest| rest.strip_suffix('\''));
+            return Some(cookie.map_or(Finding::Hidden, |cookie| {
+                Finding::Session(SessionInputs {
+                    tunnel: Zeroizing::new(format!("{cookie}\n").into_bytes()),
+                    logout: Zeroizing::new(format!("Cookie: {cookie}\n").into_bytes()),
+                })
+            }));
+        }
         let (level, message) = ["INFO:   ", "WARN:   ", "ERROR:  ", "DEBUG:  "]
             .into_iter()
             .find_map(|prefix| Some((prefix, text.strip_prefix(prefix)?)))?;
@@ -236,13 +249,18 @@ pub fn fixture(name: &str, args: &[&str], setup: Setup) -> Session {
 /// Runs `/bin/sh -c <script>` with the record file as `$1`.
 pub fn script(script: &str, setup: Setup) -> Session {
     let record = RecordFile::new();
+    let launch = script_launch(script, &record);
+    Session::start(launch, record, setup)
+}
+
+pub fn script_launch(script: &str, record: &RecordFile) -> LaunchSpec {
     let args = vec![
         "-c".to_owned(),
         script.to_owned(),
         "sh".to_owned(),
         record.path.display().to_string(),
     ];
-    Session::start(shell("/bin/sh", args), record, setup)
+    shell("/bin/sh", args)
 }
 
 pub fn shell(program: &str, args: Vec<String>) -> LaunchSpec {
@@ -251,6 +269,7 @@ pub fn shell(program: &str, args: Vec<String>) -> LaunchSpec {
         args,
         env: vec![("PATH".to_owned(), PATH.to_owned())],
         config_file: None,
+        session: None,
     }
 }
 
@@ -268,6 +287,7 @@ pub fn sha256(text: &str) -> String {
 #[derive(Debug)]
 pub enum Delivered {
     Output(Vec<OutputLine>),
+    ClientStarted,
     Event(HelperEventKind),
     RepairRoutes,
 }
@@ -353,6 +373,7 @@ impl Session {
     fn record_report(&mut self, report: Report) {
         match report {
             Report::Output(lines) => self.delivered.push(Delivered::Output(lines)),
+            Report::ClientStarted => self.delivered.push(Delivered::ClientStarted),
             Report::Event(kind) => {
                 let prompted = matches!(
                     kind,

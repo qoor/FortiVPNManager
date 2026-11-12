@@ -1,6 +1,7 @@
 //! Backend adapters: what is particular to one VPN client, behind `fvm_contract::backend::Backend`.
-//! The account and certificate value checks, which the app uses, compile on every OS; finding and
-//! running a client only where it runs.
+//! Both compile on every OS: the app on either OS reads both clients' certificate values in
+//! config.yaml. openfortivpn runs only on Unix, and openconnect is used on Windows.
 
+pub mod openconnect;
 pub mod openfortivpn;
 mod values;

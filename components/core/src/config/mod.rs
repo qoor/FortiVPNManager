@@ -27,7 +27,7 @@ pub const SESSION_MAX_MINUTES: RangeInclusive<i64> = 10..=1440;
 pub const MARGIN_MINUTES: RangeInclusive<i64> = 1..=60;
 pub const MIN_SLEEP_MINUTES: RangeInclusive<i64> = 1..=1440;
 pub const AWAY_MINUTES: RangeInclusive<i64> = 1..=1440;
-/// Certificate values kept in `vpn.trusted_certs`, newest first.
+/// Certificate values kept in each certificate list, newest first.
 pub const MAX_TRUSTED_CERTS: usize = 4;
 
 /// The `schema_version` this build reads and writes.
@@ -48,13 +48,36 @@ const WEEKDAYS: [(&str, Weekday); 7] = [
     ("sun", Weekday::Sun),
 ];
 
-/// What the file needs from the VPN client's backend adapter.
+/// What the file needs from the VPN clients' backend adapters and from the OS the app runs on.
+/// One file serves both OSes, each with its own client, so both certificate lists are read and
+/// written back; the app uses only its client's list.
 pub struct ClientRules<'a> {
-    /// The client's name, as the comments of a written file show it.
+    /// The client this app runs, as the comments of a written file show it.
     pub name: &'a str,
-    /// The canonical form of a gateway certificate value the client accepts, or `None` when the
-    /// text is not one.
-    pub certificate_value: &'a dyn Fn(&str) -> Option<String>,
+    /// The OS the comments of a written file describe.
+    pub platform: Platform,
+    /// The list the client trusts. Values of the other list that cannot be used are dropped
+    /// without a warning: the app on the other OS warns about them.
+    pub certificate_list: CertificateList,
+    /// The canonical form of a digest (`vpn.trusted_certs`), or `None` when the text is not one.
+    pub digest_value: &'a dyn Fn(&str) -> Option<String>,
+    /// The canonical form of a pin (`vpn.trusted_cert_pins`), or `None` when the text is not one.
+    pub pin_value: &'a dyn Fn(&str) -> Option<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Platform {
+    MacOs,
+    Windows,
+}
+
+/// The two lists of gateway certificate values; their formats differ by VPN client.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CertificateList {
+    /// `vpn.trusted_certs`: SHA-256 digests of the certificate (openfortivpn).
+    Digests,
+    /// `vpn.trusted_cert_pins`: `pin-sha256:` values of its public key (openconnect).
+    Pins,
 }
 
 /// Everything config.yaml holds. Passwords are never part of it. Missing keys and null values
@@ -75,9 +98,26 @@ pub struct Vpn {
     pub username: String,
     /// Empty means none.
     pub realm: String,
-    /// Gateway certificate values to trust, newest first, in the client's canonical form. Managed
-    /// by the app.
+    /// Gateway certificate digests to trust, newest first, in canonical form. Managed by the app.
     pub trusted_certs: Vec<String>,
+    /// Gateway public key pins to trust, newest first, in canonical form. Managed by the app.
+    pub trusted_cert_pins: Vec<String>,
+}
+
+impl Vpn {
+    pub fn trusted(&self, list: CertificateList) -> &[String] {
+        match list {
+            CertificateList::Digests => &self.trusted_certs,
+            CertificateList::Pins => &self.trusted_cert_pins,
+        }
+    }
+
+    pub fn trusted_mut(&mut self, list: CertificateList) -> &mut Vec<String> {
+        match list {
+            CertificateList::Digests => &mut self.trusted_certs,
+            CertificateList::Pins => &mut self.trusted_cert_pins,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -144,6 +184,7 @@ impl Default for Settings {
                 username: String::new(),
                 realm: String::new(),
                 trusted_certs: Vec::new(),
+                trusted_cert_pins: Vec::new(),
             },
             otp: Otp {
                 gmail_address: String::new(),
@@ -237,7 +278,7 @@ pub fn update(
     if base.as_ref() == Some(&settings) {
         return Ok(Update::Unchanged(settings));
     }
-    match template::write(&settings, client.name) {
+    match template::write(&settings, client) {
         Ok(text) => Ok(Update::Write { settings, text }),
         Err(kind) => Err(UpdateError::Settings(ConfigProblem {
             kind,

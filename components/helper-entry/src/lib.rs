@@ -1,10 +1,10 @@
 //! Helper entry: the Helper's work that is the same on every OS. It cleans up what an earlier Helper
 //! left behind, handles the app requests the OS side passes on and runs the VPN client through the
 //! watchdog with the backend adapter it is given. The OS side, Swift's OS integration Helper on
-//! macOS, takes the app connections and does what the entry asks of it; the two exchange the
-//! messages in `fvm_contract::helper_internal`. What differs per OS, telling processes apart,
-//! stopping leftover ones and keeping the run directory private, comes from the OS's start as a
-//! `Platform`, so this crate uses no OS-specific API.
+//! macOS and the service's own part on Windows, takes the app connections and does what the entry
+//! asks of it; the two exchange the messages in `fvm_contract::helper_internal`. What differs per
+//! OS, telling processes apart, stopping leftover ones and keeping the run directory private, comes
+//! from the OS's start as a `Platform`, so this crate uses no OS-specific API.
 
 mod entry;
 mod leftovers;

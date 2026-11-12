@@ -384,6 +384,29 @@ fn a_hand_edit_that_breaks_or_fixes_the_file_updates_the_setup_list() {
     });
 }
 
+/// Both certificate lists belong to the gateway: a hand edit of the server address empties them,
+/// the other OS's list included.
+#[test]
+fn a_new_server_address_empties_both_certificate_lists() {
+    let digest = "a".repeat(64);
+    let pin = format!("pin-sha256:{}=", "A".repeat(43));
+    let with_values = ACCOUNT.replace(
+        "  trusted_certs: []\n",
+        &format!("  trusted_certs: [\"{digest}\"]\n  trusted_cert_pins: [\"{pin}\"]\n"),
+    );
+    let mut swift = Swift::new();
+    swift.write_config(&with_values);
+    swift.launch();
+    swift.settle();
+    assert!(swift.config_text().contains(&pin));
+    swift.write_config(&with_values.replace("vpn.example.com", "vpn2.example.com"));
+    swift.settle_until("the emptied lists", |swift| {
+        let text = swift.config_text();
+        text.contains("  trusted_certs: []\n") && text.contains("  trusted_cert_pins: []\n")
+    });
+    assert!(swift.config_text().contains("vpn2.example.com"));
+}
+
 #[test]
 fn a_launch_with_a_missing_password_asks_for_setup_and_opens_settings_once() {
     let mut swift = Swift::new();

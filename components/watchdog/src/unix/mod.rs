@@ -109,12 +109,13 @@ impl Child {
     }
 
     /// SIGTERM to the client alone: what it started, such as /sbin/route restoring the routes,
-    /// must be left to finish. Returns what was done, for the Log tab.
-    pub(crate) fn terminate(&self) -> &'static str {
+    /// must be left to finish. Returns what was done, for the Log tab, and that it was a request,
+    /// which the client may answer by logging out.
+    pub(crate) fn terminate(&self) -> (&'static str, bool) {
         // An unreaped child takes a signal even after it exited.
         rustix::process::kill_process(self.0, Signal::TERM)
             .expect("signalling the unreaped client");
-        "sent SIGTERM"
+        ("sent SIGTERM", false)
     }
 
     /// SIGKILL to the client, then to its whole process group.

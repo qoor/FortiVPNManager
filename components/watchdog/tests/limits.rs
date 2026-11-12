@@ -1,4 +1,5 @@
 //! Stage time limits and stopping.
+#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
 
 mod common;
 

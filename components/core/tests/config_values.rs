@@ -46,6 +46,8 @@ vpn:
   trusted_certs:
     - {a}
     - \"{b}\"
+  trusted_cert_pins:
+    - {pin}
 otp:
   gmail_address: otp@example.com
   method: gmail_api
@@ -75,7 +77,8 @@ routes:
     - 10.30.161.16
     - \"10.30.170.0/24\"",
         a = digest_a(),
-        b = digest_b()
+        b = digest_b(),
+        pin = pin_a()
     );
     let loaded = decode(&yaml);
     assert_eq!(loaded.settings, non_default());
@@ -86,7 +89,7 @@ routes:
 fn a_full_document_in_flow_style() {
     let yaml = format!(
         "{{schema_version: 1, vpn: {{host: vpn.example.com, port: 8443, username: bob, realm: corp,
- trusted_certs: [{a}, '{b}']}},
+ trusted_certs: [{a}, '{b}'], trusted_cert_pins: [\"{pin}\"]}},
  otp: {{gmail_address: otp@example.com, method: \"gmail_api\", google_client_id: '{GOOGLE_CLIENT_ID}'}},
  connection: {{auto_connect_on_launch: false, session_max_minutes: 175,
  proactive_reconnect: {{enabled: false, margin_minutes: 7}},
@@ -94,7 +97,8 @@ fn a_full_document_in_flow_style() {
  schedule: {{enabled: true, days: [mon, wed, sat, wed], start: 8:30, end: '19:05', away_minutes: 90}}}},
  routes: {{networks: [\"10.20.161.0/24\"], bypass_vpn: [10.30.161.16/32, '10.30.170.0/24']}}}}",
         a = digest_a(),
-        b = digest_b()
+        b = digest_b(),
+        pin = pin_a()
     );
     assert_eq!(decode(&yaml).settings, non_default());
 }

@@ -1,4 +1,5 @@
 //! The conditions the client starts under.
+#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
 
 mod common;
 

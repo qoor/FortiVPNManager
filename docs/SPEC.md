@@ -5,9 +5,10 @@
 # 0. 문서 정보
 
 - **목적**: 구현과 검증의 기준이 되는 기능 명세다. 기능이 바뀌면 이 문서를 먼저 고친다.
-- **범위**: macOS와 openfortivpn backend. openconnect와 Linux·Windows는 들어갈 자리만 둔다.
+- **범위**: macOS + openfortivpn, Windows + openconnect. openconnect 처리는 나중에 macOS와 Linux에서도 쓸 수 있게 OS와 무관하게 정한다. Linux는 들어갈 자리만 둔다.
 - **숫자**: 사용자에게 보이는 규칙일 때만 적는다. 그 밖의 시간 값과 횟수는 코드가 기준이다.
 - **기술**: 어떤 기술로 만드는지는 이 문서에 적지 않는다. 지켜야 할 외부 제약일 때만 적는다. 구조와 기술 결정은 DESIGN.md를 본다.
+- **OS 표기**: 본문의 Keychain은 그 OS의 비밀값 저장소(Windows는 Credential Manager)를, "이 Mac"은 이 기기를 뜻한다. openfortivpn이라고 적은 규칙 중 VPN client와 무관한 것은 openconnect에도 똑같이 적용된다. OS나 VPN client에 따라 다른 것만 따로 적는다.
 
 | 용어 | 뜻 |
 |---|---|
@@ -36,16 +37,20 @@
 | 런타임 | 앱 | 조율, 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화 |
 | 판단 코어 | 앱 | Connection Manager 규칙과 데이터 형식 해석. 바깥과 직접 통신하지 않음 |
 | 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지켜야 할 약속 |
-| backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(지금은 openfortivpn) |
+| backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(openfortivpn, openconnect) |
 | watchdog | Helper | VPN client 실행, 입력, 시간 제한, 종료 |
 | Helper entry | Helper | 앱 요청 처리, 실행 기록과 남은 프로세스 정리 |
 | OS 연동 Helper (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 쓰기 |
-| openfortivpn | Helper가 실행 | VPN client와 그 pppd |
+| UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
+| OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
+| Helper 서비스 (Windows) | Helper | Helper entry를 쓰고 OS 연동 Helper의 일을 함: 앱 연결 확인, 남은 프로세스와 route 정리, 예외 route 쓰기 |
+| openfortivpn | Helper가 실행 | macOS의 VPN client와 그 pppd |
+| openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
-| macOS | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
+| macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
 
-Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스다. (macOS)가 붙은 구성 요소는 macOS에만 있고, 나머지는 모든 OS에 공통이다. 본문에서는 (macOS)를 뺀다.
+Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스다. macOS에서는 launchd daemon, Windows에서는 Windows 서비스로 실행된다. (macOS)·(Windows)가 붙은 구성 요소는 그 OS에만 있고, 나머지는 모든 OS에 공통이다. 본문에서는 OS 표기를 뺀다. 그림은 macOS 구성이다. Windows에서도 앱 쪽 구성은 같고, Helper 쪽은 Helper 서비스 하나가 Helper entry를 쓰면서 OS 연동 Helper의 자리를 맡는다.
 
 ## 1.2 구성 요소 사이의 연결
 
@@ -81,15 +86,16 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **제공 기능**: F-CF-02 설정 저장, F-CF-03 변경 감지, F-CF-04 기존 openfortivpn 설정 가져오기, F-OT-01 OTP 세션, F-OT-02 Gmail API 방식, F-OT-03 IMAP 방식과 대체 경로, F-OT-04 사용한 메일 정리와 스팸함 확인, F-OT-05 Gmail 연결 테스트, F-GA-01 Google 계정 연결과 해제, F-GA-02 OAuth client, F-BR-02 동기화, F-SR-01 state.json, F-SR-02 로그, F-RT-01 이벤트 처리와 타이머, F-RT-02 UI 메시지
 
 ## 2.4 backend adapter
-- **설명**: 특정 VPN client에만 해당하는 처리를 모은다. 지금은 openfortivpn 하나이고, 나중에 openconnect가 같은 인터페이스로 붙는다.
+- **설명**: 특정 VPN client에만 해당하는 처리를 모은다. openfortivpn과 openconnect가 같은 인터페이스로 붙는다.
 - **역할**
   - 실행 파일과 버전 확인, 실행 요청 검증, 설정 파일과 argv 만들기
-  - 출력 해석, 종료 유예 시간, 기존 설정 읽기, 인증서 값 형식
-- **모르는 것**: 프로세스 생성과 signal, 앱과의 통신 수단, 재시도 판단.
+  - 출력 해석, 종료 유예 시간, 세션 cookie와 logout 요청, 기존 설정 읽기, 인증서 값 형식
+  - VPN client가 여러 OS에서 돌면 OS마다 다른 것(실행 파일 위치, 환경 변수, 일부 출력 문구)
+- **모르는 것**: 프로세스 생성과 종료 수단, 앱과의 통신 수단, 재시도 판단.
 - **제공 기능**: F-VR-01 client 준비, F-VR-03 출력 해석
 
 ## 2.5 watchdog
-- **설명**: VPN client 프로세스 하나를 실행하고 끝날 때까지 지킨다. 프로세스를 다루는 방식이 OS마다 달라 그 부분만 OS별로 둔다.
+- **설명**: 시도 하나의 VPN client 실행을 끝날 때까지 지킨다. 로그인과 터널을 나눠 실행하는 client는 두 프로세스를 차례로 실행하고, 강제로 끝낸 뒤에는 logout 요청을 보낸다. 프로세스를 다루는 방식이 OS마다 달라 그 부분만 OS별(Unix, Windows)로 둔다.
 - **역할**
   - 프로세스 실행, stdin 입력, 출력 줄 조립
   - 단계별 시간 제한, 종료, 종료 사실 기록
@@ -128,6 +134,31 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 앱이 보낸 요청의 내용(버전 확인 제외), VPN client 실행.
 - **제공 기능**: F-SW-03 OS 연동 Helper (macOS)
 
+## 2.10 UI (Windows)
+- **설명**: UI (macOS)와 같은 일을 Windows에서 한다. 사용자에게 보이는 구성(창, 메뉴, pane과 그 순서, pane 고르는 방식, pane 안 항목의 묶음과 순서)은 macOS와 같고, 컨트롤은 Windows 기본 컨트롤로 그린다.
+- **역할**
+  - 알림 영역 아이콘과 메뉴, 설정창 pane
+  - 종류와 값으로 문장 만들기와 번역, 상대 시간 표시
+- **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
+- **제공 기능**: F-WN-01 UI 표시와 문장 (Windows)
+
+## 2.11 OS 연동 (Windows)
+- **설명**: 런타임이 요청하는 OS 기능을 Windows에서 제공하고 시스템 이벤트를 알린다. 런타임과 주고받는 메시지는 macOS와 같다.
+- **역할**
+  - 비밀값 저장, Helper 서비스와의 통신, 알림, 브라우저 열기, 앱 수명
+  - 시스템 이벤트와 네트워크 정보
+- **모르는 것**: 이벤트의 의미, 앱이 Helper와 주고받는 내용(버전 확인 제외).
+- **제공 기능**: F-WN-02 OS port (Windows)
+
+## 2.12 Helper 서비스 (Windows)
+- **설명**: Windows의 Helper다. Helper entry를 그대로 쓰고, macOS에서 OS 연동 Helper가 하는 일을 직접 한다.
+- **역할**
+  - 서비스 수명, 앱 연결 받기와 확인
+  - Helper entry에 넘길 Windows의 프로세스 확인과 종료, 실행 기록 폴더 권한
+  - 게이트웨이 host route 정리, 예외 route 읽기·쓰기
+- **모르는 것**: VPN client 출력 문구, 재시도 판단.
+- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper 서비스 (Windows)
+
 # 3. 기능 명세
 
 ## 3.1 Connection Manager (F-CM)
@@ -163,12 +194,12 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   1. 앱이 끝낸 실행(연결 해제, 사전 재연결, 잠자기, 앱 종료)은 분류하지 않는다.
   2. Gmail 세션 실패로 끝낸 실행은 인증 문제면 치명, 아니면 네트워크 오류다.
   3. OTP 제출 전의 인증서 거부는 즉시 한 번 다시 시도하고 실패로 세지 않는다. 다시 거부되면 네트워크 오류다.
-  4. 터널이 올라온 뒤 앱도 Helper도 멈추지 않은 client가 signal로 끝났으면 강제 종료다. 유지 시간과 관계없이 인증 실패로 세지 않는다. 연결됨이나 터널 단계의 시도 중에 Helper 연결이 끊긴 것도 강제 종료다. 이 연결은 Mac 안에만 있어 Helper 프로세스가 끝날 때만 끊긴다.
+  4. 터널이 올라온 뒤 앱도 Helper도 멈추지 않은 client가 signal로 끝났으면 강제 종료다. Windows에서는 어떻게 끝났든 강제 종료다. 유지 시간과 관계없이 인증 실패로 세지 않는다. 연결됨이나 터널 단계의 시도 중에 Helper 연결이 끊긴 것도 강제 종료다. 이 연결은 기기 안에만 있어 Helper 프로세스가 끝날 때만 끊긴다.
   5. 안정 세션이 요청 없이 끝났으면 서버가 끝낸 것으로 본다.
   6. 게이트웨이에 닿기 전에 끝났으면 네트워크 오류다.
   7. 로그인 단계에서 끝났으면 인증 실패다. 시도 중 네트워크가 바뀌었거나 깨어난 직후면 네트워크 오류로 본다.
   8. 그 뒤 단계의 실패(OTP 미수신·거부, 인증 뒤 터널 거부, 너무 빨리 끊김 등)는 인증 실패다.
-- **제약**: FortiGate는 같은 IP의 인증이 두 번 실패하면 일정 시간 차단한다. 그래서 통신 끊김일 수 있어도 인증 실패로 세고, 터널이 올라오기 전의 강제 종료도 단계에 따라 센다. pppd만 끝나면 client는 정상 종료하므로 서버 종료와 구분할 수 없다.
+- **제약**: FortiGate는 같은 IP의 인증이 두 번 실패하면 일정 시간 차단한다. 그래서 통신 끊김일 수 있어도 인증 실패로 세고, 터널이 올라오기 전의 강제 종료도 단계에 따라 센다. pppd만 끝나면 client는 정상 종료하므로 서버 종료와 구분할 수 없다. Windows에는 signal이 없어서 밖에서 강제로 끝낸 openconnect를 다른 종료와 구분할 수 없다. 그래서 Windows는 터널이 올라온 뒤 요청 없이 끝난 것을 모두 강제 종료로 본다. 로그인은 이미 성공했으므로 FortiGate 차단과 무관하고, 반복은 F-CM-04의 3과 6이 막는다.
 
 ### F-CM-04 재시도와 실패 제한
 - **설명**: 연결이 실패했을 때 다시 시도할지, 언제 할지, 언제 멈출지 정한다. FortiGate의 차단 때문에 인증 실패를 보수적으로 센다.
@@ -230,13 +261,15 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 ### F-CM-09 서버 인증서 자동 신뢰
 - **설명**: 사용자가 인증서를 신경 쓰지 않도록 게이트웨이 인증서를 무조건 자동 신뢰한다.
 - **담당**: 판단 코어, backend adapter, 런타임
-- **입력 / 출력**: 종료 사실의 인증서 값 / `vpn.trusted_certs` 갱신, 즉시 재시도
+- **입력 / 출력**: 종료 사실의 인증서 값 / `vpn.trusted_certs` 또는 `vpn.trusted_cert_pins` 갱신, 즉시 재시도
 - **세부 기능**
-  1. openfortivpn이 거부하며 출력한 SHA-256 digest를 저장하고 다음 연결부터 넘긴다. 그래서 평소에는 openfortivpn을 한 번만 실행한다.
-  2. 새 값을 목록 앞에 두고 최대 4개를 남긴다.
-  3. 실행이 지금 설정된 게이트웨이를 향했을 때만 저장한다.
-  4. 서버 주소나 port가 바뀌면 저장된 값을 비운다. 사용자가 손으로 넣은 값은 그대로 쓴다.
-- **제약**: 거부는 비밀번호를 보내기 전에 일어나므로 계정 잠금과 무관하다. 공용 네트워크의 MITM 위험은 사용자가 감수했다(DESIGN §8).
+  1. VPN client가 거부하며 출력한 인증서 값을 저장하고 다음 연결부터 넘긴다. 그래서 평소에는 VPN client를 한 번만 실행한다.
+  2. 값의 형식이 VPN client마다 달라 목록을 따로 둔다. openfortivpn의 SHA-256 digest는 `vpn.trusted_certs`에, openconnect의 `pin-sha256:` 값은 `vpn.trusted_cert_pins`에 둔다. 지금 쓰는 VPN client의 목록만 쓰고, 그 목록의 문제만 경고한다. 다른 목록은 다른 VPN client를 쓰는 앱(다른 OS의 앱 등)을 위해 그대로 두되, 그 형식에 맞지 않는 값은 파일을 다시 쓸 때 빠진다.
+  3. 새 값을 목록 앞에 두고 최대 4개를 남긴다.
+  4. 실행이 지금 설정된 게이트웨이를 향했을 때만 저장한다.
+  5. 서버 주소나 port가 바뀌면 두 목록을 모두 비운다. 사용자가 손으로 넣은 값은 그대로 쓴다.
+  6. openconnect에는 저장된 값이 없어도 맞지 않는 자리표시 값을 하나 넘긴다. 그래야 거부하며 실제 값을 출력하고 스스로 끝난다.
+- **제약**: 거부는 비밀번호를 보내기 전에 일어나므로 계정 잠금과 무관하다. 공용 네트워크의 MITM 위험은 사용자가 감수했다(DESIGN §8). openconnect는 고정 값 없이 실행하면 출력 없이 응답을 기다리며 멈춘다.
 
 ### F-CM-10 표시 결정
 - **설명**: 아이콘, 메뉴, 주의 표시, 상태 정보에 무엇을 보일지 정한다. UI는 이 값을 그대로 그린다.
@@ -254,9 +287,9 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **담당**: 판단 코어, 런타임
 - **입력 / 출력**: config.yaml 유효성, 계정 값, Keychain 항목 유무, Helper 상태 / 준비됨 또는 빠진 항목
 - **세부 기능**
-  1. 이 순서로 본다: 설정 파일 오류, 계정 정보, VPN 비밀번호, Gmail 인증(앱 비밀번호 또는 Google 계정 연결), Helper 승인, Helper 버전 일치.
+  1. 이 순서로 본다: 설정 파일 오류, 계정 정보, VPN 비밀번호, Gmail 인증(앱 비밀번호 또는 Google 계정 연결), Helper 승인(Windows는 Helper 서비스 설치·실행), Helper 버전 일치.
   2. Keychain은 항목이 있는지만 묻는다. 비밀값을 읽지 않으므로 접근 prompt가 나오지 않는다.
-  3. Helper 빌드가 다르고 시도가 없으면 옛 Helper에 유휴 시 종료를 요청한다. launchd가 이 빌드의 Helper를 띄운다.
+  3. macOS에서 Helper 빌드가 다르고 시도가 없으면 옛 Helper에 유휴 시 종료를 요청한다. launchd가 이 빌드의 Helper를 띄운다. Windows는 설치할 때 앱과 Helper 서비스를 함께 바꾸므로 빌드가 다르면 다시 설치하라고 알린다.
   4. 앱 활성화, 설정창 열림, 관련 설정·인증 변경 때 다시 확인한다. [Helper 등록] 뒤에는 한동안 반복해 승인을 따라간다.
 
 ## 3.2 설정 (F-CF)
@@ -264,7 +297,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 ### F-CF-01 config.yaml 읽기와 검증
 - **설명**: 사람이 편집하는 config.yaml을 엄격하게 읽는다. 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다.
 - **담당**: 판단 코어, 런타임
-- **입력 / 출력**: `~/.config/FortiVPNManager/config.yaml` / 설정 값과 경고, 또는 줄·열이 붙은 오류 하나
+- **입력 / 출력**: `~/.config/FortiVPNManager/config.yaml`(Windows는 `%USERPROFILE%\.config\FortiVPNManager\config.yaml`) / 설정 값과 경고, 또는 줄·열이 붙은 오류 하나
 - **세부 기능**
   1. 적지 않은 키와 null은 기본값이다. 다음은 오류다.
      - 텍스트: 크기 초과, 깨진 UTF-8, 읽을 수 없는 제어 문자, raw NEL·LS·PS
@@ -272,7 +305,8 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
      - 값: YAML 1.1식 숫자·불리언(`0443`, `yes` 등), 따옴표 숫자, 타입·범위·형식 위반, 교차 규칙 위반, 서로 겹치는 예외 규칙 항목
   2. 알 수 없는 키, 형식이 틀리거나 중복된 인증서 값, 최대 개수를 넘는 인증서 값은 경고하고 무시한다.
   3. 더 새로운 `schema_version`은 먼저 거부하고, 그 파일은 절대 덮어쓰지 않는다.
-  4. 파일이 없으면 기본값이다. symlink는 따라가고, 권한이 0600이 아니면 경고한다.
+  4. 파일이 없으면 기본값이다. symlink는 따라가고, macOS에서 권한이 0600이 아니면 경고한다. Windows는 사용자 profile의 기본 권한을 따른다.
+  5. 같은 파일을 두 OS에서 그대로 쓸 수 있다. 앱이 쓰는 설명 주석은 그 OS에 맞춘다(비밀값 저장소, 예외 route 방식).
 - **제약**: 의도한 차이는 raw NEL·LS·PS 거부 하나다(YAML 1.1과 1.2가 다르게 읽는 유일한 경우). 그 밖에 YAML parser가 바뀌어 일부 오류의 줄·열 위치와 드문 문법(콜론 뒤 TAB, 매우 깊은 중첩, 따옴표 값의 tag)의 처리가 조금 다르다. 값을 다르게 읽는 경우는 없다.
 
 ### F-CF-02 설정 저장
@@ -306,6 +340,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   2. host, port, username, password, realm, trusted-cert를 가져온다. host가 없으면 실패이고, port가 없으면 443이다.
   3. 비밀번호는 Keychain에 저장하고, 원본에 평문 비밀번호가 있다고 경고한다.
   4. 알 수 없는 키와 쓸 수 없는 줄을 보고한다.
+  5. openconnect에는 가져올 설정 파일이 없다. Windows에서는 이 기능을 보이지 않고, 다른 기기의 config.yaml을 복사해 쓴다.
 
 ## 3.3 OTP (F-OT)
 
@@ -396,16 +431,16 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **제약**: 한 목록 안의 항목끼리는 겹칠 수 없다. 외부 네트워크가 같은 사설 대역을 쓰면 그곳에서도 적용된다(감수하는 위험).
 
 ### F-BR-02 동기화
-- **설명**: 계산한 route를 주 네트워크 서비스의 additional routes에 쓰고, 실패하면 다시 시도하고 알린다.
-- **담당**: 런타임, OS 연동 Helper(networksetup), OS 연동(알림)
-- **입력 / 출력**: config.yaml, 네트워크 설정 변경 / route 쓰기, state.json 기록, macOS 알림
+- **설명**: 계산한 route를 OS가 저장해 두는 route 목록에 쓰고, 실패하면 다시 시도하고 알린다. macOS는 주 네트워크 서비스의 additional routes, Windows는 주 interface의 persistent route다.
+- **담당**: 런타임, OS 연동 Helper(networksetup) 또는 Helper 서비스(persistent route), OS 연동(알림)
+- **입력 / 출력**: config.yaml, 네트워크 설정 변경 / route 쓰기, state.json 기록, OS 알림
 - **세부 기능**
-  1. 앱 시작, Helper 준비, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다.
+  1. 앱 시작, Helper 준비, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다. Windows는 밖에서 바뀐 persistent route를 알려 주는 알림이 없어 짧은 주기로도 확인한다.
   2. config.yaml이 없거나 오류가 있으면 route를 건드리지 않는다.
   3. 가져올 대상은 config.yaml에 먼저 저장하고, 그다음 route를 쓴다.
   4. 읽은 뒤 네트워크나 route가 바뀌었으면 쓰지 않는다. 쓴 뒤 다시 읽어 확인하고, 앱이 쓴 route를 state.json에 기록한다.
   5. 쓰기가 계속 실패하면 정해진 횟수만큼 다시 시도한 뒤 macOS 알림을 한 번 보내고 재시도를 그만둔다. 그 뒤에는 네트워크나 규칙이 바뀔 때만 다시 한다.
-- **제약**: macOS가 서비스 설정에 저장하므로 재부팅과 VPN 재연결 뒤에도 유지된다. `networksetup`은 실패해도 exit code 0이라 다시 읽어 확인한다.
+- **제약**: OS가 저장해 두므로 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하다. `networksetup`은 실패해도 exit code 0이라 다시 읽어 확인한다. Windows는 persistent route만 읽고 실행 중 route는 보지 않는다. VPN 스크립트가 넣은 게이트웨이 host route가 "밖에서 추가된 route"로 들어오지 않게 하려는 것이다. Windows의 route 명령은 출력이 번역되므로 번역되는 문구를 해석하지 않는다. openconnect의 route 스크립트는 끝날 때 서버가 준 제외 대역과 목적지·mask가 같은 route를 지우므로, 그런 대상은 5번 규칙으로 다시 넣는다.
 
 ### F-BR-03 목록 편집 초안
 - **설명**: 예외 규칙 pane에서 두 목록을 편집하는 초안을 관리한다. [적용]을 눌러야 저장된다.
@@ -421,23 +456,23 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 ### F-SR-01 state.json
 - **설명**: 사람이 편집할 필요가 없는 기기별 상태를 저장한다.
 - **담당**: 런타임
-- **입력 / 출력**: 저장할 상태 / `~/Library/Application Support/FortiVPNManager/state.json`
+- **입력 / 출력**: 저장할 상태 / `~/Library/Application Support/FortiVPNManager/state.json`(Windows는 `%LOCALAPPDATA%\FortiVPNManager\state.json`)
 - **세부 기능**
-  1. 계정별 실패 기록, 로그인 시 열기를 처음 등록했는지, 서비스별로 앱이 쓴 예외 route를 저장한다.
+  1. 계정별 실패 기록, 로그인 시 열기를 처음 등록했는지, 네트워크 서비스(Windows는 interface)별로 앱이 쓴 예외 route를 저장한다.
   2. 바뀔 때만 0600으로 원자적으로 쓴다. 읽을 수 없으면 빈 상태로 시작한다.
-  3. `/Applications`의 앱이 처음 실행되면 로그인 시 열기를 한 번 켠다. 그 뒤 사용자가 끈 것은 존중한다.
+  3. 설치된 앱(macOS는 `/Applications`)이 처음 실행되면 로그인 시 열기를 한 번 켠다. 그 뒤 사용자가 끈 것은 존중한다.
 
 ### F-SR-02 로그
 - **설명**: openfortivpn 원본 출력과 앱·Helper의 설명 줄을 로그 pane과 로그 파일에 남긴다. 추적에 가장 유용하도록 마스킹하지 않는다.
 - **담당**: 런타임, UI
-- **입력 / 출력**: Helper 출력, 앱 설명 줄 / 로그 pane, `~/Library/Logs/FortiVPNManager/openfortivpn.log`
+- **입력 / 출력**: Helper 출력, 앱 설명 줄 / 로그 pane, `~/Library/Logs/FortiVPNManager/openfortivpn.log`(Windows는 `%LOCALAPPDATA%\FortiVPNManager\Logs\openconnect.log`)
 - **세부 기능**
   1. Helper가 보낸 순서대로 줄을 모으고 시각과 출처를 붙인다.
   2. 메모리에는 최근 줄만 두고, 파일은 0600으로 덧붙이며 크기가 넘으면 회전한다.
   3. 앱 종료 전에 파일 쓰기를 마친다. [지우기]는 화면만 비운다.
   4. [모두 복사]는 UI가 화면에 가진 줄로 로그 파일과 같은 형식의 텍스트를 만든다.
   5. 설명 줄은 영어이고 비밀값과 config.yaml 내용을 남기지 않는다.
-- **제약**: openfortivpn은 verbosity를 올릴 때만 비밀값을 출력하므로 기본 verbosity로 고정한다.
+- **제약**: openfortivpn은 verbosity를 올릴 때만 비밀값을 출력하므로 기본 verbosity로 고정한다. openconnect도 기본 verbosity로 고정한다. 올리면 HTTP 요청과 응답 내용이 나올 수 있다. 기본 verbosity에서는 비밀값이 나오지 않음을 Windows 시험 로그로 확인했다.
 
 ## 3.7 조율 (F-RT)
 
@@ -452,7 +487,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   4. 깨어남, 시계 변경, 시간대 변경 때 남은 타이머를 다시 건다.
 
 ### F-RT-02 UI 메시지
-- **설명**: 같은 프로세스 안에서 Swift와 Rust가 주고받는 메시지를 정한다. UI에 판단이 새지 않고 화면 배치를 바꿔도 Rust는 그대로다.
+- **설명**: 같은 프로세스 안에서 OS 앱 쪽(UI와 OS 연동)과 Rust가 주고받는 메시지를 정한다. macOS와 Windows가 같은 메시지를 쓴다. UI에 판단이 새지 않고 화면 배치를 바꿔도 Rust는 그대로다.
 - **담당**: 런타임, 공통 계약, UI, OS 연동
 - **입력 / 출력**: 명령, port 응답, 시스템 이벤트 / 도메인 구역, 로그 추가분, port 요청
 - **세부 기능**
@@ -465,49 +500,67 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 ## 3.8 VPN 실행 (F-VR, Helper 쪽)
 
 ### F-VR-01 client 준비
-- **설명**: 실행할 openfortivpn을 확인하고, 실행 요청을 검증해 실행 명세를 만든다.
-- **담당**: backend adapter, Helper entry
+- **설명**: 실행할 VPN client를 확인하고, 실행 요청을 검증해 실행 명세를 만든다.
+- **담당**: backend adapter, Helper entry(Windows는 Helper 서비스)
 - **입력 / 출력**: 실행 요청 / client 경로와 버전, 실행 명세, 또는 오류
 - **세부 기능**
-  1. `/opt/homebrew/bin/openfortivpn`을 끝까지 풀어 Homebrew Cellar 안의 파일만 쓴다. 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부한다. 문제는 종류와 경로로 알리고, 문장과 번역은 UI가 만든다.
-  2. 버전이 1.24.x가 아니면 고급 pane에 "검증되지 않은 버전" 경고를 띄운다.
-  3. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 값은 openfortivpn 버퍼 안, 제어 문자 없음, 비밀번호는 255바이트 이하다.
-  4. 설정 파일에는 비밀번호를 쓰지 않는다. 0600으로 만들고 실행이 끝나면 지운다.
-  5. argv에 verbosity 옵션과 `--persistent`를 붙이지 않고, 환경 변수는 PATH만 넘긴다.
-- **제약**: `--persistent`는 이메일 OTP 경로에서 쓴 OTP를 다시 보낸다. openfortivpn은 proxy 환경 변수를 읽고, 버퍼보다 긴 값은 조용히 자른다.
+  1. 관리자만 쓸 수 있는 곳의 실행 파일만 쓴다. 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부한다. 문제는 종류와 경로로 알리고, 문장과 번역은 UI가 만든다.
+     - openfortivpn: `/opt/homebrew/bin/openfortivpn`을 끝까지 풀어 Homebrew Cellar 안의 파일만 쓴다.
+     - openconnect: Windows는 `C:\Program Files\OpenConnect\openconnect.exe`만 쓴다. macOS·Linux는 지원할 때 정한다.
+     - logout 요청 도구: OS에 들어 있는 것만 쓰고(Windows는 시스템 폴더), 그 도구의 사용자 설정 파일과 proxy 설정은 읽지 않게 한다.
+  2. 검증된 버전(openfortivpn 1.24.x, openconnect 9.21)이 아니면 고급 pane에 "검증되지 않은 버전" 경고를 띄운다.
+  3. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 제어 문자 없음, 그 밖의 한도는 VPN client마다 정한다(openfortivpn은 버퍼 안, 비밀번호 255바이트 이하).
+  4. 비밀번호와 openconnect의 세션 cookie는 설정 파일과 argv에 쓰지 않는다. openfortivpn 설정 파일은 0600으로 만들고 실행이 끝나면 지운다. openconnect는 설정 파일 없이 argv만 쓴다.
+  5. verbosity 옵션과 자체 재접속(openfortivpn `--persistent`)을 쓰지 않는다. openconnect는 끊긴 뒤 스스로 다시 붙으려고 기다리지 않게 해서(대기 0초) 첫 재시도가 실패하면 곧바로 끝나게 한다. 재연결은 앱이 OTP와 함께 한다.
+  6. 환경 변수는 꼭 필요한 것만 넘긴다. openfortivpn은 PATH만, openconnect는 그와 route 스크립트가 도는 데 필요한 OS 시스템 변수만 넘긴다.
+  7. openconnect의 realm은 접속 URL의 경로로 넘기고, 인증서 고정 값은 두 실행 모두에 항상 하나 이상 넘긴다(F-CM-09).
+  8. openconnect는 로그인만 하는 실행과, 그 세션 cookie로 터널을 여는 실행의 명세를 함께 만든다(F-VR-02). 세션 cookie로 보낼 logout 요청의 명세도 만든다(F-VR-04).
+- **제약**: `--persistent`는 이메일 OTP 경로에서 쓴 OTP를 다시 보낸다. openfortivpn은 proxy 환경 변수를 읽고, 버퍼보다 긴 값은 조용히 자른다. openconnect의 비밀번호 미리 넣기 옵션은 쓰지 않는다. 인증서 질문이 그 줄을 답으로 읽는다. 비대화 옵션은 OTP 질문까지 막는다. 이 게이트웨이는 끊긴 세션으로 다시 붙는 것을 허용하지 않아서, openconnect가 다시 붙으려 하면 거부되고 logout한 뒤 끝난다. 다시 시도하는 동안에도 터널 어댑터는 남아 있어 앱은 끊긴 것을 알 수 없다. 연결하면서 cookie를 출력하는 openconnect 옵션은 정상 종료할 때까지 출력이 나오지 않아 쓰지 않는다.
 
 ### F-VR-02 실행과 stdin 입력
 - **설명**: VPN client를 정해진 조건으로 띄우고, prompt가 나오면 비밀번호와 OTP를 stdin으로 한 번씩 넣는다.
 - **담당**: watchdog, backend adapter
 - **입력 / 출력**: 실행 명세, 비밀번호, OTP / 진행 단계, 입력 결과
 - **세부 기능**
-  1. shell 없이 실행한다. 자식은 pipe 세 개만 물려받고, 빈 signal mask와 기본 signal 동작으로 자기 process group에서 시작한다.
-  2. prompt는 줄 끝을 기다리지 않고 찾는다. 비밀번호는 게이트웨이 연결 전 첫 prompt에만 쓴다.
+  1. shell 없이 실행한다. 자식은 pipe 세 개만 물려받는다. Unix에서는 빈 signal mask와 기본 signal 동작으로 자기 process group에서 시작한다. Windows에서는 창 없이 시작한다.
+  2. prompt는 줄 끝을 기다리지 않고 찾는다. 비밀번호는 backend adapter가 정한 단계의 첫 prompt에만 쓴다(openfortivpn은 게이트웨이 연결 전, openconnect는 OTP prompt 전). openconnect는 게이트웨이 인증서를 확인한 뒤에만 묻는다. 연결 줄은 stdout, prompt는 stderr로 따로 읽혀 순서가 바뀔 수 있으므로 연결 줄을 기다리지 않는다.
   3. OTP는 OTP prompt 단계에서 한 번만 받고, 쓴 뒤 stdin을 닫는다.
-  4. 쓴 비밀값은 바로 메모리에서 지운다. client가 먼저 끝나도 Helper는 죽지 않는다.
-- **제약**: prompt에는 줄바꿈이 없다. signal mask를 비워야 openfortivpn이 터널 전 SIGTERM에 즉시 끝난다.
+  4. 비밀번호나 OTP를 다시 물으면 답하지 않고 바로 끝낸다. 비밀번호를 다시 물으면 로그인 거부, OTP를 다시 물으면 OTP 거부다. 시간 제한까지 기다리지 않기 위해서다.
+  5. 쓴 비밀값은 바로 메모리에서 지운다. client가 먼저 끝나도 Helper는 죽지 않는다.
+  6. openconnect는 두 번 실행한다. 첫 실행은 비밀번호와 OTP로 로그인만 하고 세션 cookie를 출력한 뒤 끝난다. 그 cookie를 stdin으로 받는 둘째 실행이 터널을 연다. 앱에는 한 번의 시도로 보이고, 진행 단계는 두 실행에 걸쳐 이어서 보고한다. 첫 실행이 cookie 없이 끝나면 둘째 실행 없이 그 종료를 보고한다.
+  7. 세션 cookie는 Helper 메모리에만 두고, 실행이 끝나면 지운다. 로그에는 값 대신 받았다는 사실만 남긴다.
+- **제약**: prompt에는 줄바꿈이 없다. signal mask를 비워야 openfortivpn이 터널 전 SIGTERM에 즉시 끝난다. openconnect는 로그인이 거부되면 끝나지 않고 다시 묻는다.
 
 ### F-VR-03 출력 해석
 - **설명**: client 출력을 로그 pane의 줄로 만들고 진행 단계, 인증서 값, 실패 단서, 터널 IP를 읽는다. 출력 문구는 backend adapter만 안다.
 - **담당**: backend adapter, watchdog
 - **입력 / 출력**: stdout·stderr / 출력 줄, 진행 단계, 인증서 값, 실패 단서, 터널 IP
 - **세부 기능**
-  1. 줄바꿈 없는 출력(prompt)은 잠시 뒤 따로 보이고, 제어 문자는 보이는 표기로 바꾼다.
-  2. 로그 머리가 붙은 stdout 줄만 해석한다. `Connected to gateway.`, `Authenticated.`, `Tunnel is up and running.`, `trusted-cert = …`, tunnel mode 거부 줄이 대상이다.
-  3. 단계는 한 번씩, 커지는 순서로만 보고한다.
-  4. route 복원을 끝내지 못하고 끝났는지 추적한다.
-- **제약**: stderr에는 pppd 메시지가 나오며 오류를 뜻하지 않는다. openfortivpn을 올리면 문구가 바뀔 수 있다.
+  1. 줄바꿈 없는 출력(prompt)은 잠시 뒤 따로 보이고, 제어 문자는 보이는 표기로 바꾼다. UTF-8이 아닌 바이트도 줄을 버리지 않고 보이는 표기로 바꾼다.
+  2. openfortivpn은 로그 머리가 붙은 stdout 줄만 해석한다. `Connected to gateway.`, `Authenticated.`, `Tunnel is up and running.`, `trusted-cert = …`, tunnel mode 거부 줄이 대상이다.
+  3. openconnect는 stdout과 stderr를 모두 해석한다. 대상은 다음과 같다.
+     - 게이트웨이 연결: `Connected to HTTPS on …`
+     - OTP prompt: `Code:`
+     - 인증됨: 첫 실행의 세션 cookie 줄(`COOKIE='…'`), 둘째 실행의 `Got Legacy IP address …`
+     - 터널 IP: `Configured as …`
+     - 터널 올라옴: 터널 어댑터를 만들었다는 줄(Windows는 `Using Wintun device …`. 다른 OS는 지원할 때 정한다)
+     - 인증서 값: `None of the … fingerprint(s) … match server's certificate: …`
+  4. 단계는 한 번씩, 커지는 순서로만 보고한다.
+  5. openfortivpn이 route 복원을 끝내지 못하고 끝났는지 추적한다.
+- **제약**: openfortivpn의 stderr에는 pppd 메시지가 나오며 오류를 뜻하지 않는다. openconnect는 prompt와 오류를 stderr에 쓴다. `Configured as` 줄은 터널 어댑터가 생기기 전에 나오므로 터널 올라옴으로 보지 않는다. 그 뒤 route 스크립트가 route를 다 넣기까지 몇 초가 더 걸리지만 기다리지 않는다(macOS에서도 route를 확인하지 않는다). route 스크립트가 openconnect의 10초 제한을 넘기면 나오는 "스크립트 실패" 줄은 실패로 보지 않는다. openconnect도 무시하고 터널을 유지한다. 날짜와 Windows 오류 문장 같은 일부 문구는 Windows 언어 설정에 따라 번역되고 UTF-8이 아니다. VPN client를 올리면 문구가 바뀔 수 있다.
 
 ### F-VR-04 시간 제한과 종료
 - **설명**: 단계마다 시간 제한을 두어 진행하지 못하는 client를 끝내고, 요청이 오면 정해진 순서로 종료시킨다.
 - **담당**: watchdog, backend adapter
-- **입력 / 출력**: 진행 단계, 종료 요청 / SIGTERM·SIGKILL, 종료한 주체
+- **입력 / 출력**: 진행 단계, 종료 요청 / 정상 종료 요청과 강제 종료, 종료한 주체
 - **세부 기능**
   1. 터널이 올라오기 전까지 단계마다 시간 제한을 둔다. 넘으면 늦은 구간을 로그에 남기고 종료한다.
-  2. SIGTERM은 본 프로세스에만 보낸다. 자식 `/sbin/route`가 route 복원을 끝내야 하기 때문이다.
-  3. 유예 뒤에도 살아 있으면 SIGKILL을 본 프로세스, 그다음 process group에 보낸다.
+  2. 먼저 정상 종료를 요청하고, 유예 뒤에도 살아 있으면 강제로 끝낸다.
+     - Unix: SIGTERM은 본 프로세스에만 보낸다. 자식 `/sbin/route`가 route 복원을 끝내야 하기 때문이다. 유예 뒤에는 SIGKILL을 본 프로세스, 그다음 process group에 보낸다.
+     - Windows: 정상 종료를 요청할 수단이 없어 곧바로 강제로 끝낸다. client와 그것이 띄운 프로세스(route 스크립트)를 함께 끝낸다.
+  3. Helper가 openconnect의 세션 cookie를 가진 채 openconnect를 강제로 끝냈으면, 게이트웨이에 그 cookie로 logout 요청을 보낸다. 정상 종료 요청으로 끝났거나 스스로 끝났으면 openconnect가 logout했으므로 보내지 않는다. 응답으로는 성공 여부를 알 수 없어 보낸 사실과 응답 코드만 로그에 남긴다. 기다리는 시간에는 상한을 둔다.
   4. 첫 종료 이유만 기록하고 이후 요청은 무시한다.
-- **제약**: openfortivpn의 SIGTERM handler는 터널이 올라온 뒤에만 설치된다.
+- **제약**: openfortivpn의 SIGTERM handler는 터널이 올라온 뒤에만 설치된다. Windows에는 signal이 없고, openconnect가 logout하는 console 이벤트는 그 이벤트를 보내는 실행 파일을 회사 보안 프로그램이 막아 쓸 수 없다. 강제로 끝내면 openconnect가 logout하지 못해 세션이 idle timeout까지 서버에 남지만, 따로 보낸 logout 요청으로 끝난다. Helper가 죽어 cookie를 잃으면 세션이 남는다. 이 게이트웨이는 같은 계정의 동시 세션을 허용하므로 다음 연결은 막히지 않는다.
 
 ### F-VR-05 종료 사실과 보고
 - **설명**: client가 끝나면 무슨 일이 있었는지를 종료 사실로 앱에 한 번 보고한다. 앱은 이것으로 원인을 분류한다(F-CM-03).
@@ -515,31 +568,32 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **입력 / 출력**: 프로세스 종료 / 종료 사실
 - **세부 기능**
   1. 가장 멀리 간 단계, 종료한 주체와 이유, 학습한 인증서 값, 실패 단서, 터널 유지 시간, 종료 상태를 담는다.
-  2. route 복원이 끝나지 않았으면 복구한 뒤 보고한다.
+  2. logout 요청(F-VR-04)을 보낸 뒤, route가 정리되지 않았으면 정리하고 보고한다. openfortivpn은 default route를, openconnect는 게이트웨이로 가는 host route를 본다(강제로 끝나면 남는다).
   3. 보고는 실행마다 정확히 한 번이고 마지막 메시지다.
 
 ### F-VR-06 남은 프로세스 정리와 route 복구
-- **설명**: 비정상 종료 뒤 남은 openfortivpn·pppd와 깨진 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지기 때문이다.
-- **담당**: Helper entry, OS 연동 Helper
+- **설명**: 비정상 종료 뒤 남은 VPN client 프로세스와 깨진 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지고, openconnect가 강제로 끝나면 게이트웨이 host route가 남기 때문이다.
+- **담당**: Helper entry와 OS 연동 Helper, 또는 Helper 서비스
 - **입력 / 출력**: pidfile의 프로세스 신원과 게이트웨이 IP / 정리 결과, route 복구 결과
 - **세부 기능**
-  1. 실행 중에는 client와 pppd의 신원과 게이트웨이 IPv4를 pidfile에 기록한다.
-  2. Helper가 시작하면 연결을 받기 전에, 기록과 같은 root 프로세스인 openfortivpn과 pppd만 종료한다. 다른 프로세스는 건드리지 않는다.
-  3. default route가 없거나 ppp를 가리키면 주 네트워크의 router로 되돌리고, routing table을 다시 조회해 확인한다.
+  1. 실행 중에는 client(openfortivpn은 pppd도)의 신원과 게이트웨이 IPv4를 pidfile에 기록한다.
+  2. Helper가 시작하면 연결을 받기 전에, 기록과 같은 관리자 권한 프로세스인 VPN client만 종료한다. 다른 프로세스는 건드리지 않는다. Windows에서는 Helper 서비스가 죽어도 openconnect가 혼자 남으므로 이 정리가 필요하다.
+  3. macOS: default route가 없거나 ppp를 가리키면 주 네트워크의 router로 되돌리고, routing table을 다시 조회해 확인한다.
+  4. Windows: 남은 openconnect가 없는데 게이트웨이로 가는 host route가 남아 있으면 지우고 다시 조회해 확인한다. 강제로 끝난 터널 어댑터는 다음 openconnect 실행이 스스로 지우므로 건드리지 않는다.
 - **제약**: `/sbin/route`는 실패해도 exit code 0이다. pid는 재사용될 수 있어 시작 시각과 경로로 같은 프로세스인지 확인한다.
 
 ### F-VR-07 Helper 요청 처리
 - **설명**: 앱의 요청으로 실행을 시작·중지하고 Helper 자신의 수명을 관리한다. 실행은 한 번에 하나다.
-- **담당**: Helper entry, OS 연동 Helper
-- **입력 / 출력**: 앱 요청, 앱 연결 끊김, 재설치, SIGTERM / 응답, 이벤트와 출력
+- **담당**: Helper entry와 OS 연동 Helper, 또는 Helper 서비스
+- **입력 / 출력**: 앱 요청, 앱 연결 끊김, 재설치, SIGTERM·서비스 정지 / 응답, 이벤트와 출력
 - **세부 기능**
-  1. 실행이 있으면 새 실행 요청은 같은 사용자에게 "사용 중", 다른 사용자에게 "권한 없음"이다.
+  1. 실행이 있으면 새 실행 요청은 같은 사용자에게 "사용 중", 다른 사용자에게 "권한 없음"이다. Windows는 설치할 때 정한 사용자만 연결할 수 있다.
   2. OTP와 연결 해제는 현재 실행의 시도이고 같은 사용자일 때만 받는다.
   3. 앱 연결이 끊기면 그 앱의 실행을 끝낸다. 정상 종료, 강제 종료, 크래시가 같은 경로다.
-  4. 유휴 시 종료 요청에는 실행이 없을 때만 응하고 종료한다. 버전 확인과 이 요청의 모양은 빌드가 바뀌어도 바꾸지 않는다.
-  5. 재설치로 실행 파일이 바뀌면 실행이 없을 때 종료하고, launchd가 다음 요청 때 새 Helper를 띄운다.
-  6. SIGTERM을 받으면 실행을 끝내고 보고한 뒤 종료한다.
-- **제약**: 실행 중인 옛 Helper는 재설치 뒤 앱의 서명 확인을 통과하지 못한다. 이 자가 종료 덕분에 `make install`에 sudo가 필요 없다.
+  4. macOS: 유휴 시 종료 요청에는 실행이 없을 때만 응하고 종료한다. 버전 확인과 이 요청의 모양은 빌드가 바뀌어도 바꾸지 않는다.
+  5. macOS: 재설치로 실행 파일이 바뀌면 실행이 없을 때 종료하고, launchd가 다음 요청 때 새 Helper를 띄운다.
+  6. SIGTERM이나 서비스 정지 요청을 받으면 실행을 끝내고 보고한 뒤 종료한다. Windows 재설치는 서비스 정지 → 교체 → 시작 순서다.
+- **제약**: 실행 중인 옛 Helper는 재설치 뒤 앱의 서명 확인을 통과하지 못한다. 이 자가 종료 덕분에 `make install`에 sudo가 필요 없다. Windows에서는 실행 중인 실행 파일을 바꿀 수 없어 설치가 서비스를 먼저 멈춘다.
 
 ## 3.9 macOS 부분 (F-SW)
 
@@ -590,11 +644,63 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   5. 시스템 명령은 고정 argv, PATH만, shell 없이, 시간 제한을 두고 실행한다.
 - **제약**: Personal Team 서명이라 entitlement는 비워 두고, 번들 ID는 바꾸지 않는다.
 
+## 3.10 Windows 부분 (F-WN)
+
+### F-WN-01 UI 표시와 문장 (Windows)
+- **설명**: 도메인 구역을 알림 영역 아이콘과 설정창으로 그리고 조작을 명령으로 보낸다. 규칙은 F-SW-01과 같고, 다른 점만 적는다.
+- **담당**: UI (Windows)
+- **입력 / 출력**: 도메인 구역, 로그 추가분 / 화면, 명령
+- **세부 기능**
+  1. 알림 영역 아이콘은 macOS 메뉴바 아이콘과 같은 네 가지 상태를 구분한다. 아이콘을 누르면 macOS 메뉴와 같은 항목의 메뉴가 열린다.
+  2. 설정창은 macOS와 같은 pane을 같은 순서로 두고, macOS처럼 창 위쪽의 pane 버튼으로 고른다. pane 안의 항목도 macOS와 같은 묶음과 순서로 둔다.
+  3. 설정창을 닫아도 앱은 알림 영역에 남는다. 앱을 끝내는 것은 메뉴의 [종료]뿐이다.
+  4. 문장은 macOS와 같은 뜻으로 만들고, Windows 표시 언어(한국어·영어)를 따른다.
+  5. 기존 openfortivpn 설정 가져오기와 Helper 승인 관련 항목은 없다.
+
+### F-WN-02 OS port (Windows)
+- **설명**: Rust가 요청하는 OS 기능을 Windows에서 구현하고 시스템 이벤트를 알린다. port의 종류와 메시지는 macOS와 같다.
+- **담당**: OS 연동 (Windows)
+- **입력 / 출력**: port 요청 / port 응답, 시스템 이벤트
+
+| port | Windows 구현 |
+|---|---|
+| 비밀값 저장 | Credential Manager의 사용자 자격 증명. 항목 이름은 macOS Keychain의 서비스 이름과 계정 키를 따른다 |
+| 권한 있는 실행 통로 | Helper 서비스의 설치·실행 상태, 설치한 사용자만 열 수 있는 연결 통로 |
+| 시스템 이벤트 | 절전과 재개, 세션 잠금과 해제, 디스플레이 꺼짐과 켜짐, 네트워크 주소·연결 변경, 앱 활성화, 시계·시간대 변경 |
+| 화면 상태 | 세션 잠금 여부, 디스플레이 꺼짐 여부 |
+| 네트워크 정보 | interface 목록(주소, gateway, interface GUID), 게이트웨이로 가는 경로 |
+| 알림 | Windows 알림 |
+| 브라우저 열기 | 기본 브라우저 |
+| 앱 수명 | 종료 확인, 로그인 시 열기(사용자 시작 프로그램). 활동 유지는 필요 없다 |
+| 로그 출력 | Windows 이벤트 로그 |
+
+- **세부 기능**
+  1. Helper 통로를 열면 그 소유자가 시스템 계정인지 확인한다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 비밀번호를 가로채는 일을 막는다.
+  2. 비밀번호나 route를 바꾸는 Helper 요청은 같은 빌드로 확인된 연결로만 보낸다.
+  3. Helper 메시지는 받은 순서대로 넘긴다.
+  4. 사실만 알리고, 자리 비움 같은 판단은 Rust가 한다.
+  5. 시간대는 IANA 이름으로 바꿔 알린다. 판단 코어가 IANA 시간대로 계산하기 때문이다.
+
+### F-WN-03 Helper 서비스 (Windows)
+- **설명**: Windows의 Helper다. 서비스로 실행되며 Helper entry와 OS 연동 Helper의 일을 함께 한다.
+- **담당**: Helper 서비스
+- **입력 / 출력**: 서비스 시작·정지, 앱 연결과 요청 / 응답, 이벤트와 출력, route 변경
+- **세부 기능**
+  1. 부팅 때 자동으로 시작하고, 비정상 종료하면 Windows가 다시 시작한다.
+  2. 남은 프로세스와 route를 정리한 뒤에(F-VR-06) 앱 연결을 받는다.
+  3. 연결 통로는 설치할 때 정한 사용자(기본은 화면에 로그인한 사용자)와 시스템만 열 수 있다. 버전 확인에 직접 답하고, 같은 빌드인 연결의 요청만 처리한다.
+  4. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06).
+  5. 예외 route 읽기·쓰기와 게이트웨이 host route 정리를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다.
+  6. 시스템 명령은 고정 argv, 필요한 환경 변수만, shell 없이, 시간 제한을 두고 실행한다. 번역되는 출력은 해석하지 않는다.
+  7. 실행 기록은 관리자만 쓸 수 있는 곳에 둔다.
+- **제약**: 연결한 프로그램이 설치된 앱인지는 확인하지 않는다. 같은 사용자로 실행되는 다른 프로그램도 연결할 수 있다(DESIGN §8). 서비스에는 화면이 없어서, 사용자에게 알릴 일은 모두 앱으로 보낸다.
+
 # 4. 비기능 요구사항
 
-- **비밀값**: 비밀번호, OTP, token, client secret은 argv, 파일, 환경 변수, 로그에 남지 않는다. Helper에는 XPC로 메모리 안에서만 전달한다.
+- **비밀값**: 비밀번호, OTP, token, client secret은 argv, 파일, 환경 변수, 로그에 남지 않는다. Helper에는 앱과 Helper 사이의 연결로 메모리 안에서만 전달한다.
 - **fail fast**: Rust panic은 그 자리에서 중단하고 crash report를 남긴다. 있을 수 없는 상태를 위한 복구 경로를 만들지 않는다.
-- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 하나씩만). Swift와 Rust는 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. Swift가 OS API를 직접 부를 때는 지금처럼 그 API에 필요한 포인터 API를 쓸 수 있다.
-- **다른 OS 빌드**: 공통 crate는 macOS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 프로세스 처리, Helper의 OS별 시작 부분(남은 프로세스 확인과 종료, 실행 기록 폴더의 접근 권한), port 구현뿐이다.
+- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 crate마다 하나만).
+- **OS 앱 쪽과 Rust**: 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. OS 앱 쪽 코드(Swift, C#)가 OS API를 직접 부를 때는 그 API에 필요한 포인터 API나 호출 선언을 쓸 수 있다.
+- **다른 OS 빌드**: 공통 crate는 한 OS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 프로세스 처리, Helper의 OS별 시작 부분(남은 프로세스 확인과 종료, 실행 기록 폴더의 접근 권한), Helper의 OS 부분, port 구현뿐이다.
 - **영어**: 코드, 주석, 앱과 Helper의 로그는 영어로 쓴다.
-- **화면 문장은 UI에만**: Rust는 종류와 값만 넘기고, 문장과 번역은 UI (macOS)가 만든다.
+- **화면 문장은 UI에만**: Rust는 종류와 값만 넘기고, 문장과 번역은 UI (macOS)와 UI (Windows)가 만든다.

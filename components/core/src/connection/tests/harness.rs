@@ -370,6 +370,7 @@ impl Harness {
                 attempt_seed: [0; 16],
                 settings,
                 time_zone: seoul(),
+                kills_show_as_signals: true,
             }),
             now: t0() - Duration::from_secs(3),
             effects: Vec::new(),

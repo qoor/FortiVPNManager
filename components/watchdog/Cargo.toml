@@ -12,6 +12,10 @@ zeroize.workspace = true
 nix = { workspace = true, features = ["process", "signal"] }
 rustix = { workspace = true, features = ["event", "process", "time"] }
 
+[dev-dependencies]
+# The Windows tests read output the way openconnect prints it.
+fvm-backend-adapter.workspace = true
+
 [target.'cfg(unix)'.dev-dependencies]
 # A descriptor without close-on-exec, to show that the client does not inherit it.
 nix = { workspace = true, features = ["fs"] }

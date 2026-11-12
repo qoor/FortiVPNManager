@@ -1,4 +1,5 @@
 //! When the password and the OTP go to the client's stdin.
+#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
 
 mod common;
 
@@ -92,31 +93,69 @@ fn otp_while_stopping_is_refused() {
 }
 
 #[test]
-fn password_is_written_once_and_only_before_the_gateway() {
+fn password_is_written_only_where_the_client_asks_for_it() {
+    let script_text = "\
+printf 'INFO:   Connected to gateway.\\nVPN account password: '
+/bin/sleep 0.2
+exit 0";
+    let mut session = script(script_text, Setup::default());
+    session.wait_for_exit();
+    assert!(!session.has_text("‹password sent›"));
+    assert_eq!(
+        session.count_text("‹password prompt ignored: not expected at this stage›"),
+        1
+    );
+    session.assert_finished_cleanly();
+}
+
+/// Asked again, the gateway rejected the login; the client would wait for an answer.
+#[test]
+fn a_repeated_password_prompt_ends_the_run_at_once() {
     let script_text = "\
 printf 'VPN account password: '
 IFS= read -r pw
 printf 'first_len=%s\\n' \"${#pw}\" >> \"$1\"
 printf '\\nVPN account password: '
-/bin/sleep 0.2
-printf '\\nINFO:   Connected to gateway.\\nVPN account password: '
-/bin/sleep 0.2
-exit 0";
+IFS= read -r pw";
     let mut session = script(script_text, Setup::default());
-    session.wait_for_exit();
+    let facts = session.wait_for_exit();
     assert_eq!(session.count_text("‹password sent›"), 1);
+    assert!(session.has_text("‹password asked again: the gateway rejected the login›"));
     assert_eq!(
-        session.count_text(
-            "‹password prompt ignored: already answered or not expected at this stage›"
-        ),
-        2
+        facts.stop_initiator,
+        StopInitiator::Helper {
+            reason: StopReason::PromptRepeated
+        }
+    );
+    assert_eq!(
+        facts.exit_status,
+        ProcessExitStatus::Signaled { signal: 15 }
     );
     // With PATH as the only variable the shell runs in the C locale, where `${#pw}` counts bytes.
     assert_eq!(
         session.record.value("first_len"),
         Some(PASSWORD.len().to_string())
     );
-    session.assert_finished_cleanly();
+}
+
+#[test]
+fn a_repeated_otp_prompt_ends_the_run_at_once() {
+    let script_text = "\
+printf 'INFO:   Connected to gateway.\\nTwo-factor authentication token: '
+IFS= read -r otp
+printf '\\nTwo-factor authentication token: '
+/bin/sleep 10";
+    let mut session = script(script_text, Setup::default().submitting_otp());
+    let facts = session.wait_for_exit();
+    assert_eq!(session.count_text("‹OTP sent›"), 1);
+    assert!(session.has_text("‹OTP asked again: the gateway rejected the OTP›"));
+    assert_eq!(facts.furthest_milestone, Some(Milestone::OtpSubmitted));
+    assert_eq!(
+        facts.stop_initiator,
+        StopInitiator::Helper {
+            reason: StopReason::PromptRepeated
+        }
+    );
 }
 
 #[test]

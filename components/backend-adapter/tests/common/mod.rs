@@ -1,24 +1,36 @@
 //! Feeds output to an interpreter the way the backend contract says the watchdog does: complete
-//! lines to `line`, and after each read that leaves an unfinished line, that line's bytes to
-//! `prompt`.
+//! lines to `line`, decoded as the watchdog does, and after each read that leaves an unfinished
+//! line, that line's bytes to `prompt`.
+
+#![allow(dead_code)] // Each test file uses a different part.
 
 use std::mem;
 
+#[cfg(unix)]
 use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
 use fvm_contract::app_helper::OutputSource;
-use fvm_contract::backend::{Backend, Finding, OutputInterpreter, Prompt};
+#[cfg(unix)]
+use fvm_contract::backend::Backend;
+use fvm_contract::backend::{Finding, OutputInterpreter, Prompt};
 
-pub struct Run {
-    pub interpreter: Interpreter,
+pub struct Run<I> {
+    pub interpreter: I,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     pub findings: Vec<Finding>,
 }
 
-impl Run {
+#[cfg(unix)]
+impl Run<Interpreter> {
     pub fn new() -> Self {
+        Self::with(OpenFortiVpn.interpreter())
+    }
+}
+
+impl<I: OutputInterpreter> Run<I> {
+    pub fn with(interpreter: I) -> Self {
         Self {
-            interpreter: OpenFortiVpn.interpreter(),
+            interpreter,
             stdout: Vec::new(),
             stderr: Vec::new(),
             findings: Vec::new(),
@@ -40,7 +52,7 @@ impl Run {
         };
         while let Some(end) = bytes.iter().position(|&byte| byte == b'\n') {
             partial.extend_from_slice(&bytes[..end]);
-            let text = String::from_utf8(mem::take(partial)).unwrap();
+            let text = String::from_utf8_lossy(&mem::take(partial)).into_owned();
             findings.extend(interpreter.line(source, &text));
             bytes = &bytes[end + 1..];
         }

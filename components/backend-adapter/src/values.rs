@@ -1,4 +1,4 @@
-//! Checks of the values every VPN client takes: the gateway's host, text fields, the password and
+//! Checks of the values both VPN clients take: the gateway's host, text fields, the password and
 //! the OTP. Each client adds its own limits on top. Error texts name the field but never its value,
 //! and reach the app as they are.
 
@@ -15,7 +15,7 @@ pub(crate) fn check_otp(code: &str) -> Result<(), String> {
 }
 
 pub(crate) fn check_host(host: &str, max_bytes: usize) -> Result<(), String> {
-    check_text("host", host, max_bytes)?;
+    check_text("host", host, max_bytes, any_character)?;
     if is_host(host) {
         Ok(())
     } else {
@@ -63,14 +63,19 @@ enum TextProblem {
     SurroundingWhitespace,
 }
 
-fn text_problem(value: &str, max_bytes: usize) -> Option<TextProblem> {
+/// The first problem of `value`; `allowed` narrows the characters a client takes further.
+fn text_problem(
+    value: &str,
+    max_bytes: usize,
+    allowed: impl Fn(char) -> bool,
+) -> Option<TextProblem> {
     if value.is_empty() {
         return Some(TextProblem::Empty);
     }
     if value.len() > max_bytes {
         return Some(TextProblem::TooLong);
     }
-    if let Some(character) = value.chars().find(|&c| is_forbidden(c)) {
+    if let Some(character) = value.chars().find(|&c| is_forbidden(c) || !allowed(c)) {
         return Some(TextProblem::ForbiddenCharacter(character));
     }
     // Refused rather than trimmed: a client that trims the value itself would use another one than
@@ -87,8 +92,17 @@ pub(crate) fn is_forbidden(c: char) -> bool {
     c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{FEFF}')
 }
 
-pub(crate) fn check_text(field: &str, value: &str, max_bytes: usize) -> Result<(), String> {
-    match text_problem(value, max_bytes) {
+pub(crate) fn any_character(_: char) -> bool {
+    true
+}
+
+pub(crate) fn check_text(
+    field: &str,
+    value: &str,
+    max_bytes: usize,
+    allowed: impl Fn(char) -> bool,
+) -> Result<(), String> {
+    match text_problem(value, max_bytes, allowed) {
         None => Ok(()),
         Some(TextProblem::Empty) => Err(format!("{field} must not be empty")),
         Some(TextProblem::TooLong) => {
@@ -110,8 +124,9 @@ pub(crate) fn account_value(
     field: AccountField,
     value: &str,
     max_bytes: usize,
+    allowed: impl Fn(char) -> bool,
 ) -> Result<(), AccountValueProblem> {
-    match text_problem(value, max_bytes) {
+    match text_problem(value, max_bytes, allowed) {
         None | Some(TextProblem::Empty) => Ok(()),
         Some(TextProblem::TooLong) => Err(AccountValueProblem::TooLong {
             field,

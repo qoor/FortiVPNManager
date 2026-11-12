@@ -29,6 +29,7 @@ vpn:
   username: ""
   realm: ""
   trusted_certs: []
+  trusted_cert_pins: []
 otp:
   gmail_address: ""
   method: "imap"
@@ -57,6 +58,8 @@ fn every_key_has_a_comment() {
         "port:",
         "username:",
         "realm:",
+        "trusted_certs:",
+        "trusted_cert_pins:",
         "gmail_address:",
         "method:",
         "google_client_id:",
@@ -80,9 +83,13 @@ fn every_key_has_a_comment() {
 fn certificate_values_are_a_block_list() {
     let text = render(&non_default());
     assert!(text.contains(&format!(
-        "  trusted_certs:\n    - \"{}\"\n    - \"{}\"\notp:\n",
+        "  trusted_certs:\n    - \"{}\"\n    - \"{}\"\n  #",
         digest_a(),
         digest_b()
+    )));
+    assert!(text.contains(&format!(
+        "  trusted_cert_pins:\n    - \"{}\"\notp:\n",
+        pin_a()
     )));
     let loaded = decode(&text);
     assert_eq!(loaded.settings, non_default());
@@ -321,4 +328,49 @@ fn random_valid_configs_round_trip() {
         assert_eq!(loaded.settings, settings);
         assert!(loaded.warnings.is_empty());
     }
+}
+
+/// One file serves both OSes; the comments describe the OS of the app that wrote it.
+#[test]
+fn the_comments_describe_the_os_that_wrote_the_file() {
+    let comments = |client| -> String {
+        match config::update(None, &client, |current| *current = Settings::default()) {
+            Ok(Update::Write { text, .. }) => text
+                .lines()
+                .filter(|line| line.trim_start().starts_with('#'))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            other => panic!("did not render: {other:?}"),
+        }
+    };
+    let macos = comments(client());
+    for wording in [
+        "macOS login Keychain",
+        "an existing openfortivpn config",
+        "the Mac asleep",
+        "networksetup -setadditionalroutes",
+    ] {
+        assert!(macos.contains(wording), "{wording}");
+    }
+    let windows = comments(windows_client());
+    for wording in [
+        "Windows Credential Manager",
+        "in Credential Manager per 'username@server address'",
+        "the PC asleep",
+        "persistent routes of that interface",
+        "gateway of the active network interface",
+    ] {
+        assert!(windows.contains(wording), "{wording}");
+    }
+    for wording in ["Keychain", "Mac", "networksetup", "openfortivpn"] {
+        assert!(!windows.contains(wording), "{wording}");
+    }
+}
+
+#[test]
+fn a_file_written_on_one_os_reads_the_same_on_the_other() {
+    let text = render(&non_default());
+    let on_windows = config::read(text.as_bytes(), &windows_client()).unwrap();
+    assert_eq!(on_windows.settings, non_default());
+    assert!(on_windows.warnings.is_empty());
 }

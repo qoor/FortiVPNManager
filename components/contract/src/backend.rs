@@ -1,12 +1,14 @@
-//! What a backend adapter provides for one VPN client. The Helper entry picks the adapter and the
-//! watchdog runs the client with what it returns, so neither hard-codes the client's name, options
-//! or output wording.
+//! What a backend adapter provides for one VPN client. The Helper's OS start picks the adapter and
+//! the watchdog runs the client with what it returns, so neither hard-codes the client's name,
+//! options or output wording.
 
+use std::fmt;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
 
 use crate::app_helper::{Milestone, OutputSource, RunRequest};
 
@@ -45,7 +47,7 @@ pub trait Backend {
     /// A fresh interpreter for one run.
     fn interpreter(&self) -> Self::Interpreter;
 
-    /// How long the client may take to end after SIGTERM before it is killed.
+    /// How long the client may take to end after the OS's stop request before it is killed.
     fn stop_grace_period(&self) -> Duration;
 
     /// Whether an executable belongs to this client, so that a process of it left behind by an
@@ -104,6 +106,35 @@ pub struct LaunchSpec {
     /// Never holds the password, which goes to stdin. `None` for a client that takes everything
     /// as arguments.
     pub config_file: Option<String>,
+    /// For a client that logs in and opens the tunnel in separate runs, what follows this login
+    /// run; `None` for a client that does both in one run.
+    pub session: Option<Box<SessionLaunch>>,
+}
+
+/// The rest of an attempt whose login run printed a session (`Finding::Session`). Neither has a
+/// config file or a session of its own.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SessionLaunch {
+    /// Opens the tunnel with the session, which it reads from stdin.
+    pub tunnel: LaunchSpec,
+    /// Ends the session at the gateway, sent when the Helper ended the tunnel run by force or never
+    /// started it, so the client could not log out itself. It reads the session from stdin; the
+    /// first line of its stdout goes to the log.
+    pub logout: LaunchSpec,
+}
+
+/// What the tunnel run and the logout request read on stdin, each holding the session cookie. Debug
+/// output hides them, and they are zeroed when dropped.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SessionInputs {
+    pub tunnel: Zeroizing<Vec<u8>>,
+    pub logout: Zeroizing<Vec<u8>>,
+}
+
+impl fmt::Debug for SessionInputs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SessionInputs(<redacted>)")
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -123,6 +154,11 @@ pub enum Finding {
     CertificateRejected(String),
     /// The gateway refused tunnel mode after authentication.
     TunnelModeRejected,
+    /// The login run printed its session: the login succeeded. The line holds the session cookie,
+    /// so it is not logged.
+    Session(SessionInputs),
+    /// A line that holds a secret but could not be read as one; it is not logged either.
+    Hidden,
 }
 
 /// Reads one run's output.

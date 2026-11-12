@@ -16,9 +16,11 @@ use fvm_contract::app_internal::section::Section;
 use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, LogSource, SecretText, ToRuntime,
 };
+use fvm_core::config;
 use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup, TimerId};
 use jiff::tz::TimeZone;
 
+use crate::client;
 use crate::config_file::ConfigFile;
 use crate::log_file::{self, LogFile};
 use crate::state_file::StateFile;
@@ -129,12 +131,13 @@ impl Runtime {
         let (state, state_problem) = StateFile::open(paths.state);
         let mut attempt_seed = [0u8; 16];
         getrandom::fill(&mut attempt_seed).expect("random bytes from the OS");
-        let settings = connection::Settings::from(config.settings());
+        let settings = connection::Settings::new(config.settings(), client::CERTIFICATES);
         let cm = ConnectionManager::new(Startup {
             app_build: facts.app_build.clone(),
             attempt_seed,
             settings,
             time_zone: time_zone.clone(),
+            kills_show_as_signals: client::KILLS_SHOW_AS_SIGNALS,
         });
         let timer_inputs = inputs.clone();
         let timers = Timers::start(move |timer| {
@@ -336,7 +339,13 @@ impl Runtime {
                     },
                 );
             }
-            Effect::SaveTrustedCerts(certs) => self.save_trusted_certs(certs),
+            Effect::SaveTrustedCerts(certs) => self.save_trusted_certs(move |settings| {
+                *settings.vpn.trusted_mut(client::CERTIFICATES) = certs.clone();
+            }),
+            Effect::ClearTrustedCerts => self.save_trusted_certs(|settings| {
+                settings.vpn.trusted_certs.clear();
+                settings.vpn.trusted_cert_pins.clear();
+            }),
             Effect::SaveLedger(ledger) => {
                 if let Err(problem) = self.state.update(|state| state.ledger = Some(ledger)) {
                     self.system_log(LogLevel::Error, LogCategory::State, problem);
@@ -450,7 +459,7 @@ impl Runtime {
         }
     }
 
-    fn save_trusted_certs(&mut self, certs: Vec<String>) {
+    fn save_trusted_certs(&mut self, change: impl Fn(&mut config::Settings)) {
         if !self.config.exists() {
             self.system_log(
                 LogLevel::Error,
@@ -459,10 +468,7 @@ impl Runtime {
             );
             return;
         }
-        match self
-            .config
-            .update(|settings| settings.vpn.trusted_certs = certs.clone())
-        {
+        match self.config.update(change) {
             // The next input: this runs among the effects of the current one.
             Ok(_) => self.queue().run(Runtime::settings_changed),
             // The core keeps the values it learned; the file's older ones would undo that.
@@ -476,7 +482,7 @@ impl Runtime {
 
     /// Hands the settings in use to the core after the file changed.
     pub(crate) fn settings_changed(&mut self) {
-        let settings = connection::Settings::from(self.config.settings());
+        let settings = connection::Settings::new(self.config.settings(), client::CERTIFICATES);
         self.feed(connection::Input::SettingsChanged(settings));
     }
 

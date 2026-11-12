@@ -20,6 +20,7 @@ use fvm_contract::app_internal::{ButtonState, SecretText};
 use fvm_core::config::Settings;
 use fvm_core::connection;
 
+use crate::client::Client;
 use crate::files;
 use crate::orchestration::Runtime;
 
@@ -171,7 +172,7 @@ impl Forms {
             app_password_entered: !self.app_password.0.is_empty(),
             vpn_password_stored: self.vpn_password_stored,
             app_password_stored: self.app_password_stored,
-            saved_account_problem: OpenFortiVpn
+            saved_account_problem: Client
                 .check_account(&vpn.host, &vpn.username, &vpn.realm)
                 .err(),
             feedback: self.feedback.clone(),
@@ -276,11 +277,11 @@ impl Runtime {
         if !app_password.is_empty() && address.is_empty() {
             return fail(forms, AccountSaveError::AppPasswordNeedsAddress {});
         }
-        if let Err(problem) = OpenFortiVpn.check_account(&host, &username, &realm) {
+        if let Err(problem) = Client.check_account(&host, &username, &realm) {
             return fail(forms, AccountSaveError::AccountValue { problem });
         }
         if !vpn_password.is_empty()
-            && let Err(error) = OpenFortiVpn.check_vpn_password(&vpn_password)
+            && let Err(error) = Client.check_vpn_password(&vpn_password)
         {
             return fail(forms, error);
         }
@@ -482,6 +483,10 @@ impl Runtime {
             };
             settings.vpn.trusted_certs =
                 connection::merge_trusted_certs(&imported.trusted_certs, kept);
+            if !same_gateway {
+                // The other OS's values belong to the old gateway too.
+                settings.vpn.trusted_cert_pins.clear();
+            }
         });
         if let Err(error) = written {
             return self.finish_import(

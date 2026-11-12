@@ -126,7 +126,7 @@ fn reads(length: usize, cuts: &BTreeSet<usize>) -> Vec<Range<usize>> {
 struct Replay {
     /// The prompts reported between one stdin pause and the next, the last entry after the last pause.
     prompts_per_pause: Vec<Vec<Prompt>>,
-    run: Run,
+    run: Run<fvm_backend_adapter::openfortivpn::Interpreter>,
 }
 
 fn replay(

@@ -4,7 +4,6 @@
 
 use std::time::Duration;
 
-use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_helper::HelperStatus;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::port::{
@@ -12,6 +11,7 @@ use fvm_contract::app_internal::port::{
 };
 use fvm_core::connection::{self, HelperFacts, ReadinessFacts};
 
+use crate::client::Client;
 use crate::orchestration::Runtime;
 
 /// Gives the system time to start the replaced Helper.
@@ -100,7 +100,7 @@ impl Runtime {
         let address = settings.otp.gmail_address.clone();
         let account_values_usable = !vpn.host.is_empty()
             && !vpn.username.is_empty()
-            && OpenFortiVpn
+            && Client
                 .check_account(&vpn.host, &vpn.username, &vpn.realm)
                 .is_ok();
         let mut facts = ReadinessFacts {

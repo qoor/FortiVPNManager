@@ -18,6 +18,8 @@ struct Case {
     path_changed: bool,
     within_wake_grace: bool,
     observed_up: Option<f64>,
+    /// Windows: a kill shows no signal.
+    no_signals: bool,
 }
 
 fn outcome(facts: ExitFacts, case: Case) -> Outcome {
@@ -31,6 +33,7 @@ fn outcome(facts: ExitFacts, case: Case) -> Outcome {
         path_changed: case.path_changed,
         within_wake_grace: case.within_wake_grace,
         observed_up: case.observed_up.map(Duration::from_secs_f64),
+        kills_show_as_signals: !case.no_signals,
     })
 }
 
@@ -208,6 +211,94 @@ fn killed_after_the_tunnel_came_up() {
                 .facts()
         ),
         Outcome::NetworkError
+    );
+}
+
+/// Without signals a kill cannot be told from the server or a drop, so after the tunnel came up
+/// every end nobody here asked for reconnects at once.
+#[test]
+fn without_signals_every_unrequested_end_after_the_tunnel_is_forced() {
+    let windows = |facts, case: Case| {
+        outcome(
+            facts,
+            Case {
+                no_signals: true,
+                ..case
+            },
+        )
+    };
+    for up in [5.0, 180.0, 5_000.0] {
+        assert_eq!(
+            windows(ended(Milestone::TunnelUp).up(up).facts(), Case::default()),
+            Outcome::ForcedTermination,
+            "{up}"
+        );
+    }
+    assert_eq!(
+        windows(
+            ended(Milestone::TunnelUp).up(5_000.0).facts(),
+            Case {
+                seen: Some(Milestone::TunnelUp),
+                observed_up: Some(5_000.0),
+                ..Case::default()
+            }
+        ),
+        Outcome::ForcedTermination,
+        "a session ends the same way"
+    );
+    // Stops the app or the Helper asked for keep their rules.
+    assert_eq!(
+        windows(
+            ended(Milestone::TunnelUp)
+                .by_helper(StopReason::HelperShutdown)
+                .up(5_000.0)
+                .facts(),
+            Case::default()
+        ),
+        Outcome::NetworkError
+    );
+    assert_eq!(
+        windows(
+            ended(Milestone::TunnelUp).up(1.0).facts(),
+            Case {
+                app_stop: Some(StopReason::AttemptTimeout),
+                ..Case::default()
+            }
+        ),
+        Outcome::NetworkError
+    );
+    // Before the tunnel the stage rules stay, for the gateway's IP block.
+    assert_eq!(
+        windows(
+            ended(Milestone::ConnectedToGateway).facts(),
+            Case::default()
+        ),
+        auth(Failure::AuthenticationRejected)
+    );
+    assert_eq!(
+        windows(ended(Milestone::OtpSubmitted).facts(), Case::default()),
+        auth(Failure::OtpRejected)
+    );
+}
+
+/// The Helper ends a run whose client asks again for what it was given.
+#[test]
+fn a_repeated_prompt_is_a_rejected_login_or_otp() {
+    assert_eq!(
+        plain(
+            ended(Milestone::ConnectedToGateway)
+                .by_helper(StopReason::PromptRepeated)
+                .facts()
+        ),
+        auth(Failure::AuthenticationRejected)
+    );
+    assert_eq!(
+        plain(
+            ended(Milestone::OtpSubmitted)
+                .by_helper(StopReason::PromptRepeated)
+                .facts()
+        ),
+        auth(Failure::OtpRejected)
     );
 }
 

@@ -1,4 +1,5 @@
 //! Misuse that would leave a run waiting forever fails at once.
+#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
 
 mod common;
 

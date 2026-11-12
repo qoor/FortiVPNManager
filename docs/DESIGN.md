@@ -6,13 +6,14 @@
 ## 1. 배경
 - FortiGate SSL VPN 서버가 약 3시간마다 세션을 강제로 끊는다. 그때마다 `sudo openfortivpn`을 다시 실행하고 Gmail로 온 이메일 OTP를 손으로 입력해야 했다.
 - 개인 Mac에서 쓰는 도구다. 지인 배포는 추후 과제이고, 유료 Apple Developer 계정은 없다.
-- 나중에 Linux와 Windows에서도 쓰고, VPN client로 openconnect도 고를 수 있게 하려 한다(§7.2).
+- 회사 Windows PC에서도 같은 일을 하려 한다. Windows에서는 openconnect를 VPN client로 쓴다(§7.1, §7.2). openconnect는 나중에 macOS와 Linux에서도 쓸 수 있게 한다. Linux는 추후 과제다.
 
 ## 2. 목표와 범위
 - **목표**
   - 메뉴바에 상주하면서 openfortivpn 실행, OTP 입력, 재연결을 사람 대신 한다.
   - 사용자가 신경 쓸 일을 최소로 줄인다. 인증서 확인 창, 수동 OTP 입력 창, 기술적인 설정 항목을 두지 않는다.
-  - 다른 OS와 VPN client를 붙일 때 UI, OS 연동, VPN client 처리만 새로 만들면 되도록 공통 부분을 나눠 둔다. 지금 지원하는 것은 macOS와 openfortivpn이다.
+  - 다른 OS와 VPN client를 붙일 때 UI, OS 연동, VPN client 처리만 새로 만들면 되도록 공통 부분을 나눠 둔다. 지원하는 것은 macOS + openfortivpn과 Windows + openconnect다.
+  - 한 기기의 config.yaml을 다른 OS로 그대로 옮겨 쓸 수 있게 한다. 비밀번호와 Gmail 인증만 그 기기에서 다시 넣는다.
 - **범위 밖**
   - 앱이 비정상 종료된 뒤 실행 중인 터널을 다시 이어받는 기능(adopt)
   - split DNS, 다중 VPN 프로필
@@ -44,6 +45,17 @@
 | config.yaml은 엄격하게 읽는다 | 사람이 직접 편집하는 파일이다. YAML 1.1의 8진수·60진수 해석, anchor/alias처럼 의도와 다르게 읽힐 수 있는 문법은 거부한다. 파일에 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다 |
 | 앱이 config.yaml을 다시 쓰면 직접 단 주석과 이 버전이 모르는 키는 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장, 새 인증서 digest 기록, 예외 규칙 가져오기뿐이다 |
 | 로그는 마스킹하지 않은 원본을 보여준다 | 기본 verbosity에서는 비밀값이 출력되지 않음을 openfortivpn 소스에서 확인했다. 문제를 추적할 때는 원본이 가장 유용하다 |
+| Windows에서는 openconnect(`--protocol=fortinet`)를 감싼다 | openfortivpn은 Windows를 공식 지원하지 않는다. 사용자 PC의 FortiClient 7.4.3에는 CLI가 없고, 회사 설치본이라 올릴 수 없다. openconnect로 같은 게이트웨이에 비밀번호와 이메일 OTP로 로그인하는 것을 실제 PC에서 확인했다(§6) |
+| openconnect의 인증서 고정 값은 config.yaml의 새 키(`vpn.trusted_cert_pins`)에 둔다 | 값의 형식이 openfortivpn과 달라(`pin-sha256:`) 같은 목록에 섞을 수 없다. 섞으면 이전 빌드가 형식 오류로 경고한다. 새 키는 이전 빌드가 모르는 키로 보고 경고만 하므로 빌드끼리의 호환을 지킨다 |
+| openconnect에는 인증서 고정 값을 항상 하나 이상 넘긴다 | 고정 값 없이 실행하면 pipe에 아무것도 내보내지 않고 멈췄다. 맞지 않는 값을 넘기면 실제 값을 출력하고 곧바로 끝난다. 그래서 openfortivpn과 같은 "거부 → 저장 → 즉시 재시도" 흐름이 되고, 인증서 질문에 답하는 장치가 필요 없다 |
+| openconnect 처리는 OS와 무관하게 두고, OS마다 다른 것만 나눈다 | openconnect는 나중에 macOS와 Linux에서도 쓴다. 실행 인자, prompt, 출력 문구, 인증서 값 형식, 세션 cookie와 logout은 OS와 무관하다. OS마다 다른 것은 실행 파일 위치, 넘길 환경 변수, 터널 어댑터를 만들었다는 줄, route 스크립트, 정상 종료 요청 수단이다. 인증서 목록은 OS가 아니라 VPN client를 따른다 |
+| openconnect는 로그인과 터널을 두 번의 실행으로 나눈다 | Helper가 logout하려면 세션 cookie가 필요하다(아래). 연결하면서 cookie를 출력하는 옵션은 Windows에서 openconnect가 정상 종료할 때까지 출력 버퍼에 남아, 강제로 끝내면 잃는다. 로그인만 하는 실행은 cookie를 출력하고 정상 종료하므로 곧바로 받는다. 받은 cookie를 stdin으로 넘기면 둘째 실행이 터널을 연다. OS와 무관한 흐름이라 다른 OS에서도 그대로 쓴다 |
+| Helper가 세션 cookie를 가진 채 openconnect를 강제로 끝내면 게이트웨이에 logout 요청을 보낸다 | 강제로 끝내면 openconnect가 logout하지 못해 세션이 idle timeout(50분)까지 서버에 남는다. 따로 보낸 logout 요청으로 세션이 끝나는 것을 확인했다(§6). 정상 종료 요청으로 끝나면 openconnect가 스스로 logout하므로 보내지 않는다. 그래서 signal이 있는 OS에서는 유예를 넘겨 강제로 끝낼 때만 보내고, Windows에서는 늘 보낸다 |
+| logout 요청은 OS의 curl로 보낸다 | Helper에 TLS와 인증서 고정 확인 코드를 따로 넣지 않아도 된다. Windows 10 이후에는 관리자만 바꿀 수 있는 System32에 있고, macOS·Linux에도 기본으로 있다. 인증서 고정 값이 맞을 때만 서버와 통신하는 것을 확인했다. cookie는 stdin으로 넘기고, curl 설정 파일과 proxy 설정은 읽지 않게 한다 |
+| openconnect 연결 성공은 터널 어댑터를 만든 시점으로 본다 | `Configured as` 줄은 어댑터가 생기기 약 1초 전에 나온다. 그 뒤 route가 다 들어가기까지 몇 초가 더 걸리지만 기다리지 않는다. macOS도 route를 확인하지 않고, 그동안 생기는 일은 새로 여는 연결이 잠깐 VPN을 타지 않는 정도다. route 스크립트가 실패하는 일이 실제로 보이면 그때 확인을 더한다 |
+| Windows에서는 openconnect를 늘 강제로 끝내고, 그것이 띄운 route 스크립트도 함께 끝낸다 | Windows에는 signal이 없다. openconnect가 logout하는 정상 종료 수단은 console 이벤트뿐인데, 다른 프로세스의 console에 붙어 이벤트를 보내는 시험 실행 파일을 회사 PC의 보안 프로그램(AhnLab MDS)이 악성으로 막았다(2026-11-12). 그래서 늘 강제로 끝내고 Helper가 logout한다. 터널 직후에 끝내면 route 스크립트가 아직 돌고 있어, 함께 끝내지 않으면 정리한 게이트웨이 host route를 스크립트가 다시 넣을 수 있다 |
+| Windows는 터널이 올라온 뒤 요청 없이 끝난 openconnect를 모두 강제 종료로 본다 | 사용자 결정이다(2026-11-11). signal이 없어서 밖에서 끝낸 것을 구분할 수 없다. 로그인은 이미 성공했으므로 FortiGate 차단과 무관하다. 접속 직후 끊기는 일이 반복돼도 곧바로 재연결은 한 번뿐이고, 그 뒤 backoff하다 시도 상한에서 멈춘다 |
+| Windows 예외 규칙은 주 interface의 persistent route로 둔다 | OS가 저장해 두고 다시 넣으므로 macOS의 additional routes와 성질이 같다. persistent 목록에는 VPN 스크립트가 넣는 실행 중 route가 없어서 "앱이 넣은 것"과 "밖에서 넣은 것"의 구분이 그대로 성립한다. VPN이 받은 대역보다 좁은 예외 route가 먼저 선택되는 것을 실제 PC에서 확인했다 |
 | 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명은 라이브러리 원문(영어)을 그대로 보인다(§7.2) |
 
 ### 3.2 구조와 기술
@@ -58,6 +70,11 @@
 | 내부 오류는 곧바로 중단한다 | 억지 예외 처리 대신 panic은 abort하고 crash report를 남긴다. Release 빌드에도 줄 번호를 남긴다 |
 | config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
 | TLS는 rustls에 ring provider 하나와 platform verifier를 쓴다 | OS의 신뢰 저장소를 따른다. aws-lc-rs는 넣지 않는다. HTTPS는 OS의 proxy 설정을 따른다 |
+| Windows의 UI와 OS 연동은 C# WinUI 3로 만든다 | 사용자 결정이다(2026-11-12, 처음에는 WPF). macOS에서 Swift를 고른 이유와 같다(OS 기본 UI). WinUI 3는 Windows에서만 빌드되지만 빌드와 시험을 Windows PC에서 하므로 문제가 없다 |
+| Windows 앱도 런타임을 같은 프로세스에서 시작하고 같은 JSON 메시지를 쓴다 | Rust 시작 함수가 익명 pipe 두 개를 만들어 handle 값만 돌려준다. C#은 이를 stream으로 감싸 읽고 쓰므로 둘 사이에 pointer가 오가지 않는다. C# 쪽 메시지 정의는 Swift처럼 Rust가 만든 fixture로 검사한다 |
+| Windows Helper는 Rust만으로 된 Windows 서비스(LocalSystem)다 | 서비스 진입, 연결 통로, 프로세스 처리를 모두 Rust 라이브러리로 할 수 있어 macOS의 Swift 껍데기 같은 OS 쪽 코드가 필요 없다. 서비스 시작 callback은 인자를 읽지 않으므로 unsafe가 필요 없다 |
+| Windows 앱 ↔ Helper는 named pipe 위의 같은 메시지다 | XPC 자리다. 통로는 설치할 때 정한 사용자와 시스템만 열 수 있게 접근 권한을 둔다. 앱은 통로가 시스템 계정 소유인지 확인한 뒤에 비밀번호를 보낸다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 가로채는 일을 막기 위해서다. 연결한 프로그램이 설치본인지는 unsafe 없이 확인할 방법이 없어 확인하지 않는다(§8) |
+| Windows의 route 읽기·쓰기는 PowerShell route cmdlet을 고정 argv로 실행하고 JSON으로 받는다 | macOS의 networksetup처럼 시스템 명령을 쓴다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없고, route API를 직접 부르면 unsafe가 필요하다 |
 
 ## 4. 구성과 역할
 
@@ -70,6 +87,7 @@
   - Swift의 OS 연동 Helper(XPC, launchd, 서명 확인, route 복구, networksetup)가 Rust Helper entry(watchdog과 backend adapter)를 같은 프로세스에서 시작한다.
   - 상태를 저장하지 않고 config.yaml도 읽지 않는다. 앱이 보낸 값 중 검증을 통과한 것만 쓴다. 환경 변수는 PATH만 넘긴다(openfortivpn이 proxy 환경 변수를 읽기 때문, §6).
 - **둘을 나눈 이유**: root로 실행되는 코드를 최소로 줄이기 위해서다. 앱은 root 권한 없이 자유롭게 재시작하거나 재설치할 수 있다.
+- **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, macOS Helper의 Swift 부분이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다.
 
 ### 4.2 앱과 Helper 사이의 규칙
 - XPC 연결은 양쪽이 서로의 code signing requirement(Team ID + signing identifier)를 확인한다. 비밀번호는 Helper의 버전을 확인한 뒤에만 보낸다.
@@ -78,6 +96,7 @@
 - XPC로 오가는 내용은 공통 계약이 정한 JSON이다. 앱의 OS 연동은 내용을 읽지 않고 런타임에 그대로 넘기며, 직접 읽는 것은 버전뿐이다.
 - Helper는 앱의 연결이 끊기면(종료, 강제 종료, 크래시) 터널을 정상 종료한다. 그래서 세 경우가 모두 같은 경로를 탄다.
 - Helper가 보내는 이벤트와 로그 출력은 하나의 순서 있는 채널로 전달된다. 연결 해제나 종료가 끝났는지는 요청에 대한 응답이 아니라 Helper가 보내는 종료 이벤트로 판단한다.
+- Windows에는 서명 확인이 없다(유료 인증서가 없다). 그 대신 Helper는 통로의 접근 권한으로 상대 사용자를 제한하고, 앱은 통로의 소유자가 시스템 계정인지 확인한다. 같은 빌드인지 확인하는 규칙과 메시지 형식은 macOS와 같다.
 
 ### 4.3 구성 요소
 구성 요소마다 디렉토리를 하나 둔다. 구성 요소 안에서 OS에 의존하는 부분만 `macos/` 같은 하위 디렉토리로 나눈다. Rust crate 이름에는 `fvm-` 접두사를 붙인다(Rust의 기본 라이브러리 `core`와 겹치지 않게).
@@ -85,22 +104,28 @@
 ```
 components/
   contract/                     공통 계약: backend 인터페이스, 앱 ↔ Helper 메시지, 앱 ↔ 런타임 메시지, 메시지 읽기·쓰기
-                                (macos/: Swift 쪽 정의와 XPC 연결 정의)
+                                (macos/: Swift 쪽 정의와 XPC 연결 정의, windows/: C# 쪽 정의)
   core/                         판단 코어: 연결 state machine, config.yaml, 예외 규칙 계산, IMAP·Gmail API·OAuth·OTP 메일 형식. I/O 없음
   runtime/                      런타임: 조율과 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화, UI 메시지
-                                (src/macos/, macos/: macOS 앱이 런타임을 시작하는 부분)
+                                (src/macos/, macos/, src/windows/: 각 OS 앱이 런타임을 시작하는 부분)
   backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 유예 시간, 검증된 버전, 기존 설정 가져오기
-  watchdog/                     watchdog: 프로세스 실행, stdin, 출력, 단계별 시간 제한, 종료, 종료 사실 (unix/)
-  helper-entry/                 Helper entry: 앱 요청 처리, 실행 기록, 남은 프로세스 정리. OS 전용 API 없음
+  backend-adapter/openconnect/  backend adapter: 두 번의 실행 인자, 출력 해석, 세션 cookie, logout 요청, 검증된 버전
+                                (OS마다 다른 것: 실행 파일 위치, 환경 변수, 터널 어댑터 줄. 지금은 Windows만)
+  watchdog/                     watchdog: 프로세스 실행, stdin, 출력, 단계별 시간 제한, 종료, 종료 사실 (unix/, windows/)
+  helper-entry/                 Helper entry: 두 OS가 함께 쓰는 앱 요청 처리, 실행 기록, 남은 프로세스 정리. OS 전용 API 없음
                                 (macos/: Helper의 시작 함수. backend adapter와 macOS의 프로세스 확인·종료,
-                                 실행 기록 폴더 권한을 Helper entry에 넘긴다)
+                                 실행 기록 폴더 권한을 Helper entry에 넘긴다. windows/: Helper 서비스 실행 파일)
   ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
+  ui/windows/                   UI: 알림 영역 아이콘과 설정창, 모든 문장과 번역
   os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
+  os-integration/windows/       OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달, Helper 통로
   os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
 packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보
+packaging/windows/              C# solution, 설치 스크립트
 ```
 
 - **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, backend adapter, 공통 계약.
+- Windows의 Helper 서비스는 macOS의 OS 연동 Helper 자리를 따로 두지 않는다. 서비스 진입, 통로, route 정리를 Rust로 할 수 있어서다.
 - 판단 코어와 watchdog은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
 - **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.
 - **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점만 새로 만든다. Linux와 Windows의 서비스는 Helper entry를 그대로 쓰고, backend adapter를 골라 시작하는 부분만 맡는다.
@@ -109,6 +134,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
+- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다. 파일을 Program Files에 복사하고, 서비스를 등록하고(부팅 때 시작, 비정상 종료 때 다시 시작), 통로를 열 사용자를 정한다. 이 사용자는 화면에 로그인한 사용자가 기본이고 직접 지정할 수도 있다. 일반 사용자가 설치하면 스크립트가 관리자 계정으로 돌아서, 실행한 계정을 고르면 정작 사용자의 앱이 연결하지 못하기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). 재설치는 서비스 정지 → 교체 → 시작이다.
 
 ## 5. 동작 원칙
 
@@ -124,7 +150,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 - 앱이 요청해서 끝난 연결(연결 해제, 사전 재연결, 잠자기, 종료)은 분류하지 않는다.
 - 나머지는 아래 순서로 판단한다.
   1. OTP를 쓰기 전에 인증서가 거부됐다: digest를 저장하고 즉시 한 번 다시 시도한다. 실패로 세지 않는다.
-  2. 터널이 올라온 뒤 앱도 Helper도 멈추지 않은 openfortivpn이 signal로 끝났다: 누군가 강제로 끝낸 것이다. 서버나 계정 탓이 아니므로 유지 시간과 관계없이 실패로 세지 않고 곧바로 재연결한다.
+  2. 터널이 올라온 뒤 앱도 Helper도 멈추지 않은 openfortivpn이 signal로 끝났다: 누군가 강제로 끝낸 것이다. 서버나 계정 탓이 아니므로 유지 시간과 관계없이 실패로 세지 않고 곧바로 재연결한다. Windows의 openconnect는 어떻게 끝났든 여기에 넣는다(§3.1).
   3. 안정적으로 유지되던 터널이 우리 요청 없이 끝났다: 서버가 세션을 끝낸 것으로 보고 잠시 뒤 재연결한다.
   4. 게이트웨이에 닿기 전에 끝났다: 네트워크 오류로 보고 backoff한다.
   5. 로그인 단계에서 끝났다: 인증 실패로 센다. 단, 시도 중 네트워크가 바뀌었거나 깨어난 직후라면 네트워크 오류로 본다.
@@ -154,6 +180,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 ### 5.5 예외 규칙
 사내망에 직접 연결돼 있을 때, VPN이 가져가는 대역 중 지정한 host나 대역을 그 네트워크의 router로 바로 보낸다. VPN을 재연결해도 SSH 같은 TCP 세션이 끊기지 않게 하려는 것이다.
 - **방식**: 주 네트워크 서비스의 additional routes(`networksetup -setadditionalroutes`)를 쓴다. macOS가 서비스 설정에 저장하고 서비스가 켜질 때마다 넣으므로, 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하게 동작한다. 쓰기에는 root가 필요해서 Helper가 실행한다.
+- **Windows 방식**: 주 interface(VPN 어댑터 제외)의 persistent route를 그 gateway로 쓴다. 성질과 규칙은 macOS와 같고, 앱이 쓴 route는 interface GUID 단위로 기억한다. 밖에서 바뀐 것을 알려 주는 알림이 없어 짧은 주기로도 확인한다.
 - **source of truth는 config.yaml**이다. 포맷한 뒤에도 config.yaml만 복원하면 그대로 적용된다.
 - **적용 대역(`routes.networks`)**: 이 Mac의 IPv4 주소가 목록의 대역 안에 있을 때만 적용한다. 밖에서는 앱이 넣은 route를 지워서 모든 트래픽이 VPN을 탄다. 이 목록에는 앱이 스스로 추가하지 않는다.
 - **동기화 원칙**
@@ -166,7 +193,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 - **감수하는 위험**: 외부 네트워크가 우연히 적용 대역과 같은 사설 대역을 쓰면 그곳에서도 적용된다.
 
 ### 5.6 UI
-macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같은 정보 구성(메뉴, pane 묶음)을 따른다.
+macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플랫폼과 구현 언어가 달라도 사용자에게 같은 구성으로 보인다(사용자 결정, 2026-11-11). 같은 창과 메뉴, 같은 pane을 같은 순서와 같은 pane 고르는 방식(창 위쪽의 pane 버튼)으로 두고, pane 안의 항목도 같은 묶음과 순서로 둔다. 컨트롤은 그 OS의 기본 컨트롤로 그린다. 다른 점은 OS에 없는 것뿐이다. Windows는 메뉴바 대신 알림 영역 아이콘에서 같은 메뉴를 열고, 그 OS에 해당하지 않는 항목(기존 openfortivpn 설정 가져오기, Helper 승인)은 빠진다.
 - 메뉴바 아이콘은 연결됨 / 끊김 / 연결·재연결 중 / 오류 네 가지만 구분한다.
 - **메뉴바 메뉴**: 상태와 연결 동작을 둔다.
   - 연결된 동안 터널 IP와 연결 시각을 보인다.
@@ -220,10 +247,52 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
 - Rust의 `main`이 아닌 프로세스(Swift 앱에 링크된 Rust 라이브러리)에서는 SIGPIPE가 무시되지 않는다. 닫힌 상대에게 쓰면 프로세스가 죽는다.
 - `xcodebuild`는 String Catalog에 새 문장을 넣지 않는다. Xcode에서 빌드하거나, 빌드가 남긴 `.stringsdata`로 `xcstringstool sync`를 실행한다.
 
-**openconnect 9.21 (Windows에서 확인, 나중의 backend)**
-- `--protocol=fortinet`으로 같은 게이트웨이에 비밀번호와 이메일 OTP로 로그인했다. prompt는 `Password:` 다음 `Code:`다.
-- 인증서 고정 값의 형식이 openfortivpn과 다르다(`pin-sha256:`, SPKI base64). openfortivpn의 digest는 맞지 않으므로 고정 값은 backend마다 따로 둔다.
-- route가 많으면(약 27개) vpnc-script-win.js가 openconnect의 10초 제한을 넘긴다. 스크립트는 나중에 끝나고 터널은 유지됐다. Wintun은 쓸 때마다 "experimental" 경고를 낸다.
+**openconnect 9.21 / Windows 11** (사용자 PC, 2026-11-06·11-10 시험. 회사 FortiClient가 설치된 상태)
+- `--protocol=fortinet`으로 같은 게이트웨이에 비밀번호와 이메일 OTP로 로그인했다.
+  - `Password:`와 `Code:` prompt는 stderr에 줄바꿈 없이 나온다. 비밀번호는 TLS 검증 뒤에 묻는다.
+  - 진행 줄(`Connected to HTTPS on`, `Got Legacy IP address`, `Configured as`)은 stdout에 나온다.
+- realm은 접속 URL의 경로로 넘긴다(소스 확인).
+- **인증서**
+  - 고정 값의 형식이 openfortivpn과 다르다(`pin-sha256:`, SPKI base64). openfortivpn의 digest는 맞지 않는다.
+  - 고정 값 없이 실행하면 "signer not found" 뒤 pipe에 아무것도 내보내지 않고 기다렸다. Ctrl+C 이벤트에도 끝나지 않았다.
+  - 맞지 않는 값을 넘기면 실제 값을 stderr에 출력하고 바로 exit 1로 끝난다. 묻지 않는다.
+- 비밀번호 미리 넣기 옵션은 인증서 질문이 그 줄을 읽고, 비대화 옵션은 OTP 질문까지 막는다(소스 확인). 로그인이 거부되면 끝나지 않고 다시 묻는다.
+- **터널이 올라오는 순서**
+  - OTP를 넣은 뒤 약 1초에 `Configured as`가 나온다.
+  - 약 1초 뒤 Wintun 어댑터가 생긴다(stderr `Using Wintun device '…', index N`).
+  - 그 뒤 vpnc-script-win.js가 route를 넣는다. 2026-11-10에는 route 29개가 `Configured as` 뒤 6~8초에 다 들어갔다. 2026-11-06의 수동 실행과 2026-11-12 시험에서는 openconnect의 10초 스크립트 제한을 넘겨 "Script did not complete within 10 seconds"와 "Failed to spawn script" 줄이 나왔지만 터널은 유지됐다. 소스상 openconnect는 이 결과를 무시하고 스크립트를 끝내지도 않는다.
+  - 스크립트의 출력은 openconnect의 pipe로 오지 않는다.
+- 게이트웨이는 DNS를 주지 않는다(macOS openfortivpn도 같다).
+- **끊김** (2026-11-11 시험: 어댑터 끄기, 게이트웨이만 방화벽으로 막기)
+  - 게이트웨이는 끊긴 세션으로 다시 붙는 것을 허용하지 않는다. openconnect가 다시 붙으려 하면 서버가 거부하고(HTTP 302 또는 403), openconnect는 logout한 뒤 exit 2로 끝난다. exit 2는 이 경우에만 나온다(소스 확인).
+  - 다시 붙으려는 시도는 기본값으로 300초 동안 10초, 20초, 30초… 간격으로 한다. 대기 시간을 다 써도 마지막 간격만큼 쉰 뒤 한 번 더 시도한다. 대기를 0으로 하면 첫 재시도가 실패하는 즉시 끝난다(소스 확인).
+  - 어댑터가 꺼지면 곧바로 알아챈다. 선은 살아 있고 게이트웨이와의 통신만 끊기면 약 20초 뒤 dead peer로 알아챈다.
+  - 다시 시도하는 동안에도 터널 어댑터는 Up으로 남는다. 통신이 끊긴 것은 openconnect가 끝날 때에야 알 수 있다.
+  - 스스로 끝날 때는 게이트웨이 host route도 지운다.
+  - 유선이 끊기자 Wi-Fi가 곧바로 붙어 openconnect가 그 경로로 서버에 닿았지만 역시 거부됐다.
+- 데이터는 DTLS(UDP)로 보낸다. openfortivpn은 TLS(TCP)만 쓴다.
+- 같은 계정의 동시 세션이 허용된다. Windows에서 세 번 로그인하는 동안 Mac 세션이 유지됐다.
+- OTP를 67초 뒤에 넣었더니 거부되고 Code를 다시 물었다. 56초 뒤에는 받아들여졌다. 오래 기다리면 서버가 연결을 닫지만 openconnect가 새 연결로 다시 보낸다.
+- **종료**
+  - 터널이 올라온 뒤 다른 프로세스가 openconnect의 console에 붙어 Ctrl+C 이벤트를 보내면 logout하고 route를 되돌린 뒤 2초 안에 exit 0으로 끝난다.
+  - Ctrl+C를 무시하는 설정은 자식 프로세스에 물려진다. SSH로 접속한 세션은 명령을 이 설정으로 실행해서, 그 아래에서 띄운 프로세스는 Ctrl+C를 받지 못한다. Windows가 시작한 서비스에는 이 설정이 없다. 시스템 계정 서비스 안에서 띄운 프로세스에 같은 서비스 안에서 보낸 Ctrl+C가 전달됐다(2026-11-11).
+  - 회사 PC의 AhnLab MDS Agent가 다른 프로세스의 console에 붙어 Ctrl+C를 보내던 시험 실행 파일을 "악성 파일 진단 후 차단"으로 막았다(탐지명 없음, 2026-11-12). 처음 보는 실행 파일은 몇 분씩 분석한 뒤에 실행된다.
+  - 소스상 Ctrl+C와 console 닫힘·logoff·shutdown 이벤트는 logout하는 취소이고, Ctrl+Break는 logout 없이 세션을 남기고 끝나는 detach다. Ctrl+Break만 process group 하나로 보낼 수 있으므로, 보낸 쪽을 피하려고 Ctrl+Break를 쓰면 logout이 되지 않는다.
+  - 강제 종료하면 터널 어댑터와 주소는 사라지지만 게이트웨이로 가는 host route가 남는다. 어댑터는 숨은 상태로 남았다가 다음 openconnect 실행이 지운다. 그래서 어댑터 이름이 매번 같지 않다.
+  - 강제 종료 직후 다시 로그인할 수 있었다.
+  - 프로세스 트리째 강제로 끝내면 openconnect가 띄운 route 스크립트도 함께 끝난다.
+- **세션 cookie와 logout** (2026-11-12 시험)
+  - 로그인만 하는 실행은 stdout에 `COOKIE='SVPNCOOKIE=…'`와 HOST, CONNECT_URL, FINGERPRINT, RESOLVE 줄을 내고 exit 0으로 끝난다. 그 cookie를 stdin으로 받은 둘째 실행이 터널을 열었다.
+  - 연결하면서 cookie를 출력하는 옵션은 출력을 비우지 않아, stdout이 pipe일 때 정상 종료할 때까지 나오지 않는다(소스 확인).
+  - 강제 종료 뒤 2·30·90초에도 서버는 그 cookie를 세션으로 다뤘다. 세션 정보 요청에 접근 거부(HTTP 403)가 왔고, 끝난 세션이나 가짜 cookie에는 로그인 페이지로 가라는 응답(HTTP 302)이 온다. logout 요청 뒤에는 끝난 세션과 같은 응답이 왔다.
+  - logout 요청의 응답은 가짜 cookie에도 같다(HTTP 200, 같은 길이). 그래서 응답으로 성공 여부를 알 수 없다.
+  - Windows의 curl은 `-k`를 줘도 공개 키 고정 값이 틀리면 통신하지 않는다.
+- Wintun은 openconnect 설치본에 들어 있고, 쓸 때마다 "experimental" 경고를 낸다. 날짜와 Windows 오류 문장 같은 일부 출력은 시스템 언어로 번역되고 UTF-8이 아니다.
+
+**Windows route**
+- `route -p add`로 넣은 route는 persistent 목록에 들어가고 곧바로 쓰인다. VPN이 받은 /24보다 좁은 /32 예외 route가 먼저 선택됐고, VPN 정상 종료와 강제 종료 뒤에도 남았다.
+- PowerShell로 넣어도 기본으로 지금 쓰는 목록과 persistent 목록 둘 다에 들어간다. 다시 시작한 뒤에도 남아 선택됐다. 어댑터를 끄면 잠시 빠졌다가 다시 켜면 저절로 돌아온다(2026-11-11).
+- `route.exe`와 `route print`의 출력은 시스템 언어로 번역된다.
 
 ## 7. 결정 이력과 교훈
 같은 실수를 반복하지 않기 위해, 현재 구성에 이르게 한 결정과 그 근거를 남긴다.
@@ -255,6 +324,23 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
   - Windows 지원과 openconnect backend를 붙이기 전에 했다. 정보 구성을 먼저 확정하면 Windows UI는 그것을 한 번만 따라 만들면 되기 때문이다. Rust 쪽은 바뀌지 않았다. UI에 보내는 정보가 화면 단위가 아니라 주제 단위라서 pane을 나눠도 macOS UI만 고치면 됐다.
   - 실제 macOS 컨트롤로 만든 목업을 사용자가 직접 써 보고 정했다. 그 과정에서 바뀐 것: 로그는 별도 창 대신 pane, 일반 pane에도 상태 표시, 설정 필요 안내는 항목별 동작.
   - openconnect가 들어올 자리: backend 선택은 고급 pane의 VPN client 묶음에 둔다. 설정 가져오기는 계정 pane에 그대로 두고 backend에 따라 달라진다.
+- **2026-11-10 Windows + openconnect 계획과 PC 시험**
+  - 시험 스크립트로 사용자 PC에서 확인한 것을 바탕으로 정했다(§6). 정상 종료, 강제 종료 뒤 정리와 재로그인, 예외 route, 동시 세션이 이때 확인됐다.
+  - 바뀐 계획: 인증서 질문에 답하는 대신 고정 값을 항상 넘긴다. 연결 성공은 `Configured as`가 아니라 터널 어댑터를 만든 시점으로 본다.
+  - 사용자 결정: UI는 C# WPF, openconnect 고정 값은 새 키, driver는 openconnect에 들어 있는 Wintun(TAP은 문제가 보이면 검토), macOS는 openfortivpn을 그대로 쓰고 openconnect는 Windows에서만 검증, 정상 종료는 Rust unsafe 한 곳. 빌드 환경은 사용자가 나중에 정한다. 네트워크 끊김과 재부팅 확인은 구현한 뒤에 한다.
+  - 사용자 결정(2026-11-11): 연결한 프로그램이 설치본인지는 확인하지 않고 통로를 설치한 사용자로 제한한다(§8). Windows는 터널 뒤 요청 없는 종료를 모두 강제 종료로 본다. Mac에서 Windows 코드를 컴파일하는 확인은 보류한다.
+- **2026-11-11 Windows 끊김과 재부팅 시험**
+  - 구현 전에 사용자 PC에서 했다(§6). 끊긴 세션은 서버가 매번 거부해서 openconnect가 스스로 다시 붙은 적이 없다.
+  - openconnect의 재접속 대기를 0초로 정했다. 기다려서 얻는 것이 없고, 기다리는 동안 터널 어댑터가 남아 앱은 연결됨으로 보이기 때문이다. 기본값 300초면 최대 5분 동안 죽은 터널을 연결됨으로 보인다.
+  - 앱이 따로 통신 상태를 확인하지 않는다. 통신만 끊기는 경우도 openconnect가 약 20초 안에 알아채고 끝난다.
+  - 예외 route는 재부팅과 어댑터 끄고 켜기 뒤에도 남았다.
+- **2026-11-11 UI 구성 통일**: 사용자 결정이다. 처음에는 Windows 설정창을 Windows 설정 앱처럼 왼쪽 목록으로 pane을 고르게 했다. 사용자가 플랫폼과 구현 언어가 달라도 같은 구성으로 보이기를 원해서, 창·메뉴·pane과 pane 안 항목의 배치를 macOS와 같게 하고 컨트롤만 그 OS의 것을 쓴다.
+- **2026-11-12 Windows UI를 WinUI 3로 변경**: 사용자 결정이다. WPF를 고를 때의 이점이던 Mac에서의 컴파일은, 빌드와 시험을 Windows PC에서 하게 되면서 쓸 일이 없어졌다.
+- **2026-11-12 Windows 종료 방식 변경**
+  - Ctrl+C를 보내는 시험 실행 파일을 회사 PC의 보안 프로그램이 악성으로 막았다(§6). 실제 Helper도 같은 PC에서 돌기 때문에 이 방식을 버렸다.
+  - 강제 종료만 하면 세션이 서버에 남고, 게이트웨이 host route가 남고, 터널 직후라면 route 스크립트가 정리 뒤에 route를 다시 넣을 수 있다. 앞의 둘은 Helper가 logout과 route 정리를, 마지막은 프로세스 트리째 끝내는 것으로 막는다.
+  - 사용자가 Helper의 logout 방식(A안)을 골랐다. 실제 로그인으로 강제 종료 뒤 세션이 남고 logout 요청으로 끝나는 것을 확인한 뒤 정했다. Rust unsafe 예외가 없어졌다.
+  - 사용자 지시: openconnect는 Windows 전용이 아니다. 나중에 macOS와 Linux에서도 쓰므로 openconnect 처리는 OS와 무관하게 두고 OS마다 다른 것만 나눈다.
 - **2026-11-12 공통 구조 정리**
   - Windows와 openconnect를 붙이기 전에 따로 했다(사용자 결정). 동작은 바뀌지 않는다.
   - Helper entry에서 앱 요청 처리, 실행 기록, 남은 프로세스 정리를 macOS의 시작 부분과 나눴다. 다른 OS의 Helper가 이 부분을 그대로 쓰게 하려는 것이다. OS마다 다른 것(프로세스 확인과 종료, 실행 기록 폴더 권한)은 backend adapter처럼 OS별 시작 부분이 넘겨준다. 그래서 Helper entry에는 OS 전용 코드가 없다. 어떤 backend adapter를 쓸지도 OS별 시작 부분이 정한다.
@@ -270,7 +356,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
   - 공통 crate 5개(공통 계약, 판단 코어, 런타임, backend adapter, watchdog)와 macOS 전용 Helper entry 하나로 나눴다. backend adapter와 watchdog은 합치지 않았다. VPN client마다 바뀌는 부분과 프로세스 처리를 나눠야 유지보수가 쉽고, watchdog은 공통 계약에만 의존한다.
   - 디렉토리는 구성 요소 기준으로 나눴다. 언어별(`crates/`)이나 플랫폼별(최상위 `macos/`) 배치는 사용자가 거절했다.
   - UI 상태는 화면 모양의 전체 상태 대신 도메인 구역으로 보낸다(§3.2).
-  - Linux UI는 나중에 Rust + QML(cxx-qt)로 만든다. Windows UI는 나중에 정한다.
+  - Linux UI는 나중에 Rust + QML(cxx-qt)로 만든다. Windows UI는 그 뒤 C# WPF로 정했다(§7.1).
 - **진행 방식과 교훈**
   - 코드 이야기 없이 기능만 적은 명세(SPEC.md)를 먼저 썼다. 처음 쓴 초안은 코드를 산문으로 옮긴 것이라 다시 썼다.
   - 옛 코드는 바꿀 수 없는 외부 사실(XPC 메시지 모양, 시간 값과 횟수, openfortivpn 출력 문구와 실행 조건)을 확인할 때만 봤다. 옛 구조와 흐름은 따르지 않고 설계에서 출발했다. 옛 Swift 테스트는 Rust로 옮겨 같은 결과가 나오는지 확인했다.
@@ -301,6 +387,11 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
   2. **같은 사용자 권한의 코드가 root로 이어지는 경로**: Homebrew 바이너리 변조, Personal Team 키를 이용한 앱 사칭, `/Applications`의 앱 바꿔치기가 가능하다.
   3. **config.yaml 변조**: `vpn.host`를 바꾸면 1번과 결합해 자격증명이 다른 서버로 갈 수 있다. Keychain 항목이 `username@host` 단위라 host가 바뀌면 비밀번호를 다시 입력해야 하므로 부분적으로 완화된다.
 - 강화 옵션(인증서 변경 시 확인, root 소유 바이너리 사본, 게이트웨이 고정과 관리자 인증)은 추후 과제다.
+- **Windows**
+  - 비밀값은 Credential Manager에 저장하고, Helper에는 named pipe로 메모리 안에서만 전달한다.
+  - openconnect는 관리자만 쓸 수 있는 Program Files의 것만, logout 요청용 curl은 System32의 것만 실행한다.
+  - 세션 cookie는 Helper 메모리에만 두고, openconnect와 curl에는 stdin으로 넘긴다. 로그에는 값을 남기지 않는다.
+  - 감수하는 위험: 서명 확인이 없어서, 같은 사용자로 실행되는 다른 프로그램도 Helper에 연결해 연결, 해제, 예외 route 쓰기를 요청할 수 있다. Helper는 받은 값을 모두 다시 검증하므로 요청할 수 있는 일은 앱으로 할 수 있는 일로 한정된다. 위의 1·3번 위험은 Windows에도 같다.
 
 ## 9. 리스크와 추후 과제
 - FortiOS 7.6.3 이상으로 게이트웨이를 올리면 openfortivpn을 쓸 수 없다. openconnect의 `--protocol=fortinet`도 같은 SSL VPN tunnel mode라 대안이 되지 않는다. 대안은 아직 없다.
@@ -309,9 +400,16 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
 - Personal Team 인증서는 1년마다 만료된다.
 - openfortivpn을 업그레이드하면 출력 문자열이 바뀔 수 있다. 검증된 버전이 아니면 고급 pane에 경고를 띄운다.
 - Windows에서 openconnect를 쓸 때의 경고(§6)는 알려진 문제로 두고 써 보면서 개선한다. driver는 Wintun을 기본으로 하고, 불안정하면 TAP을 검토한다.
+- Windows는 터널 뒤 요청 없는 종료를 모두 강제 종료로 보므로, 접속 직후 스스로 끊기는 일이 반복되면 두 번째에 멈추지 않고 시도 상한(한 시간 12번)까지 로그인과 OTP 메일이 반복된다.
+- 회사 보안 프로그램이 서비스가 실행하는 PowerShell을 막으면 Windows 예외 규칙과 게이트웨이 host route 정리가 동작하지 않는다.
+- Windows에서 openconnect를 늘 강제로 끝내므로, Helper가 죽어 세션 cookie를 잃으면 그 세션은 idle timeout(50분)까지 서버에 남는다. 지금은 같은 계정의 동시 세션이 허용돼 다음 연결에 지장이 없다. 회사가 동시 접속을 막으면 다시 봐야 한다.
+- logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
+- 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
+- 아직 확인하지 않은 Windows 동작: route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지, 살아 있는 세션 cookie로 세션 정보를 물었을 때 접근 거부(HTTP 403)가 나온 이유.
 - 추후 과제
-  - openconnect backend, Linux 앱(Rust + QML)과 서비스, Windows 앱과 서비스
-  - Linux·Windows용 Rust 테스트를 돌릴 CI(GitHub Actions 후보, 사용자 확인 필요)
+  - Linux 앱(Rust + QML)과 서비스
+  - Windows 빌드 환경과 CI(GitHub Actions 후보, 사용자 확인 필요)
+  - macOS와 Linux의 openconnect: 실행 파일 위치, 환경 변수, 터널 어댑터 줄, 정상 종료 요청(SIGTERM)과 그 뒤의 logout 규칙 확인
   - 앱 크기 줄이기
   - 지인 배포, 인증서 보안 강화, split DNS, 다중 프로필, 비정상 종료 뒤 터널 이어받기(adopt), root 소유 바이너리 사본
 
@@ -327,3 +425,13 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
 8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다.
 9. 보안: `ps`와 로그에 비밀값이 없고, 렌더링된 openfortivpn 설정 파일은 0600이며 종료 후 삭제된다. config.yaml과 state.json은 0600이다. `make verify`가 통과한다.
 10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝낸다. 앱이 곧바로 재연결을 시작하고, 새 Helper가 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그를 남긴다. 남아 있던 openfortivpn과 pppd가 사라지고 새 터널이 올라온다.
+
+**Windows** (위 시나리오 중 OS와 무관한 4·6·7·9는 그대로 하고, 다음을 더한다)
+1. Mac의 config.yaml을 복사한 첫 실행: 비밀번호와 Gmail 인증만 넣으면 연결된다. `vpn.trusted_cert_pins`가 비어 있으면 거부 1회 뒤 즉시 재실행으로 연결되고 값이 저장된다.
+2. [연결 해제]와 사전 재연결: 로그에 강제 종료와 logout 요청(응답 코드)이 남고, 게이트웨이 host route가 사라지고, 남은 openconnect·route 스크립트 프로세스가 없다.
+3. openconnect를 작업 관리자로 끝냄: 게이트웨이 host route가 정리되고 곧바로 재연결된다.
+4. Helper 서비스를 작업 관리자로 끝냄: Windows가 서비스를 다시 시작하고, 새 서비스가 남은 openconnect를 정리한 뒤 앱이 다시 연결한다.
+5. 예외 규칙: 유선과 Wi-Fi 각각에서 대상이 직접 경로로 가고, VPN 재연결 뒤에도 유지된다.
+6. 네트워크를 잠깐 끊었다가 되돌림: openconnect가 곧바로 끝나고, 네트워크가 돌아오면 다시 연결된다. 절전과 재개
+7. 보안: 작업 관리자의 명령줄과 로그에 비밀값이 없다.
+8. 일반 사용자 계정: 관리자 계정 정보를 넣어 설치한 뒤, 일반 사용자의 앱이 서비스에 연결된다.

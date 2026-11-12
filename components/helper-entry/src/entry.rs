@@ -554,6 +554,7 @@ where
                 let json = to_json(&lines);
                 self.os.send(&FromEntry::SendOutput { app, json });
             }
+            Report::ClientStarted => self.client_started(),
             Report::Event(kind) => {
                 let event = HelperEvent {
                     attempt_id: current.attempt.clone(),
@@ -564,10 +565,6 @@ where
                     json: to_json(&event),
                 });
                 match event.kind {
-                    HelperEventKind::Milestone {
-                        milestone: Milestone::Spawned,
-                        ..
-                    } => self.client_spawned(),
                     HelperEventKind::Milestone {
                         milestone: Milestone::TunnelUp,
                         ..
@@ -584,8 +581,9 @@ where
         }
     }
 
-    /// Records the client so that a Helper started after this one died can stop it.
-    fn client_spawned(&mut self) {
+    /// Records the client so that a Helper started after this one died can stop it. A tunnel run
+    /// replaces the login run, which has exited.
+    fn client_started(&mut self) {
         let client_name = self.backend.client_name();
         let current = self.run.as_mut().expect("a run spawned its client");
         let Some(pid) = current.run.process_id() else {
