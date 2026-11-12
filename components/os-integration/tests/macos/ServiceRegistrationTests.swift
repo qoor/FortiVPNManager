@@ -2,9 +2,12 @@ import Foundation
 import Testing
 
 struct ServiceRegistrationTests {
-    @Test func theAppInstalledInApplicationsMayRegisterServices() {
-        let bundleURL = URL(filePath: "/Applications/FortiVPNManager.app", directoryHint: .isDirectory)
-        #expect(ServiceRegistration.isInstalledCopy(at: bundleURL))
+    @Test(arguments: [
+        "/Applications/FortiVPNManager.app/",
+        "/Applications/FortiVPNManager.app",
+    ])
+    func theAppInstalledInApplicationsMayRegisterServices(path: String) {
+        #expect(ServiceRegistration.isInstalledCopy(at: URL(filePath: path)))
     }
 
     @Test(arguments: [

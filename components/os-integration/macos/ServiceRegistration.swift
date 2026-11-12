@@ -6,13 +6,9 @@ import ServiceManagement
 /// somewhere else.
 @MainActor
 enum ServiceRegistration {
-    // Match Bundle.bundleURL's directory URL, including its trailing slash.
-    nonisolated private static let installedAppURL = URL(
-        filePath: "/Applications/FortiVPNManager.app", directoryHint: .isDirectory
-    )
-
+    // Compare paths, not URLs: URL equality counts the trailing slash that Bundle.bundleURL carries.
     nonisolated static func isInstalledCopy(at bundleURL: URL) -> Bool {
-        bundleURL.resolvingSymlinksInPath().standardizedFileURL == installedAppURL.standardizedFileURL
+        bundleURL.resolvingSymlinksInPath().path == "/Applications/FortiVPNManager.app"
     }
 
     static func helperStatus() -> AppInternal.PortResponse {
