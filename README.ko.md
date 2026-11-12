@@ -19,7 +19,7 @@ openfortivpn으로 FortiGate SSL VPN에 자동 접속하고, 끊기면 자동으
 - 예외 규칙: 지정한 사내 대역에 연결돼 있을 때 예외 대상 호스트·대역은 VPN을 거치지 않고 그 네트워크로 바로 나갑니다(macOS 추가 라우트, 재부팅 후에도 유지). 다른 네트워크에서는 모두 VPN을 거칩니다.
 - 설정은 `~/.config/FortiVPNManager/config.yaml`에, 비밀번호는 Keychain에 저장합니다.
 
-문서: [설계](docs/DESIGN.md) · [기능 명세](docs/SPEC.md)
+문서: [설계](docs/DESIGN.md) · [기능 명세](docs/SPEC.md) · [설정 UI](docs/SETTINGS-UI.md)
 
 ## 요구 사항
 

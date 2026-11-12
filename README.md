@@ -19,7 +19,7 @@ A macOS menu bar app that connects to FortiGate SSL VPN through openfortivpn and
 - Exception Rules: while connected to a specified corporate network range, the listed hosts and ranges bypass the VPN and go out directly through that network (macOS additional routes, kept across reboots). On any other network, everything goes through the VPN.
 - Settings are stored in `~/.config/FortiVPNManager/config.yaml` and passwords in the Keychain.
 
-Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md)
+Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md) · [Settings UI](docs/SETTINGS-UI.md)
 
 ## Requirements
 
