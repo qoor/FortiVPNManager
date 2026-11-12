@@ -6,10 +6,13 @@ import ServiceManagement
 /// somewhere else.
 @MainActor
 enum ServiceRegistration {
-    static let installedAppURL = URL(filePath: "/Applications/FortiVPNManager.app")
+    // Match Bundle.bundleURL's directory URL, including its trailing slash.
+    nonisolated private static let installedAppURL = URL(
+        filePath: "/Applications/FortiVPNManager.app", directoryHint: .isDirectory
+    )
 
-    static var isInstalledCopy: Bool {
-        Bundle.main.bundleURL.resolvingSymlinksInPath().standardizedFileURL == installedAppURL.standardizedFileURL
+    nonisolated static func isInstalledCopy(at bundleURL: URL) -> Bool {
+        bundleURL.resolvingSymlinksInPath().standardizedFileURL == installedAppURL.standardizedFileURL
     }
 
     static func helperStatus() -> AppInternal.PortResponse {
@@ -42,7 +45,7 @@ enum ServiceRegistration {
     private static var helper: SMAppService { .daemon(plistName: FortiIdentifiers.helperPlistName) }
 
     private static func change(_ body: () throws -> Void) -> AppInternal.PortResponse {
-        guard isInstalledCopy else { return .registrationFailed(error: .notInstalledCopy) }
+        guard isInstalledCopy(at: Bundle.main.bundleURL) else { return .registrationFailed(error: .notInstalledCopy) }
         do {
             try body()
             return .registered

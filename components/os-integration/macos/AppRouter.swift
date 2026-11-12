@@ -77,10 +77,6 @@ final class AppRouter {
 }
 
 extension AppInternal.AppFacts {
-    /// Only this copy may register the Helper and the login item, so the system never points at a
-    /// build elsewhere.
-    static let installedAppURL = URL(fileURLWithPath: "/Applications/FortiVPNManager.app")
-
     /// The running app's facts. The built-in OAuth client is put in the bundle at build time
     /// (packaging/macos/Config/GoogleOAuthClient.json, gitignored).
     static func current(bundle: Bundle = .main) -> Self {
@@ -88,8 +84,7 @@ extension AppInternal.AppFacts {
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
         return Self(
             appBuild: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
-            installedCopy: bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
-                == installedAppURL.standardizedFileURL,
+            installedCopy: ServiceRegistration.isInstalledCopy(at: bundle.bundleURL),
             builtInOauthClient: client,
             timeZone: TimeZone.current.identifier,
             signInPages: .localized
