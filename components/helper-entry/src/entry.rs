@@ -1,15 +1,14 @@
-//! The Helper entry's event loop. Swift's messages, the current run's reports and gateway lookups
-//! arrive on one channel and are handled one at a time on one thread. So what reaches an app keeps
-//! the order in which it happened, and the run thread, which only forwards, never waits for this one.
+//! The Helper entry's event loop. The OS side's messages, the current run's reports and gateway
+//! lookups arrive on one channel and are handled one at a time on one thread. So what reaches an app
+//! keeps the order in which it happened, and the run thread, which only forwards, never waits for
+//! this one.
 
 use std::collections::HashMap;
 use std::env;
-use std::io::BufReader;
 use std::mem;
 use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,13 +18,12 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{Backend, ClientProblemKind};
 use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
-use fvm_contract::stream;
 use fvm_watchdog::{Report, RouteRepair, Run, Timing};
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::leftovers;
-use crate::processes::ProcessIdentity;
+use crate::platform::Platform;
 use crate::run_directory::{self, RunRecord};
 
 /// How long exiting after SIGTERM waits for the run to report its exit. Longer than the client's
@@ -35,20 +33,20 @@ const SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
 const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
 
 pub(crate) enum Event {
-    Swift(ToEntry),
+    FromOs(ToEntry),
     Run(Report),
     GatewayResolved { run: u64, gateway: Option<Ipv4Addr> },
 }
 
-/// The writing side of the stream to Swift.
-pub(crate) struct Swift(UnixStream);
+/// Where the entry's messages for the OS side go, in order.
+pub(crate) struct OsSide(pub(crate) Box<dyn Fn(&FromEntry) + Send>);
 
-impl Swift {
+impl OsSide {
     pub fn send(&self, message: &FromEntry) {
-        stream::send(&mut &self.0, message).expect("writing a message to Swift");
+        (self.0)(message);
     }
 
-    /// Never with a secret: the line goes to the unified log.
+    /// Never with a secret: the line goes to the system log.
     pub fn log(&self, level: LogLevel, category: LogCategory, message: String) {
         self.send(&FromEntry::Log {
             level,
@@ -58,34 +56,25 @@ impl Swift {
     }
 }
 
-pub(crate) fn serve<B>(backend: B, run_directory: PathBuf, socket: UnixStream)
-where
+pub(crate) fn serve<B, P>(
+    backend: B,
+    platform: P,
+    run_directory: PathBuf,
+    os: OsSide,
+    sender: Sender<Event>,
+    events: Receiver<Event>,
+) where
     B: Backend,
     B::Interpreter: 'static,
+    P: Platform,
 {
-    let (sender, events) = mpsc::channel();
-    let reader = socket.try_clone().expect("cloning the socket to Swift");
-    let forwarded = sender.clone();
-    thread::Builder::new()
-        .name("fvm-helper-entry-read".into())
-        .spawn(move || {
-            let mut reader = BufReader::new(reader);
-            loop {
-                let message = stream::receive(&mut reader).expect("reading a message from Swift");
-                forwarded
-                    .send(Event::Swift(message))
-                    .expect("the event loop runs as long as the process");
-            }
-        })
-        .expect("starting the Helper entry's reader thread");
-
-    let swift = Swift(socket);
-    leftovers::clean_up(&backend, &run_directory, &swift, &events);
-    swift.send(&FromEntry::Ready {});
+    leftovers::clean_up(&backend, &platform, &run_directory, &os, &events);
+    os.send(&FromEntry::Ready {});
     Entry {
         backend,
+        platform,
         run_directory,
-        swift,
+        os,
         events,
         sender,
         apps: HashMap::new(),
@@ -98,10 +87,11 @@ where
     .run()
 }
 
-struct Entry<B> {
+struct Entry<B, P> {
     backend: B,
+    platform: P,
     run_directory: PathBuf,
-    swift: Swift,
+    os: OsSide,
     events: Receiver<Event>,
     /// For the run's reports and the gateway lookups.
     sender: Sender<Event>,
@@ -111,7 +101,7 @@ struct Entry<B> {
     runs_started: u64,
     executable_replaced: bool,
     lifecycle: Lifecycle,
-    /// The current run's route repair while Swift carries it out.
+    /// The current run's route repair while the OS side carries it out.
     route_repair: Option<RouteRepair>,
 }
 
@@ -129,7 +119,7 @@ struct CurrentRun {
 
 enum Lifecycle {
     Serving,
-    /// Answered an exitWhenIdle request with true; tells Swift to exit at `at`.
+    /// Answered an exitWhenIdle request with true; tells the OS side to exit at `at`.
     ExitingWhenIdle {
         at: Instant,
     },
@@ -137,7 +127,7 @@ enum Lifecycle {
     ShuttingDown {
         deadline: Instant,
     },
-    /// Told Swift to exit.
+    /// Told the OS side to exit.
     Exiting,
 }
 
@@ -151,10 +141,11 @@ impl Lifecycle {
     }
 }
 
-impl<B> Entry<B>
+impl<B, P> Entry<B, P>
 where
     B: Backend,
     B::Interpreter: 'static,
+    P: Platform,
 {
     fn run(mut self) -> ! {
         loop {
@@ -184,15 +175,15 @@ where
 
     fn handle(&mut self, event: Event) {
         match event {
-            Event::Swift(ToEntry::AppConnected { app, uid }) => self.admit(app, uid),
-            Event::Swift(ToEntry::AppDisconnected { app }) => self.app_disconnected(app),
-            Event::Swift(ToEntry::Request { id, app, request }) => self.request(id, app, request),
-            Event::Swift(ToEntry::ExecutableReplaced {}) => self.executable_replaced(),
-            Event::Swift(ToEntry::TerminationRequested {}) => self.termination_requested(),
-            Event::Swift(ToEntry::RoutesRepaired { outcome }) => self
+            Event::FromOs(ToEntry::AppConnected { app, uid }) => self.admit(app, uid),
+            Event::FromOs(ToEntry::AppDisconnected { app }) => self.app_disconnected(app),
+            Event::FromOs(ToEntry::Request { id, app, request }) => self.request(id, app, request),
+            Event::FromOs(ToEntry::ExecutableReplaced {}) => self.executable_replaced(),
+            Event::FromOs(ToEntry::TerminationRequested {}) => self.termination_requested(),
+            Event::FromOs(ToEntry::RoutesRepaired { outcome }) => self
                 .route_repair
                 .take()
-                .expect("Swift answers only the route repair it was asked for")
+                .expect("the OS side answers only the route repair it was asked for")
                 .finish(outcome),
             Event::Run(report) => self.run_report(report),
             Event::GatewayResolved { run, gateway } => self.gateway_resolved(run, gateway),
@@ -204,13 +195,13 @@ where
         if accept {
             self.apps.insert(app, uid);
         }
-        self.swift.send(&FromEntry::Admitted { app, accept });
+        self.os.send(&FromEntry::Admitted { app, accept });
     }
 
     fn app_disconnected(&mut self, app: u64) {
         self.apps.remove(&app);
         if let Some(current) = self.run.as_ref().filter(|run| run.owner_app == app) {
-            self.swift.log(
+            self.os.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
                 format!("run {}: owning connection invalidated", current.attempt),
@@ -230,7 +221,7 @@ where
     /// starts the new one on the next request.
     fn exit_for_replacement(&mut self) {
         let path = env::current_exe().expect("the Helper's executable path");
-        self.swift.log(
+        self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
@@ -261,7 +252,7 @@ where
         match self.lifecycle {
             Lifecycle::ExitingWhenIdle { .. } => self.exit(FromEntry::ExitAfterDraining {}),
             Lifecycle::ShuttingDown { .. } => {
-                self.swift.log(
+                self.os.log(
                     LogLevel::Error,
                     LogCategory::Helper,
                     "the run did not finish after SIGTERM; exiting anyway".to_owned(),
@@ -275,7 +266,7 @@ where
     }
 
     fn exit(&mut self, message: FromEntry) {
-        self.swift.send(&message);
+        self.os.send(&message);
         self.lifecycle = Lifecycle::Exiting;
     }
 
@@ -287,17 +278,17 @@ where
             AppRequest::Disconnect { attempt, reason } => self.disconnect(app, &attempt, &reason),
             AppRequest::Status {} => {
                 let json = Some(to_json(&self.status()));
-                self.swift.send(&FromEntry::Reply { id, json });
+                self.os.send(&FromEntry::Reply { id, json });
                 return;
             }
             AppRequest::ExitWhenIdle {} => {
                 let value = self.exit_when_idle();
-                self.swift.send(&FromEntry::ReplyFlag { id, value });
+                self.os.send(&FromEntry::ReplyFlag { id, value });
                 return;
             }
         };
         let json = result.err().map(|error| to_json(&error));
-        self.swift.send(&FromEntry::Reply { id, json });
+        self.os.send(&FromEntry::Reply { id, json });
     }
 
     /// The uid of an app that may act on runs: requests can still arrive from a connection that is
@@ -359,10 +350,17 @@ where
             .backend
             .launch_spec(&client, request, &config_path)
             .map_err(|reason| error(HelperErrorCode::InvalidRequest, reason))?;
-        if let Err(failure) = run_directory::prepare(&self.run_directory)
-            .and_then(|()| run_directory::write_config(&config_path, &launch.config_file))
+        // The run directory also holds the pidfile, so it is prepared without a config file too.
+        if let Err(failure) = self
+            .platform
+            .prepare_run_directory(&self.run_directory)
+            .and_then(|()| {
+                launch.config_file.as_ref().map_or(Ok(()), |contents| {
+                    run_directory::write_config(&self.platform, &config_path, contents)
+                })
+            })
         {
-            self.swift.log(
+            self.os.log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!("cannot write the {client_name} config: {failure}"),
@@ -386,7 +384,7 @@ where
                     .expect("the event loop runs as long as the process");
             },
         );
-        self.swift.log(
+        self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
@@ -425,7 +423,7 @@ where
         let raw = raw
             .as_str()
             .expect("a stop reason serializes as its raw value");
-        self.swift.log(
+        self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!("run {}: stop requested ({raw})", current.attempt),
@@ -489,7 +487,7 @@ where
             return false;
         }
         if matches!(self.lifecycle, Lifecycle::Serving) {
-            self.swift.log(
+            self.os.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
                 "exiting on request so launchd starts the current binary".to_owned(),
@@ -529,7 +527,7 @@ where
 
     fn gateway_resolved(&mut self, run: u64, gateway: Option<Ipv4Addr>) {
         let Some(gateway) = gateway else {
-            self.swift.log(
+            self.os.log(
                 LogLevel::Info,
                 LogCategory::Routes,
                 "gateway has no IPv4 address; its host route will not be repaired".to_owned(),
@@ -554,14 +552,14 @@ where
         match report {
             Report::Output(lines) => {
                 let json = to_json(&lines);
-                self.swift.send(&FromEntry::SendOutput { app, json });
+                self.os.send(&FromEntry::SendOutput { app, json });
             }
             Report::Event(kind) => {
                 let event = HelperEvent {
                     attempt_id: current.attempt.clone(),
                     kind,
                 };
-                self.swift.send(&FromEntry::SendEvent {
+                self.os.send(&FromEntry::SendEvent {
                     app,
                     json: to_json(&event),
                 });
@@ -581,7 +579,7 @@ where
             Report::RepairRoutes(repair) => {
                 let gateway = current.record.gateway;
                 self.route_repair = Some(repair);
-                self.swift.send(&FromEntry::RepairRoutes { gateway });
+                self.os.send(&FromEntry::RepairRoutes { gateway });
             }
         }
     }
@@ -594,7 +592,7 @@ where
             return;
         };
         let pid = i32::try_from(pid).expect("a pid fits in pid_t");
-        let Some(client) = ProcessIdentity::of_root_process(pid) else {
+        let Some(client) = self.platform.process(pid) else {
             return;
         };
         current.record.processes = vec![client];
@@ -603,8 +601,7 @@ where
             current.attempt
         );
         self.save_record();
-        self.swift
-            .log(LogLevel::Notice, LogCategory::Helper, message);
+        self.os.log(LogLevel::Notice, LogCategory::Helper, message);
     }
 
     /// Adds what the client started for the tunnel, such as pppd, to the record.
@@ -612,7 +609,7 @@ where
         let current = self.run.as_mut().expect("a run brought the tunnel up");
         let message = format!("run {}: tunnel up", current.attempt);
         if let Some(pid) = current.run.process_id() {
-            for child in ProcessIdentity::root_children(pid) {
+            for child in self.platform.children(pid) {
                 if self.backend.is_own_executable(Path::new(&child.path))
                     && !current.record.processes.contains(&child)
                 {
@@ -621,8 +618,7 @@ where
             }
             self.save_record();
         }
-        self.swift
-            .log(LogLevel::Notice, LogCategory::Helper, message);
+        self.os.log(LogLevel::Notice, LogCategory::Helper, message);
     }
 
     fn save_record(&self) {
@@ -630,8 +626,10 @@ where
             .run
             .as_ref()
             .expect("a record belongs to the current run");
-        if let Err(failure) = run_directory::write_record(&self.run_directory, &current.record) {
-            self.swift.log(
+        if let Err(failure) =
+            run_directory::write_record(&self.platform, &self.run_directory, &current.record)
+        {
+            self.os.log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!("cannot write the pidfile: {failure}"),
@@ -641,12 +639,9 @@ where
 
     fn run_exited(&mut self, facts: &ExitFacts) {
         let finished = self.run.take().expect("the current run exited");
-        leftovers::remove(&finished.config_path, &self.swift);
-        leftovers::remove(
-            &run_directory::record_path(&self.run_directory),
-            &self.swift,
-        );
-        self.swift.log(
+        leftovers::remove(&finished.config_path, &self.os);
+        leftovers::remove(&run_directory::record_path(&self.run_directory), &self.os);
+        self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(

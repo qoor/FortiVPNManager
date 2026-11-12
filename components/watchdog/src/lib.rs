@@ -10,7 +10,11 @@
 
 mod lines;
 mod run;
+#[cfg(unix)]
 mod unix;
+
+#[cfg(unix)]
+use unix as os;
 
 use std::sync::mpsc::Sender;
 use std::thread;

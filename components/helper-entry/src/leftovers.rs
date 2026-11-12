@@ -11,27 +11,27 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::backend::Backend;
 use fvm_contract::helper_internal::{FromEntry, LogCategory, LogLevel, ToEntry};
-use rustix::process::{Pid, Signal};
 
-use crate::entry::{Event, Swift};
-use crate::processes::ProcessIdentity;
+use crate::entry::{Event, OsSide};
+use crate::platform::{Platform, ProcessIdentity};
 use crate::run_directory::{self, RunRecord};
 
-/// How long the processes get to disappear after SIGKILL.
+/// How long the processes get to disappear after the forced stop.
 const KILL_LIMIT: Duration = Duration::from_secs(2);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Stops the recorded processes that still run, asks Swift to repair the routes and waits for the
-/// answer, then removes the files the earlier Helper left. Until "ready", Swift accepts no app
-/// connection and passes on no signal, so the answer is the only message it sends.
-pub(crate) fn clean_up(
+/// Stops the recorded processes that still run, asks the OS side to repair the routes and waits for
+/// the answer, then removes the files the earlier Helper left. Until "ready", the OS side accepts no
+/// app connection and passes on no stop request, so the answer is the only message it sends.
+pub(crate) fn clean_up<P: Platform>(
     backend: &impl Backend,
+    platform: &P,
     directory: &Path,
-    swift: &Swift,
+    os: &OsSide,
     events: &Receiver<Event>,
 ) {
-    if let Err(failure) = run_directory::prepare(directory) {
-        swift.log(
+    if let Err(failure) = platform.prepare_run_directory(directory) {
+        os.log(
             LogLevel::Error,
             LogCategory::Helper,
             format!("cannot prepare the run directory: {failure}"),
@@ -41,7 +41,7 @@ pub(crate) fn clean_up(
     if let Some(record) = run_directory::read_record(directory) {
         // An unreadable pidfile still means a run did not finish, so the routes are checked.
         let record = record.unwrap_or_else(|_| {
-            swift.log(
+            os.log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!(
@@ -55,11 +55,11 @@ pub(crate) fn clean_up(
             .processes
             .into_iter()
             .filter(|process| {
-                backend.is_own_executable(Path::new(&process.path)) && process.is_running()
+                backend.is_own_executable(Path::new(&process.path)) && process.is_running(platform)
             })
             .collect();
         if !orphans.is_empty() {
-            swift.log(
+            os.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
                 format!(
@@ -68,33 +68,33 @@ pub(crate) fn clean_up(
                     pids(&orphans)
                 ),
             );
-            terminate(&orphans, backend.stop_grace_period(), swift);
+            terminate(platform, &orphans, backend.stop_grace_period(), os);
         }
-        swift.send(&FromEntry::RepairRoutes {
+        os.send(&FromEntry::RepairRoutes {
             gateway: record.gateway,
         });
-        let Event::Swift(ToEntry::RoutesRepaired { outcome }) =
+        let Event::FromOs(ToEntry::RoutesRepaired { outcome }) =
             events.recv().expect("the entry holds a sender")
         else {
-            panic!("Swift sent something other than the route repair's answer before ready");
+            panic!("the OS side sent something other than the route repair's answer before ready");
         };
-        swift.log(
+        os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!("cleaned up after an unfinished run (route repair: {outcome:?})"),
         );
     }
     for leftover in run_directory::leftovers(directory) {
-        remove(&leftover, swift);
+        remove(&leftover, os);
     }
 }
 
 /// Deletes a file; one that is already gone is fine.
-pub(crate) fn remove(path: &Path, swift: &Swift) {
+pub(crate) fn remove(path: &Path, os: &OsSide) {
     match fs::remove_file(path) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => swift.log(
+        Err(error) => os.log(
             LogLevel::Error,
             LogCategory::Helper,
             format!("cannot delete {}: {error}", path.display()),
@@ -102,49 +102,64 @@ pub(crate) fn remove(path: &Path, swift: &Swift) {
     }
 }
 
-/// SIGTERM first, so the client can restore the routes, and SIGKILL after `grace_period`.
-fn terminate(processes: &[ProcessIdentity], grace_period: Duration, swift: &Swift) {
-    signal(processes, Signal::TERM);
-    let survivors = wait_for_exit(processes, grace_period);
+/// The OS's stop request first, so the client can restore the routes, and its forced stop after
+/// `grace_period`.
+fn terminate<P: Platform>(
+    platform: &P,
+    processes: &[ProcessIdentity],
+    grace_period: Duration,
+    os: &OsSide,
+) {
+    stop(platform, processes, P::request_stop);
+    let survivors = wait_for_exit(platform, processes, grace_period);
     if survivors.is_empty() {
         return;
     }
-    swift.log(
+    os.log(
         LogLevel::Notice,
         LogCategory::Helper,
-        format!("sending SIGKILL to {:?}", pids(&survivors)),
+        format!("sending {} to {:?}", P::FORCE_STOP, pids(&survivors)),
     );
-    signal(&survivors, Signal::KILL);
-    let stuck = wait_for_exit(&survivors, KILL_LIMIT);
+    stop(platform, &survivors, P::force_stop);
+    let stuck = wait_for_exit(platform, &survivors, KILL_LIMIT);
     if !stuck.is_empty() {
-        swift.log(
+        os.log(
             LogLevel::Error,
             LogCategory::Helper,
-            format!("processes still running after SIGKILL: {:?}", pids(&stuck)),
+            format!(
+                "processes still running after {}: {:?}",
+                P::FORCE_STOP,
+                pids(&stuck)
+            ),
         );
     }
 }
 
-/// Checks each identity right before signalling it, since its pid may have been reused meanwhile.
-fn signal(processes: &[ProcessIdentity], signal: Signal) {
-    for process in processes.iter().filter(|process| process.is_running()) {
-        let pid = Pid::from_raw(process.pid).expect("a running process has a positive pid");
-        // It may have exited since the check.
-        let _ = rustix::process::kill_process(pid, signal);
+/// Checks each identity right before stopping it, since its pid may have been reused meanwhile.
+fn stop<P: Platform>(platform: &P, processes: &[ProcessIdentity], how: fn(&P, &ProcessIdentity)) {
+    for process in processes
+        .iter()
+        .filter(|process| process.is_running(platform))
+    {
+        how(platform, process);
     }
 }
 
 /// The processes still running once all are gone or `limit` passed.
-fn wait_for_exit(processes: &[ProcessIdentity], limit: Duration) -> Vec<ProcessIdentity> {
+fn wait_for_exit(
+    platform: &impl Platform,
+    processes: &[ProcessIdentity],
+    limit: Duration,
+) -> Vec<ProcessIdentity> {
     let deadline = Instant::now() + limit;
     let mut remaining: Vec<ProcessIdentity> = processes
         .iter()
-        .filter(|process| process.is_running())
+        .filter(|process| process.is_running(platform))
         .cloned()
         .collect();
     while !remaining.is_empty() && Instant::now() < deadline {
         thread::sleep(POLL_INTERVAL);
-        remaining.retain(ProcessIdentity::is_running);
+        remaining.retain(|process| process.is_running(platform));
     }
     remaining
 }

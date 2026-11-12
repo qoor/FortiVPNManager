@@ -1,5 +1,6 @@
 //! Request checks, the config file and the launch, through `Backend::launch_spec` and
 //! `Backend::check_otp`.
+#![cfg(unix)] // openfortivpn runs only on Unix.
 
 use std::path::{Path, PathBuf};
 
@@ -42,7 +43,7 @@ fn launch(request: &RunRequest) -> Result<LaunchSpec, String> {
 }
 
 fn config(request: &RunRequest) -> String {
-    launch(request).unwrap().config_file
+    launch(request).unwrap().config_file.unwrap()
 }
 
 fn rejected(request: &RunRequest) -> String {
@@ -136,18 +137,19 @@ fn never_writes_the_password_or_another_key() {
         r.password = password.into();
     });
     let spec = launch(&request).unwrap();
-    assert!(!spec.config_file.contains(password));
-    assert!(!spec.config_file.contains("password"));
+    let config_file = spec.config_file.unwrap();
+    assert!(!config_file.contains(password));
+    assert!(!config_file.contains("password"));
     assert!(!spec.args.iter().any(|arg| arg.contains(password)));
     assert!(!spec.env.iter().any(|(_, value)| value.contains(password)));
-    for (key, _) in read_back(&spec.config_file) {
+    for (key, _) in read_back(&config_file) {
         assert!(
             ["host", "port", "username", "realm", "trusted-cert"].contains(&key.as_str()),
             "{key}"
         );
     }
-    assert!(spec.config_file.ends_with('\n'));
-    assert!(!spec.config_file.contains('\r'));
+    assert!(config_file.ends_with('\n'));
+    assert!(!config_file.contains('\r'));
 }
 
 #[test]

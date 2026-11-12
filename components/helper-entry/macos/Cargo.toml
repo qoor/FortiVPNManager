@@ -11,13 +11,13 @@ crate-type = ["staticlib", "lib"]
 [dependencies]
 fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
-fvm-watchdog.workspace = true
+fvm-helper-entry.workspace = true
 libproc.workspace = true
 rustix = { workspace = true, features = ["process"] }
-serde.workspace = true
-serde_json.workspace = true
 socket2.workspace = true
-zeroize.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

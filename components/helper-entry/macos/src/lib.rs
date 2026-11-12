@@ -1,14 +1,11 @@
 //! Helper entry (macOS): the Helper's Rust side. Swift reaches it only through the socket returned
-//! by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`. It cleans up
-//! what an earlier Helper left behind, handles the app requests Swift passes on and runs the VPN
-//! client through the watchdog with the openfortivpn backend adapter.
+//! by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`, and the
+//! shared Helper entry runs the VPN client with the openfortivpn backend adapter and macOS's
+//! process and file handling.
 
-mod entry;
-mod leftovers;
-mod processes;
-mod run_directory;
+mod platform;
 
-use std::io;
+use std::io::{self, BufReader};
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -16,6 +13,7 @@ use std::thread;
 
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::backend::Backend;
+use fvm_contract::stream;
 
 /// Root-only: it holds the config file of the current run and the pidfile.
 const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
@@ -35,10 +33,20 @@ where
     B::Interpreter: 'static,
 {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
+    let writer = ours.try_clone().expect("cloning the socket to Swift");
+    let inbox = fvm_helper_entry::start(backend, platform::MacOs, run_directory, move |message| {
+        stream::send(&mut &writer, message).expect("writing a message to Swift");
+    });
     thread::Builder::new()
-        .name("fvm-helper-entry".into())
-        .spawn(move || entry::serve(backend, run_directory, ours))
-        .expect("starting the Helper entry thread");
+        .name("fvm-helper-entry-read".into())
+        .spawn(move || {
+            let mut reader = BufReader::new(ours);
+            loop {
+                let message = stream::receive(&mut reader).expect("reading a message from Swift");
+                inbox.deliver(message);
+            }
+        })
+        .expect("starting the Helper entry's reader thread");
     theirs
 }
 
@@ -54,10 +62,6 @@ fn socket_pair() -> io::Result<(UnixStream, UnixStream)> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::BufReader;
-
-    use fvm_contract::stream;
-
     use super::*;
 
     #[test]

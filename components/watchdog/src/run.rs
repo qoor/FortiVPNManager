@@ -22,7 +22,7 @@ use fvm_contract::backend::{
 use zeroize::Zeroizing;
 
 use crate::lines::{LineAssembler, MAX_LINE_BYTES};
-use crate::unix::{self, Child};
+use crate::os::{self, Child};
 use crate::{Report, RouteRepair, Timing};
 
 /// Controls a started run. Dropping it does not stop the run.
@@ -62,13 +62,13 @@ impl Run {
 
         let (inputs, received) = mpsc::channel();
         let client_name = backend.client_name();
-        let spawned = match unix::spawn(launch) {
+        let spawned = match os::spawn(launch) {
             Ok(spawned) => spawned,
             Err(errno) => {
                 let text = format!(
                     "‹spawn failed: {}: {}›",
                     launch.program.display(),
-                    unix::describe_errno(errno)
+                    describe_errno(errno)
                 );
                 let reporter = thread::Builder::new()
                     .name("fvm-watchdog".to_owned())
@@ -103,7 +103,7 @@ impl Run {
             thread::Builder::new()
                 .name("fvm-watchdog-output".to_owned())
                 .spawn(move || {
-                    unix::read_output(pipe, &wake, |bytes| {
+                    os::read_output(pipe, &wake, |bytes| {
                         forwarded.send(Input::Output(source, bytes)).is_ok()
                     });
                     let _ = forwarded.send(Input::End(source));
@@ -487,7 +487,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
     fn reach(&mut self, milestone: Milestone) {
         self.furthest = milestone;
         let tunnel_ip = if milestone == Milestone::TunnelUp {
-            self.tunnel_up_at = Some(unix::time_including_sleep());
+            self.tunnel_up_at = Some(os::time_including_sleep());
             self.tunnel_ip
         } else {
             None
@@ -577,7 +577,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             let errno = error
                 .raw_os_error()
                 .expect("a pipe write fails with an errno");
-            format!("‹input failed: {}›", unix::describe_errno(errno))
+            format!("‹input failed: {}›", describe_errno(errno))
         };
         self.meta(text);
         false
@@ -604,29 +604,28 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         if self.stop.is_some() {
             return;
         }
-        child.terminate();
+        let done = child.terminate();
         self.stop = Some(reason);
         self.stage = None;
         let raw = serde_json::to_value(reason).expect("a stop reason serializes");
         let raw = raw
             .as_str()
             .expect("a stop reason serializes as its raw value");
-        self.meta(format!("‹sent SIGTERM (reason: {raw})›"));
+        self.meta(format!("‹{done} (reason: {raw})›"));
         self.kill_deadline = Some(Instant::now() + self.grace_period);
     }
 
     fn grace_period_expired(&mut self) {
         self.kill_deadline = None;
-        if !self.running() {
+        let Phase::Running(child) = &self.phase else {
             return;
-        }
+        };
+        let done = child.kill();
         self.meta(format!(
-            "‹sent SIGKILL: still running {} after SIGTERM›",
-            seconds(self.grace_period)
+            "‹{done}: still running {} after {}›",
+            seconds(self.grace_period),
+            os::STOP_REQUEST
         ));
-        if let Phase::Running(child) = &self.phase {
-            child.kill();
-        }
     }
 
     // Exit
@@ -640,7 +639,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         let status = child.reap();
         self.phase = Phase::Draining {
             status,
-            exited_at: unix::time_including_sleep(),
+            exited_at: os::time_including_sleep(),
             deadline: Instant::now() + self.timing.pipe_drain,
         };
         self.stdin = None;
@@ -729,7 +728,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
 fn describe(status: ProcessExitStatus) -> String {
     match status {
         ProcessExitStatus::Exited { code } => format!("code {code}"),
-        ProcessExitStatus::Signaled { signal } => match unix::signal_name(signal) {
+        ProcessExitStatus::Signaled { signal } => match os::signal_name(signal) {
             Some(name) => format!("signal {signal} ({name})"),
             None => format!("signal {signal}"),
         },
@@ -738,6 +737,16 @@ fn describe(status: ProcessExitStatus) -> String {
         }
         ProcessExitStatus::Unknown {} => "unknown".to_owned(),
     }
+}
+
+/// The OS's text and the number, as the Log tab shows OS errors: "No such file or directory
+/// (errno 2)".
+fn describe_errno(errno: i32) -> String {
+    let shown = io::Error::from_raw_os_error(errno).to_string();
+    let text = shown
+        .strip_suffix(&format!(" (os error {errno})"))
+        .expect("std shows an OS error as its text and the code");
+    format!("{text} (errno {errno})")
 }
 
 /// "30s", "0.25s".

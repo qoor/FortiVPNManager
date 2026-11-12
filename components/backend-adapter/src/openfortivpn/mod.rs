@@ -1,17 +1,23 @@
 //! Homebrew's openfortivpn 1.24.1, which starts Apple's pppd. Its option set, prompts and output
-//! wording are only known here.
+//! wording are only known here. Finding and running it is Unix only.
 
+mod account;
+#[cfg(unix)]
 mod client;
 mod output;
+#[cfg(unix)]
 mod request;
 mod settings;
 
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::time::Duration;
 
+#[cfg(unix)]
 use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
+#[cfg(unix)]
 use fvm_contract::backend::{
     Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
@@ -38,7 +44,7 @@ impl OpenFortiVpn {
     /// `text` as a gateway certificate value openfortivpn compares, a SHA-256 digest in 64
     /// lowercase hex characters, or `None` when it is no digest.
     pub fn certificate_value(&self, text: &str) -> Option<String> {
-        request::certificate_value(text)
+        account::certificate_value(text)
     }
 
     /// Why openfortivpn would refuse the account's server address, username or realm, the first
@@ -50,16 +56,17 @@ impl OpenFortiVpn {
         username: &str,
         realm: &str,
     ) -> Result<(), AccountValueProblem> {
-        request::check_account(host, username, realm)
+        account::check_account(host, username, realm)
     }
 
     /// Why openfortivpn would refuse a typed VPN password: a line break or NUL, or too many
     /// bytes. An empty one passes, as it keeps the stored password.
     pub fn check_vpn_password(&self, password: &str) -> Result<(), AccountSaveError> {
-        request::check_vpn_password(password)
+        account::check_vpn_password(password)
     }
 }
 
+#[cfg(unix)]
 impl Backend for OpenFortiVpn {
     type Interpreter = Interpreter;
 
@@ -89,7 +96,7 @@ impl Backend for OpenFortiVpn {
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {
-        request::check_otp(code)
+        crate::values::check_otp(code)
     }
 
     fn interpreter(&self) -> Interpreter {

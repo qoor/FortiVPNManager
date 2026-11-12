@@ -27,7 +27,7 @@
 
 ![전체 구성](images/system-overview.svg)
 
-앱과 Helper는 별도 프로세스다. 화살표는 서로 주고받는 것을 나타낸다. 판단 코어는 런타임만 쓴다. watchdog은 Helper entry가 골라 준 backend adapter로 VPN client의 출력을 해석한다. 공통 계약은 양쪽이 함께 쓰는 약속이라 그림에서 뺐다.
+앱과 Helper는 별도 프로세스다. 화살표는 서로 주고받는 것을 나타낸다. 판단 코어는 런타임만 쓴다. watchdog은 Helper가 OS마다 정한 backend adapter로 VPN client의 출력을 해석한다. 공통 계약은 양쪽이 함께 쓰는 약속이라 그림에서 뺐다.
 
 | 구성 요소 | 위치 | 역할 |
 |---|---|---|
@@ -38,7 +38,7 @@
 | 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지켜야 할 약속 |
 | backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(지금은 openfortivpn) |
 | watchdog | Helper | VPN client 실행, 입력, 시간 제한, 종료 |
-| Helper entry (macOS) | Helper | 앱 요청 처리, VPN client 처리 선택, 남은 프로세스 정리 |
+| Helper entry | Helper | 앱 요청 처리, 실행 기록과 남은 프로세스 정리 |
 | OS 연동 Helper (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 쓰기 |
 | openfortivpn | Helper가 실행 | VPN client와 그 pppd |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
@@ -51,7 +51,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 - **앱 안**: UI는 사용자 조작을 명령으로 보내고, 바뀐 상태와 새 로그를 받는다. 런타임은 OS 기능이 필요하면 OS 연동에 요청하고, OS 연동은 결과와 시스템 이벤트를 알린다.
 - **앱 ↔ Helper**: 서로를 확인한 연결로 실행 요청, OTP, 연결 해제를 보내고 진행 단계, 출력, 종료 보고를 받는다. 주고받는 내용은 공통 계약이 정한다.
-- **Helper 안**: OS 연동 Helper가 받은 요청을 Helper entry에 넘기고, Helper entry가 VPN client에 맞는 backend adapter를 골라 watchdog으로 실행한다. 이벤트와 출력은 순서대로 앱에 간다.
+- **Helper 안**: OS 연동 Helper가 받은 요청을 Helper entry에 넘기고, Helper entry가 시작할 때 받은 backend adapter로 watchdog을 실행한다. 어떤 backend adapter를 쓸지는 Helper의 OS별 시작 부분이 정한다. 이벤트와 출력은 순서대로 앱에 간다.
 - **바깥**: 런타임이 Gmail·Google과 통신하고 파일을 다룬다. 판단 코어는 런타임을 통해서만 쓰인다.
 
 # 2. 구성 요소별 설명
@@ -96,12 +96,12 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: VPN client 이름과 출력 문구, route 복구 방법.
 - **제공 기능**: F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고
 
-## 2.6 Helper entry (macOS)
-- **설명**: Helper에서 OS에 의존하지 않는 부분의 시작점이다. 앱 요청을 처리하고 backend adapter를 골라 watchdog에 연결한다. Linux·Windows에서는 각 OS의 Helper 서비스가 이 일을 한다.
+## 2.6 Helper entry
+- **설명**: Helper에서 OS에 의존하지 않는 부분이다. 앱 요청을 처리하고, 시작할 때 받은 backend adapter로 watchdog을 실행한다. 어떤 backend adapter를 쓸지는 Helper의 OS별 시작 부분이 정한다(macOS는 openfortivpn). Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
 - **역할**
   - 실행 하나와 그 주인 관리, Helper가 끝날 때 판단
   - 실행 기록 관리와 남은 프로세스 정리
-- **모르는 것**: 앱과의 통신 수단, 연결 확인, route 복구 방법.
+- **모르는 것**: 앱과의 통신 수단, 연결 확인, route 복구 방법, OS가 프로세스와 파일 권한을 다루는 방법.
 - **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리
 
 ## 2.7 UI (macOS)
@@ -595,6 +595,6 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **비밀값**: 비밀번호, OTP, token, client secret은 argv, 파일, 환경 변수, 로그에 남지 않는다. Helper에는 XPC로 메모리 안에서만 전달한다.
 - **fail fast**: Rust panic은 그 자리에서 중단하고 crash report를 남긴다. 있을 수 없는 상태를 위한 복구 경로를 만들지 않는다.
 - **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 하나씩만). Swift와 Rust는 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. Swift가 OS API를 직접 부를 때는 지금처럼 그 API에 필요한 포인터 API를 쓸 수 있다.
-- **다른 OS 빌드**: 공통 crate는 macOS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 프로세스 처리와 port 구현뿐이다.
+- **다른 OS 빌드**: 공통 crate는 macOS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 프로세스 처리, Helper의 OS별 시작 부분(남은 프로세스 확인과 종료, 실행 기록 폴더의 접근 권한), port 구현뿐이다.
 - **영어**: 코드, 주석, 앱과 Helper의 로그는 영어로 쓴다.
 - **화면 문장은 UI에만**: Rust는 종류와 값만 넘기고, 문장과 번역은 UI (macOS)가 만든다.

@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 
 use fvm_contract::app_internal::SecretText;
 
-use super::request::{certificate_value, is_forbidden};
+use super::account::certificate_value;
+use crate::values::is_forbidden;
 
 /// The port openfortivpn uses when the file sets none.
 const DEFAULT_PORT: u16 = 443;

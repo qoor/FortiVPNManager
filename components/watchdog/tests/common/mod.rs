@@ -250,7 +250,7 @@ pub fn shell(program: &str, args: Vec<String>) -> LaunchSpec {
         program: PathBuf::from(program),
         args,
         env: vec![("PATH".to_owned(), PATH.to_owned())],
-        config_file: String::new(),
+        config_file: None,
     }
 }
 

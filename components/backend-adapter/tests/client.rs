@@ -1,4 +1,5 @@
 //! The client's name, executable problems, stop grace period and leftover executables.
+#![cfg(unix)] // openfortivpn runs only on Unix.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

@@ -96,6 +96,9 @@ pub(crate) fn spawn(launch: &LaunchSpec) -> Result<Spawned, i32> {
     })
 }
 
+/// What the Log tab calls the stop request in the line about the kill that follows it.
+pub(crate) const STOP_REQUEST: &str = "SIGTERM";
+
 /// The client until it is reaped. Until then its pid and process group id cannot be reused, so
 /// signals reach only the client and the processes it started.
 pub(crate) struct Child(Pid);
@@ -106,19 +109,21 @@ impl Child {
     }
 
     /// SIGTERM to the client alone: what it started, such as /sbin/route restoring the routes,
-    /// must be left to finish.
-    pub(crate) fn terminate(&self) {
+    /// must be left to finish. Returns what was done, for the Log tab.
+    pub(crate) fn terminate(&self) -> &'static str {
         // An unreaped child takes a signal even after it exited.
         rustix::process::kill_process(self.0, Signal::TERM)
             .expect("signalling the unreaped client");
+        "sent SIGTERM"
     }
 
     /// SIGKILL to the client, then to its whole process group.
-    pub(crate) fn kill(&self) {
+    pub(crate) fn kill(&self) -> &'static str {
         rustix::process::kill_process(self.0, Signal::KILL)
             .expect("signalling the unreaped client");
         // Fails when nothing is left in the group but the client itself, which already got it.
         let _ = rustix::process::kill_process_group(self.0, Signal::KILL);
+        "sent SIGKILL"
     }
 
     pub(crate) fn exit_watch(&self) -> ExitWatch {
@@ -227,14 +232,4 @@ pub(crate) fn signal_name(signal: i32) -> Option<&'static str> {
     .into_iter()
     .find(|(known, _)| known.as_raw() == signal)
     .map(|(_, name)| name)
-}
-
-/// strerror's text and the number, as the Log tab shows OS errors: "No such file or directory
-/// (errno 2)".
-pub(crate) fn describe_errno(errno: i32) -> String {
-    let shown = io::Error::from_raw_os_error(errno).to_string();
-    let text = shown
-        .strip_suffix(&format!(" (os error {errno})"))
-        .expect("std shows an OS error as strerror's text and the code");
-    format!("{text} (errno {errno})")
 }

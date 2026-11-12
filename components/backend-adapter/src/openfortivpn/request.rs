@@ -1,26 +1,17 @@
-//! The values openfortivpn takes: checked by the app before saving them, checked again by the
-//! Helper, and turned into openfortivpn's launch. The Helper's error texts name the field but never
-//! its value, and reach the app as they are.
+//! A run's values checked again by the Helper and turned into openfortivpn's launch. The error
+//! texts name the field but never its value, and reach the app as they are.
 
-use std::net::Ipv4Addr;
 use std::path::Path;
 
 use fvm_contract::app_helper::RunRequest;
-use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
-use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{ClientExecutable, LaunchSpec};
 
-// openfortivpn's buffer sizes (src/config.h): load_config() silently cuts longer values, so the
-// client would use a different value than the one checked.
-const MAX_HOST_BYTES: usize = 253; // GATEWAY_HOST_SIZE
-const MAX_USERNAME_BYTES: usize = 64; // USERNAME_SIZE
-const MAX_REALM_BYTES: usize = 63; // REALM_SIZE
+use super::account::{
+    MAX_HOST_BYTES, MAX_PASSWORD_BYTES, MAX_REALM_BYTES, MAX_USERNAME_BYTES, is_certificate_value,
+};
+use crate::values;
 
 const MAX_TRUSTED_CERTS: usize = 8;
-
-/// read_password() reads at most PASSWORD_SIZE (256) bytes and stops early only at '\n'. A longer
-/// password would leave its '\n' in stdin, and the OTP prompt would read that as an empty answer.
-const MAX_PASSWORD_BYTES: usize = 255;
 
 /// The only environment variable openfortivpn gets: it reads https_proxy and all_proxy.
 const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -40,27 +31,19 @@ pub(super) fn launch_spec(
         // which would send the used OTP again.
         args: vec!["-c".to_owned(), config_path.to_owned()],
         env: vec![("PATH".to_owned(), PATH.to_owned())],
-        config_file: config_file(request),
+        config_file: Some(config_file(request)),
     })
-}
-
-pub(super) fn check_otp(code: &str) -> Result<(), String> {
-    if (6..=8).contains(&code.len()) && code.bytes().all(|byte| byte.is_ascii_digit()) {
-        Ok(())
-    } else {
-        Err("OTP must be 6 to 8 ASCII digits".to_owned())
-    }
 }
 
 /// Checks the fields in the order the config file lists them, then the password.
 fn check(request: &RunRequest) -> Result<(), String> {
-    check_host(&request.host)?;
+    values::check_host(&request.host, MAX_HOST_BYTES)?;
     if !(1..=65_535).contains(&request.port) {
         return Err("port must be between 1 and 65535".to_owned());
     }
-    check_text("username", &request.username, MAX_USERNAME_BYTES)?;
+    values::check_text("username", &request.username, MAX_USERNAME_BYTES)?;
     if let Some(realm) = realm(request) {
-        check_text("realm", realm, MAX_REALM_BYTES)?;
+        values::check_text("realm", realm, MAX_REALM_BYTES)?;
     }
     if request.trusted_certs.len() > MAX_TRUSTED_CERTS {
         return Err(format!(
@@ -79,101 +62,12 @@ fn check(request: &RunRequest) -> Result<(), String> {
     check_password(&request.password)
 }
 
-fn check_host(host: &str) -> Result<(), String> {
-    check_text("host", host, MAX_HOST_BYTES)?;
-    if is_host(host) {
-        Ok(())
-    } else {
-        Err("host must be a DNS hostname (letters, digits and hyphens, labels of 1-63) or a dotted-quad IPv4 address".to_owned())
-    }
-}
-
-/// An IPv4 address by the contract's rule (`Ipv4Addr`'s), or a host name; never a scheme, port or
-/// path.
-fn is_host(host: &str) -> bool {
-    host.parse::<Ipv4Addr>().is_ok() || is_host_name(host)
-}
-
-/// RFC 1123 labels. The last one must not be a number (RFC 3696 §2), since getaddrinfo reads names
-/// such as `127.1`, `1.2.3` or `0x7f000001` as IPv4 addresses.
-fn is_host_name(host: &str) -> bool {
-    let labels_valid = host.split('.').all(|label| {
-        (1..=63).contains(&label.len())
-            && label
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            && !label.starts_with('-')
-            && !label.ends_with('-')
-    });
-    if !labels_valid {
-        return false;
-    }
-    let last = host
-        .rsplit_once('.')
-        .map_or(host, |(_, last)| last)
-        .as_bytes();
-    let decimal = last.iter().all(u8::is_ascii_digit);
-    let hex = last.len() >= 2
-        && last[0] == b'0'
-        && last[1].eq_ignore_ascii_case(&b'x')
-        && last[2..].iter().all(u8::is_ascii_hexdigit);
-    !decimal && !hex
-}
-
-/// Why a text value cannot go into openfortivpn's config file.
-enum TextProblem {
-    Empty,
-    TooLong,
-    ForbiddenCharacter(char),
-    SurroundingWhitespace,
-}
-
-fn text_problem(value: &str, max_bytes: usize) -> Option<TextProblem> {
-    if value.is_empty() {
-        return Some(TextProblem::Empty);
-    }
-    if value.len() > max_bytes {
-        return Some(TextProblem::TooLong);
-    }
-    if let Some(character) = value.chars().find(|&c| is_forbidden(c)) {
-        return Some(TextProblem::ForbiddenCharacter(character));
-    }
-    // Stricter than load_config(), which trims only ASCII whitespace.
-    if value.starts_with(char::is_whitespace) || value.ends_with(char::is_whitespace) {
-        return Some(TextProblem::SurroundingWhitespace);
-    }
-    None
-}
-
-/// A line break would add a config line. The other controls (NEL included), the Unicode line and
-/// paragraph separators and the BOM are never part of a real value.
-pub(super) fn is_forbidden(c: char) -> bool {
-    c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{FEFF}')
-}
-
-fn check_text(field: &str, value: &str, max_bytes: usize) -> Result<(), String> {
-    match text_problem(value, max_bytes) {
-        None => Ok(()),
-        Some(TextProblem::Empty) => Err(format!("{field} must not be empty")),
-        Some(TextProblem::TooLong) => {
-            Err(format!("{field} must be at most {max_bytes} UTF-8 bytes"))
-        }
-        Some(TextProblem::ForbiddenCharacter(character)) => {
-            let code = u32::from(character);
-            Err(format!("{field} contains forbidden character U+{code:04X}"))
-        }
-        Some(TextProblem::SurroundingWhitespace) => {
-            Err(format!("{field} must not start or end with whitespace"))
-        }
-    }
-}
-
 /// The password goes to stdin, followed by '\n', so spaces at either end are kept.
 fn check_password(password: &str) -> Result<(), String> {
     if password.is_empty() {
         return Err("password must not be empty".to_owned());
     }
-    if let Some(character) = forbidden_in_password(password) {
+    if let Some(character) = values::forbidden_in_password(password) {
         let code = u32::from(character);
         return Err(format!(
             "password contains forbidden character U+{code:04X}"
@@ -185,74 +79,6 @@ fn check_password(password: &str) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-/// '\n' ends read_password() early, '\r' would become part of the password (a pipe has no tty
-/// translation), and '\0' ends the C string.
-fn forbidden_in_password(password: &str) -> Option<char> {
-    password.chars().find(|c| matches!(c, '\n' | '\r' | '\0'))
-}
-
-/// The app's check of the account before it is saved or used, with the Helper's rules: the first
-/// value openfortivpn would refuse, in the order server address, username, realm. An empty server
-/// address or username is left to the caller, as an account not set up yet; an empty realm means
-/// none.
-pub(super) fn check_account(
-    host: &str,
-    username: &str,
-    realm: &str,
-) -> Result<(), AccountValueProblem> {
-    fn value_problem(
-        field: AccountField,
-        value: &str,
-        max_bytes: usize,
-    ) -> Result<(), AccountValueProblem> {
-        match text_problem(value, max_bytes) {
-            None | Some(TextProblem::Empty) => Ok(()),
-            Some(TextProblem::TooLong) => Err(AccountValueProblem::TooLong {
-                field,
-                max_bytes: u32::try_from(max_bytes).expect("buffer sizes fit in u32"),
-            }),
-            Some(TextProblem::ForbiddenCharacter(_)) => {
-                Err(AccountValueProblem::DisallowedCharacters { field })
-            }
-            Some(TextProblem::SurroundingWhitespace) => {
-                Err(AccountValueProblem::LeadingOrTrailingSpace { field })
-            }
-        }
-    }
-
-    value_problem(AccountField::Host, host, MAX_HOST_BYTES)?;
-    if !host.is_empty() && !is_host(host) {
-        return Err(AccountValueProblem::InvalidHost {});
-    }
-    value_problem(AccountField::Username, username, MAX_USERNAME_BYTES)?;
-    value_problem(AccountField::Realm, realm, MAX_REALM_BYTES)
-}
-
-/// The app's check of a typed VPN password before it is saved. An empty one is left to the
-/// caller, for which it keeps the stored password.
-pub(super) fn check_vpn_password(password: &str) -> Result<(), AccountSaveError> {
-    if forbidden_in_password(password).is_some() || password.len() > MAX_PASSWORD_BYTES {
-        return Err(AccountSaveError::InvalidVpnPassword {
-            max_bytes: u32::try_from(MAX_PASSWORD_BYTES).expect("the buffer size fits in u32"),
-        });
-    }
-    Ok(())
-}
-
-/// `text` as openfortivpn compares it, if it is a SHA-256 digest in hex of either case.
-pub(super) fn certificate_value(text: &str) -> Option<String> {
-    let value = text.to_ascii_lowercase();
-    is_certificate_value(&value).then_some(value)
-}
-
-/// openfortivpn compares the gateway's SHA-256 digest as lowercase hex.
-fn is_certificate_value(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 /// An empty realm means none.

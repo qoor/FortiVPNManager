@@ -1,5 +1,6 @@
 //! Replays the synthetic transcripts in `fixtures/`, reconstructed from openfortivpn 1.24.1 and
 //! Apple pppd source strings, under many ways the output can be split into reads.
+#![cfg(unix)] // openfortivpn runs only on Unix.
 
 mod common;
 

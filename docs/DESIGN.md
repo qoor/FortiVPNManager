@@ -91,17 +91,19 @@ components/
                                 (src/macos/, macos/: macOS 앱이 런타임을 시작하는 부분)
   backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 유예 시간, 검증된 버전, 기존 설정 가져오기
   watchdog/                     watchdog: 프로세스 실행, stdin, 출력, 단계별 시간 제한, 종료, 종료 사실 (unix/)
-  helper-entry/macos/           Helper entry: backend adapter를 골라 watchdog에 연결하는 Helper의 시작 함수
+  helper-entry/                 Helper entry: 앱 요청 처리, 실행 기록, 남은 프로세스 정리. OS 전용 API 없음
+                                (macos/: Helper의 시작 함수. backend adapter와 macOS의 프로세스 확인·종료,
+                                 실행 기록 폴더 권한을 Helper entry에 넘긴다)
   ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
   os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
   os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
 packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보
 ```
 
-- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, backend adapter, 공통 계약.
+- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, backend adapter, 공통 계약.
 - 판단 코어와 watchdog은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
 - **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.
-- **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점만 새로 만든다. Linux와 Windows의 서비스는 Rust로 Helper entry 역할을 한다.
+- **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점만 새로 만든다. Linux와 Windows의 서비스는 Helper entry를 그대로 쓰고, backend adapter를 골라 시작하는 부분만 맡는다.
 
 ### 4.4 빌드와 설치
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
@@ -253,6 +255,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI도 같�
   - Windows 지원과 openconnect backend를 붙이기 전에 했다. 정보 구성을 먼저 확정하면 Windows UI는 그것을 한 번만 따라 만들면 되기 때문이다. Rust 쪽은 바뀌지 않았다. UI에 보내는 정보가 화면 단위가 아니라 주제 단위라서 pane을 나눠도 macOS UI만 고치면 됐다.
   - 실제 macOS 컨트롤로 만든 목업을 사용자가 직접 써 보고 정했다. 그 과정에서 바뀐 것: 로그는 별도 창 대신 pane, 일반 pane에도 상태 표시, 설정 필요 안내는 항목별 동작.
   - openconnect가 들어올 자리: backend 선택은 고급 pane의 VPN client 묶음에 둔다. 설정 가져오기는 계정 pane에 그대로 두고 backend에 따라 달라진다.
+- **2026-11-12 공통 구조 정리**
+  - Windows와 openconnect를 붙이기 전에 따로 했다(사용자 결정). 동작은 바뀌지 않는다.
+  - Helper entry에서 앱 요청 처리, 실행 기록, 남은 프로세스 정리를 macOS의 시작 부분과 나눴다. 다른 OS의 Helper가 이 부분을 그대로 쓰게 하려는 것이다. OS마다 다른 것(프로세스 확인과 종료, 실행 기록 폴더 권한)은 backend adapter처럼 OS별 시작 부분이 넘겨준다. 그래서 Helper entry에는 OS 전용 코드가 없다. 어떤 backend adapter를 쓸지도 OS별 시작 부분이 정한다.
+  - watchdog은 OS마다 다른 프로세스 처리만 따로 둔다. 실행 명세의 설정 파일은 없어도 되게 했다. 모든 것을 인자로 받는 VPN client도 있기 때문이다. VPN client 값 검사 가운데 client끼리 같은 것은 한곳에 모았다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**

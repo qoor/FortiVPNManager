@@ -1,4 +1,5 @@
 //! What one run's output tells, line by line and prompt by prompt.
+#![cfg(unix)] // openfortivpn runs only on Unix.
 
 mod common;
 

@@ -329,18 +329,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "fvm-helper-entry"
+version = "0.0.0"
+dependencies = [
+ "fvm-contract",
+ "fvm-watchdog",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
 name = "fvm-helper-entry-macos"
 version = "0.0.0"
 dependencies = [
  "fvm-backend-adapter",
  "fvm-contract",
- "fvm-watchdog",
+ "fvm-helper-entry",
  "libproc",
  "rustix",
- "serde",
  "serde_json",
  "socket2",
- "zeroize",
 ]
 
 [[package]]

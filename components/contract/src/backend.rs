@@ -28,8 +28,9 @@ pub trait Backend {
     fn untested_version(&self, version: &str) -> Option<UntestedVersion>;
 
     /// Checks every value of `request` again, since the Helper does not trust the app, and builds
-    /// the launch. The caller writes `LaunchSpec::config_file` to `config_path` with mode 0600
-    /// before the launch and removes it after the run. The error is an English reason for the app.
+    /// the launch. If the launch has a config file, the caller writes it to `config_path` with mode
+    /// 0600 before the launch and removes it after the run. The error is an English reason for the
+    /// app.
     fn launch_spec(
         &self,
         client: &ClientExecutable,
@@ -100,8 +101,9 @@ pub struct LaunchSpec {
     pub args: Vec<String>,
     /// The whole environment; nothing else is inherited.
     pub env: Vec<(String, String)>,
-    /// Never holds the password, which goes to stdin.
-    pub config_file: String,
+    /// Never holds the password, which goes to stdin. `None` for a client that takes everything
+    /// as arguments.
+    pub config_file: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

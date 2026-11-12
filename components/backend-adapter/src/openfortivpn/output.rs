@@ -7,7 +7,7 @@ use std::net::Ipv4Addr;
 use fvm_contract::app_helper::{Milestone, OutputSource};
 use fvm_contract::backend::{Finding, OutputInterpreter, Prompt};
 
-use super::request::certificate_value;
+use super::account::certificate_value;
 
 // read_password() prints these with no line break and then blocks reading stdin.
 const PASSWORD_PROMPT: &[u8] = b"VPN account password: "; // main.c
