@@ -1,23 +1,35 @@
 # FortiVPNManager
 
-openfortivpn으로 FortiGate SSL VPN에 자동 접속하고, 끊기면 자동으로 다시 접속하는 macOS 메뉴바 앱입니다.
+English · [한국어](README.ko.md)
 
-- Gmail(Google Workspace)로 온 FortiGate 이메일 OTP를 자동으로 읽어 입력합니다. Gmail API(Google 계정 연결)를 쓰고, 안 되면 IMAP(앱 비밀번호)으로 전환합니다.
-- 서버가 세션을 끊으면 잠시 뒤, 누군가 강제로 끝내면 곧바로 재연결하고, 만료 직전에는 미리 재연결합니다.
-- 예외 규칙: 지정한 사내 대역에 연결돼 있을 때 예외 대상 호스트·대역은 VPN을 거치지 않고 그 네트워크로 바로 나갑니다(macOS 추가 라우트, 재부팅 후에도 유지). 다른 네트워크에서는 모두 VPN을 거칩니다.
-- 설정은 `~/.config/FortiVPNManager/config.yaml`에, 비밀번호는 Keychain에 저장합니다.
+A macOS menu bar app that connects to FortiGate SSL VPN through openfortivpn and reconnects automatically when the connection drops.
 
-문서: [설계](docs/DESIGN.md) · [기능 명세](docs/SPEC.md)
+## Features
 
-## 요구 사항
+- **Native UI**: A native UI on each OS delivers high responsiveness and a UX that fits naturally into the OS.
+- **Cross-platform (planned)**: Support for multiple operating systems and VPN backends.
+- **Minimal setup**: Automatic VPN reconnection needs only the VPN server details, the OTP authentication details, and the Helper setup.
+- **Schedules**: Manage when automatic reconnection runs, with time ranges for each day of the week.
+- **Fast connection**: Fast reconnection and fast automatic OTP authentication keep the impact of reconnects on your traffic to a minimum.
 
-- macOS 15 이상, Apple Silicon (개발 환경: macOS 27)
+## What it does
+
+- Reads the FortiGate email OTP sent to Gmail (Google Workspace) and enters it for you. It uses the Gmail API (Google account connection) and falls back to IMAP (app password) when that doesn't work.
+- Reconnects shortly after the server ends the session, immediately when the session is forcibly terminated, and ahead of time just before it expires.
+- Exception Rules: while connected to a specified corporate network range, the listed hosts and ranges bypass the VPN and go out directly through that network (macOS additional routes, kept across reboots). On any other network, everything goes through the VPN.
+- Settings are stored in `~/.config/FortiVPNManager/config.yaml` and passwords in the Keychain.
+
+Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md)
+
+## Requirements
+
+- macOS 15 or later, Apple Silicon (developed on macOS 27)
 - Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
-- Rust ([rustup](https://rustup.rs)으로 설치, `~/.cargo/bin/cargo`를 씁니다)
+- Rust (install with [rustup](https://rustup.rs); the build uses `~/.cargo/bin/cargo`)
 - openfortivpn (`brew install openfortivpn`)
-- 무료 Apple ID로 만든 **Apple Development** 서명 인증서 (유료 개발자 계정 불필요)
+- An **Apple Development** signing certificate created with a free Apple ID (no paid developer account required)
 
-## 처음 한 번 준비
+## One-time setup
 
 ```sh
 sudo xcode-select -s /Applications/Xcode.app
@@ -27,46 +39,46 @@ brew install xcodegen
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-1. Xcode > Settings > Accounts에서 Apple ID를 추가합니다.
-2. 같은 화면의 Manage Certificates… > `+` > **Apple Development**를 선택해 인증서를 만듭니다.
-   인증서가 유효하지 않다고 나오면 Apple WWDR G3 중간 인증서를 로그인 Keychain에 추가합니다.
-3. `make local-config`를 실행하면 인증서에서 Team ID를 읽어 `packaging/macos/Config/Local.xcconfig`를 만듭니다.
+1. Add your Apple ID in Xcode > Settings > Accounts.
+2. On the same screen, choose Manage Certificates… > `+` > **Apple Development** to create a certificate.
+   If the certificate shows as not valid, add the Apple WWDR G3 intermediate certificate to the login Keychain.
+3. Run `make local-config`. It reads the Team ID from the certificate and creates `packaging/macos/Config/Local.xcconfig`.
 
-## Google OAuth 클라이언트 (Gmail API용, 선택)
+## Google OAuth client (for the Gmail API, optional)
 
-OTP 메일을 가장 빠르게 감지하는 Gmail API 방식은 Google Cloud의 **데스크톱 앱 OAuth 클라이언트**가 필요합니다.
-클라이언트는 빌드할 때 앱에 내장되며, 사용자는 설정창에서 **Google 계정 연결**만 누르면 됩니다.
+The Gmail API method, which detects OTP emails the fastest, needs a **Desktop app OAuth client** from Google Cloud.
+The client is embedded in the app at build time, so users only need to click **Connect Google Account…** in Settings.
 
-1. Google Cloud 프로젝트에서 Gmail API를 사용 설정하고, OAuth 동의 화면(조직 내부용이면 *Internal*)에
-   `https://www.googleapis.com/auth/gmail.modify` 범위를 추가합니다.
-2. **데스크톱 앱** 유형의 OAuth 클라이언트를 만들고 JSON을 내려받습니다.
-3. 내려받은 JSON을 `packaging/macos/Config/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
-   저장소에 올라가지 않습니다(client secret 포함).
+1. In a Google Cloud project, enable the Gmail API and add the `https://www.googleapis.com/auth/gmail.modify` scope
+   to the OAuth consent screen (*Internal* if it's only for your organization).
+2. Create an OAuth client of type **Desktop app** and download its JSON.
+3. Copy the downloaded JSON to `packaging/macos/Config/GoogleOAuthClient.json`. This file is listed in `.gitignore`,
+   so it never gets committed (it contains the client secret).
 
-파일이 없으면 내장 클라이언트 없이 빌드되며, 설정창 계정 pane의 **OAuth 클라이언트 (고급)**에서 JSON을 직접
-가져올 수 있습니다. 이 경우에도 앱 비밀번호(IMAP) 방식은 그대로 쓸 수 있습니다.
+Without the file, the app builds without a built-in client, and you can import the JSON yourself under
+**OAuth client (advanced)** in the Account pane of Settings. The app password (IMAP) method still works either way.
 
-## 빌드와 설치
+## Build and install
 
-| 명령 | 내용 |
+| Command | What it does |
 |---|---|
-| `make test` | Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, UI·OS 연동) |
-| `make build` | Debug 빌드 (`.build/xcode`) |
-| `make verify` | 서명/번들 구성 검사 |
-| `make install` | Release 빌드를 `/Applications`에 설치하고 실행합니다. 설치 전에 VPN이 연결되어 있었는데 터널이 돌아오지 않으면 이전 앱을 되돌려 놓습니다 |
-| `make logs` | 앱/Helper 로그 실시간 보기 |
+| `make test` | All Rust tests plus the Swift test bundles (shared contract, Helper, UI and OS integration) |
+| `make build` | Debug build (`.build/xcode`) |
+| `make verify` | Checks signing and bundle layout |
+| `make install` | Builds Release, installs it to `/Applications`, and launches it. If the VPN was connected before the install and the tunnel doesn't come back, it restores the previous app |
+| `make logs` | Streams app and Helper logs live |
 
-Helper(root 데몬)는 `/Applications`에 설치된 앱에서만 등록됩니다. 처음 실행하면 시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 승인해야 합니다.
+The Helper (root daemon) is registered only from an app installed in `/Applications`. On first launch, approve it in System Settings > General > Login Items & Extensions.
 
-## 파일 위치
+## File locations
 
-| 내용 | 위치 |
+| What | Where |
 |---|---|
-| 설정 | `~/.config/FortiVPNManager/config.yaml` |
-| 비밀번호, Google 로그인 토큰 | 로그인 Keychain |
-| 앱 상태 (실패 횟수 등) | `~/Library/Application Support/FortiVPNManager/state.json` |
-| openfortivpn 원본 로그 | `~/Library/Logs/FortiVPNManager/openfortivpn.log` |
+| Settings | `~/.config/FortiVPNManager/config.yaml` |
+| Passwords, Google sign-in tokens | Login Keychain |
+| App state (failure counts, etc.) | `~/Library/Application Support/FortiVPNManager/state.json` |
+| Raw openfortivpn log | `~/Library/Logs/FortiVPNManager/openfortivpn.log` |
 
-## 구조
+## Architecture
 
-공통 로직은 Rust, macOS의 UI·OS 연동·OS 연동 Helper는 Swift입니다. 구성 요소와 역할은 [설계 §4](docs/DESIGN.md#4-구성과-역할)를 보세요.
+Shared logic is written in Rust; the macOS UI, OS integration, and the OS integration Helper are written in Swift. For the components and their roles, see [Design §4](docs/DESIGN.md#4-구성과-역할) (Korean).
