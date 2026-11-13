@@ -44,6 +44,8 @@ targets:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchDaemons
+      # An Icon Composer document, so macOS draws the Dark, Clear and Tinted icons itself.
+      - path: AppIcon.icon
     info:
       path: Support/App-Info.plist
       properties:
@@ -54,6 +56,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # The sources state their isolation themselves, as the contract's types are nonisolated.
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         # UI text is English in code; Korean lives in components/ui/macos/Localizable.xcstrings.
