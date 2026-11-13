@@ -48,6 +48,8 @@ internal sealed class GeneralPane : IPane
     private readonly SettingsCard autoConnectCard;
     private IReadOnlyList<SetupItem> shownItems = [];
     private FailureReason? shownFailure;
+    /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
+    private readonly Dictionary<string, FrameworkElement> rows = [];
     private bool refreshing;
 
     public GeneralPane(AppUi ui, PanePage page)
@@ -72,7 +74,13 @@ internal sealed class GeneralPane : IPane
         disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
         reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
         status.Children.Add(Cards.SectionHeader(L("Status"), first: true));
-        foreach (var element in new UIElement[] { current, reason, setupItems, failure, connectedAt, tunnelIp, proactive, nextAttempt, Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow)) })
+        var buttons = Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow));
+        rows["Current status"] = current;
+        rows["Connected at"] = connectedAt;
+        rows["Tunnel IP"] = tunnelIp;
+        rows["Next proactive reconnect"] = proactive;
+        rows[SettingsSearch.ConnectionButtons] = buttons;
+        foreach (var element in new UIElement[] { current, reason, setupItems, failure, connectedAt, tunnelIp, proactive, nextAttempt, buttons })
         {
             status.Children.Add(element);
         }
@@ -93,6 +101,8 @@ internal sealed class GeneralPane : IPane
                 ui.Send(new Command.SetConnectionOption(new ConnectionOption.AutoConnectOnLaunch(autoConnect.IsOn)));
             }
         };
+        rows["Open at login"] = openAtLoginCard;
+        rows["Connect automatically at launch"] = autoConnectCard;
         startup.Children.Add(Cards.SectionHeader(L("Startup")));
         startup.Children.Add(openAtLoginCard);
         startup.Children.Add(openAtLoginError);
@@ -115,7 +125,7 @@ internal sealed class GeneralPane : IPane
         import.Children.Add(Cards.SectionHeader(L("Import Settings")));
         var source = Cards.Card(L("FortiClient settings"), importButton);
         source.Describe(L("Brings in the server address from FortiClient."));
-        import.Children.Add(source);
+        import.Children.Add(rows[SettingsSearch.ImportRow] = source);
         var close = new Button { Content = L("Close") };
         close.Click += (_, _) => ui.Send(new Command.DismissImportReport());
         importSource.TextWrapping = TextWrapping.Wrap;
@@ -129,6 +139,8 @@ internal sealed class GeneralPane : IPane
         importClose.Content = close;
         import.Children.Add(importClose);
     }
+
+    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
 
     public void Refresh()
     {

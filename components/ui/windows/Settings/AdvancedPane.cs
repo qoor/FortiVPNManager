@@ -32,6 +32,8 @@ internal sealed class AdvancedPane : IPane
     private readonly SettingsCard fileCard;
     private readonly InfoBar loadError = Cards.Notice(InfoBarSeverity.Error);
     private readonly StackPanel warnings = new() { Spacing = 4 };
+    /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
+    private readonly Dictionary<string, FrameworkElement> rows = [];
     private string? clientPath;
     private string? settingsPath;
     private IReadOnlyList<ConfigWarning> shownWarnings = [];
@@ -42,9 +44,9 @@ internal sealed class AdvancedPane : IPane
         (helperLine, helperMark, helperText) = Cards.StatusLine();
         registerHelper.Click += (_, _) => ui.Send(new Command.RegisterHelper());
         body.Children.Add(Cards.SectionHeader(L("Helper"), first: true));
-        body.Children.Add(Cards.Card(L("Status"), helperLine));
+        body.Children.Add(rows["Helper"] = Cards.Card(L("Status"), helperLine));
         registerCard = Cards.ActionCard(registerHelper);
-        body.Children.Add(registerCard);
+        body.Children.Add(rows["Register Helper"] = registerCard);
         body.Children.Add(registerError);
 
         // The path runs long and would wrap; the button shows it in File Explorer, its tooltip as text.
@@ -57,9 +59,9 @@ internal sealed class AdvancedPane : IPane
         };
         clientNotFound.Text = L("Not found");
         client.Children.Add(Cards.SectionHeader(L("VPN client")));
-        client.Children.Add(Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
-        client.Children.Add(Cards.Card(L("Version"), clientVersion));
-        client.Children.Add(Cards.Card(L("Path"), Cards.Row(showClient, clientNotFound)));
+        client.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
+        client.Children.Add(rows["Version"] = Cards.Card(L("Version"), clientVersion));
+        client.Children.Add(rows["Path"] = Cards.Card(L("Path"), Cards.Row(showClient, clientNotFound)));
         client.Children.Add(untested);
         client.Children.Add(clientProblem);
         body.Children.Add(client);
@@ -73,11 +75,13 @@ internal sealed class AdvancedPane : IPane
         };
         fileCard = new SettingsCard { Header = filePath, Content = showFile };
         body.Children.Add(Cards.SectionHeader(L("Settings File")));
-        body.Children.Add(fileCard);
+        body.Children.Add(rows["Settings File"] = fileCard);
         body.Children.Add(loadError);
         body.Children.Add(warnings);
         page.BodyPanel.Children.Add(body);
     }
+
+    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
 
     public void Refresh()
     {

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The UI's sentences and log lines, compiled here from their sources so the tests need no WinUI. -->
+  <!-- The UI's sentences, log lines and settings search, compiled here from their sources so the tests need no WinUI. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>FortiVPNManager.Ui.Tests</RootNamespace>
@@ -24,6 +24,7 @@
     <Compile Include="..\..\windows\Text\*.cs" Link="Text\%(Filename)%(Extension)" />
     <Compile Include="..\..\windows\SettingsPane.cs" Link="SettingsPane.cs" />
     <Compile Include="..\..\windows\LogLines.cs" Link="LogLines.cs" />
+    <Compile Include="..\..\windows\SettingsSearch.cs" Link="SettingsSearch.cs" />
     <EmbeddedResource Include="..\..\macos\Localizable.xcstrings" LogicalName="Localizable.xcstrings" />
     <EmbeddedResource Include="..\..\windows\Windows.xcstrings" LogicalName="Windows.xcstrings" />
   </ItemGroup>

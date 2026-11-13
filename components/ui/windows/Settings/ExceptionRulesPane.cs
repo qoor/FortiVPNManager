@@ -27,6 +27,8 @@ internal sealed class ExceptionRulesPane : IPane
     private readonly AddressList networks;
     private readonly AddressList targets;
     private readonly Button addCurrentNetwork = new() { Content = L("Add Current Network") };
+    /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
+    private readonly Dictionary<string, FrameworkElement> rows = [];
     private bool editingNetworkRow;
     private bool editingTargetRow;
 
@@ -55,8 +57,8 @@ internal sealed class ExceptionRulesPane : IPane
         page.ActionsPanel.Children.Add(apply);
 
         (statusLine, statusMark, statusText) = Cards.StatusLine();
-        body.Children.Add(Cards.Card(L("Current network"), currentNetwork));
-        body.Children.Add(Cards.Card(L("Status"), statusLine));
+        body.Children.Add(rows["Current network"] = Cards.Card(L("Current network"), currentNetwork));
+        body.Children.Add(rows["Status"] = Cards.Card(L("Status"), statusLine));
         body.Children.Add(applyFailed);
         body.Children.Add(stoppedRetrying);
 
@@ -67,7 +69,8 @@ internal sealed class ExceptionRulesPane : IPane
             editing => { editingNetworkRow = editing; Refresh(); });
         addCurrentNetwork.Click += (_, _) => ui.Send(new Command.AddCurrentNetwork());
         body.Children.Add(Cards.SectionHeader(L("Networks where the rules apply")));
-        body.Children.Add(networks.View);
+        body.Children.Add(rows["Networks where the rules apply"] = networks.View);
+        rows["Add Current Network"] = addCurrentNetwork;
         var networkButtons = new Grid { Margin = new Thickness(0, 4, 0, 0) };
         networkButtons.Children.Add(Cards.Row(networks.Add, networks.Remove));
         addCurrentNetwork.HorizontalAlignment = HorizontalAlignment.Right;
@@ -81,7 +84,7 @@ internal sealed class ExceptionRulesPane : IPane
             rows => ui.Send(new Command.SetBypassRows(BypassList.Targets, rows)),
             editing => { editingTargetRow = editing; Refresh(); });
         body.Children.Add(Cards.SectionHeader(L("Exception targets")));
-        body.Children.Add(targets.View);
+        body.Children.Add(rows["Exception targets"] = targets.View);
         var targetButtons = Cards.Row(targets.Add, targets.Remove);
         targetButtons.Margin = new Thickness(0, 4, 0, 0);
         body.Children.Add(targetButtons);
@@ -90,6 +93,8 @@ internal sealed class ExceptionRulesPane : IPane
         body.Children.Add(footer);
         page.BodyPanel.Children.Add(body);
     }
+
+    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
 
     public void Refresh()
     {

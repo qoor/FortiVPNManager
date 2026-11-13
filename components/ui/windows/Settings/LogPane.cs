@@ -139,6 +139,9 @@ internal sealed class LogPane : IPane, IDisposable
 
     public void Refresh() => showFile.IsEnabled = ui.Config is not null;
 
+    /// <summary>The pane's one row; its commands at the top have none.</summary>
+    public FrameworkElement? OpenRow(string key) => key == "Auto-scroll" ? autoScroll : null;
+
     /// <summary>Opens the find box with the keyboard in it.</summary>
     public bool ShowFind()
     {

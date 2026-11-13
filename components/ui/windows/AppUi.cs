@@ -51,6 +51,17 @@ public sealed class AppUi
     /// <summary>The Account pane's disclosures the person opened, kept while the app runs (macOS SettingsNavigation).</summary>
     public HashSet<string> OpenDisclosures { get; } = [];
 
+    /// <summary>Whether the panes show the rows of a setting shown only in some states; the search lists only those it can go to.</summary>
+    public bool IsShown(SearchCondition condition) => condition switch
+    {
+        SearchCondition.Connected => Connection?.Status is ConnectionStatus.Connected,
+        SearchCondition.GmailApi => Gmail?.Method == OtpMethod.GmailApi,
+        SearchCondition.VpnClientFound => Readiness?.Client is not null,
+        SearchCondition.RegisterHelper => Readiness is { RegisterHelper: not ButtonState.Hidden },
+        SearchCondition.AddCurrentNetwork => BypassRules is { AddCurrentNetwork: not ButtonState.Hidden },
+        _ => throw new InvalidOperationException($"unknown condition {condition}"),
+    };
+
     /// <summary>The Log pane's Auto-scroll, kept while the app runs.</summary>
     public bool LogAutoScroll { get; set; } = true;
 

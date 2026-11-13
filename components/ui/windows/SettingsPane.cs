@@ -10,3 +10,18 @@ public enum SettingsPane
     Advanced,
     Log,
 }
+
+public static class SettingsPanes
+{
+    /// <summary>The pane's English title, its key in the catalogs (the macOS pane titles).</summary>
+    public static string TitleKey(this SettingsPane pane) => pane switch
+    {
+        SettingsPane.General => "General",
+        SettingsPane.Account => "Account",
+        SettingsPane.Connection => "Connection",
+        SettingsPane.ExceptionRules => "Exception Rules",
+        SettingsPane.Advanced => "Advanced",
+        SettingsPane.Log => "Log",
+        _ => throw new InvalidOperationException($"unknown pane {pane}"),
+    };
+}
