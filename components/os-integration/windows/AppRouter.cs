@@ -183,7 +183,7 @@ public static class CurrentAppFacts
     /// <summary>
     /// The build comes from the app's informational version, which the build script sets for the app
     /// and the Helper alike. The built-in OAuth client is a file the build script puts next to the
-    /// app (packaging/windows, gitignored), as on macOS.
+    /// app (packaging/GoogleOAuthClient.json, gitignored), the one the macOS build uses.
     /// </summary>
     /// <param name="signInPages">The pages the Google sign-in listener shows, in the UI's language.</param>
     public static AppFacts Read(SignInPages signInPages)
