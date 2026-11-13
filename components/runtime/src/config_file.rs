@@ -9,8 +9,10 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use fvm_contract::app_internal::problem::ConfigWarningKind;
 use fvm_contract::app_internal::problem::{
-    ConfigFileError, ConfigProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind,
+    ConfigFileError, ConfigProblem, ConfigProblemKind, ConfigWarning,
 };
 use fvm_core::config::{self, Settings, Update, UpdateError};
 
