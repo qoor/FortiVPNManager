@@ -17,3 +17,7 @@ packaging/macos/Support/App-Info.plist
 # Google OAuth Desktop client (contains the client secret), the same for every platform; each
 # platform's build puts it with its app
 packaging/GoogleOAuthClient.json
+
+# .NET (Windows app builds)
+bin/
+obj/
