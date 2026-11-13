@@ -131,7 +131,7 @@ components/
   os-integration/windows/       OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달, Helper 통로
   os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
 packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보, 빌드·설치 스크립트
-packaging/windows/              C# solution, 설치 스크립트
+packaging/windows/              C# solution, 빌드·설치 스크립트
 ```
 
 - **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, watchdog, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 watchdog뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. Windows Helper 서비스는 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
@@ -144,7 +144,7 @@ packaging/windows/              C# solution, 설치 스크립트
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
-- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다. 파일을 Program Files에 복사하고, 서비스를 등록하고(부팅 때 시작, 비정상 종료 때 다시 시작), 통로를 열 사용자를 정한다. 이 사용자는 화면에 로그인한 사용자가 기본이고 직접 지정할 수도 있다. 일반 사용자가 설치하면 스크립트가 관리자 계정으로 돌아서, 실행한 계정을 고르면 정작 사용자의 앱이 연결하지 못하기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). Windows가 꺼질 때 종료 준비 알림을 받은 Helper를 기다려 줄 시간도 서비스 설정에 넣는다. 재설치는 서비스 정지 → 교체 → 시작이다.
+- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다. 빌드는 사용자 자신의 계정으로 빌드 스크립트(`packaging/windows/build.ps1`)를 실행해 release 빌드를 만든다. Rust는 사용자마다 설치되므로 관리자 계정에는 없을 수 있다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다(`packaging/windows/install.ps1`). 그 빌드를 Program Files에 넣고, 서비스를 등록하고, 통로를 열 사용자를 정한다. 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. 서비스는 부팅 때 시작하고, 비정상 종료하거나 시작에 실패할 때마다 다시 시작한다(5초, 5초, 그 뒤 1분마다). Helper 없이는 VPN을 쓸 수 없고, 통로 이름을 다른 프로그램이 먼저 차지한 경우처럼 원인이 사라지면 저절로 돌아오기 때문이다. 이 사용자는 화면에 로그인한 사용자가 기본이고 직접 지정할 수도 있다. 일반 사용자가 설치하면 스크립트가 관리자 계정으로 돌아서, 실행한 계정을 고르면 정작 사용자의 앱이 연결하지 못하기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). Windows가 꺼질 때 종료 준비 알림을 받은 Helper를 기다려 줄 시간(30초)도 서비스 설정에 넣는다. sc.exe에는 이 설정이 없어 서비스 API를 직접 부른다. 재설치는 서비스 정지 → 교체 → 시작이다. 새 파일은 옆 폴더에 먼저 두고, Helper 프로세스까지 끝난 뒤 앱 폴더를 이름 바꾸기 한 번으로 통째로 바꾼다. 앱처럼 폴더 안의 프로그램이 실행 중이면 이름 바꾸기가 실패하고, 그때는 아무것도 바꾸지 않은 채 Helper를 다시 시작하고 끝난다. PowerShell의 폴더 옮기기는 이름 바꾸기가 실패하면 파일을 하나씩 옮겨, 쓰이는 파일만 남기고 Helper 실행 파일은 옮겨 버린다(2026-11-13 노트북에서 확인). 회사 보안 프로그램이 새 실행 파일을 몇 분 붙잡아 Windows가 서비스 시작에 주는 30초를 넘기므로, 시작이 실패하면 10분까지 다시 시도한다. OpenConnect가 설치돼 있지 않으면 알리고 설치는 계속한다. 앱의 준비 상태에도 나오기 때문이다.
 
 ## 5. 동작 원칙
 
