@@ -1,14 +1,16 @@
 //! One run: a thread that owns everything about the client and handles, in order, its output, its
-//! exit, the caller's requests and the time limits. Reader threads and an exit thread only forward
-//! what they see. A client that logs in and opens the tunnel in separate runs has two processes, one
-//! after the other; their inputs carry which one they come from. When the Helper had to end the
-//! tunnel run by force, or never started it, the run sends the client's logout request before it
-//! reports the exit.
+//! exit, the caller's requests and the time limits. Reader threads, an exit thread and the gateway
+//! lookup only forward what they see. A client that logs in and opens the tunnel in separate runs
+//! has two processes, one after the other; their inputs carry which one they come from. When the
+//! Helper had to end the tunnel run by force, or never started it, the run sends the client's
+//! logout request before it reports the exit. The run keeps the pidfile up to date and removes its
+//! files before it reports the exit.
 
 use std::io::{self, PipeReader, PipeWriter, Read, Write};
 use std::iter;
 use std::mem;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
@@ -16,56 +18,59 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
-    ProcessExitStatus, StopInitiator, StopReason,
+    AttemptId, ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine,
+    OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
     Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs,
     SessionLaunch,
 };
+use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use zeroize::Zeroizing;
 
 use crate::lines::{LineAssembler, MAX_LINE_BYTES};
 use crate::os::{self, Child, Spawned};
+use crate::run_directory::{RunFiles, RunRecord};
 use crate::{Report, RouteRepair, Timing};
 
 /// Controls a started run. Dropping it does not stop the run.
-pub struct Run {
+pub struct Run<B> {
+    backend: Arc<B>,
     inputs: Sender<Input>,
-    client_name: &'static str,
     /// 0 once the client is about to be reaped.
     process_id: Arc<AtomicU32>,
     /// The thread that calls `on_report`.
     run_thread: ThreadId,
 }
 
-impl Run {
-    /// Starts the client as `launch` says, for one run, and calls `on_report` in order on the run's
-    /// own thread until the `Exited` event, which is also how a failed start is reported.
-    /// `on_report` must never wait for anything that may be held while `submit_otp` runs, since
-    /// `submit_otp` waits for that thread; calling `submit_otp` or `stop` on it panics.
+impl<B> Run<B>
+where
+    B: Backend + Send + Sync + 'static,
+{
+    /// Starts the client as `launch` says, for one run of `request`, and calls `on_report` in order
+    /// on the run's own thread until the `Exited` event, which is also how a failed start is
+    /// reported. `on_report` must never wait for anything that may be held while `submit_otp` runs,
+    /// since `submit_otp` waits for that thread; calling `submit_otp` or `stop` on it panics.
     ///
-    /// `password` goes to stdin at the client's first password prompt, if the interpreter expects
-    /// one there, and is then zeroed. The process must ignore SIGPIPE (see the crate documentation).
-    pub fn start<B>(
-        backend: &B,
+    /// The request's password goes to stdin at the client's first password prompt, if the
+    /// interpreter expects one there, and is then zeroed. The process must ignore SIGPIPE (see the
+    /// crate documentation).
+    pub(crate) fn start(
+        backend: Arc<B>,
         launch: &LaunchSpec,
-        password: String,
+        request: &mut RunRequest,
+        files: RunFiles,
         timing: Timing,
         on_report: impl FnMut(Report) + Send + 'static,
-    ) -> Run
-    where
-        B: Backend,
-        B::Interpreter: 'static,
-    {
-        // The caller's copy is zeroed when this returns; the line is zeroed once written.
-        let password = Zeroizing::new(password);
+    ) -> Self {
+        // The request's copy is gone; this one is zeroed when this returns and the line once
+        // written.
+        let password = Zeroizing::new(mem::take(&mut request.password));
         let mut password_line = Zeroizing::new(Vec::with_capacity(password.len() + 1));
         password_line.extend_from_slice(password.as_bytes());
         password_line.push(b'\n');
 
         let (inputs, received) = mpsc::channel();
-        let client_name = backend.client_name();
         let spawned = match os::spawn(launch) {
             Ok(spawned) => spawned,
             Err(errno) => {
@@ -76,11 +81,11 @@ impl Run {
                 );
                 let reporter = thread::Builder::new()
                     .name("fvm-watchdog".to_owned())
-                    .spawn(move || report_spawn_failure(text, errno, on_report))
+                    .spawn(move || report_spawn_failure(text, errno, &files, on_report))
                     .expect("starting the watchdog thread");
                 return Run {
+                    backend,
                     inputs,
-                    client_name,
                     process_id: Arc::new(AtomicU32::new(0)),
                     run_thread: reporter.thread().id(),
                 };
@@ -90,10 +95,13 @@ impl Run {
         let process_id = Arc::new(AtomicU32::new(spawned.child.id()));
         let command = command_line(launch);
         let (child, stdin, wake_write) = watch_process(spawned, 0, &inputs);
+        look_up_gateway(request.host.clone(), inputs.clone());
         let watch = Watch {
-            client_name,
             interpreter: backend.interpreter(),
-            grace_period: backend.stop_grace_period(),
+            backend: Arc::clone(&backend),
+            attempt: request.attempt_id.clone(),
+            files,
+            record: RunRecord::default(),
             timing,
             on_report,
             inputs: inputs.clone(),
@@ -127,16 +135,16 @@ impl Run {
             .spawn(move || watch.run(command, &received))
             .expect("starting the watchdog thread");
         Run {
+            backend,
             inputs,
-            client_name,
             process_id,
             run_thread: watcher.thread().id(),
         }
     }
 
-    /// Writes `code` and a line break to the client's stdin and closes stdin; accepted once, while
-    /// the client waits for the OTP. The caller checks the code with `Backend::check_otp` first.
-    /// The error is the Helper's answer to the app.
+    /// Checks `code` with the backend adapter, then writes it and a line break to the client's
+    /// stdin and closes stdin; accepted once, while the client waits for the OTP. The error is the
+    /// Helper's answer to the app.
     pub fn submit_otp(&self, code: String) -> Result<(), HelperError> {
         assert_ne!(
             thread::current().id(),
@@ -144,10 +152,16 @@ impl Run {
             "submit_otp from on_report would wait for its own thread"
         );
         let code = Zeroizing::new(code);
+        self.backend
+            .check_otp(&code)
+            .map_err(|message| HelperError {
+                code: HelperErrorCode::InvalidRequest,
+                message,
+            })?;
         let (reply, answer) = mpsc::sync_channel(1);
         let not_running = || HelperError {
             code: HelperErrorCode::WrongPhase,
-            message: format!("{} is not running", self.client_name),
+            message: format!("{} is not running", self.backend.client_name()),
         };
         if self.inputs.send(Input::SubmitOtp { code, reply }).is_err() {
             return Err(not_running());
@@ -214,6 +228,29 @@ fn watch_process(
     (spawned.child, spawned.stdin, spawned.wake_write)
 }
 
+/// The gateway's IPv4 address, for the pidfile and the route repair. Looked up while the run
+/// starts, since DNS may not answer once a broken tunnel took the routes; off the run's thread,
+/// since a slow answer must not hold up the client. The route repair is IPv4 only, and std cannot
+/// ask for IPv4 alone, so the first IPv4 answer counts.
+fn look_up_gateway(host: String, inputs: Sender<Input>) {
+    thread::Builder::new()
+        .name("fvm-watchdog-gateway".to_owned())
+        .spawn(move || {
+            let gateway = (host.as_str(), 0)
+                .to_socket_addrs()
+                .ok()
+                .and_then(|mut addresses| {
+                    addresses.find_map(|address| match address {
+                        SocketAddr::V4(address) => Some(*address.ip()),
+                        SocketAddr::V6(_) => None,
+                    })
+                });
+            // A run that already ended has no use for it.
+            let _ = inputs.send(Input::Gateway(gateway));
+        })
+        .expect("starting the gateway lookup thread");
+}
+
 fn command_line(launch: &LaunchSpec) -> String {
     iter::once(launch.program.display().to_string())
         .chain(launch.args.iter().cloned())
@@ -234,14 +271,24 @@ pub(crate) enum Input {
     /// The log line about the logout request.
     LoggedOut(String),
     RoutesRepaired(RouteRepairOutcome),
+    /// The gateway's IPv4 address, if it has one.
+    Gateway(Option<Ipv4Addr>),
 }
 
-fn report_spawn_failure(text: String, errno: i32, mut on_report: impl FnMut(Report)) {
+fn report_spawn_failure(
+    text: String,
+    errno: i32,
+    files: &RunFiles,
+    mut on_report: impl FnMut(Report),
+) {
     on_report(Report::Output(vec![OutputLine {
         date: SystemTime::now(),
         source: OutputSource::Helper,
         text,
     }]));
+    for line in files.remove() {
+        on_report(Report::Log(LogLevel::Error, LogCategory::Helper, line));
+    }
     on_report(Report::Event(HelperEventKind::Exited {
         facts: ExitFacts {
             furthest_milestone: None,
@@ -255,10 +302,14 @@ fn report_spawn_failure(text: String, errno: i32, mut on_report: impl FnMut(Repo
     }));
 }
 
-struct Watch<I, R> {
-    client_name: &'static str,
-    interpreter: I,
-    grace_period: Duration,
+struct Watch<B: Backend, R> {
+    backend: Arc<B>,
+    interpreter: B::Interpreter,
+    /// Names the run in the Helper's log.
+    attempt: AttemptId,
+    files: RunFiles,
+    /// What the pidfile holds once written.
+    record: RunRecord,
     timing: Timing,
     on_report: R,
     /// For the route repair's answer.
@@ -342,14 +393,14 @@ impl Stream {
     }
 }
 
-impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
+impl<B: Backend, R: FnMut(Report)> Watch<B, R> {
     fn run(mut self, command: String, inputs: &Receiver<Input>) {
         let Phase::Running(child) = &self.phase else {
             unreachable!("a run starts with the client running")
         };
         let pid = child.id();
         self.meta(format!("‹attempt started: pid {pid}, {command}›"));
-        self.client_started();
+        self.record_client(pid);
         self.reach(Milestone::Spawned);
         while !matches!(self.phase, Phase::Reported) {
             let input = match self.next_deadline() {
@@ -397,6 +448,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             Input::Stop(reason) => self.stop(reason),
             Input::LoggedOut(text) => self.logged_out(text),
             Input::RoutesRepaired(outcome) => self.routes_repaired(outcome),
+            Input::Gateway(gateway) => self.gateway_resolved(gateway),
         }
     }
 
@@ -542,6 +594,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         self.furthest = milestone;
         let tunnel_ip = if milestone == Milestone::TunnelUp {
             self.tunnel_up_at = Some(os::time_including_sleep());
+            self.record_tunnel();
             self.tunnel_ip
         } else {
             None
@@ -591,7 +644,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
     }
 
     fn submit_otp(&mut self, code: &str) -> Result<(), HelperError> {
-        let client = self.client_name;
+        let client = self.backend.client_name();
         let refusal = if !self.running() || self.stop.is_some() {
             Some(format!("{client} is not running"))
         } else if self.otp_submitted {
@@ -632,7 +685,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         let text = if error.kind() == io::ErrorKind::BrokenPipe {
             format!(
                 "‹input failed: {} exited before reading it (EPIPE)›",
-                self.client_name
+                self.backend.client_name()
             )
         } else {
             let errno = error
@@ -668,7 +721,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
             Phase::Running(child) => {
                 let (done, forced) = child.terminate();
                 self.forced = forced;
-                self.kill_deadline = Some(Instant::now() + self.grace_period);
+                self.kill_deadline = Some(Instant::now() + self.backend.stop_grace_period());
                 done
             }
             Phase::Draining { .. } if self.tunnel_pending() => "tunnel run not started",
@@ -692,7 +745,7 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         self.forced = true;
         self.meta(format!(
             "‹{done}: still running {} after {}›",
-            seconds(self.grace_period),
+            seconds(self.backend.stop_grace_period()),
             os::STOP_REQUEST
         ));
     }
@@ -846,15 +899,74 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         self.stderr = Stream::new(self.timing.line_idle_flush);
         self.wake_readers = Some(wake_write);
         self.meta(format!("‹tunnel run started: pid {pid}, {command}›"));
-        self.client_started();
+        self.record_client(pid);
         // The client reads nothing after the session.
         self.write_stdin(&input);
         self.stdin = None;
     }
 
-    fn client_started(&mut self) {
-        self.flush_batch();
-        (self.on_report)(Report::ClientStarted);
+    // The pidfile
+
+    /// Records the client so that a Helper started after this one died can stop it. A tunnel run
+    /// replaces the login run, which has exited.
+    fn record_client(&mut self, pid: u32) {
+        let Some(client) = os::process(pid) else {
+            return;
+        };
+        self.record.processes = vec![client];
+        self.save_record();
+        let message = format!(
+            "run {}: {} running as pid {pid}",
+            self.attempt,
+            self.backend.client_name()
+        );
+        self.log(LogLevel::Notice, LogCategory::Helper, message);
+    }
+
+    /// Adds what the client started for the tunnel, such as pppd, to the record before the tunnel
+    /// is reported up.
+    fn record_tunnel(&mut self) {
+        let Phase::Running(child) = &self.phase else {
+            return;
+        };
+        for started in os::children(child.id()) {
+            if self.backend.is_own_executable(Path::new(&started.path))
+                && !self.record.processes.contains(&started)
+            {
+                self.record.processes.push(started);
+            }
+        }
+        self.save_record();
+    }
+
+    fn gateway_resolved(&mut self, gateway: Option<Ipv4Addr>) {
+        let Some(gateway) = gateway else {
+            self.log(
+                LogLevel::Info,
+                LogCategory::Routes,
+                "gateway has no IPv4 address; its host route will not be repaired".to_owned(),
+            );
+            return;
+        };
+        self.record.gateway = Some(gateway);
+        if !self.record.processes.is_empty() {
+            self.save_record();
+        }
+    }
+
+    fn save_record(&mut self) {
+        if let Err(failure) = self.files.write_record(&self.record) {
+            self.log(
+                LogLevel::Error,
+                LogCategory::Helper,
+                format!("cannot write the pidfile: {failure}"),
+            );
+        }
+    }
+
+    /// Never with a secret: the line goes to the system log.
+    fn log(&mut self, level: LogLevel, category: LogCategory, message: String) {
+        (self.on_report)(Report::Log(level, category, message));
     }
 
     fn logged_out(&mut self, text: String) {
@@ -869,7 +981,10 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
         if self.interpreter.routes_left_unrestored() {
             self.flush_batch();
             self.phase = Phase::RepairingRoutes(facts);
-            (self.on_report)(Report::RepairRoutes(RouteRepair(Some(self.inputs.clone()))));
+            (self.on_report)(Report::RepairRoutes(RouteRepair {
+                gateway: self.record.gateway,
+                answer: Some(self.inputs.clone()),
+            }));
         } else {
             self.report_exit(facts);
         }
@@ -889,6 +1004,9 @@ impl<I: OutputInterpreter, R: FnMut(Report)> Watch<I, R> {
 
     fn report_exit(&mut self, facts: ExitFacts) {
         self.phase = Phase::Reported;
+        for line in self.files.remove() {
+            self.log(LogLevel::Error, LogCategory::Helper, line);
+        }
         self.event(HelperEventKind::Exited { facts });
     }
 }

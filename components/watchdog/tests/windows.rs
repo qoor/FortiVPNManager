@@ -7,17 +7,20 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
+use fvm_backend_adapter::openconnect::{Interpreter, OpenConnect};
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputSource, StopInitiator, StopReason,
+    ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, StopInitiator, StopReason,
 };
-use fvm_contract::backend::{LaunchSpec, RouteRepairOutcome, SessionLaunch};
-use fvm_watchdog::{Report, Run, Timing};
+use fvm_contract::backend::{
+    Backend, ClientExecutable, ClientProblem, LaunchSpec, RouteRepairOutcome, SessionLaunch,
+    UntestedVersion,
+};
+use fvm_watchdog::{Report, Run, Timing, Watchdog};
 
 const CMD: &str = r"C:\Windows\System32\cmd.exe";
 const PASSWORD: &str = "Pa55 w#rd";
@@ -60,7 +63,58 @@ set /p HEADER=\r
 exit /b 0\r
 ";
 
-/// A directory of its own for each test's scripts and record file.
+/// openconnect as far as the watchdog can tell, but the client is the test's cmd script.
+struct Scripted(LaunchSpec);
+
+impl Backend for Scripted {
+    type Interpreter = Interpreter;
+
+    fn client_name(&self) -> &'static str {
+        OpenConnect.client_name()
+    }
+
+    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
+        Ok(ClientExecutable {
+            path: PathBuf::from(CMD),
+            version: "9.21".to_owned(),
+        })
+    }
+
+    fn describe_problem(&self, _: &ClientProblem) -> String {
+        unreachable!("the script is always found")
+    }
+
+    fn untested_version(&self, _: &str) -> Option<UntestedVersion> {
+        unreachable!("the tests do not ask for the client's version")
+    }
+
+    fn launch_spec(
+        &self,
+        _: &ClientExecutable,
+        _: &RunRequest,
+        _: &Path,
+    ) -> Result<LaunchSpec, String> {
+        Ok(self.0.clone())
+    }
+
+    fn check_otp(&self, code: &str) -> Result<(), String> {
+        OpenConnect.check_otp(code)
+    }
+
+    fn interpreter(&self) -> Interpreter {
+        OpenConnect.interpreter()
+    }
+
+    fn stop_grace_period(&self) -> Duration {
+        OpenConnect.stop_grace_period()
+    }
+
+    fn is_own_executable(&self, path: &Path) -> bool {
+        OpenConnect.is_own_executable(path)
+    }
+}
+
+/// A directory of its own for each test's scripts, record file and run directory.
 struct Scratch(PathBuf);
 
 impl Scratch {
@@ -77,6 +131,10 @@ impl Scratch {
 
     fn record(&self) -> PathBuf {
         self.0.join("record.txt")
+    }
+
+    fn run_directory(&self) -> PathBuf {
+        self.0.join("run")
     }
 
     /// `cmd /d /c <script> <record file>`, with only the variables cmd and ping need.
@@ -119,34 +177,49 @@ impl Drop for Scratch {
 }
 
 struct Session {
-    run: Run,
+    run: Run<Scripted>,
     reports: Receiver<Report>,
     lines: Vec<(OutputSource, String)>,
     milestones: Vec<Milestone>,
-    client_starts: usize,
     exit: Option<ExitFacts>,
 }
 
 impl Session {
-    fn start(launch: &LaunchSpec) -> Self {
+    fn start(scratch: &Scratch, launch: LaunchSpec) -> Self {
+        let mut watchdog =
+            Watchdog::new(Scripted(launch), scratch.run_directory(), Timing::default());
+        let mut request = RunRequest {
+            attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
+            host: "203.0.113.10".to_owned(),
+            port: 443,
+            username: "alice".to_owned(),
+            realm: None,
+            trusted_certs: Vec::new(),
+            password: PASSWORD.to_owned(),
+        };
         let (sender, reports) = mpsc::channel();
-        let run = Run::start(
-            &OpenConnect,
-            launch,
-            PASSWORD.to_owned(),
-            Timing::default(),
-            move |report| {
-                let _ = sender.send(report);
-            },
-        );
+        let started = watchdog.start(&mut request, move |report| {
+            let _ = sender.send(report);
+        });
+        let (run, _) = started.unwrap();
         Self {
             run,
             reports,
             lines: Vec::new(),
             milestones: Vec::new(),
-            client_starts: 0,
             exit: None,
         }
+    }
+
+    /// The client processes started: the login run and, if it came to that, the tunnel run.
+    fn client_starts(&self) -> usize {
+        self.lines
+            .iter()
+            .filter(|(_, text)| {
+                text.starts_with("‹attempt started: pid ")
+                    || text.starts_with("‹tunnel run started: pid ")
+            })
+            .count()
     }
 
     /// Records reports, submitting the OTP when asked, until `done` holds.
@@ -159,7 +232,6 @@ impl Session {
                 Ok(Report::Output(lines)) => self
                     .lines
                     .extend(lines.into_iter().map(|line| (line.source, line.text))),
-                Ok(Report::ClientStarted) => self.client_starts += 1,
                 Ok(Report::Event(HelperEventKind::Milestone { milestone, .. })) => {
                     self.milestones.push(milestone);
                     if milestone == Milestone::OtpPrompted {
@@ -168,6 +240,7 @@ impl Session {
                 }
                 Ok(Report::Event(HelperEventKind::Exited { facts })) => self.exit = Some(facts),
                 Ok(Report::RepairRoutes(repair)) => repair.finish(RouteRepairOutcome::NotNeeded),
+                Ok(Report::Log(..)) => {}
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => panic!("the run ended without an exit"),
             }
@@ -192,7 +265,7 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         tunnel: scratch.launch("tunnel", TUNNEL),
         logout: scratch.launch("logout", LOGOUT),
     }));
-    let mut session = Session::start(&launch);
+    let mut session = Session::start(&scratch, launch);
     session.wait(|session| session.milestones.contains(&Milestone::TunnelUp));
     assert_eq!(
         session.milestones,
@@ -205,7 +278,7 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
             Milestone::TunnelUp,
         ]
     );
-    assert_eq!(session.client_starts, 2);
+    assert_eq!(session.client_starts(), 2);
     let values = scratch.values();
     assert_eq!(values["password"], PASSWORD);
     assert_eq!(values["otp"], OTP);
@@ -268,7 +341,7 @@ set /p PW=\r
         tunnel: scratch.launch("tunnel", TUNNEL),
         logout: scratch.launch("logout", LOGOUT),
     }));
-    let mut session = Session::start(&launch);
+    let mut session = Session::start(&scratch, launch);
     let facts = session.wait_for_exit();
     assert_eq!(
         facts.stop_initiator,
@@ -276,14 +349,15 @@ set /p PW=\r
             reason: StopReason::PromptRepeated
         }
     );
-    assert_eq!(session.client_starts, 1);
+    assert_eq!(session.client_starts(), 1);
     assert!(!scratch.values().contains_key("logout_input"));
 }
 
 #[test]
 fn the_client_gets_only_the_launch_environment() {
     let scratch = Scratch::new();
-    let mut session = Session::start(&scratch.launch("environment", "@echo off\r\nset\r\n"));
+    let launch = scratch.launch("environment", "@echo off\r\nset\r\n");
+    let mut session = Session::start(&scratch, launch);
     session.wait_for_exit();
     let names: Vec<&str> = session
         .lines

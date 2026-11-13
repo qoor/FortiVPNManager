@@ -1,15 +1,11 @@
-//! The Helper entry's event loop. The OS side's messages, the current run's reports and gateway
-//! lookups arrive on one channel and are handled one at a time on one thread. So what reaches an app
-//! keeps the order in which it happened, and the run thread, which only forwards, never waits for
-//! this one.
+//! The Helper entry's event loop. The OS side's messages and the current run's reports arrive on
+//! one channel and are handled one at a time on one thread. So what reaches an app keeps the order
+//! in which it happened, and the run thread, which only forwards, never waits for this one.
 
 use std::collections::HashMap;
 use std::env;
 use std::mem;
-use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
-use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
@@ -18,13 +14,9 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{Backend, ClientProblemKind};
 use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
-use fvm_watchdog::{Report, RouteRepair, Run, Timing};
+use fvm_watchdog::{Report, RouteRepair, Run, StartFailure, Watchdog};
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
-
-use crate::leftovers;
-use crate::platform::Platform;
-use crate::run_directory::{self, RunRecord};
 
 /// How long exiting after SIGTERM waits for the run to report its exit. Longer than the client's
 /// grace period, so a client that ignores SIGTERM is killed and reported first.
@@ -35,7 +27,6 @@ const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
 pub(crate) enum Event {
     FromOs(ToEntry),
     Run(Report),
-    GatewayResolved { run: u64, gateway: Option<Ipv4Addr> },
 }
 
 /// Where the entry's messages for the OS side go, in order.
@@ -56,30 +47,23 @@ impl OsSide {
     }
 }
 
-pub(crate) fn serve<B, P>(
-    backend: B,
-    platform: P,
-    run_directory: PathBuf,
+pub(crate) fn serve<B>(
+    watchdog: Watchdog<B>,
     os: OsSide,
     sender: Sender<Event>,
     events: Receiver<Event>,
 ) where
-    B: Backend,
-    B::Interpreter: 'static,
-    P: Platform,
+    B: Backend + Send + Sync + 'static,
 {
-    leftovers::clean_up(&backend, &platform, &run_directory, &os, &events);
+    clean_up(&watchdog, &os, &events);
     os.send(&FromEntry::Ready {});
     Entry {
-        backend,
-        platform,
-        run_directory,
+        watchdog,
         os,
         events,
         sender,
         apps: HashMap::new(),
         run: None,
-        runs_started: 0,
         executable_replaced: false,
         lifecycle: Lifecycle::Serving,
         route_repair: None,
@@ -87,18 +71,43 @@ pub(crate) fn serve<B, P>(
     .run()
 }
 
-struct Entry<B, P> {
-    backend: B,
-    platform: P,
-    run_directory: PathBuf,
+/// Has the watchdog clean up after a Helper that died during a run, and the OS side repair the
+/// routes that run may have left broken, before any app connection is accepted. Until "ready", the
+/// OS side accepts no app connection and passes on no stop request, so the route repair's answer is
+/// the only message it sends.
+fn clean_up<B>(watchdog: &Watchdog<B>, os: &OsSide, events: &Receiver<Event>)
+where
+    B: Backend + Send + Sync + 'static,
+{
+    watchdog.clean_up(
+        |level, category, message| os.log(level, category, message),
+        |gateway| {
+            os.send(&FromEntry::RepairRoutes { gateway });
+            let Event::FromOs(ToEntry::RoutesRepaired { outcome }) =
+                events.recv().expect("the entry holds a sender")
+            else {
+                panic!(
+                    "the OS side sent something other than the route repair's answer before ready"
+                );
+            };
+            os.log(
+                LogLevel::Notice,
+                LogCategory::Helper,
+                format!("cleaned up after an unfinished run (route repair: {outcome:?})"),
+            );
+        },
+    );
+}
+
+struct Entry<B> {
+    watchdog: Watchdog<B>,
     os: OsSide,
     events: Receiver<Event>,
-    /// For the run's reports and the gateway lookups.
+    /// For the run's reports.
     sender: Sender<Event>,
     /// Admitted app connections that are still open, with their uid.
     apps: HashMap<u64, u32>,
-    run: Option<CurrentRun>,
-    runs_started: u64,
+    run: Option<CurrentRun<B>>,
     executable_replaced: bool,
     lifecycle: Lifecycle,
     /// The current run's route repair while the OS side carries it out.
@@ -106,15 +115,11 @@ struct Entry<B, P> {
 }
 
 /// The one run at a time and who owns it.
-struct CurrentRun {
-    /// Tells this run's gateway lookup apart from an earlier run's.
-    number: u64,
+struct CurrentRun<B> {
     attempt: AttemptId,
     owner_app: u64,
     owner_uid: u32,
-    run: Run,
-    config_path: PathBuf,
-    record: RunRecord,
+    run: Run<B>,
 }
 
 enum Lifecycle {
@@ -141,11 +146,9 @@ impl Lifecycle {
     }
 }
 
-impl<B, P> Entry<B, P>
+impl<B> Entry<B>
 where
-    B: Backend,
-    B::Interpreter: 'static,
-    P: Platform,
+    B: Backend + Send + Sync + 'static,
 {
     fn run(mut self) -> ! {
         loop {
@@ -186,7 +189,6 @@ where
                 .expect("the OS side answers only the route repair it was asked for")
                 .finish(outcome),
             Event::Run(report) => self.run_report(report),
-            Event::GatewayResolved { run, gateway } => self.gateway_resolved(run, gateway),
         }
     }
 
@@ -324,7 +326,7 @@ where
                 "the Helper is shutting down; try again shortly",
             ));
         }
-        let client_name = self.backend.client_name();
+        let client_name = self.watchdog.client_name();
         if let Some(current) = &self.run {
             return Err(if current.owner_uid == uid {
                 error(
@@ -338,52 +340,29 @@ where
                 )
             });
         }
-        let client = self.backend.locate_client().map_err(|problem| {
-            error(
-                HelperErrorCode::ClientUnavailable,
-                self.backend.describe_problem(&problem),
-            )
-        })?;
-        let number = self.runs_started + 1;
-        let config_path = run_directory::config_path(&self.run_directory, number);
-        let launch = self
-            .backend
-            .launch_spec(&client, request, &config_path)
-            .map_err(|reason| error(HelperErrorCode::InvalidRequest, reason))?;
-        // The run directory also holds the pidfile, so it is prepared without a config file too.
-        if let Err(failure) = self
-            .platform
-            .prepare_run_directory(&self.run_directory)
-            .and_then(|()| {
-                launch.config_file.as_ref().map_or(Ok(()), |contents| {
-                    run_directory::write_config(&self.platform, &config_path, contents)
-                })
-            })
-        {
-            self.os.log(
-                LogLevel::Error,
-                LogCategory::Helper,
-                format!("cannot write the {client_name} config: {failure}"),
-            );
-            return Err(error(
-                HelperErrorCode::InternalError,
-                format!("could not create the {client_name} config file: {failure}"),
-            ));
-        }
-
-        self.runs_started = number;
         let reports = self.sender.clone();
-        let run = Run::start(
-            &self.backend,
-            &launch,
-            mem::take(&mut request.password),
-            Timing::default(),
-            move |report| {
-                reports
-                    .send(Event::Run(report))
-                    .expect("the event loop runs as long as the process");
-            },
-        );
+        let started = self.watchdog.start(request, move |report| {
+            reports
+                .send(Event::Run(report))
+                .expect("the event loop runs as long as the process");
+        });
+        let (run, client) = started.map_err(|failure| match failure {
+            StartFailure::ClientUnavailable(message) => {
+                error(HelperErrorCode::ClientUnavailable, message)
+            }
+            StartFailure::InvalidRequest(reason) => error(HelperErrorCode::InvalidRequest, reason),
+            StartFailure::RunFiles(failure) => {
+                self.os.log(
+                    LogLevel::Error,
+                    LogCategory::Helper,
+                    format!("cannot write the {client_name} config: {failure}"),
+                );
+                error(
+                    HelperErrorCode::InternalError,
+                    format!("could not create the {client_name} config file: {failure}"),
+                )
+            }
+        })?;
         self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
@@ -392,15 +371,11 @@ where
                 request.attempt_id, client.version
             ),
         );
-        self.resolve_gateway(number, request.host.clone());
         self.run = Some(CurrentRun {
-            number,
             attempt: request.attempt_id.clone(),
             owner_app: app,
             owner_uid: uid,
             run,
-            config_path,
-            record: RunRecord::default(),
         });
         Ok(())
     }
@@ -409,9 +384,6 @@ where
         let mut code = Zeroizing::new(code);
         let uid = self.app_uid(app)?;
         let current = self.controllable_run(attempt, uid)?;
-        self.backend
-            .check_otp(&code)
-            .map_err(|reason| error(HelperErrorCode::InvalidRequest, reason))?;
         current.run.submit_otp(mem::take(&mut *code))
     }
 
@@ -433,7 +405,7 @@ where
     }
 
     /// The current run if `attempt` names it and `uid` owns it.
-    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun, HelperError> {
+    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun<B>, HelperError> {
         let current = self
             .run
             .as_ref()
@@ -462,13 +434,13 @@ where
             .run
             .as_ref()
             .is_some_and(|current| current.run.process_id().is_some());
-        match self.backend.locate_client() {
-            Ok(client) => HelperStatus {
+        match self.watchdog.find_client() {
+            Ok((client, untested_version)) => HelperStatus {
                 client_running,
                 client_path: Some(client.path.display().to_string()),
-                untested_version: self.backend.untested_version(&client.version),
                 client_version: Some(client.version),
                 client_problem: None,
+                untested_version,
             },
             Err(problem) => HelperStatus {
                 client_running,
@@ -499,50 +471,6 @@ where
         true
     }
 
-    /// The gateway's IPv4 address, for the pidfile and the route repair. Looked up while the run
-    /// starts, since DNS may not answer once a broken tunnel took the routes; off this thread, since
-    /// a slow answer must not hold up the app's requests. The route repair is IPv4 only, and std
-    /// cannot ask for IPv4 alone, so the first IPv4 answer counts.
-    fn resolve_gateway(&self, run: u64, host: String) {
-        let events = self.sender.clone();
-        thread::Builder::new()
-            .name("fvm-helper-entry-gateway".into())
-            .spawn(move || {
-                let gateway =
-                    (host.as_str(), 0)
-                        .to_socket_addrs()
-                        .ok()
-                        .and_then(|mut addresses| {
-                            addresses.find_map(|address| match address {
-                                SocketAddr::V4(address) => Some(*address.ip()),
-                                SocketAddr::V6(_) => None,
-                            })
-                        });
-                events
-                    .send(Event::GatewayResolved { run, gateway })
-                    .expect("the event loop runs as long as the process");
-            })
-            .expect("starting the gateway lookup thread");
-    }
-
-    fn gateway_resolved(&mut self, run: u64, gateway: Option<Ipv4Addr>) {
-        let Some(gateway) = gateway else {
-            self.os.log(
-                LogLevel::Info,
-                LogCategory::Routes,
-                "gateway has no IPv4 address; its host route will not be repaired".to_owned(),
-            );
-            return;
-        };
-        let Some(current) = self.run.as_mut().filter(|current| current.number == run) else {
-            return;
-        };
-        current.record.gateway = Some(gateway);
-        if !current.record.processes.is_empty() {
-            self.save_record();
-        }
-    }
-
     fn run_report(&mut self, report: Report) {
         let current = self
             .run
@@ -554,7 +482,6 @@ where
                 let json = to_json(&lines);
                 self.os.send(&FromEntry::SendOutput { app, json });
             }
-            Report::ClientStarted => self.client_started(),
             Report::Event(kind) => {
                 let event = HelperEvent {
                     attempt_id: current.attempt.clone(),
@@ -568,77 +495,26 @@ where
                     HelperEventKind::Milestone {
                         milestone: Milestone::TunnelUp,
                         ..
-                    } => self.tunnel_up(),
+                    } => self.os.log(
+                        LogLevel::Notice,
+                        LogCategory::Helper,
+                        format!("run {}: tunnel up", event.attempt_id),
+                    ),
                     HelperEventKind::Milestone { .. } => {}
                     HelperEventKind::Exited { facts } => self.run_exited(&facts),
                 }
             }
             Report::RepairRoutes(repair) => {
-                let gateway = current.record.gateway;
+                let gateway = repair.gateway;
                 self.route_repair = Some(repair);
                 self.os.send(&FromEntry::RepairRoutes { gateway });
             }
-        }
-    }
-
-    /// Records the client so that a Helper started after this one died can stop it. A tunnel run
-    /// replaces the login run, which has exited.
-    fn client_started(&mut self) {
-        let client_name = self.backend.client_name();
-        let current = self.run.as_mut().expect("a run spawned its client");
-        let Some(pid) = current.run.process_id() else {
-            return;
-        };
-        let pid = i32::try_from(pid).expect("a pid fits in pid_t");
-        let Some(client) = self.platform.process(pid) else {
-            return;
-        };
-        current.record.processes = vec![client];
-        let message = format!(
-            "run {}: {client_name} running as pid {pid}",
-            current.attempt
-        );
-        self.save_record();
-        self.os.log(LogLevel::Notice, LogCategory::Helper, message);
-    }
-
-    /// Adds what the client started for the tunnel, such as pppd, to the record.
-    fn tunnel_up(&mut self) {
-        let current = self.run.as_mut().expect("a run brought the tunnel up");
-        let message = format!("run {}: tunnel up", current.attempt);
-        if let Some(pid) = current.run.process_id() {
-            for child in self.platform.children(pid) {
-                if self.backend.is_own_executable(Path::new(&child.path))
-                    && !current.record.processes.contains(&child)
-                {
-                    current.record.processes.push(child);
-                }
-            }
-            self.save_record();
-        }
-        self.os.log(LogLevel::Notice, LogCategory::Helper, message);
-    }
-
-    fn save_record(&self) {
-        let current = self
-            .run
-            .as_ref()
-            .expect("a record belongs to the current run");
-        if let Err(failure) =
-            run_directory::write_record(&self.platform, &self.run_directory, &current.record)
-        {
-            self.os.log(
-                LogLevel::Error,
-                LogCategory::Helper,
-                format!("cannot write the pidfile: {failure}"),
-            );
+            Report::Log(level, category, message) => self.os.log(level, category, message),
         }
     }
 
     fn run_exited(&mut self, facts: &ExitFacts) {
         let finished = self.run.take().expect("the current run exited");
-        leftovers::remove(&finished.config_path, &self.os);
-        leftovers::remove(&run_directory::record_path(&self.run_directory), &self.os);
         self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,

@@ -5,10 +5,12 @@ publish.workspace = true
 
 [dependencies]
 fvm-contract.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(unix)'.dependencies]
+libproc.workspace = true
 nix = { workspace = true, features = ["process", "signal"] }
 rustix = { workspace = true, features = ["event", "process", "time"] }
 

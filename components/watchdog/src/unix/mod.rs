@@ -1,14 +1,22 @@
-//! Starting, signalling and collecting the client on Unix.
+//! Starting, signalling and collecting the client on Unix; telling root processes apart through
+//! macOS's libproc, so that an earlier Helper's are found and stopped with signals; and keeping the
+//! run directory to root with Unix permissions.
 
 use std::ffi::CString;
+use std::fs::{self, DirBuilder, File, OpenOptions, Permissions};
 use std::io::{self, PipeReader, PipeWriter, Read};
 use std::iter;
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::path::Path;
 use std::time::Duration;
 
 use fvm_contract::app_helper::ProcessExitStatus;
 use fvm_contract::backend::LaunchSpec;
+use libproc::libproc::bsd_info::BSDInfo;
+use libproc::libproc::proc_pid::{pidinfo, pidpath};
+use libproc::processes::{ProcFilter, pids_by_type};
 use nix::libc;
 use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, PosixSpawnFlags, posix_spawn};
 use nix::sys::signal::{SigSet, Signal as SpawnSignal};
@@ -16,6 +24,8 @@ use rustix::event::{PollFd, PollFlags};
 use rustix::io::Errno;
 use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, WaitOptions};
 use rustix::time::ClockId;
+
+use crate::run_directory::{Failure, ProcessIdentity};
 
 pub(crate) struct Spawned {
     pub child: Child,
@@ -233,4 +243,85 @@ pub(crate) fn signal_name(signal: i32) -> Option<&'static str> {
     .into_iter()
     .find(|(known, _)| known.as_raw() == signal)
     .map(|(_, name)| name)
+}
+
+/// How the Helper's log names the forced stop of a process an earlier Helper left.
+pub(crate) const FORCE_STOP: &str = "SIGKILL";
+
+/// The live process `pid` if it runs as root, as the Helper starts its clients; `None` if it is
+/// gone, a zombie, unreadable or another user's.
+pub(crate) fn process(pid: u32) -> Option<ProcessIdentity> {
+    // The pid may come from a pidfile; 0 would name the kernel.
+    let raw = i32::try_from(pid).ok().filter(|&raw| raw > 0)?;
+    let info = pidinfo::<BSDInfo>(raw, 0).ok()?;
+    if info.pbi_uid != 0 {
+        return None;
+    }
+    // A zombie has no executable path any more.
+    let path = pidpath(raw).ok()?;
+    Some(ProcessIdentity {
+        pid,
+        start_seconds: info.pbi_start_tvsec,
+        start_microseconds: info.pbi_start_tvusec,
+        path,
+    })
+}
+
+/// The root processes that `parent` started and that still run.
+pub(crate) fn children(parent: u32) -> Vec<ProcessIdentity> {
+    // Listing fails when there are none.
+    let children = pids_by_type(ProcFilter::ByParentProcess { ppid: parent }).unwrap_or_default();
+    children.into_iter().filter_map(process).collect()
+}
+
+/// SIGTERM, so that a client can restore the routes. It may have exited since it was checked.
+pub(crate) fn request_stop(process: &ProcessIdentity) {
+    signal(process, Signal::TERM);
+}
+
+/// SIGKILL. It may have exited since it was checked.
+pub(crate) fn force_stop(process: &ProcessIdentity) {
+    signal(process, Signal::KILL);
+}
+
+fn signal(process: &ProcessIdentity, signal: Signal) {
+    let pid = i32::try_from(process.pid)
+        .ok()
+        .and_then(Pid::from_raw)
+        .expect("a running process has a positive pid_t");
+    // It may have exited since the check.
+    let _ = rustix::process::kill_process(pid, signal);
+}
+
+/// Creates the run directory if needed and makes sure it is a real directory owned by this
+/// process's user with mode 0700, so nobody else can place or read files in it.
+pub(crate) fn prepare_run_directory(directory: &Path) -> Result<(), Failure> {
+    let shown = directory.display();
+    match DirBuilder::new().mode(0o700).create(directory) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(Failure::new(format!("mkdir {shown}"), error)),
+    }
+    let metadata = fs::symlink_metadata(directory)
+        .map_err(|error| Failure::new(format!("lstat {shown}"), error))?;
+    if !metadata.is_dir() || metadata.uid() != rustix::process::geteuid().as_raw() {
+        return Err(Failure::new(
+            format!("{shown} is not a directory owned by the helper"),
+            io::Error::from_raw_os_error(Errno::PERM.raw_os_error()),
+        ));
+    }
+    if metadata.mode() & 0o777 != 0o700 {
+        fs::set_permissions(directory, Permissions::from_mode(0o700))
+            .map_err(|error| Failure::new(format!("chmod {shown}"), error))?;
+    }
+    Ok(())
+}
+
+/// A new file with mode 0600; an existing file or symlink at `path` is an error.
+pub(crate) fn create_private_file(path: &Path) -> io::Result<File> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
 }

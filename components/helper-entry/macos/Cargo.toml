@@ -12,8 +12,7 @@ crate-type = ["staticlib", "lib"]
 fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
 fvm-helper-entry.workspace = true
-libproc.workspace = true
-rustix = { workspace = true, features = ["process"] }
+fvm-watchdog.workspace = true
 socket2.workspace = true
 
 [dev-dependencies]

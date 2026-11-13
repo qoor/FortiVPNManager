@@ -348,8 +348,7 @@ dependencies = [
  "fvm-backend-adapter",
  "fvm-contract",
  "fvm-helper-entry",
- "libproc",
- "rustix",
+ "fvm-watchdog",
  "serde_json",
  "socket2",
 ]
@@ -380,8 +379,10 @@ version = "0.0.0"
 dependencies = [
  "fvm-backend-adapter",
  "fvm-contract",
+ "libproc",
  "nix",
  "rustix",
+ "serde",
  "serde_json",
  "zeroize",
 ]

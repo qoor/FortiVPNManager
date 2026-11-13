@@ -1,6 +1,6 @@
-//! A test-only backend that reads output the way openfortivpn 1.24.1 prints it (the fixture
-//! scripts copy its strings), plus a session line like openconnect's login run prints, and a session
-//! that runs a fixture and records what the run reports.
+//! A test-only backend that runs the test's own launch and reads output the way openfortivpn
+//! 1.24.1 prints it (the fixture scripts copy its strings), plus a session line like openconnect's
+//! login run prints, and a session that runs a fixture and records what the run reports.
 
 #![allow(dead_code)] // Each test file uses a different part.
 
@@ -20,10 +20,14 @@ use fvm_contract::backend::{
     Backend, ClientExecutable, ClientProblem, Finding, LaunchSpec, OutputInterpreter, Prompt,
     RouteRepairOutcome, SessionInputs, UntestedVersion,
 };
-use fvm_watchdog::{Report, Run, StageLimits, Timing};
+use fvm_contract::helper_internal::{LogCategory, LogLevel};
+use fvm_watchdog::{Report, Run, StageLimits, Timing, Watchdog};
 use zeroize::Zeroizing;
 
 pub const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+pub const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
+/// An IPv4 literal, so the gateway lookup needs no DNS.
+pub const GATEWAY: &str = "203.0.113.10";
 pub const REJECTED_DIGEST: &str =
     "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11";
 /// Leading and trailing spaces and non-ASCII must reach the client byte for byte.
@@ -41,13 +45,10 @@ pub const FULL_FLOW: [Milestone; 6] = [
 
 // The backend
 
+/// openfortivpn with a test's launch and grace period.
 pub struct FakeOpenFortiVpn {
-    pub grace_period: Duration,
-}
-
-/// openfortivpn with a test's grace period.
-pub fn fake_backend(grace_period: Duration) -> FakeOpenFortiVpn {
-    FakeOpenFortiVpn { grace_period }
+    launch: LaunchSpec,
+    grace_period: Duration,
 }
 
 impl Backend for FakeOpenFortiVpn {
@@ -57,29 +58,35 @@ impl Backend for FakeOpenFortiVpn {
         "openfortivpn"
     }
 
+    /// The launch's program, wherever it is.
     fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
-        unreachable!("the watchdog does not locate the client")
+        Ok(ClientExecutable {
+            path: self.launch.program.clone(),
+            version: "1.24.1".to_owned(),
+        })
     }
 
     fn describe_problem(&self, _: &ClientProblem) -> String {
-        unreachable!("the watchdog does not describe client problems")
+        unreachable!("the fake client is always found")
     }
 
     fn untested_version(&self, _: &str) -> Option<UntestedVersion> {
-        unreachable!("the watchdog does not judge client versions")
+        unreachable!("the tests do not ask for the client's version")
     }
 
+    /// The test's launch, whatever the request.
     fn launch_spec(
         &self,
         _: &ClientExecutable,
         _: &RunRequest,
         _: &Path,
     ) -> Result<LaunchSpec, String> {
-        unreachable!("the tests build the launch themselves")
+        Ok(self.launch.clone())
     }
 
+    /// Every code: the adapters test their own rule.
     fn check_otp(&self, _: &str) -> Result<(), String> {
-        unreachable!("the caller checks the OTP before the watchdog")
+        Ok(())
     }
 
     fn interpreter(&self) -> FakeInterpreter {
@@ -90,8 +97,9 @@ impl Backend for FakeOpenFortiVpn {
         self.grace_period
     }
 
+    /// Every path: the tests run no root process, so none is recorded anyway.
     fn is_own_executable(&self, _: &Path) -> bool {
-        unreachable!("the watchdog does not sweep leftovers")
+        true
     }
 }
 
@@ -281,44 +289,94 @@ pub fn sha256(text: &str) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+// The run
+
+/// Starts `launch` as a run of the fake openfortivpn with `setup`'s password, limits and grace
+/// period, keeping its files in `directory`.
+pub fn start_run(
+    launch: LaunchSpec,
+    directory: &RunDirectory,
+    setup: &Setup,
+    on_report: impl FnMut(Report) + Send + 'static,
+) -> Run<FakeOpenFortiVpn> {
+    let backend = FakeOpenFortiVpn {
+        launch,
+        grace_period: setup.grace_period,
+    };
+    let mut watchdog = Watchdog::new(backend, directory.path.clone(), setup.timing);
+    let mut request = RunRequest {
+        attempt_id: ATTEMPT.parse().unwrap(),
+        host: GATEWAY.to_owned(),
+        port: 443,
+        username: "alice".to_owned(),
+        realm: None,
+        trusted_certs: Vec::new(),
+        password: setup.password.clone(),
+    };
+    match watchdog.start(&mut request, on_report) {
+        Ok((run, _)) => run,
+        Err(failure) => panic!("the run did not start: {failure:?}"),
+    }
+}
+
+static RUN_DIRECTORY_NUMBER: AtomicU64 = AtomicU64::new(0);
+
+/// A run directory of the test's own, removed when dropped.
+pub struct RunDirectory {
+    pub path: PathBuf,
+}
+
+impl RunDirectory {
+    pub fn new() -> Self {
+        let number = RUN_DIRECTORY_NUMBER.fetch_add(1, Ordering::Relaxed);
+        let name = format!("fvm-watchdog-run-{}-{number}", std::process::id());
+        let path = std::env::temp_dir().join(name);
+        let _ = std::fs::remove_dir_all(&path);
+        Self { path }
+    }
+}
+
+impl Drop for RunDirectory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 // The session
 
 /// A report as recorded; the route repair was answered as it arrived.
 #[derive(Debug)]
 pub enum Delivered {
     Output(Vec<OutputLine>),
-    ClientStarted,
     Event(HelperEventKind),
     RepairRoutes,
+    Log(LogLevel, LogCategory, String),
 }
 
 pub struct Session {
-    pub run: Run,
+    pub run: Run<FakeOpenFortiVpn>,
     reports: Receiver<Report>,
     pub delivered: Vec<Delivered>,
     pub record: RecordFile,
+    pub directory: RunDirectory,
     otp: Option<String>,
     route_repair: RouteRepairOutcome,
 }
 
 impl Session {
     pub fn start(launch: LaunchSpec, record: RecordFile, setup: Setup) -> Self {
+        let directory = RunDirectory::new();
         let (sender, reports) = mpsc::channel();
-        let run = Run::start(
-            &fake_backend(setup.grace_period),
-            &launch,
-            setup.password,
-            setup.timing,
-            move |report| {
-                // A test that already ended no longer listens.
-                let _ = sender.send(report);
-            },
-        );
+        let run = start_run(launch, &directory, &setup, move |report| {
+            // A test that already ended no longer listens.
+            let _ = sender.send(report);
+        });
         Self {
             run,
             reports,
             delivered: Vec::new(),
             record,
+            directory,
             otp: setup.otp,
             route_repair: setup.route_repair,
         }
@@ -373,7 +431,6 @@ impl Session {
     fn record_report(&mut self, report: Report) {
         match report {
             Report::Output(lines) => self.delivered.push(Delivered::Output(lines)),
-            Report::ClientStarted => self.delivered.push(Delivered::ClientStarted),
             Report::Event(kind) => {
                 let prompted = matches!(
                     kind,
@@ -390,6 +447,10 @@ impl Session {
             Report::RepairRoutes(repair) => {
                 self.delivered.push(Delivered::RepairRoutes);
                 repair.finish(self.route_repair);
+            }
+            Report::Log(level, category, message) => {
+                self.delivered
+                    .push(Delivered::Log(level, category, message));
             }
         }
     }

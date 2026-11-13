@@ -50,9 +50,12 @@ fn attempt(login: &str, tunnel: &str, logout: &str, setup: Setup) -> Session {
 
 fn client_starts(session: &Session) -> usize {
     session
-        .delivered
+        .texts()
         .iter()
-        .filter(|delivered| matches!(delivered, Delivered::ClientStarted))
+        .filter(|text| {
+            text.starts_with("‹attempt started: pid ")
+                || text.starts_with("‹tunnel run started: pid ")
+        })
         .count()
 }
 

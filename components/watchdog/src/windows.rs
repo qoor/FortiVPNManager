@@ -1,9 +1,12 @@
-//! Starting, stopping and collecting the client on Windows. Windows has no signals, so a client is
-//! always ended by force, together with what it started, such as openconnect's route script.
+//! Starting, stopping and collecting the client on Windows, and the run directory. Windows has no
+//! signals, so a client is always ended by force, together with what it started, such as
+//! openconnect's route script.
 
 use std::env;
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, PipeReader, PipeWriter, Read};
 use std::os::windows::process::CommandExt;
+use std::path::Path;
 use std::process::{self, Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -11,6 +14,8 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::ProcessExitStatus;
 use fvm_contract::backend::LaunchSpec;
+
+use crate::run_directory::{Failure, ProcessIdentity};
 
 /// The process gets a console that has no window, so nothing shows on a desktop.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -177,6 +182,57 @@ pub(crate) fn time_including_sleep() -> Duration {
 /// Windows ends processes with exit codes only.
 pub(crate) fn signal_name(_signal: i32) -> Option<&'static str> {
     None
+}
+
+/// How the Helper's log names the forced stop of a process an earlier Helper left.
+pub(crate) const FORCE_STOP: &str = "taskkill";
+
+/// Telling Windows processes apart comes with the Windows Helper. Until then no process is
+/// recognised, so a run records none and nothing an earlier Helper left is stopped.
+pub(crate) fn process(_pid: u32) -> Option<ProcessIdentity> {
+    None
+}
+
+/// See `process`.
+pub(crate) fn children(_parent: u32) -> Vec<ProcessIdentity> {
+    Vec::new()
+}
+
+/// Windows has no stop request a client could answer, so this ends the process and what it
+/// started at once, as the forced stop does.
+pub(crate) fn request_stop(process: &ProcessIdentity) {
+    force_stop(process);
+}
+
+pub(crate) fn force_stop(process: &ProcessIdentity) {
+    kill_tree(process.pid);
+}
+
+/// The directory inherits its access rights from where it is created, which only the system and
+/// administrators can reach; so only the last level is created, and it must be a real directory.
+pub(crate) fn prepare_run_directory(directory: &Path) -> Result<(), Failure> {
+    let shown = directory.display();
+    match fs::create_dir(directory) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(Failure::new(format!("create {shown}"), error)),
+    }
+    // A link has no directory type of its own, so it fails here too.
+    let metadata = fs::symlink_metadata(directory)
+        .map_err(|error| Failure::new(format!("inspect {shown}"), error))?;
+    if !metadata.is_dir() {
+        return Err(Failure::new(
+            format!("{shown} is not a directory"),
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        ));
+    }
+    Ok(())
+}
+
+/// A new file with the run directory's access rights; an existing file or link at `path` is an
+/// error.
+pub(crate) fn create_private_file(path: &Path) -> io::Result<File> {
+    OpenOptions::new().write(true).create_new(true).open(path)
 }
 
 /// Whether taskkill ended process `pid` and every process it started. Its messages are in the
