@@ -280,7 +280,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - **터널이 올라오는 순서**
   - OTP를 넣은 뒤 약 1초에 `Configured as`가 나온다.
   - 약 1초 뒤 Wintun 어댑터가 생긴다(stderr `Using Wintun device '…', index N`).
-  - 그 뒤 vpnc-script-win.js가 route를 넣는다. 2026-11-10에는 route 29개가 `Configured as` 뒤 6~8초에 다 들어갔다. 2026-11-06의 수동 실행과 2026-11-12 시험에서는 openconnect의 10초 스크립트 제한을 넘겨 "Script did not complete within 10 seconds"와 "Failed to spawn script" 줄이 나왔지만 터널은 유지됐다. 소스상 openconnect는 이 결과를 무시하고 스크립트를 끝내지도 않는다.
+  - 그 뒤 vpnc-script-win.js가 route를 넣는다. 2026-11-10에는 route 29개가 `Configured as` 뒤 6~8초에 다 들어갔다. 2026-11-06의 수동 실행과 2026-11-12 시험에서는 openconnect의 10초 스크립트 제한을 넘겨 "Script did not complete within 10 seconds"와 "Failed to spawn script" 줄이 나왔지만 터널은 유지됐다. 소스상 openconnect는 이 결과를 무시하고 스크립트를 끝내지도 않는다. 2026-11-13에는 10초를 넘기지 않았다. 어댑터가 생긴 뒤 2초에 서버가 준 split route 26개 중 3개가, 5초에 26개가 다 들어갔고 스크립트도 끝났다.
   - 스크립트의 출력은 openconnect의 pipe로 오지 않는다.
 - 게이트웨이는 DNS를 주지 않는다(macOS openfortivpn도 같다).
 - **끊김** (2026-11-11 시험: 어댑터 끄기, 게이트웨이만 방화벽으로 막기)
@@ -305,6 +305,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 로그인만 하는 실행은 stdout에 `COOKIE='SVPNCOOKIE=…'`와 HOST, CONNECT_URL, FINGERPRINT, RESOLVE 줄을 내고 exit 0으로 끝난다. 그 cookie를 stdin으로 받은 둘째 실행이 터널을 열었다.
   - 연결하면서 cookie를 출력하는 옵션은 출력을 비우지 않아, stdout이 pipe일 때 정상 종료할 때까지 나오지 않는다(소스 확인).
   - 강제 종료 뒤 2·30·90초에도 서버는 그 cookie를 세션으로 다뤘다. 세션 정보 요청에 접근 거부(HTTP 403)가 왔고, 끝난 세션이나 가짜 cookie에는 로그인 페이지로 가라는 응답(HTTP 302)이 온다. logout 요청 뒤에는 끝난 세션과 같은 응답이 왔다.
+  - 403은 요청 방식 때문이 아니라 세션이 터널을 연 상태여서 나온다(2026-11-13). 세션 정보 요청은 터널을 열기 전에는 받아들여졌고(HTTP 200), 터널이 열린 동안과 강제 종료 뒤에는 403, logout 뒤에는 302였다. `dual_stack=1`을 붙이거나 openconnect의 user agent로 보내도 같았다. 그래서 강제 종료 뒤에도 세션이 남고, logout 요청이 그 세션을 끝낸다는 것이 직접 확인됐다.
   - logout 요청의 응답은 가짜 cookie에도 같다(HTTP 200, 같은 길이). 그래서 응답으로 성공 여부를 알 수 없다.
   - Windows의 curl은 `-k`를 줘도 공개 키 고정 값이 틀리면 통신하지 않는다.
 - Wintun은 openconnect 설치본에 들어 있고, 쓸 때마다 "experimental" 경고를 낸다. 날짜와 Windows 오류 문장 같은 일부 출력은 시스템 언어로 번역되고 UTF-8이 아니다.
@@ -442,7 +443,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
 - 같은 사용자의 다른 프로그램이 Helper 서비스보다 먼저 같은 이름의 통로를 만들면 Helper는 통로를 열지 못하고 서비스가 시작에 실패한다. 앱은 그 통로의 소유자가 시스템 계정이 아니어서 비밀번호를 보내지 않는다.
 - 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
-- 아직 확인하지 않은 Windows 동작: route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지, 살아 있는 세션 cookie로 세션 정보를 물었을 때 접근 거부(HTTP 403)가 나온 이유.
+- 아직 확인하지 않은 Windows 동작: route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지. 소스상으로는 스크립트가 끝까지 돈다. 2026-11-13 확인에서는 5초 안에 끝나 제한을 넘기지 않았다.
 - 추후 과제
   - Linux 앱(Rust + QML)과 서비스
   - Windows 빌드 환경과 CI(GitHub Actions 후보, 사용자 확인 필요)
