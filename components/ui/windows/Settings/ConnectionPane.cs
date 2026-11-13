@@ -34,6 +34,10 @@ internal sealed class ConnectionPane : IPane
     private readonly MinutesBox minSleep;
     private readonly SettingsCard minSleepCard;
     private readonly InfoBar optionsError = Cards.Notice(InfoBarSeverity.Error);
+    /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
+    private readonly Dictionary<string, FrameworkElement> rows = [];
+    /// <summary>The expander each row in one is in, which the person may have collapsed.</summary>
+    private readonly Dictionary<FrameworkElement, SettingsExpander> expanders = [];
     private ScheduleSection? schedule;
     private bool refreshing;
 
@@ -68,7 +72,7 @@ internal sealed class ConnectionPane : IPane
             days[day] = button;
             dayRow.Children.Add(button);
         }
-        scheduleRows.Add(Cards.Card(L("Days"), dayRow).Fit(dayRow, (7 * 40) + (6 * 4)));
+        scheduleRows.Add((SettingsCard)(rows["Days"] = Cards.Card(L("Days"), dayRow).Fit(dayRow, (7 * 40) + (6 * 4))));
         start.SelectedTimeChanged += (_, _) => HoursPicked();
         end.SelectedTimeChanged += (_, _) => HoursPicked();
         // The picker and the button inside it keep 242 px, which would run past a narrow card.
@@ -83,17 +87,19 @@ internal sealed class ConnectionPane : IPane
                 }
             };
         }
-        scheduleRows.Add(Cards.Card(L("Start time"), start).Fit(start, 242));
-        scheduleRows.Add(Cards.Card(L("End time"), end).Fit(end, 242));
+        scheduleRows.Add((SettingsCard)(rows["Start time"] = Cards.Card(L("Start time"), start).Fit(start, 242)));
+        scheduleRows.Add((SettingsCard)(rows["End time"] = Cards.Card(L("End time"), end).Fit(end, 242)));
         var away = Cards.Card(L("Stop reconnecting after being away"), awayMinutes.Row);
         ToolTipService.SetToolTip(away, L("After the end time, reconnects wait while you're away (screen locked or off, PC asleep) and stop after this long."));
         scheduleRows.Add(away);
+        rows["Stop reconnecting after being away"] = away;
         scheduleRows.Add(outlook);
         foreach (var row in scheduleRows)
         {
             expander.Items.Add(row);
+            expanders[row] = expander;
         }
-        body.Children.Add(expander);
+        body.Children.Add(rows["Connect on a schedule"] = expander);
         body.Children.Add(hoursError);
         body.Children.Add(Cards.Footer(L("Connects at the start time on the selected days. The end time never disconnects.")));
     }
@@ -101,14 +107,18 @@ internal sealed class ConnectionPane : IPane
     private void AddReconnectRows()
     {
         body.Children.Add(Cards.SectionHeader(L("Reconnect")));
-        body.Children.Add(Cards.Card(L("Maximum session length"), sessionMax.Row));
+        body.Children.Add(rows["Maximum session length"] = Cards.Card(L("Maximum session length"), sessionMax.Row));
         var proactiveRow = new SettingsExpander { Header = L("Proactive reconnect"), Content = Switch(proactive, on => new ConnectionOption.ProactiveReconnect(on)), IsExpanded = true };
         proactiveRow.Items.Add(marginCard);
-        body.Children.Add(proactiveRow);
+        body.Children.Add(rows["Proactive reconnect"] = proactiveRow);
+        rows["Margin"] = marginCard;
+        expanders[marginCard] = proactiveRow;
         var sleepRow = new SettingsExpander { Header = L("Reconnect after sleep"), Content = Switch(afterSleep, on => new ConnectionOption.ReconnectAfterSleep(on)), IsExpanded = true };
         ToolTipService.SetToolTip(sleepRow, L("Starts a new connection when the PC wakes from sleeping at least the minimum sleep time."));
         sleepRow.Items.Add(minSleepCard);
-        body.Children.Add(sleepRow);
+        body.Children.Add(rows["Reconnect after sleep"] = sleepRow);
+        rows["Minimum sleep time"] = minSleepCard;
+        expanders[minSleepCard] = sleepRow;
         body.Children.Add(optionsError);
         body.Children.Add(Cards.Footer(L("Connects again before the server ends the session (maximum session length − margin).")));
     }
@@ -153,6 +163,16 @@ internal sealed class ConnectionPane : IPane
         {
             ui.Send(new Command.SetScheduleHours(newStart, newEnd));
         }
+    }
+
+    public FrameworkElement? OpenRow(string key)
+    {
+        var row = rows.GetValueOrDefault(key);
+        if (row is not null && expanders.TryGetValue(row, out var expander))
+        {
+            expander.IsExpanded = true;
+        }
+        return row;
     }
 
     public void Refresh()

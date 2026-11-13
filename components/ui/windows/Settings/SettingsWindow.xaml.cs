@@ -22,15 +22,15 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 public sealed partial class SettingsWindow : Window
 {
-    /// <summary>The panes with their titles (the macOS catalog's) and Segoe Fluent Icons glyphs.</summary>
-    private static readonly (SettingsPane Pane, string Title, string Glyph)[] Panes =
+    /// <summary>The panes' Segoe Fluent Icons glyphs, in the navigation's order.</summary>
+    private static readonly (SettingsPane Pane, string Glyph)[] Panes =
     [
-        (SettingsPane.General, "General", "\uE713"),
-        (SettingsPane.Account, "Account", "\uE77B"),
-        (SettingsPane.Connection, "Connection", "\uE968"),
-        (SettingsPane.ExceptionRules, "Exception Rules", "\uE8AB"),
-        (SettingsPane.Advanced, "Advanced", "\uE90F"),
-        (SettingsPane.Log, "Log", "\uE8A5"),
+        (SettingsPane.General, "\uE713"),
+        (SettingsPane.Account, "\uE77B"),
+        (SettingsPane.Connection, "\uE968"),
+        (SettingsPane.ExceptionRules, "\uE8AB"),
+        (SettingsPane.Advanced, "\uE90F"),
+        (SettingsPane.Log, "\uE8A5"),
     ];
 
     /// <summary>Where the window's place and last pane are kept between runs.</summary>
@@ -54,10 +54,13 @@ public sealed partial class SettingsWindow : Window
         FlyoutSearch.PlaceholderText = L("Search");
         ToolTipService.SetToolTip(NarrowSearchButton, L("Search"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NarrowSearchButton, L("Search"));
-        foreach (var (pane, title, glyph) in Panes)
+        foreach (var (pane, glyph) in Panes)
         {
-            Navigation.MenuItems.Add(new NavigationViewItem { Content = L(title), Tag = pane, Icon = new FontIcon { Glyph = glyph } });
+            Navigation.MenuItems.Add(new NavigationViewItem { Content = L(pane.TitleKey()), Tag = pane, Icon = new FontIcon { Glyph = glyph } });
         }
+        // A result shows its own text; keyboard selection in the list leaves the typed term as it is.
+        Search.UpdateTextOnSelect = false;
+        FlyoutSearch.UpdateTextOnSelect = false;
         AddKeyboardShortcuts();
         var placement = Placement.Load();
         lastPane = placement?.Pane ?? SettingsPane.General;
@@ -131,7 +134,7 @@ public sealed partial class SettingsWindow : Window
     private void OnNavigated(object sender, NavigationEventArgs e)
     {
         var pane = (SettingsPane)e.Parameter;
-        ((PanePage)e.Content).Show(ui, pane, L(Panes.First(p => p.Pane == pane).Title));
+        ((PanePage)e.Content).Show(ui, pane, L(pane.TitleKey()));
         lastPane = pane;
         AppTitleBar.IsBackButtonEnabled = ContentFrame.CanGoBack;
         Select(pane);
@@ -147,35 +150,102 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// The results of the settings search under the box, as in Windows Settings: each setting with the
+    /// pane it is in. Typing changes nothing on the right.
+    /// </summary>
     private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
+        RoundClearButton(sender);
         if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
         {
             return;
         }
-        var words = sender.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        sender.ItemsSource = words.Length == 0
-            ? null
-            : Panes
-                .Where(pane => words.All(word => (L(pane.Title) + " " + pane.Title).Contains(word, StringComparison.OrdinalIgnoreCase)))
-                .Select(pane => L(pane.Title))
-                .DefaultIfEmpty(L("No results"))
-                .ToList();
+        if (sender.Text.Trim().Length == 0)
+        {
+            sender.ItemsSource = null;
+            return;
+        }
+        var results = SettingsSearch.Results(sender.Text, ui.IsShown);
+        // The input method finishes the syllable being composed when Down moves into the list, which
+        // reports the text again; the same results stay as they are, so the line just chosen stays chosen.
+        var shown = (sender.ItemsSource as List<object>)?.Select(line => (line as FrameworkElement)?.Tag as SearchResult).ToList();
+        if (shown is not null && (results.Count == 0 ? shown is [null] : shown.SequenceEqual(results)))
+        {
+            return;
+        }
+        sender.ItemsSource = results.Count == 0
+            ? new List<object> { new TextBlock { Text = L("No results"), Foreground = Cards.Brush("TextFillColorSecondaryBrush") } }
+            : results.Select(Suggestion).ToList<object>();
+    }
+
+    /// <summary>A result's line: the pane's glyph, the setting's name (up to three lines) and, for a setting, its pane.</summary>
+    private static Grid Suggestion(SearchResult result)
+    {
+        var line = new Grid { ColumnSpacing = 12, Tag = result, Padding = new Thickness(0, 4, 0, 4) };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.Children.Add(new FontIcon { Glyph = Panes.First(p => p.Pane == result.Pane).Glyph, FontSize = 16, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
+        var text = new StackPanel();
+        text.Children.Add(new TextBlock { Text = result.Item?.Title ?? L(result.Pane.TitleKey()), TextWrapping = TextWrapping.Wrap, MaxLines = 3 });
+        if (result.Item is not null)
+        {
+            text.Children.Add(new TextBlock { Text = L(result.Pane.TitleKey()), Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Cards.Brush("TextFillColorSecondaryBrush") });
+        }
+        Grid.SetColumn(text, 1);
+        line.Children.Add(text);
+        return line;
+    }
+
+    /// <summary>A chosen result, or Enter for the first one; the keyboard stays in the box after Enter.</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        var result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
+            ?? SettingsSearch.Results(sender.Text, ui.IsShown).FirstOrDefault();
+        if (result is null)
+        {
+            return;
+        }
+        SearchFlyout.Hide();
+        Reveal(result);
     }
 
     /// <summary>
-    /// A clicked result, or Enter for the first one. Moving through the results with the arrow keys
-    /// changes nothing on the right, as in the macOS settings window.
+    /// Goes to the result's pane; for a setting, opens the group it is in, scrolls to its row and
+    /// highlights it for a moment, once the pane is laid out.
     /// </summary>
-    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    private void Reveal(SearchResult result)
     {
-        var chosen = args.ChosenSuggestion as string ?? (sender.ItemsSource as List<string>)?.FirstOrDefault();
-        var match = Panes.Where(pane => L(pane.Title) == chosen).Select(pane => (SettingsPane?)pane.Pane).FirstOrDefault();
-        if (match is { } pane)
+        Select(result.Pane);
+        if (result.Item?.Row is { } row)
         {
-            Select(pane);
-            SearchFlyout.Hide();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => (ContentFrame.Content as PanePage)?.Reveal(row));
         }
+    }
+
+    /// <summary>
+    /// The clear button marks the pointer with a round background 28 wide and 24 tall, its cross 18 px
+    /// in from the box's end, as measured on the search box of Windows Settings; the template draws a
+    /// rounded square 32 wide. The button exists once the box has text, which is when it first shows.
+    /// </summary>
+    private static void RoundClearButton(AutoSuggestBox box)
+    {
+        if (Cards.FindDescendant(box, "DeleteButton") is not Button button || button.MaxWidth == 28)
+        {
+            return;
+        }
+        // The text box puts the button's own width back, so a maximum width holds it at 28.
+        button.MaxWidth = 28;
+        // The button's own template comes once it first shows, when it is laid out at its size.
+        void Round(object sender, SizeChangedEventArgs e)
+        {
+            if (Cards.FindDescendant(button, "ButtonLayoutGrid") is Grid background)
+            {
+                background.CornerRadius = new CornerRadius(12);
+                button.SizeChanged -= Round;
+            }
+        }
+        button.SizeChanged += Round;
     }
 
     private Flyout SearchFlyout => (Flyout)RootGrid.Resources["SearchFlyout"];

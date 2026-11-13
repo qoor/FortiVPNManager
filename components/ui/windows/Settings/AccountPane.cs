@@ -63,6 +63,11 @@ internal sealed class AccountPane : IPane
     private readonly TextBlock testText;
     private readonly TextBlock methodFooter = Cards.Footer("");
 
+    /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
+    private readonly Dictionary<string, FrameworkElement> rows = [];
+    /// <summary>The expander each row in one is in; an expander's own row maps to itself.</summary>
+    private readonly Dictionary<FrameworkElement, SettingsExpander> expanders = [];
+    private SettingsCard? fallbackPasswordCard;
     private bool refreshing;
     private bool oauthClientOpenedForMissing;
 
@@ -85,7 +90,7 @@ internal sealed class AccountPane : IPane
         page.BodyPanel.Children.Add(body);
         (testResult, testMark, testText) = Cards.StatusLine();
         testGmail.Click += (_, _) => ui.Send(new Command.TestGmail());
-        body.Children.Add(Cards.ActionCard(Cards.Buttons(testGmail, testProgress, testChecking, testResult)));
+        body.Children.Add(rows["Test Gmail Connection"] = Cards.ActionCard(Cards.Buttons(testGmail, testProgress, testChecking, testResult)));
         body.Children.Add(methodFooter);
         var filterTip = Cards.Footer(L("Recommended: create a Gmail filter for subject:AuthCode that never sends it to Spam."));
         filterTip.Margin = new Thickness(1, 2, 0, 0);
@@ -95,12 +100,13 @@ internal sealed class AccountPane : IPane
     private void AddVpnRows()
     {
         body.Children.Add(Cards.SectionHeader(L("VPN"), first: true));
-        body.Children.Add(Cards.Card(L("Server address"), Field(host, draft => draft.Host, (draft, text) => draft.Host = text)).Fit(host, FieldWidth));
-        body.Children.Add(Cards.Card(L("Port"), Field(port, draft => draft.Port, (draft, text) => draft.Port = text)).Fit(port, 96));
-        body.Children.Add(Cards.Card(L("Username"), Field(username, draft => draft.Username, (draft, text) => draft.Username = text)).Fit(username, FieldWidth));
-        body.Children.Add(Cards.Card(L("Password"), Field(vpnPassword, draft => draft.VpnPassword, (draft, text) => draft.VpnPassword = text)).Fit(vpnPassword, FieldWidth));
+        body.Children.Add(rows["Server address"] = Cards.Card(L("Server address"), Field(host, draft => draft.Host, (draft, text) => draft.Host = text)).Fit(host, FieldWidth));
+        body.Children.Add(rows["Port"] = Cards.Card(L("Port"), Field(port, draft => draft.Port, (draft, text) => draft.Port = text)).Fit(port, 96));
+        body.Children.Add(rows["Username"] = Cards.Card(L("Username"), Field(username, draft => draft.Username, (draft, text) => draft.Username = text)).Fit(username, FieldWidth));
+        body.Children.Add(rows["Password"] = Cards.Card(L("Password"), Field(vpnPassword, draft => draft.VpnPassword, (draft, text) => draft.VpnPassword = text)).Fit(vpnPassword, FieldWidth));
         var realmRow = Remembered(new SettingsExpander { Header = L("Realm (advanced)") }, "realm");
-        realmRow.Items.Add(Cards.Card(L("Realm"), Field(realm, draft => draft.Realm, (draft, text) => draft.Realm = text)).Fit(realm, FieldWidth));
+        realmRow.Items.Add(rows["Realm"] = Cards.Card(L("Realm"), Field(realm, draft => draft.Realm, (draft, text) => draft.Realm = text)).Fit(realm, FieldWidth));
+        expanders[rows["Realm"]] = realmRow;
         body.Children.Add(realmRow);
         body.Children.Add(vpnFooter);
     }
@@ -108,7 +114,7 @@ internal sealed class AccountPane : IPane
     private void AddGmailRows()
     {
         body.Children.Add(Cards.SectionHeader(L("2-Step Verification (Gmail)")));
-        body.Children.Add(Cards.Card(L("Gmail address"), Field(gmailAddress, draft => draft.GmailAddress, (draft, text) => draft.GmailAddress = text)).Fit(gmailAddress, FieldWidth));
+        body.Children.Add(rows["Gmail address"] = Cards.Card(L("Gmail address"), Field(gmailAddress, draft => draft.GmailAddress, (draft, text) => draft.GmailAddress = text)).Fit(gmailAddress, FieldWidth));
         method.Items.Add(L("Google account (Gmail API)"));
         method.Items.Add(L("App password (IMAP)"));
         method.SelectionChanged += (_, _) =>
@@ -120,7 +126,7 @@ internal sealed class AccountPane : IPane
         };
         var methodCard = Cards.Card(L("Connection method"), method).Fit(method, FieldWidth);
         ToolTipService.SetToolTip(methodCard, L("Google account is recommended: it sees the OTP email at once. IMAP can be several seconds late."));
-        body.Children.Add(methodCard);
+        body.Children.Add(rows["Connection method"] = methodCard);
         body.Children.Add(methodError);
 
         // The Gmail API: the Google account, the optional IMAP fallback and the OAuth client.
@@ -131,17 +137,20 @@ internal sealed class AccountPane : IPane
         status.Spacing = 6;
         status.VerticalAlignment = VerticalAlignment.Center;
         googleAccount.Content = Cards.Buttons(status, cancelSignIn, disconnectGoogle, connectGoogle);
-        gmailApiRows.Children.Add(googleAccount);
+        gmailApiRows.Children.Add(rows["Google account"] = googleAccount);
         gmailApiRows.Children.Add(googleError);
 
         var fallback = Remembered(new SettingsExpander { Header = L("IMAP fallback (optional)") }, "imapFallback");
-        fallback.Items.Add(new SettingsCard
+        fallbackPasswordCard = new SettingsCard
         {
             Header = L("App password"),
             Description = L("When the Gmail API is unavailable, this app password reads the OTP email."),
             Content = Field(fallbackPassword, draft => draft.AppPassword, (draft, text) => draft.AppPassword = text),
-        }.Fit(fallbackPassword, FieldWidth));
-        gmailApiRows.Children.Add(fallback);
+        }.Fit(fallbackPassword, FieldWidth);
+        fallback.Items.Add(fallbackPasswordCard);
+        expanders[fallbackPasswordCard] = fallback;
+        expanders[fallback] = fallback;
+        gmailApiRows.Children.Add(rows["IMAP fallback (optional)"] = fallback);
 
         useBuiltInClient.Click += (_, _) => ui.Send(new Command.UseBuiltInOAuthClient());
         importClient.Click += async (_, _) => await ImportOAuthClient();
@@ -149,14 +158,16 @@ internal sealed class AccountPane : IPane
         clientWarning.Foreground = Cards.Brush("SystemFillColorCautionBrush");
         var clientRow = Cards.Row(clientWarning, clientLabel);
         clientRow.Spacing = 6;
-        oauthClient.Items.Add(new SettingsCard
+        oauthClient.Items.Add(rows["OAuth client"] = new SettingsCard
         {
             Header = L("OAuth client"),
             Description = L("Changing the client requires connecting the Google account again."),
             Content = clientRow,
         });
-        oauthClient.Items.Add(new SettingsCard { Content = Cards.Buttons(useBuiltInClient, importClient) });
+        oauthClient.Items.Add(rows[SettingsSearch.OAuthClientButtons] = new SettingsCard { Content = Cards.Buttons(useBuiltInClient, importClient) });
         gmailApiRows.Children.Add(Remembered(oauthClient, "oauthClient"));
+        expanders[rows["OAuth client"]] = oauthClient;
+        expanders[rows[SettingsSearch.OAuthClientButtons]] = oauthClient;
         secretMissing.Show(null);
         gmailApiRows.Children.Add(secretMissing);
         body.Children.Add(gmailApiRows);
@@ -212,6 +223,19 @@ internal sealed class AccountPane : IPane
             }
         };
         return expander;
+    }
+
+    /// <summary>The app password's row is the fallback's under the Gmail API and a row of its own with IMAP.</summary>
+    public FrameworkElement? OpenRow(string key)
+    {
+        var row = key == "App password"
+            ? ui.Gmail?.Method == OtpMethod.GmailApi ? fallbackPasswordCard : imapPasswordCard
+            : rows.GetValueOrDefault(key);
+        if (row is not null && expanders.TryGetValue(row, out var expander))
+        {
+            expander.IsExpanded = true;
+        }
+        return row;
     }
 
     public void Refresh()
