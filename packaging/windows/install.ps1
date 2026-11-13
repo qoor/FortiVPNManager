@@ -2,10 +2,7 @@
 # to the Start menu, installing the .NET Desktop Runtime 10 the app needs when it is missing. Run it again
 # to reinstall: the service stops, which ends a VPN connection it runs, the files are replaced and
 # the service starts again. Run from an elevated PowerShell. ASCII only.
-# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\install.ps1 [-User <account or SID>]
-# Only one user may open the Helper's pipe: the one signed in to Windows unless -User names another.
-# Not the account that runs this, since a standard user's elevation runs it as an administrator.
-param([string] $User)
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\install.ps1
 $ErrorActionPreference = 'Stop'
 $built = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) '.build\windows\FortiVPNManager'
 # components/helper-entry/windows/src/service.rs
@@ -103,21 +100,6 @@ if (-not (Test-Path (Join-Path $built 'fvm-helper.exe'))) {
     throw "no build in $built; run packaging\windows\build.ps1 first, as yourself without elevation"
 }
 
-# The user signed in to Windows is the owner of its desktop, explorer.exe.
-if ($User -match '^S-1-') {
-    $sid = New-Object Security.Principal.SecurityIdentifier $User
-} elseif ($User) {
-    $sid = (New-Object Security.Principal.NTAccount $User).Translate([Security.Principal.SecurityIdentifier])
-} else {
-    $owners = @(Get-CimInstance Win32_Process -Filter "Name = 'explorer.exe'" |
-        ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid).Sid } |
-        Where-Object { $_ } | Sort-Object -Unique)
-    if ($owners.Count -eq 0) { throw 'nobody is signed in to Windows; name the user with -User' }
-    if ($owners.Count -gt 1) { throw "several users are signed in ($($owners -join ', ')); name one with -User" }
-    $sid = New-Object Security.Principal.SecurityIdentifier $owners[0]
-}
-try { $account = $sid.Translate([Security.Principal.NTAccount]).Value } catch { $account = $sid.Value }
-Note "the Helper's pipe is for $account ($($sid.Value))"
 if (-not (Test-Path $client)) {
     Note "OpenConnect is not installed ($client is missing); the app cannot connect until it is"
 }
@@ -189,7 +171,7 @@ $starting = $false
 try {
     # The path is quoted, as it has spaces; New-Service and Win32_Service take it whole, unlike
     # sc.exe through Windows PowerShell's argument passing.
-    $command = "`"$folder\fvm-helper.exe`" --allowed-user $($sid.Value)"
+    $command = "`"$folder\fvm-helper.exe`""
     if ($existing) {
         $changed = Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments @{ PathName = $command; StartMode = 'Automatic' }
         if ($changed.ReturnValue -ne 0) { throw "changing the Helper service failed with code $($changed.ReturnValue)" }
@@ -245,5 +227,5 @@ $shortcut.TargetPath = Join-Path $folder 'FortiVPNManager.exe'
 $shortcut.WorkingDirectory = $folder
 $shortcut.Save()
 $started = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = $helperSource; StartTime = $start } -ErrorAction SilentlyContinue |
-    Where-Object { $_.Message -like 'helper * running for *' } | Select-Object -First 1
+    Where-Object { $_.Message -like 'helper * running' } | Select-Object -First 1
 if ($started) { Note $started.Message } else { Note 'the Helper runs' }

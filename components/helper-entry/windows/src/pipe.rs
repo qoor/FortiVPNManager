@@ -39,8 +39,8 @@ use crate::{BUILD, Log, routes};
 /// cannot spin.
 const ACCEPT_RETRY: Duration = Duration::from_millis(500);
 /// How many messages may wait for a connection that is slow to read. The app reads all the time; a
-/// connection that lets this many pile up is closed, so another program of the same user cannot
-/// make the Helper keep its answers without limit by asking and never reading.
+/// connection that lets this many pile up is closed, so another program cannot make the Helper keep
+/// its answers without limit by asking and never reading.
 const OUTGOING_LIMIT: usize = 256;
 
 pub struct Options {
@@ -507,7 +507,7 @@ impl Relay {
     }
 
     /// Queues a bypass-route request. A connection may have one at a time, as the app sends them,
-    /// so another program of the same user cannot pile them up.
+    /// so another program cannot pile them up.
     fn route_job(&self, app: u64, id: u64, job: RouteJob) {
         let busy = match self.lock().connections.get_mut(&app) {
             Some(connection) => std::mem::replace(&mut connection.routing, true),
