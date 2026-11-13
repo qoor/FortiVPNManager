@@ -33,6 +33,7 @@ pub(crate) struct RunRecord {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProcessIdentity {
     pub pid: u32,
+    /// When it started, since 1970. An OS that tells only whole seconds leaves the microseconds 0.
     pub start_seconds: u64,
     pub start_microseconds: u64,
     pub path: String,

@@ -6,6 +6,7 @@ members = [
     "components/core",
     "components/helper-entry",
     "components/helper-entry/macos",
+    "components/helper-entry/windows",
     "components/runtime",
     "components/watchdog",
 ]
@@ -17,6 +18,8 @@ publish = false
 [workspace.dependencies]
 base64 = "0.23"
 encoding_rs = "0.8"
+# Writes the Windows Helper's log to the Windows event log.
+eventlog = "0.3"
 fvm-backend-adapter = { path = "components/backend-adapter" }
 fvm-contract = { path = "components/contract" }
 fvm-core = { path = "components/core" }
@@ -25,7 +28,10 @@ fvm-watchdog = { path = "components/watchdog" }
 # Civil time in a time zone the runtime resolved; nothing that reads the system database.
 jiff = { version = "0.2.41", default-features = false, features = ["std"] }
 getrandom = "0.3"
+# Named pipes with a security descriptor, without unsafe code of our own.
+interprocess = "2.4"
 libproc = "0.15"
+log = "0.4"
 nix = "0.31"
 rustix = "1"
 saphyr-parser = "0.3"
@@ -39,8 +45,12 @@ rustls-platform-verifier = "0.6"
 sha2 = "0.11"
 # `all` exposes set_nosigpipe.
 socket2 = { version = "0.6", features = ["all"] }
+# Windows process identities (path, start time, user) without unsafe code of our own.
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+widestring = "1"
+windows-service = "0.8"
 zeroize = "1"
 
 [workspace.lints.rust]

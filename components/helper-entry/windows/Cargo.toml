@@ -1,0 +1,27 @@
+[package]
+name = "fvm-helper-entry-windows"
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fvm-helper"
+path = "src/main.rs"
+
+# Windows only; on other OSes the library is empty and the executable only says so.
+[target.'cfg(windows)'.dependencies]
+eventlog.workspace = true
+fvm-backend-adapter.workspace = true
+fvm-contract.workspace = true
+fvm-core.workspace = true
+fvm-helper-entry.workspace = true
+fvm-watchdog.workspace = true
+interprocess.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+widestring.workspace = true
+zeroize.workspace = true
+windows-service.workspace = true
+
+[lints]
+workspace = true

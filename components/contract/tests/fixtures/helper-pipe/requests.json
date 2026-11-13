@@ -1,0 +1,10 @@
+[
+  {"build": {"id": 1, "app": "20261112.1"}},
+  {"connect": {"id": 2, "json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\"}"}},
+  {"submitOtp": {"id": 3, "attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F", "code": "123456"}},
+  {"disconnect": {"id": 4, "attempt": "E621E1F8-C36C-495A-93FC-0C247A3E6E5F", "reason": "userDisconnect"}},
+  {"status": {"id": 5}},
+  {"exitWhenIdle": {"id": 6}},
+  {"readBypassRoutes": {"id": 7}},
+  {"writeBypassRoutes": {"id": 8, "json": "{\"routes\":[]}"}}
+]

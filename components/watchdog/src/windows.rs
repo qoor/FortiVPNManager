@@ -1,6 +1,6 @@
-//! Starting, stopping and collecting the client on Windows, and the run directory. Windows has no
-//! signals, so a client is always ended by force, together with what it started, such as
-//! openconnect's route script.
+//! Starting, stopping and collecting the client on Windows, telling processes apart, and the run
+//! directory. Windows has no signals, so a client is always ended by force, together with what it
+//! started, such as openconnect's route script.
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::ProcessExitStatus;
 use fvm_contract::backend::LaunchSpec;
+use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System, Uid, UpdateKind};
 
 use crate::run_directory::{Failure, ProcessIdentity};
 
@@ -187,15 +188,68 @@ pub(crate) fn signal_name(_signal: i32) -> Option<&'static str> {
 /// How the Helper's log names the forced stop of a process an earlier Helper left.
 pub(crate) const FORCE_STOP: &str = "taskkill";
 
-/// Telling Windows processes apart comes with the Windows Helper. Until then no process is
-/// recognised, so a run records none and nothing an earlier Helper left is stopped.
-pub(crate) fn process(_pid: u32) -> Option<ProcessIdentity> {
-    None
+/// The live process `pid` if it runs as the Helper's own user, the system account in the service,
+/// as the Helper starts its clients; `None` if it is gone, unreadable or another user's.
+pub(crate) fn process(pid: u32) -> Option<ProcessIdentity> {
+    // The pid may come from a pidfile; 0 names the idle process.
+    if pid == 0 {
+        return None;
+    }
+    let processes = processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]));
+    identity(pid, processes.process(Pid::from_u32(pid))?)
 }
 
-/// See `process`.
-pub(crate) fn children(_parent: u32) -> Vec<ProcessIdentity> {
-    Vec::new()
+/// The processes that `parent` started and that still run as the Helper's own user. Every
+/// process's parent comes with the process list itself; only the children's paths and users are
+/// read, since reading them for every process takes long.
+pub(crate) fn children(parent: u32) -> Vec<ProcessIdentity> {
+    let parent = Pid::from_u32(parent);
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    system
+        .processes()
+        .iter()
+        .filter(|(_, process)| process.parent() == Some(parent))
+        .filter_map(|(pid, _)| process(pid.as_u32()))
+        .collect()
+}
+
+fn identity(pid: u32, process: &Process) -> Option<ProcessIdentity> {
+    if process.user_id() != Some(own_user()) {
+        return None;
+    }
+    Some(ProcessIdentity {
+        pid,
+        start_seconds: process.start_time(),
+        start_microseconds: 0,
+        path: process.exe()?.to_str()?.to_owned(),
+    })
+}
+
+/// The user the Helper runs as, and so starts its clients as.
+fn own_user() -> &'static Uid {
+    static USER: OnceLock<Uid> = OnceLock::new();
+    USER.get_or_init(|| {
+        let own = Pid::from_u32(process::id());
+        processes(ProcessesToUpdate::Some(&[own]))
+            .process(own)
+            .and_then(Process::user_id)
+            .cloned()
+            .expect("the Helper can read its own user")
+    })
+}
+
+/// A fresh look at `which` processes with their executable path and user.
+fn processes(which: ProcessesToUpdate<'_>) -> System {
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        which,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::Always)
+            .with_user(UpdateKind::Always),
+    );
+    system
 }
 
 /// Windows has no stop request a client could answer, so this ends the process and what it
@@ -266,5 +320,77 @@ fn kill_tree(pid: u32) -> bool {
                 return false;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    const CMD: &str = r"C:\Windows\System32\cmd.exe";
+
+    fn wait_until(condition: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !condition() {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        true
+    }
+
+    #[test]
+    fn a_process_and_its_children_are_found_and_stopped_together() {
+        let mut parent = Command::new(CMD)
+            .args(["/d", "/c", "ping -n 60 127.0.0.1 >nul"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let identity = process(parent.id()).unwrap();
+        assert!(identity.path.eq_ignore_ascii_case(CMD), "{}", identity.path);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        assert!(identity.start_seconds.abs_diff(now) < 60, "{identity:?}");
+        assert!(wait_until(|| !children(parent.id()).is_empty()));
+        let child = children(parent.id()).remove(0);
+        assert!(
+            child.path.to_ascii_lowercase().ends_with(r"\ping.exe"),
+            "{child:?}"
+        );
+        assert!(process(child.pid).is_some());
+
+        force_stop(&identity);
+        assert!(wait_until(|| process(child.pid).is_none()));
+        parent.wait().unwrap();
+        assert_eq!(process(identity.pid), None);
+    }
+
+    #[test]
+    fn no_process_has_pid_zero() {
+        assert_eq!(process(0), None);
+    }
+
+    #[test]
+    fn the_run_directory_must_be_a_real_directory() {
+        let base = env::temp_dir().join(format!("fvm-watchdog-os-{}", process::id()));
+        fs::create_dir_all(&base).unwrap();
+        let directory = base.join("run");
+        for _ in 0..2 {
+            if let Err(failure) = prepare_run_directory(&directory) {
+                panic!("{failure}");
+            }
+        }
+        let file = directory.join("pidfile");
+        create_private_file(&file).unwrap();
+        assert!(create_private_file(&file).is_err());
+        let not_directory = base.join("file");
+        fs::write(&not_directory, b"").unwrap();
+        assert!(prepare_run_directory(&not_directory).is_err());
+        fs::remove_dir_all(&base).unwrap();
     }
 }

@@ -1,8 +1,9 @@
-//! Messages between the OS integration Helper (Swift) and the Helper entry (Rust) in the Helper
-//! process. Swift accepts and checks app connections, answers the version check, repairs routes and
-//! runs networksetup itself; every other app request goes to Rust unread. The JSON follows Swift's
-//! enum coding (see `app_helper`), so the Swift side, `components/contract/macos/HelperInternal.swift`,
-//! uses synthesized `Codable`. Rust only receives `ToEntry` and only sends `FromEntry`.
+//! Messages between the Helper's OS side and the Helper entry in the Helper process: Swift's OS
+//! integration Helper on macOS, the service's own part on Windows. The OS side accepts and checks
+//! app connections, answers the version check, repairs routes and reads and writes the bypass
+//! routes itself; every other app request goes to the entry unread. The JSON follows Swift's enum
+//! coding (see `app_helper`), so the Swift side, `components/contract/macos/HelperInternal.swift`,
+//! uses synthesized `Codable`. The entry only receives `ToEntry` and only sends `FromEntry`.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -11,12 +12,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::RouteRepairOutcome;
 
-/// Sent by Swift.
+/// Sent by the OS side.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ToEntry {
-    /// An app connection passed the signature check; `app` names it in later messages. Swift
-    /// holds the connection until `FromEntry::Admitted` answers.
+    /// An app connection passed the OS side's check, the signature on macOS and the pipe's access
+    /// rights on Windows; `app` names it in later messages. `uid` tells the apps' users apart: the
+    /// uid on macOS, the session id on Windows, where only one user may connect. The OS side holds
+    /// the connection until `FromEntry::Admitted` answers.
     AppConnected { app: u64, uid: u32 },
     /// The connection is gone, whether the app quit, crashed or was killed.
     AppDisconnected { app: u64 },
@@ -26,10 +29,11 @@ pub enum ToEntry {
         app: u64,
         request: AppRequest,
     },
-    /// The Helper's own executable was replaced on disk. Once Swift has seen the replacement, it
-    /// sends this before announcing any new app connection, so Rust can refuse that connection.
+    /// macOS: the Helper's own executable was replaced on disk. Once Swift has seen the
+    /// replacement, it sends this before announcing any new app connection, so Rust can refuse
+    /// that connection. Windows cannot replace a running executable.
     ExecutableReplaced {},
-    /// The process received SIGTERM.
+    /// The OS asked the Helper to stop: SIGTERM on macOS, the service stop on Windows.
     TerminationRequested {},
     /// Answers `FromEntry::RepairRoutes`.
     RoutesRepaired { outcome: RouteRepairOutcome },
@@ -54,6 +58,7 @@ pub enum AppRequest {
         reason: String,
     },
     Status {},
+    /// macOS only: the Windows service answers it itself, since Windows does not start it again.
     ExitWhenIdle {},
 }
 

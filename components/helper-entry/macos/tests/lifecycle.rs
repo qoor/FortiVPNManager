@@ -135,7 +135,9 @@ fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
         (Duration::from_secs(14)..Duration::from_secs(17)).contains(&waited),
         "{waited:?}"
     );
-    assert!(swift.has_log("error helper: the run did not finish after SIGTERM; exiting anyway"));
+    assert!(swift.has_log(
+        "error helper: the run did not finish after the termination request; exiting anyway"
+    ));
     assert_eq!(swift.exit_facts(1), None);
     assert_eq!(swift.count(is("exitAfterDraining")), 0);
 
