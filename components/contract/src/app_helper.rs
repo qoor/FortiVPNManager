@@ -4,7 +4,8 @@
 //! data without a label uses the key `_0`, a case without data is `{}`, dates are seconds since
 //! 1970, and absent optional values are left out. Each type derives only the directions its two
 //! users need: the Helper receives the run request and sends everything else, and the app's runtime
-//! does the opposite.
+//! does the opposite. The bypass-route request and reply go both ways, since the Windows Helper
+//! answers them in Rust.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -351,7 +352,7 @@ pub struct BypassRoutesSnapshot {
 /// The complete additional route list for the service in `expected`. The Helper writes it only
 /// while the primary service, its router and its current routes are still exactly `expected`, and
 /// only with routes through that router or routes the service already has.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BypassRoutesRequest {
     /// What the app read and planned from.
     pub expected: BypassRoutesSnapshot,
@@ -359,7 +360,7 @@ pub struct BypassRoutesRequest {
 }
 
 /// Answer to reading or writing the bypass routes.
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BypassRoutesReply {
     Success {

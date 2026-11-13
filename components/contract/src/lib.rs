@@ -5,4 +5,5 @@ pub mod app_helper;
 pub mod app_internal;
 pub mod backend;
 pub mod helper_internal;
+pub mod helper_pipe;
 pub mod stream;

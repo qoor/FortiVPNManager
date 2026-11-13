@@ -18,8 +18,9 @@ use fvm_watchdog::{Report, RouteRepair, Run, StartFailure, Watchdog};
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
-/// How long exiting after SIGTERM waits for the run to report its exit. Longer than the client's
-/// grace period, so a client that ignores SIGTERM is killed and reported first.
+/// How long exiting after the OS's termination request waits for the run to report its exit.
+/// Longer than the client's grace period, so a client that ignores the stop request is killed and
+/// reported first.
 const SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
 /// Lets the reply to an exitWhenIdle request leave before the Helper exits.
 const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
@@ -128,7 +129,8 @@ enum Lifecycle {
     ExitingWhenIdle {
         at: Instant,
     },
-    /// SIGTERM came during a run; exiting once the run reports its exit, or at `deadline` anyway.
+    /// The termination request came during a run; exiting once the run reports its exit, or at
+    /// `deadline` anyway.
     ShuttingDown {
         deadline: Instant,
     },
@@ -245,7 +247,7 @@ where
                 }
                 None => self.exit(FromEntry::ExitAfterDraining {}),
             },
-            // SIGTERM may come again; the first one decided already.
+            // The request may come again; the first one decided already.
             Lifecycle::ShuttingDown { .. } | Lifecycle::Exiting => {}
         }
     }
@@ -257,7 +259,8 @@ where
                 self.os.log(
                     LogLevel::Error,
                     LogCategory::Helper,
-                    "the run did not finish after SIGTERM; exiting anyway".to_owned(),
+                    "the run did not finish after the termination request; exiting anyway"
+                        .to_owned(),
                 );
                 self.exit(FromEntry::ExitNow {});
             }
