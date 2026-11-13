@@ -1,6 +1,7 @@
-# Builds the Windows Helper and the runtime DLL for release into .build\windows\FortiVPNManager,
-# which install.ps1 puts in Program Files. Run it as yourself, without elevation: Rust is installed
-# per user, so an administrator account may have none. ASCII only.
+# Builds the Windows Helper and the runtime DLL for release into .build\windows\FortiVPNManager, the
+# folder install.ps1 puts in Program Files, with the built-in Google OAuth client when there is one.
+# Run it as yourself, without elevation: Rust is installed per user, so an administrator account may
+# have none. ASCII only.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -29,4 +30,13 @@ if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 Copy-Item (Join-Path $root 'target\release\fvm-helper.exe') $out
 Copy-Item (Join-Path $root 'target\release\fvm_runtime.dll') $out
+# The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
+# gitignored as it has the client secret. Without it the app still works; users then import a client
+# JSON in Settings.
+$oauthClient = Join-Path $root 'packaging\GoogleOAuthClient.json'
+if (Test-Path $oauthClient -PathType Leaf) {
+    Copy-Item $oauthClient $out
+} else {
+    Write-Warning 'packaging\GoogleOAuthClient.json not found; building without a built-in Google OAuth client'
+}
 Write-Output "build: $build in $out"
