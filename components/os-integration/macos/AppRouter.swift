@@ -61,6 +61,8 @@ final class AppRouter {
             reply(.browserOpened(opened: URL(string: url).map { NSWorkspace.shared.open($0) } ?? false))
         case .loginItemRegistration: reply(ServiceRegistration.loginItemStatus())
         case let .setLoginItem(enabled): reply(ServiceRegistration.setLoginItem(enabled))
+        // macOS imports openfortivpn's settings file instead.
+        case .fortiClientConnections: reply(.fortiClientConnections(connections: []))
         }
     }
 

@@ -1521,6 +1521,16 @@
         }
       }
     },
+    "FortiClient has no SSL VPN connection.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiClient에 SSL VPN 연결이 없습니다."
+          }
+        }
+      }
+    },
     "FortiVPNManager: %@": {
       "localizations": {
         "ko": {
@@ -3727,6 +3737,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "포트는 1에서 65535 사이의 숫자여야 합니다."
+          }
+        }
+      }
+    },
+    "The server address of the FortiClient connection '%@' isn't supported.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiClient 연결 '%1$@'의 서버 주소는 지원되지 않습니다."
           }
         }
       }

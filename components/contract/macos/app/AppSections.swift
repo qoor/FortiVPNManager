@@ -454,5 +454,7 @@ extension AppInternal {
         case unreadable(path: String, problem: FileProblem)
         case missingHost(path: String)
         case config(error: ConfigFileError)
+        case noFortiClientConnection
+        case invalidFortiClientServer(connection: String)
     }
 }

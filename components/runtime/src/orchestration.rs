@@ -65,18 +65,36 @@ impl Queue {
     }
 }
 
-/// Where the runtime keeps its files.
+/// Where the runtime keeps its files, and where the VPN client's settings are imported from.
 pub(crate) struct Paths {
     pub(crate) config: PathBuf,
     pub(crate) state: PathBuf,
     pub(crate) log: PathBuf,
-    pub(crate) home: PathBuf,
+    pub(crate) client_settings: ClientSettings,
+}
+
+/// The settings "Import" and the first launch bring in.
+#[derive(Clone)]
+pub(crate) enum ClientSettings {
+    /// openfortivpn's settings file, looked for where openfortivpn looks under `home` (macOS).
+    #[cfg_attr(
+        all(windows, not(test)),
+        expect(dead_code, reason = "only the macOS entry and the tests choose it")
+    )]
+    OpenFortiVpn { home: PathBuf },
+    /// The official FortiClient's SSL VPN connection, which the OS integration reads (Windows):
+    /// openconnect has no settings file of its own.
+    #[cfg_attr(
+        not(any(windows, test)),
+        expect(dead_code, reason = "only the Windows entry and the tests choose it")
+    )]
+    FortiClient,
 }
 
 pub(crate) struct Runtime {
     pub(crate) facts: AppFacts,
     pub(crate) time_zone: TimeZone,
-    pub(crate) home: PathBuf,
+    pub(crate) client_settings: ClientSettings,
     pub(crate) cm: ConnectionManager,
     pub(crate) config: ConfigFile,
     pub(crate) state: StateFile,
@@ -152,7 +170,7 @@ impl Runtime {
             .expect("starting the runtime's I/O threads");
         let mut runtime = Self {
             time_zone,
-            home: paths.home,
+            client_settings: paths.client_settings,
             cm,
             config,
             state,

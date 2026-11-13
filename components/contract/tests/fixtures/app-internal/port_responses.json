@@ -309,5 +309,30 @@
         }
       }
     }
+  },
+  {
+    "portResponse": {
+      "id": 22,
+      "response": {
+        "fortiClientConnections": {
+          "connections": [
+            {
+              "name": "Office",
+              "server": "vpn.example.com:10443"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 22,
+      "response": {
+        "fortiClientConnections": {
+          "connections": []
+        }
+      }
+    }
   }
 ]

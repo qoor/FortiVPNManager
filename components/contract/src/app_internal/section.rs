@@ -842,8 +842,23 @@ pub enum ImportedPassword {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ImportError {
-    SourceNotFound { path: String },
-    Unreadable { path: String, problem: FileProblem },
-    MissingHost { path: String },
-    Config { error: ConfigFileError },
+    SourceNotFound {
+        path: String,
+    },
+    Unreadable {
+        path: String,
+        problem: FileProblem,
+    },
+    MissingHost {
+        path: String,
+    },
+    Config {
+        error: ConfigFileError,
+    },
+    /// FortiClient keeps no SSL VPN connection.
+    NoFortiClientConnection {},
+    /// The connection's server is not `host` or `host:port`.
+    InvalidFortiClientServer {
+        connection: String,
+    },
 }

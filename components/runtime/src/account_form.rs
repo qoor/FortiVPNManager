@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_internal::command::AccountForm;
 use fvm_contract::app_internal::port::{
-    LogCategory, LogLevel, PortRequest, PortResponse, SecretItem, SecretStoreFailure,
+    FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
+    SecretStoreFailure,
 };
 use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{
@@ -17,12 +18,12 @@ use fvm_contract::app_internal::section::{
     ImportReport, ImportedPassword,
 };
 use fvm_contract::app_internal::{ButtonState, SecretText};
-use fvm_core::config::Settings;
+use fvm_core::config::{CertificateList, Settings};
 use fvm_core::connection;
 
-use crate::client::Client;
+use crate::client::{self, Client};
 use crate::files;
-use crate::orchestration::Runtime;
+use crate::orchestration::{ClientSettings, Runtime};
 
 /// An openfortivpn config file is small; anything larger is not one.
 const MAX_IMPORT_BYTES: u64 = 64 * 1024;
@@ -375,62 +376,158 @@ impl Runtime {
         self.forms.import_report = None;
     }
 
-    /// The first openfortivpn config file found where openfortivpn looks by default.
+    /// The first openfortivpn config file found where openfortivpn looks by default. FortiClient's
+    /// connection has no file; it is read when imported.
     pub(crate) fn find_default_import_file(&mut self) {
-        let found = OpenFortiVpn
-            .default_settings_files(&self.home)
-            .into_iter()
-            .find(|path| path.exists());
-        self.forms.default_import_file = found.map(|path| path.display().to_string());
-    }
-
-    /// "Import openfortivpn Settings" with the chosen file, or the default one.
-    pub(crate) fn import_client_settings(&mut self, file: Option<String>) {
-        let source = file.map(PathBuf::from).or_else(|| {
-            OpenFortiVpn
-                .default_settings_files(&self.home)
+        self.forms.default_import_file = match &self.client_settings {
+            ClientSettings::OpenFortiVpn { home } => OpenFortiVpn
+                .default_settings_files(home)
                 .into_iter()
                 .find(|path| path.exists())
-        });
-        let Some(source) = source else {
-            return;
+                .map(|path| path.display().to_string()),
+            ClientSettings::FortiClient => None,
         };
-        self.import_from(
-            &source,
-            Box::new(|runtime: &mut Runtime| {
-                runtime.forms.vpn_password = SecretText(String::new());
-                runtime.forms.feedback = None;
-                runtime
-                    .forms
-                    .reset_account(&runtime.config.settings().clone());
-                runtime.forms.looked_up = None;
-                runtime.look_up_stored_secrets();
-                runtime.feed(connection::Input::RecheckReadiness);
-            }),
-        );
+    }
+
+    /// "Import": openfortivpn's settings from the chosen file or the default one, or FortiClient's
+    /// first connection (choosing among several is not offered yet).
+    pub(crate) fn import_client_settings(&mut self, file: Option<String>) {
+        let done: Box<dyn FnOnce(&mut Runtime)> = Box::new(|runtime: &mut Runtime| {
+            runtime.forms.vpn_password = SecretText(String::new());
+            runtime.forms.feedback = None;
+            runtime
+                .forms
+                .reset_account(&runtime.config.settings().clone());
+            runtime.forms.looked_up = None;
+            runtime.look_up_stored_secrets();
+            runtime.feed(connection::Input::RecheckReadiness);
+        });
+        match self.client_settings.clone() {
+            ClientSettings::OpenFortiVpn { home } => {
+                let source = file.map(PathBuf::from).or_else(|| {
+                    OpenFortiVpn
+                        .default_settings_files(&home)
+                        .into_iter()
+                        .find(|path| path.exists())
+                });
+                if let Some(source) = source {
+                    self.import_from(&source, done);
+                }
+            }
+            ClientSettings::FortiClient => self.request(
+                PortRequest::FortiClientConnections {},
+                move |runtime, response| match forticlient_connections(response).first() {
+                    Some(connection) => runtime.import_forticlient(connection, done),
+                    None => runtime.finish_import(
+                        ClientSettingsImport::Failed {
+                            error: ImportError::NoFortiClientConnection {},
+                        },
+                        done,
+                    ),
+                },
+            ),
+        }
     }
 
     /// The first launch: imports when there is no config.yaml yet and an openfortivpn config
-    /// exists, then calls `then` with whether a report is shown.
+    /// exists, or FortiClient keeps a connection, then calls `then` with whether a report is shown.
     pub(crate) fn import_on_first_launch(
         &mut self,
         then: impl FnOnce(&mut Runtime, bool) + 'static,
     ) {
-        let source = (!self.config.exists())
-            .then(|| {
-                OpenFortiVpn
-                    .default_settings_files(&self.home)
-                    .into_iter()
-                    .find(|path| path.exists())
-            })
-            .flatten();
-        match source {
-            Some(source) => self.import_from(
-                &source,
-                Box::new(move |runtime: &mut Runtime| then(runtime, true)),
-            ),
-            None => then(self, false),
+        if self.config.exists() {
+            return then(self, false);
         }
+        match self.client_settings.clone() {
+            ClientSettings::OpenFortiVpn { home } => {
+                let source = OpenFortiVpn
+                    .default_settings_files(&home)
+                    .into_iter()
+                    .find(|path| path.exists());
+                match source {
+                    Some(source) => self.import_from(
+                        &source,
+                        Box::new(move |runtime: &mut Runtime| then(runtime, true)),
+                    ),
+                    None => then(self, false),
+                }
+            }
+            ClientSettings::FortiClient => self.request(
+                PortRequest::FortiClientConnections {},
+                move |runtime, response| match forticlient_connections(response).first() {
+                    Some(connection) => runtime.import_forticlient(
+                        connection,
+                        Box::new(move |runtime: &mut Runtime| then(runtime, true)),
+                    ),
+                    None => then(runtime, false),
+                },
+            ),
+        }
+    }
+
+    /// Takes the server of FortiClient's `connection` as `vpn.host` and `vpn.port`. The username
+    /// FortiClient shows is kept encrypted by FortiClient, so the account's username, realm and
+    /// password stay as they are. Certificate values belong to the gateway they were seen on, so a
+    /// new gateway starts without them. FortiClient's settings are only read.
+    fn import_forticlient(
+        &mut self,
+        connection: &FortiClientConnection,
+        done: Box<dyn FnOnce(&mut Runtime)>,
+    ) {
+        let Some((host, port)) = forticlient_server(&connection.server) else {
+            return self.finish_import(
+                ClientSettingsImport::Failed {
+                    error: ImportError::InvalidFortiClientServer {
+                        connection: connection.name.clone(),
+                    },
+                },
+                done,
+            );
+        };
+        let port = i64::from(port);
+        let written = self.config.update(|settings| {
+            if settings.vpn.host != host || settings.vpn.port != port {
+                settings.vpn.trusted_certs.clear();
+                settings.vpn.trusted_cert_pins.clear();
+            }
+            settings.vpn.host.clone_from(&host);
+            settings.vpn.port = port;
+        });
+        if let Err(error) = written {
+            return self.finish_import(
+                ClientSettingsImport::Failed {
+                    error: ImportError::Config { error },
+                },
+                done,
+            );
+        }
+        self.config_reloaded();
+        let saved = self.config.settings().clone();
+        let trusted = match client::CERTIFICATES {
+            CertificateList::Digests => saved.vpn.trusted_certs.len(),
+            CertificateList::Pins => saved.vpn.trusted_cert_pins.len(),
+        };
+        let report = ImportReport {
+            source: connection.name.clone(),
+            host: saved.vpn.host.clone(),
+            port: u16::try_from(saved.vpn.port).expect("the settings file checks the port range"),
+            username: saved.vpn.username.clone(),
+            realm: saved.vpn.realm.clone(),
+            trusted_certs: u32::try_from(trusted).expect("at most four values"),
+            password: None,
+            unknown_keys: Vec::new(),
+            ignored_keys: Vec::new(),
+            unreadable_lines: Vec::new(),
+        };
+        self.system_log(
+            LogLevel::Notice,
+            LogCategory::Import,
+            format!(
+                "imported the FortiClient connection {}: port {}",
+                connection.name, report.port
+            ),
+        );
+        self.finish_import(ClientSettingsImport::Imported { report }, done);
     }
 
     /// Replaces `vpn.*` from the openfortivpn config at `source`, saves its password under the
@@ -565,6 +662,24 @@ impl Runtime {
     }
 }
 
+fn forticlient_connections(response: PortResponse) -> Vec<FortiClientConnection> {
+    match response {
+        PortResponse::FortiClientConnections { connections } => connections,
+        other => panic!("FortiClient's connections answered with {other:?}"),
+    }
+}
+
+/// FortiClient's `Server` value: `host:port`, or a bare host on port 443, FortiClient's default.
+/// Anything else, such as an address with a scheme or a path, is not taken.
+fn forticlient_server(server: &str) -> Option<(String, u16)> {
+    let server = server.trim();
+    let (host, port) = match server.rsplit_once(':') {
+        Some((host, port)) => (host, port.parse::<u16>().ok().filter(|&port| port > 0)?),
+        None => (server, 443),
+    };
+    (!host.is_empty() && !host.contains(['/', ':'])).then(|| (host.to_owned(), port))
+}
+
 fn file_problem(error: &io::Error, path: &str) -> FileProblem {
     match error.kind() {
         io::ErrorKind::InvalidInput => FileProblem::NotRegularFile {},
@@ -576,5 +691,43 @@ fn file_problem(error: &io::Error, path: &str) -> FileProblem {
             path: path.into(),
             errno: error.raw_os_error().unwrap_or(0),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::forticlient_server;
+
+    #[test]
+    fn a_forticlient_server_is_a_host_with_or_without_a_port() {
+        assert_eq!(
+            forticlient_server("vpn.example.com:10443"),
+            Some(("vpn.example.com".into(), 10443))
+        );
+        assert_eq!(
+            forticlient_server(" 203.0.113.7:8443 "),
+            Some(("203.0.113.7".into(), 8443))
+        );
+        assert_eq!(
+            forticlient_server("vpn.example.com"),
+            Some(("vpn.example.com".into(), 443))
+        );
+    }
+
+    #[test]
+    fn other_forticlient_servers_are_not_taken() {
+        for server in [
+            "",
+            ":443",
+            "vpn.example.com:",
+            "vpn.example.com:0",
+            "vpn.example.com:70000",
+            "vpn.example.com:https",
+            "https://vpn.example.com",
+            "vpn.example.com/realm",
+            "vpn.example.com:443/realm",
+        ] {
+            assert_eq!(forticlient_server(server), None, "{server}");
+        }
     }
 }

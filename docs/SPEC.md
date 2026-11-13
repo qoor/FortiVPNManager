@@ -334,16 +334,21 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   2. 내용이 바뀌었을 때만 반영한다. 앱이 쓴 내용과 수정 시각만 바뀐 것은 제외하되, 앱이 쓰기 직전의 손 편집은 놓치지 않는다.
   3. 바뀌면 Connection Manager, 준비 상태, 예외 규칙에 전한다.
 
-### F-CF-04 기존 openfortivpn 설정 가져오기
-- **설명**: openfortivpn 설정에서 계정과 인증서 값을 가져와 처음 설정을 덜어 준다. 원본은 고치지 않는다.
-- **담당**: 런타임, backend adapter, UI
-- **입력 / 출력**: `~/.config/openfortivpn/config` 또는 고른 파일 / config.yaml 계정 값, Keychain 비밀번호, 가져오기 보고
+### F-CF-04 기존 설정 가져오기
+- **설명**: macOS는 openfortivpn 설정, Windows는 공식 FortiClient의 연결에서 계정 값을 가져와 처음 설정을 덜어 준다. 원본은 고치지 않는다.
+- **담당**: 런타임, backend adapter, OS 연동(Windows), UI
+- **입력 / 출력**: `~/.config/openfortivpn/config` 또는 고른 파일, Windows는 FortiClient의 SSL VPN 연결 / config.yaml 계정 값, Keychain 비밀번호, 가져오기 보고
 - **세부 기능**
   1. config.yaml이 없는 첫 실행에서 자동으로, 또는 일반 pane(파일 메뉴)에서 직접 가져온다.
   2. host, port, username, password, realm, trusted-cert를 가져온다. host가 없으면 실패이고, port가 없으면 443이다.
   3. 비밀번호는 Keychain에 저장하고, 원본에 평문 비밀번호가 있다고 경고한다.
   4. 알 수 없는 키와 쓸 수 없는 줄을 보고한다.
-  5. openconnect에는 가져올 설정 파일이 없다. Windows에서는 이 기능을 보이지 않고, 다른 기기의 config.yaml을 복사해 쓴다.
+  5. openconnect에는 가져올 설정 파일이 없어서, Windows는 공식 FortiClient의 SSL VPN 연결에서 가져온다(2026-11-13).
+     - FortiClient가 연결마다 남긴 `Server` 값(`host:port`, 포트가 없으면 443)을 host와 port로 가져온다. 주소에 scheme이나 경로가 붙었으면 실패다.
+     - FortiClient가 보여 주는 username은 FortiClient가 암호화해 두어 가져오지 않는다. username, realm, 비밀번호는 그대로 둔다.
+     - gateway가 바뀌면 이전 gateway의 인증서 값을 지운다.
+     - FortiClient의 첫 연결에서 가져온다. 여러 연결 중 고르기는 아직 다루지 않는다(사용자 결정). 연결이 없으면 그렇다고 보고하고, 첫 실행에서는 아무것도 하지 않는다.
+     - FortiClient 설정은 읽기만 한다. IPsec 연결은 openconnect 대상이 아니라 읽지 않는다.
 
 ## 3.3 OTP (F-OT)
 
@@ -659,7 +664,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 설정창을 닫아도 앱은 알림 영역에 남는다. 앱을 끝내는 것은 메뉴의 [종료]뿐이다.
   4. 앱을 켜면 알림 영역 아이콘만 둔다. 설정이 필요하거나 첫 실행에서 설정을 가져왔어도 설정창을 스스로 열지 않는다. 설정창은 아이콘 더블클릭이나 메뉴의 [설정…]으로 연다(사용자 결정, 2026-11-13).
   5. 문장은 macOS와 같은 뜻으로 만들고, Windows 표시 언어(한국어·영어)를 따른다.
-  6. 기존 openfortivpn 설정 가져오기와 Helper 승인 관련 항목은 없다.
+  6. Helper 승인 관련 항목은 없다. 일반 pane의 설정 가져오기는 openfortivpn 대신 FortiClient 연결에서 가져온다(F-CF-04).
 
 ### F-WN-02 OS port (Windows)
 - **설명**: Rust가 요청하는 OS 기능을 Windows에서 구현하고 시스템 이벤트를 알린다. port의 종류와 메시지는 macOS와 같다.
@@ -677,6 +682,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 | 브라우저 열기 | 기본 브라우저 |
 | 앱 수명 | 종료 확인, 로그인 시 열기(사용자 시작 프로그램). 활동 유지는 필요 없다 |
 | 로그 출력 | Windows 이벤트 로그 |
+| FortiClient 연결 | 컴퓨터 설정(`HKLM\SOFTWARE\Fortinet\FortiClient\Sslvpn\Tunnels`)의 연결별 key 이름과 `Server` 값. 읽기만 한다. macOS는 빈 목록으로 답한다 |
 
 - **세부 기능**
   1. Helper 통로를 열면 그 소유자가 시스템 계정인지 확인한다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 비밀번호를 가로채는 일을 막는다.

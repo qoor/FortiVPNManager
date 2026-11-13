@@ -577,5 +577,7 @@ public static partial class AppInternal
         public sealed record Unreadable(string Path, FileProblem Problem) : ImportError;
         public sealed record MissingHost(string Path) : ImportError;
         public sealed record Config(ConfigFileError Error) : ImportError;
+        public sealed record NoFortiClientConnection : ImportError;
+        public sealed record InvalidFortiClientServer(string Connection) : ImportError;
     }
 }

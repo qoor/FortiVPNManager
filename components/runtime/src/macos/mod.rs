@@ -8,7 +8,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::link;
-use crate::orchestration::{self, Input, Paths};
+use crate::orchestration::{self, ClientSettings, Input, Paths};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
@@ -41,7 +41,7 @@ fn paths() -> Paths {
         config: home.join(".config/FortiVPNManager/config.yaml"),
         state: home.join("Library/Application Support/FortiVPNManager/state.json"),
         log: home.join("Library/Logs/FortiVPNManager/openfortivpn.log"),
-        home,
+        client_settings: ClientSettings::OpenFortiVpn { home },
     }
 }
 
