@@ -44,15 +44,22 @@ struct AdvancedPane: View {
     /// The VPN client the Helper runs.
     private func clientSection(_ client: AppInternal.VpnClientInfo) -> some View {
         Section("VPN client") {
-            LabeledContent("openfortivpn") {
-                Text(verbatim: client.path ?? String(localized: "Not found"))
-                    .textSelection(.enabled)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            LabeledContent("Type") {
+                Text(verbatim: "openfortivpn")
             }
-            .searchAnchor("openfortivpn", navigation)
+            .searchAnchor("Type", navigation)
             LabeledContent("Version", value: client.version ?? String(localized: "Unknown"))
                 .searchAnchor("Version", navigation)
+            // The Homebrew path runs long and would wrap; the button shows it in Finder, the help tag as text.
+            LabeledContent("Path") {
+                if let path = client.path {
+                    Button("Show in Finder") { revealInFinder(path) }
+                        .help(path)
+                } else {
+                    Text("Not found")
+                }
+            }
+            .searchAnchor("Path", navigation)
             if let untested = client.untestedVersion {
                 NoticeRow(text: untested.message, style: .warning)
             }

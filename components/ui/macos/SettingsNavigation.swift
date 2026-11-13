@@ -239,10 +239,10 @@ enum SettingsSearch {
         case .exceptionRules:
             [
                 item(pane, "Current network"),
+                item(pane, "Status"),
                 item(pane, "Networks where the rules apply"),
                 item(pane, "Add Current Network"),
                 item(pane, "Exception targets"),
-                item(pane, "Status"),
             ]
         case .advanced:
             [
@@ -250,8 +250,10 @@ enum SettingsSearch {
                 item(pane, "Register Helper"),
                 item(pane, "App Background Activity"),
                 item(pane, "Open System Settings…", row: "App Background Activity"),
-                item(pane, "openfortivpn", when: .vpnClientFound),
+                item(pane, "Type", when: .vpnClientFound),
+                item(pane, "openfortivpn", row: "Type", when: .vpnClientFound),
                 item(pane, "Version", when: .vpnClientFound),
+                item(pane, "Path", when: .vpnClientFound),
                 item(pane, "Settings File"),
                 item(pane, "Show in Finder", row: "Settings File"),
             ]

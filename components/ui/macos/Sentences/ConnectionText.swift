@@ -6,7 +6,8 @@ import Foundation
 extension AppInternal.ConnectionSection {
     /// One line: "Connected · 1 hr 23 min · Reconnects in about 1 hr 32 min", "Waiting to reconnect (1:12)".
     /// `outlook` is the schedule's, which ends the line of a session without a planned reconnect.
-    func statusLine(outlook: AppInternal.ScheduleOutlook?, time: TimeStyle) -> String {
+    /// Without `includesPlannedReconnect`, a planned reconnect leaves the line to a row of its own.
+    func statusLine(outlook: AppInternal.ScheduleOutlook?, time: TimeStyle, includesPlannedReconnect: Bool = true) -> String {
         switch status {
         case .notConnected:
             return String(localized: "Not connected")
@@ -18,7 +19,7 @@ extension AppInternal.ConnectionSection {
         case let .connected(since, _, proactiveReconnect):
             var parts = [String(localized: "Connected"), time.duration(time.now.timeIntervalSince(since))]
             if case let .at(at) = proactiveReconnect {
-                parts.append(time.plannedReconnect(at))
+                if includesPlannedReconnect { parts.append(time.plannedReconnect(at)) }
             } else if outlook == .suspended {
                 parts.append(String(localized: "Won't reconnect"))
             } else if case .holdingWhileAway = outlook {

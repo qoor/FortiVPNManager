@@ -245,8 +245,10 @@ private struct GmailSection: View {
                 Text("Disconnecting")
                     .foregroundStyle(.secondary)
             }
-        case let .connected(address):
-            NoticeRow(text: String(localized: "Connected (\(address))"), style: .success)
+        // The address is the Gmail address above; the Gmail test and the OTP session catch a sign-in
+        // with another account.
+        case .connected:
+            NoticeRow(text: String(localized: "Connected"), style: .success)
         case .notConnected:
             Text("Not connected")
                 .foregroundStyle(.secondary)

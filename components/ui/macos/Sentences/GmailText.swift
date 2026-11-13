@@ -115,11 +115,10 @@ extension AppInternal.GmailTest {
         switch self {
         case .idle, .running:
             nil
-        case let .imapSucceeded(archive, trash, spam):
-            (spam.map { String(localized: "Connection succeeded · Archive: \(archive), Trash: \(trash), Spam: \($0)") }
-                ?? String(localized: "Connection succeeded · Archive: \(archive), Trash: \(trash)"), true)
-        case let .apiSucceeded(address):
-            (String(localized: "Connection succeeded · Gmail API (\(address))"), true)
+        case .imapSucceeded:
+            (String(localized: "Connection succeeded (IMAP)"), true)
+        case .apiSucceeded:
+            (String(localized: "Connection succeeded (Gmail API)"), true)
         case let .failed(failure):
             (failure.message, false)
         }

@@ -811,16 +811,6 @@
         }
       }
     },
-    "Connected (%@)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "연결됨 (%@)"
-          }
-        }
-      }
-    },
     "Connected as %@. Connect again with %@.": {
       "localizations": {
         "ko": {
@@ -901,32 +891,22 @@
         }
       }
     },
-    "Connection succeeded · Archive: %@, Trash: %@": {
+    "Connection succeeded (Gmail API)": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "연결 성공 · 전체보관함 %@, 휴지통 %@"
+            "value": "연결 성공 (Gmail API)"
           }
         }
       }
     },
-    "Connection succeeded · Archive: %@, Trash: %@, Spam: %@": {
+    "Connection succeeded (IMAP)": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "연결 성공 · 전체보관함 %@, 휴지통 %@, 스팸함 %@"
-          }
-        }
-      }
-    },
-    "Connection succeeded · Gmail API (%@)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "연결 성공 · Gmail API (%@)"
+            "value": "연결 성공 (IMAP)"
           }
         }
       }
@@ -2711,6 +2691,16 @@
         }
       }
     },
+    "Path": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로"
+          }
+        }
+      }
+    },
     "Paused by the schedule": {
       "localizations": {
         "ko": {
@@ -4007,6 +3997,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "터널 구성 실패"
+          }
+        }
+      }
+    },
+    "Type": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "유형"
           }
         }
       }

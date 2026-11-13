@@ -22,10 +22,10 @@ struct ExceptionRulesPane: View {
                             .textSelection(.enabled)
                     }
                     .searchAnchor("Current network", navigation)
+                    statusRows(rules, time: TimeStyle(now: ui.clock.now, environment: environment))
                 }
                 networksSection(rules)
                 targetsSection(rules)
-                statusSection(rules, time: TimeStyle(now: ui.clock.now, environment: environment))
             }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -58,7 +58,6 @@ struct ExceptionRulesPane: View {
                 onEditingChanged: { isEditingNetworkRow = $0; editingChanged() }
             )
             .spanningFormRow()
-            .frame(height: 105)
             .searchAnchor("Networks where the rules apply", navigation)
             AddressListButtons(
                 actions: networkActions, canAdd: rules.networks.addRow == .enabled,
@@ -77,12 +76,13 @@ struct ExceptionRulesPane: View {
                 canAdd: rules.targets.addRow == .enabled,
                 emptyText: String(localized: "Double-click here or click + to add a host or network."),
                 placeholder: String(localized: "e.g. 10.30.161.16 or 10.30.170.0/24"),
+                // A Mac is used on a few networks, unlike the many exception targets.
+                minHeight: 175,
                 actions: targetActions,
                 onChange: { ui.send(.setBypassRows(list: .targets, rows: $0)) },
                 onEditingChanged: { isEditingTargetRow = $0; editingChanged() }
             )
             .spanningFormRow()
-            .frame(height: 175)
             .searchAnchor("Exception targets", navigation)
             AddressListButtons(
                 actions: targetActions, canAdd: rules.targets.addRow == .enabled,
@@ -100,27 +100,26 @@ struct ExceptionRulesPane: View {
 
     /// Marked addresses and unapplied changes come first; otherwise how the rules stand on this
     /// network, as the runtime reports it.
-    private func statusSection(_ rules: AppInternal.BypassRulesSection, time: TimeStyle) -> some View {
-        Section {
-            LabeledContent("Status") {
-                if !rules.networks.problemRows.isEmpty || !rules.targets.problemRows.isEmpty {
-                    Label("Fix the marked addresses to apply.", systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                } else if rules.hasChanges {
-                    Label("There are changes that haven't been applied.", systemImage: "pencil.circle")
-                        .foregroundStyle(.secondary)
-                } else {
-                    let status = rules.status.line(time: time)
-                    NoticeRow(text: status.text, style: status.style)
-                }
+    @ViewBuilder
+    private func statusRows(_ rules: AppInternal.BypassRulesSection, time: TimeStyle) -> some View {
+        LabeledContent("Status") {
+            if !rules.networks.problemRows.isEmpty || !rules.targets.problemRows.isEmpty {
+                Label("Fix the marked addresses to apply.", systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+            } else if rules.hasChanges {
+                Label("There are changes that haven't been applied.", systemImage: "pencil.circle")
+                    .foregroundStyle(.secondary)
+            } else {
+                let status = rules.status.line(time: time)
+                NoticeRow(text: status.text, style: status.style)
             }
-            .searchAnchor("Status", navigation)
-            if case let .applyFailed(error)? = rules.notice {
-                NoticeRow(text: error.message, style: .error)
-            }
-            if let message = rules.stoppedRetryingMessage {
-                NoticeRow(text: message, style: .error)
-            }
+        }
+        .searchAnchor("Status", navigation)
+        if case let .applyFailed(error)? = rules.notice {
+            NoticeRow(text: error.message, style: .error)
+        }
+        if let message = rules.stoppedRetryingMessage {
+            NoticeRow(text: message, style: .error)
         }
     }
 

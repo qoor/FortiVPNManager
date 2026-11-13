@@ -25,10 +25,14 @@ struct GeneralPane: View {
     private func statusSection(_ connection: AppInternal.ConnectionSection, time: TimeStyle) -> some View {
         Section("Status") {
             // The note runs under the whole row: beside a long status it would push the status to a
-            // line of its own.
+            // line of its own. The planned reconnect is left to the "Next proactive reconnect" row,
+            // as it would wrap the status line.
             VStack(alignment: .leading, spacing: 3) {
                 LabeledContent("Current status") {
-                    Label(connection.statusLine(outlook: ui.schedule?.outlook, time: time), systemImage: connection.icon.statusSymbol)
+                    Label(
+                        connection.statusLine(outlook: ui.schedule?.outlook, time: time, includesPlannedReconnect: false),
+                        systemImage: connection.icon.statusSymbol
+                    )
                         .foregroundStyle(connection.icon.statusColor)
                 }
                 if connection.accountAppliesNextConnection {

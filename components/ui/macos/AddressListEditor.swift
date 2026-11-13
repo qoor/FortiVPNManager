@@ -17,6 +17,10 @@ struct AddressListEditor: NSViewRepresentable {
     let emptyText: String
     /// Shown in a row being typed.
     let placeholder: String
+    /// The height of a short list (at least one row, for the empty text). Beyond it the list grows by
+    /// its rows rather than scrolling inside the scrolling form (HIG: no nested scroll views of the
+    /// same orientation).
+    var minHeight: CGFloat = 0
     let actions: AddressListActions
     let onChange: ([String]) -> Void
     let onEditingChanged: (Bool) -> Void
@@ -44,6 +48,7 @@ struct AddressListEditor: NSViewRepresentable {
         }
         actions.view = view
         view.configure(emptyText: emptyText, placeholder: placeholder)
+        view.minHeight = minHeight
         view.canAdd = canAdd
         view.show(rows: rows, problemRows: problemRows, messages: problemMessages)
     }
@@ -93,6 +98,9 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     var onEditingChanged: ((Bool) -> Void)?
     var onSelectionChanged: ((Bool) -> Void)?
     var canAdd = true
+    var minHeight: CGFloat = 0 {
+        didSet { if minHeight != oldValue { invalidateIntrinsicContentSize() } }
+    }
 
     private let scrollView = NSScrollView()
     private let tableView = RulesTableView()
@@ -147,7 +155,14 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
 
     // MARK: - Layout
 
+    override var intrinsicContentSize: NSSize {
+        let rowsHeight = CGFloat(max(displayCount, 1)) * tableView.rowHeight
+        return NSSize(width: NSView.noIntrinsicMetric, height: max(minHeight, rowsHeight))
+    }
+
     private func setUp() {
+        setContentHuggingPriority(.required, for: .vertical)
+        setContentCompressionResistancePriority(.required, for: .vertical)
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("address"))
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
@@ -196,6 +211,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         tableView.reloadData()
         tableView.selectRowIndexes(selection, byExtendingSelection: false)
         emptyLabel.isHidden = displayCount > 0
+        invalidateIntrinsicContentSize()
         selectionChanged()
     }
 
