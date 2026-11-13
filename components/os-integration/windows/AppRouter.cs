@@ -12,8 +12,6 @@ public interface IAppUi
 
     void AppendLog(IReadOnlyList<LogLine> lines);
 
-    void OpenSettings();
-
     /// <summary>Builds the text and posts the notification, replacing an earlier one of the same kind.</summary>
     void PostNotification(UserNotification notification);
 }
@@ -72,8 +70,9 @@ public sealed class AppRouter
             case FromRuntime.PortAction action:
                 Perform(action.Value);
                 break;
+            // The app starts in the notification area only, even when setup is needed; Settings opens
+            // from the icon's double-click or its menu (user decision, 2026-11-13).
             case FromRuntime.OpenSettings:
-                ui.OpenSettings();
                 break;
         }
     }

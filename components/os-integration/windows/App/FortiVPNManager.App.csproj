@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The Windows app: its entry, one copy per user, and the runtime, the OS integration and the UI joined.
+    Built by packaging/windows/build.ps1, which sets the informational version to the build the Helper
+    carries too. .NET comes from the PC (install.ps1 makes sure it is there); Windows App SDK ships with
+    the app, so nothing else needs installing.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <AssemblyName>FortiVPNManager</AssemblyName>
+    <RootNamespace>FortiVPNManager.App</RootNamespace>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Without it, publishing leaves out the app's resources (FortiVPNManager.pri and the compiled XAML). -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>false</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Program.Main lets only one copy start before XAML does. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- The app icon (packaging/windows/AppIcon.ico, used as it is): the exe's, and the window's in the taskbar. -->
+    <ApplicationIcon>..\..\..\..\packaging\windows\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="..\..\..\..\packaging\windows\AppIcon.ico" Link="AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\contract\windows\FortiVPNManager.Contract.csproj" />
+    <ProjectReference Include="..\FortiVPNManager.OsIntegration.csproj" />
+    <ProjectReference Include="..\..\..\ui\windows\FortiVPNManager.Ui.csproj" />
+  </ItemGroup>
+</Project>

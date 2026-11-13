@@ -21,10 +21,25 @@ internal static class SystemLog
     /// </summary>
     internal const int MaxPart = 30_000;
 
-    public static void Write(LogLevel level, LogCategory category, string message)
+    public static void Write(LogLevel level, LogCategory category, string message) =>
+        Write(level == LogLevel.Error ? EventLogEntryType.Error : EventLogEntryType.Information, Name(category), message);
+
+    private static int faultWritten;
+
+    /// <summary>
+    /// A fault that stops the app, kept as macOS keeps a crash report. A fault on the UI thread can reach
+    /// both the XAML handler and the process's, so only the first record is written.
+    /// </summary>
+    public static void WriteFault(Exception fault)
     {
-        var type = level == LogLevel.Error ? EventLogEntryType.Error : EventLogEntryType.Information;
-        var name = Name(category);
+        if (Interlocked.Exchange(ref faultWritten, 1) == 0)
+        {
+            Write(EventLogEntryType.Error, "app", $"unhandled exception: {fault}");
+        }
+    }
+
+    private static void Write(EventLogEntryType type, string name, string message)
+    {
         var parts = Parts(message);
         try
         {

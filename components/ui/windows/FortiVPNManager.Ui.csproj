@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Windows UI: the notification-area icon and its menu, the settings window, every sentence. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>FortiVPNManager.Ui</RootNamespace>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.251219" />
+    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.4.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\contract\windows\FortiVPNManager.Contract.csproj" />
+  </ItemGroup>
+  <!-- The macOS string catalog is the one source of the shared sentences; the Windows one names Windows. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\macos\Localizable.xcstrings" LogicalName="Localizable.xcstrings" />
+    <EmbeddedResource Include="Windows.xcstrings" LogicalName="Windows.xcstrings" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FortiVPNManager.Ui.Tests" />
+  </ItemGroup>
+</Project>

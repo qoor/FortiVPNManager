@@ -2,5 +2,8 @@
   <Project Path="../../components/contract/tests/windows/FortiVPNManager.Contract.Tests.csproj" />
   <Project Path="../../components/contract/windows/FortiVPNManager.Contract.csproj" />
   <Project Path="../../components/os-integration/tests/windows/FortiVPNManager.OsIntegration.Tests.csproj" />
+  <Project Path="../../components/os-integration/windows/App/FortiVPNManager.App.csproj" />
   <Project Path="../../components/os-integration/windows/FortiVPNManager.OsIntegration.csproj" />
+  <Project Path="../../components/ui/tests/windows/FortiVPNManager.Ui.Tests.csproj" />
+  <Project Path="../../components/ui/windows/FortiVPNManager.Ui.csproj" />
 </Solution>

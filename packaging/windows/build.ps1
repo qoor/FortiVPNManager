@@ -1,5 +1,5 @@
-# Builds the Windows Helper and the runtime DLL for release into .build\windows\FortiVPNManager, the
-# folder install.ps1 puts in Program Files, with the built-in Google OAuth client when there is one.
+# Builds the Windows app, the Helper and the runtime DLL for release into .build\windows\FortiVPNManager,
+# the folder install.ps1 puts in Program Files, with the built-in Google OAuth client when there is one.
 # Run it as yourself, without elevation: Rust is installed per user, so an administrator account may
 # have none. ASCII only.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
@@ -9,6 +9,12 @@ $out = Join-Path $root '.build\windows\FortiVPNManager'
 # The Helper and the app carry the same build, which the app checks before it sends a secret. The
 # format is the macOS build's.
 $build = Get-Date -Format 'yyyyMMddHHmmss'
+
+function Invoke-Dotnet([string[]] $arguments) {
+    $ErrorActionPreference = 'Continue'
+    & dotnet @arguments
+    if ($LASTEXITCODE -ne 0) { throw "dotnet $($arguments[0]) failed with exit code $LASTEXITCODE" }
+}
 
 function Invoke-Cargo([string[]] $arguments) {
     # cargo reports progress on stderr, which Windows PowerShell may turn into errors under Stop.
@@ -28,6 +34,9 @@ try {
 }
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
+# The app takes the build as its informational version, which it reports and checks against the Helper's.
+$app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.App.csproj'
+Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:InformationalVersion=$build", '-o', $out, '--nologo')
 Copy-Item (Join-Path $root 'target\release\fvm-helper.exe') $out
 Copy-Item (Join-Path $root 'target\release\fvm_runtime.dll') $out
 # The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
