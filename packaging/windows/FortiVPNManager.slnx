@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../../components/contract/tests/windows/FortiVPNManager.Contract.Tests.csproj" />
+  <Project Path="../../components/contract/windows/FortiVPNManager.Contract.csproj" />
+  <Project Path="../../components/os-integration/tests/windows/FortiVPNManager.OsIntegration.Tests.csproj" />
+  <Project Path="../../components/os-integration/windows/FortiVPNManager.OsIntegration.csproj" />
+</Solution>
