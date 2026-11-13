@@ -251,5 +251,13 @@
         }
       }
     }
+  },
+  {
+    "portRequest": {
+      "id": 24,
+      "request": {
+        "fortiClientConnections": {}
+      }
+    }
   }
 ]

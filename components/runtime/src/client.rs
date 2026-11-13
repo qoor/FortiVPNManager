@@ -1,7 +1,8 @@
 //! The VPN client of the OS the app runs on: openconnect on Windows, openfortivpn on macOS (Linux
 //! and openconnect on macOS come later). The runtime uses its adapter for the account checks, and
-//! the certificate list it trusts follows the client, not the OS. Importing settings stays
-//! openfortivpn's on every OS: openconnect has no settings file to import.
+//! the certificate list it trusts follows the client, not the OS. Importing settings reads
+//! openfortivpn's settings file on macOS and the official FortiClient's connection on Windows:
+//! openconnect has no settings file of its own.
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;

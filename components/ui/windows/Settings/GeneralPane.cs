@@ -9,13 +9,19 @@ namespace FortiVPNManager.Ui.Settings;
 
 /// <summary>
 /// The General pane (components/ui/macos/GeneralPane.swift): the connection's status with its
-/// buttons, as in the menu, and how the app starts. Importing the VPN client's settings is macOS only.
+/// buttons, as in the menu, how the app starts, and importing FortiClient's server address.
 /// </summary>
 internal sealed class GeneralPane : IPane
 {
     private readonly AppUi ui;
     private readonly StackPanel status = new() { Spacing = 4 };
     private readonly StackPanel startup = new() { Spacing = 4 };
+    private readonly StackPanel import = new() { Spacing = 4 };
+    private readonly StackPanel importReport = new() { Spacing = 4 };
+    private readonly TextBlock importSource = Cards.Value();
+    private readonly TextBlock importServer = Cards.Value();
+    private readonly InfoBar importFailed = Cards.Notice(InfoBarSeverity.Error);
+    private readonly SettingsCard importClose = new() { ContentAlignment = ContentAlignment.Left };
     private readonly SettingsCard current = Cards.Card(L("Current status"));
     private readonly FontIcon currentMark;
     private readonly TextBlock currentText;
@@ -94,6 +100,34 @@ internal sealed class GeneralPane : IPane
 
         page.BodyPanel.Children.Add(status);
         page.BodyPanel.Children.Add(startup);
+        AddImportRows();
+        page.BodyPanel.Children.Add(import);
+    }
+
+    /// <summary>
+    /// Importing FortiClient's settings, in the place macOS imports openfortivpn's. The report of the
+    /// last import, the first launch's included, stays until closed.
+    /// </summary>
+    private void AddImportRows()
+    {
+        var importButton = new Button { Content = L("Import Settings") };
+        importButton.Click += (_, _) => ui.Send(new Command.ImportClientSettings());
+        import.Children.Add(Cards.SectionHeader(L("Import Settings")));
+        var source = Cards.Card(L("FortiClient settings"), importButton);
+        source.Describe(L("Brings in the server address from FortiClient."));
+        import.Children.Add(source);
+        var close = new Button { Content = L("Close") };
+        close.Click += (_, _) => ui.Send(new Command.DismissImportReport());
+        importSource.TextWrapping = TextWrapping.Wrap;
+        var report = new StackPanel { Spacing = 4 };
+        report.Children.Add(importSource);
+        report.Children.Add(importServer);
+        importReport.Children.Add(new SettingsCard { Content = report, ContentAlignment = ContentAlignment.Left });
+        import.Children.Add(importReport);
+        import.Children.Add(importFailed);
+        // Closes the report, whether the import took the server or failed.
+        importClose.Content = close;
+        import.Children.Add(importClose);
     }
 
     public void Refresh()
@@ -105,11 +139,27 @@ internal sealed class GeneralPane : IPane
             ShowStatus(connection, ui.Time);
         }
         startup.Visible(ui.Config is not null);
+        import.Visible(ui.Config is not null);
         if (ui.Config is { } config)
         {
             ShowStartup(config);
+            ShowImport(config.Account.ImportReport);
         }
         refreshing = false;
+    }
+
+    private void ShowImport(ClientSettingsImport? report)
+    {
+        var imported = (report as ClientSettingsImport.Imported)?.Report;
+        importReport.Visible(imported is not null);
+        if (imported is not null)
+        {
+            importSource.Text = L("Imported from the FortiClient connection '%@'.", imported.Source);
+            // Only the server came from FortiClient; the account's other values stay as they were.
+            importServer.Text = L("Server: %@:%@", imported.Host, imported.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        importFailed.Show((report as ClientSettingsImport.Failed)?.Error.Message());
+        importClose.Visible(report is not null);
     }
 
     private void ShowStatus(ConnectionSection connection, TimeStyle time)

@@ -1153,6 +1153,20 @@ fn config_sections() {
                 }),
                 None,
             ),
+            config_section(
+                imported(ClientSettingsImport::Failed {
+                    error: ImportError::NoFortiClientConnection {},
+                }),
+                None,
+            ),
+            config_section(
+                imported(ClientSettingsImport::Failed {
+                    error: ImportError::InvalidFortiClientServer {
+                        connection: "Office".into(),
+                    },
+                }),
+                None,
+            ),
         ],
     );
 }
@@ -1471,6 +1485,7 @@ fn port_requests() {
             ),
             request(22, PortRequest::LoginItemRegistration {}),
             request(23, PortRequest::SetLoginItem { enabled: false }),
+            request(24, PortRequest::FortiClientConnections {}),
         ],
     );
 }
@@ -1740,6 +1755,21 @@ fn port_responses() {
                 },
             ),
             response(21, PortResponse::BrowserOpened { opened: false }),
+            response(
+                22,
+                PortResponse::FortiClientConnections {
+                    connections: vec![FortiClientConnection {
+                        name: "Office".into(),
+                        server: "vpn.example.com:10443".into(),
+                    }],
+                },
+            ),
+            response(
+                22,
+                PortResponse::FortiClientConnections {
+                    connections: vec![],
+                },
+            ),
         ],
     );
 }

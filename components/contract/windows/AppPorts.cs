@@ -42,6 +42,9 @@ public static partial class AppInternal
         public sealed record OpenBrowser(string Url) : PortRequest;
         public sealed record LoginItemRegistration : PortRequest;
         public sealed record SetLoginItem(bool Enabled) : PortRequest;
+
+        /// <summary>The official FortiClient's SSL VPN connections, read only; Windows imports its settings from them.</summary>
+        public sealed record FortiClientConnections : PortRequest;
     }
 
     [Cases]
@@ -82,6 +85,8 @@ public static partial class AppInternal
         public sealed record ScreenState(bool Locked, bool DisplaysAsleep) : PortResponse;
 
         public sealed record BrowserOpened(bool Opened) : PortResponse;
+
+        public sealed record FortiClientConnections(IReadOnlyList<FortiClientConnection> Connections) : PortResponse;
     }
 
     /// <summary>Carried out without an answer.</summary>
@@ -179,6 +184,9 @@ public static partial class AppInternal
 
     /// <summary>An interface appears once per address.</summary>
     public sealed record InterfaceAddress(string Name, bool Up, string? Ipv4 = null);
+
+    /// <summary>A FortiClient SSL VPN connection: its name and its Server value, usually host:port.</summary>
+    public sealed record FortiClientConnection(string Name, string Server);
 
     public enum LogLevel
     {

@@ -10,16 +10,16 @@ use std::time::{Duration, Instant};
 use fvm_contract::app_helper::{AdditionalRoute, BypassRoutesSnapshot, HelperStatus};
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::port::{
-    HelperCall, PortRequest, PortResponse, RegistrationStatus, SecretItem,
+    FortiClientConnection, HelperCall, PortRequest, PortResponse, RegistrationStatus, SecretItem,
 };
 use fvm_contract::app_internal::section::{
     AccountFeedback, BypassStatus, ClientSettingsImport, ConfigSection, ConnectionStatus,
-    HelperState, ImportedPassword, Section,
+    HelperState, ImportError, ImportedPassword, Section,
 };
 use fvm_contract::app_internal::{AppFacts, FromRuntime, SecretText, SignInPages, ToRuntime};
 use serde_json::json;
 
-use crate::orchestration::{self, Input, Paths};
+use crate::orchestration::{self, ClientSettings, Input, Paths};
 
 const APP_BUILD: &str = "100";
 /// No message for this long: the runtime has nothing more to do on its own.
@@ -53,6 +53,9 @@ struct App {
     requests: Vec<PortRequest>,
     sections: Vec<Section>,
     open_settings: u32,
+    /// FortiClient's SSL VPN connections, which make the runtime import from FortiClient as on
+    /// Windows; `None` imports openfortivpn's settings file as on macOS.
+    forticlient: Option<Vec<FortiClientConnection>>,
 }
 
 fn scratch() -> PathBuf {
@@ -93,6 +96,7 @@ impl App {
             requests: Vec::new(),
             sections: Vec::new(),
             open_settings: 0,
+            forticlient: None,
         }
     }
 
@@ -116,7 +120,12 @@ impl App {
             config: self.config_path(),
             state: self.folder.join("state/state.json"),
             log: self.folder.join("logs/openfortivpn.log"),
-            home: self.folder.join("home"),
+            client_settings: match self.forticlient {
+                Some(_) => ClientSettings::FortiClient,
+                None => ClientSettings::OpenFortiVpn {
+                    home: self.folder.join("home"),
+                },
+            },
         };
         let runtime_inputs = inputs.clone();
         thread::spawn(move || orchestration::run(paths, runtime_inputs, received, out));
@@ -239,6 +248,9 @@ impl App {
                 status: RegistrationStatus::NotRegistered,
             },
             PortRequest::SetLoginItem { .. } => PortResponse::Registered {},
+            PortRequest::FortiClientConnections {} => PortResponse::FortiClientConnections {
+                connections: self.forticlient.clone().unwrap_or_default(),
+            },
         }
     }
 
@@ -648,4 +660,94 @@ fn a_rule_removed_from_the_file_takes_its_route_away() {
     });
     // A route through another gateway was never the rules' to take.
     assert_eq!(app.service.as_ref().unwrap().routes, vec![other]);
+}
+
+fn forticlient_connection(name: &str, server: &str) -> FortiClientConnection {
+    FortiClientConnection {
+        name: name.into(),
+        server: server.into(),
+    }
+}
+
+impl App {
+    fn import_report(&self) -> Option<ClientSettingsImport> {
+        self.config_section().account.import_report.clone()
+    }
+}
+
+#[test]
+fn the_first_launch_imports_the_server_of_forticlients_one_connection() {
+    let mut app = App::new();
+    app.forticlient = Some(vec![forticlient_connection(
+        "Office",
+        "vpn.example.com:10443",
+    )]);
+    app.launch();
+    app.settle_until("the import report", |app| {
+        app.sections.iter().any(|section| matches!(section, Section::Config { section } if section.account.import_report.is_some()))
+    });
+    app.settle();
+    let Some(ClientSettingsImport::Imported { report }) = app.import_report() else {
+        panic!("an import report")
+    };
+    assert_eq!(report.source, "Office");
+    assert_eq!(
+        (report.host.as_str(), report.port),
+        ("vpn.example.com", 10443)
+    );
+    assert_eq!(report.username, "");
+    let text = app.config_text();
+    for line in ["  host: \"vpn.example.com\"\n", "  port: 10443\n"] {
+        assert!(text.contains(line), "{text}");
+    }
+}
+
+#[test]
+fn importing_from_forticlient_keeps_the_account_and_takes_only_the_server() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.forticlient = Some(vec![forticlient_connection("Office", "gw.example.com")]);
+    app.launch();
+    app.settle();
+    app.command(Command::ImportClientSettings { file: None });
+    app.settle();
+    let Some(ClientSettingsImport::Imported { report }) = app.import_report() else {
+        panic!("an import report")
+    };
+    assert_eq!((report.host.as_str(), report.port), ("gw.example.com", 443));
+    assert_eq!(report.username, "alice");
+    let text = app.config_text();
+    for line in [
+        "  host: \"gw.example.com\"\n",
+        "  port: 443\n",
+        "  username: \"alice\"\n",
+    ] {
+        assert!(text.contains(line), "{text}");
+    }
+}
+
+#[test]
+fn importing_from_forticlient_tells_why_nothing_was_taken() {
+    for (connections, expected) in [
+        (vec![], ImportError::NoFortiClientConnection {}),
+        (
+            vec![forticlient_connection("Office", "https://vpn.example.com/")],
+            ImportError::InvalidFortiClientServer {
+                connection: "Office".into(),
+            },
+        ),
+    ] {
+        let mut app = App::new();
+        app.write_config(ACCOUNT);
+        app.forticlient = Some(connections);
+        app.launch();
+        app.settle();
+        app.command(Command::ImportClientSettings { file: None });
+        app.settle();
+        assert_eq!(
+            app.import_report(),
+            Some(ClientSettingsImport::Failed { error: expected })
+        );
+        assert_eq!(app.config_text(), ACCOUNT);
+    }
 }

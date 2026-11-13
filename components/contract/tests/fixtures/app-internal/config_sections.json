@@ -1161,5 +1161,115 @@
         "value": 180
       }
     }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "importReport": {
+        "failed": {
+          "error": {
+            "noFortiClientConnection": {}
+          }
+        }
+      },
+      "port": "443",
+      "realm": "",
+      "revert": "disabled",
+      "revision": 4,
+      "save": "disabled",
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "importReport": {
+        "failed": {
+          "error": {
+            "invalidFortiClientServer": {
+              "connection": "Office"
+            }
+          }
+        }
+      },
+      "port": "443",
+      "realm": "",
+      "revert": "disabled",
+      "revision": 4,
+      "save": "disabled",
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
   }
 ]

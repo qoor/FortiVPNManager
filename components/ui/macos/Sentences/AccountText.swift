@@ -58,6 +58,10 @@ extension AppInternal.ImportError {
             String(localized: "The openfortivpn config file has no host: \(path)")
         case let .config(error):
             error.message
+        case .noFortiClientConnection:
+            String(localized: "FortiClient has no SSL VPN connection.")
+        case let .invalidFortiClientServer(connection):
+            String(localized: "The server address of the FortiClient connection '\(connection)' isn't supported.")
         }
     }
 }

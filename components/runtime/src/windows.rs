@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use crate::link;
-use crate::orchestration::{self, Input, Paths};
+use crate::orchestration::{self, ClientSettings, Input, Paths};
 
 /// The app's ends of the runtime's two pipes, which the app then owns.
 #[repr(C)]
@@ -66,7 +66,7 @@ fn paths() -> Paths {
         config: home.join(r".config\FortiVPNManager\config.yaml"),
         state: local.join(r"FortiVPNManager\state.json"),
         log: local.join(r"FortiVPNManager\Logs\openconnect.log"),
-        home,
+        client_settings: ClientSettings::FortiClient,
     }
 }
 
@@ -127,6 +127,7 @@ mod tests {
         );
         assert!(paths.state.ends_with(r"FortiVPNManager\state.json"));
         assert!(paths.log.ends_with(r"FortiVPNManager\Logs\openconnect.log"));
-        assert!(paths.config.starts_with(&paths.home));
+        assert!(paths.config.starts_with(env::home_dir().unwrap()));
+        assert!(matches!(paths.client_settings, ClientSettings::FortiClient));
     }
 }

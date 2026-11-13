@@ -128,6 +128,9 @@ public sealed class AppRouter
             case PortRequest.SetLoginItem login:
                 reply(ServiceRegistration.SetLoginItem(login.Enabled));
                 break;
+            case PortRequest.FortiClientConnections:
+                reply(new PortResponse.FortiClientConnections(FortiClientSettings.Connections()));
+                break;
         }
     }
 

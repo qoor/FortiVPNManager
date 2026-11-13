@@ -583,6 +583,8 @@ private extension AppInternal {
             )))),
             configSection(accountForm(4, importReport: .failed(error: .missingHost(path: "/Users/alice/vpn.conf")))),
             configSection(accountForm(4, importReport: .failed(error: .config(error: unreadableFile)))),
+            configSection(accountForm(4, importReport: .failed(error: .noFortiClientConnection))),
+            configSection(accountForm(4, importReport: .failed(error: .invalidFortiClientServer(connection: "Office")))),
         ]
 
         static let configFileErrors: [ConfigFileError] = [
@@ -680,6 +682,7 @@ private extension AppInternal {
             )),
             .portRequest(id: 22, request: .loginItemRegistration),
             .portRequest(id: 23, request: .setLoginItem(enabled: false)),
+            .portRequest(id: 24, request: .fortiClientConnections),
         ]
 
         static let portActions: [FromRuntime] = [
@@ -796,6 +799,10 @@ private extension AppInternal {
             .portResponse(id: 19, response: .primaryRouter(router: nil)),
             .portResponse(id: 20, response: .screenState(locked: true, displaysAsleep: false)),
             .portResponse(id: 21, response: .browserOpened(opened: false)),
+            .portResponse(id: 22, response: .fortiClientConnections(connections: [
+                FortiClientConnection(name: "Office", server: "vpn.example.com:10443"),
+            ])),
+            .portResponse(id: 22, response: .fortiClientConnections(connections: [])),
         ]
 
         static let systemEvents: [ToRuntime] = [

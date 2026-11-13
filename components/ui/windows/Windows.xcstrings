@@ -135,6 +135,16 @@
         }
       }
     },
+    "Brings in the server address from FortiClient.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiClient의 서버 주소를 가져옵니다."
+          }
+        }
+      }
+    },
     "Check Helper Service…": {
       "localizations": {
         "ko": {
@@ -221,6 +231,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "로그에서 찾기 (Ctrl+F)"
+          }
+        }
+      }
+    },
+    "FortiClient settings": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiClient 설정"
+          }
+        }
+      }
+    },
+    "Imported from the FortiClient connection '%@'.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiClient 연결 '%@'에서 가져왔습니다."
           }
         }
       }

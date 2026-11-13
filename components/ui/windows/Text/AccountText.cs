@@ -4,8 +4,8 @@ using static FortiVPNManager.Ui.Text.Strings;
 namespace FortiVPNManager.Ui.Text;
 
 /// <summary>
-/// The account's sentences (components/ui/macos/Sentences/AccountText.swift). The import of the VPN
-/// client's settings is macOS only, so its sentences are not here.
+/// The account's sentences (components/ui/macos/Sentences/AccountText.swift), with the import's: Windows
+/// imports FortiClient's server address.
 /// </summary>
 public static class AccountText
 {
@@ -36,6 +36,18 @@ public static class AccountText
         AccountSaveError.Config config => config.Error.Message(),
         AccountSaveError.SecretStore store => L("Couldn't save the password to Credential Manager: %@", store.Failure.Description),
         _ => throw new InvalidOperationException($"unknown account save error {error}"),
+    };
+
+    /// <summary>Why an import took nothing. Windows imports FortiClient's connection; the file cases are macOS's.</summary>
+    public static string Message(this ImportError error) => error switch
+    {
+        ImportError.NoFortiClientConnection => L("FortiClient has no SSL VPN connection."),
+        ImportError.InvalidFortiClientServer invalid => L("The server address of the FortiClient connection '%@' isn't supported.", invalid.Connection),
+        ImportError.Config config => config.Error.Message(),
+        ImportError.SourceNotFound notFound => L("openfortivpn config file not found: %@", notFound.Path),
+        ImportError.Unreadable unreadable => L("Could not read the openfortivpn config file (%@): %@", unreadable.Path, unreadable.Problem.ClientFileReason()),
+        ImportError.MissingHost missing => L("The openfortivpn config file has no host: %@", missing.Path),
+        _ => throw new InvalidOperationException($"unknown import error {error}"),
     };
 
     /// <summary>The prompt of an empty password field.</summary>

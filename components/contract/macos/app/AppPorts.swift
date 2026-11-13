@@ -24,6 +24,9 @@ extension AppInternal {
         case openBrowser(url: String)
         case loginItemRegistration
         case setLoginItem(enabled: Bool)
+
+        /// The official FortiClient's SSL VPN connections; Windows imports its settings from them.
+        case fortiClientConnections
     }
 
     enum PortResponse: Encodable, Sendable {
@@ -49,6 +52,14 @@ extension AppInternal {
         case screenState(locked: Bool, displaysAsleep: Bool)
 
         case browserOpened(opened: Bool)
+
+        case fortiClientConnections(connections: [FortiClientConnection])
+    }
+
+    /// A FortiClient SSL VPN connection: its name and its `Server` value, usually `host:port`.
+    struct FortiClientConnection: Encodable, Equatable, Sendable {
+        var name: String
+        var server: String
     }
 
     /// Carried out without an answer.
