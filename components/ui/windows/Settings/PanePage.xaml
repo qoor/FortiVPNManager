@@ -1,0 +1,31 @@
+<Page
+    x:Class="FortiVPNManager.Ui.Settings.PanePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    SizeChanged="OnSizeChanged">
+    <!-- A pane: its title with the pane's own buttons at the top, and under it the pane's settings, which scroll. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!-- The pane's buttons sit beside the title, or under it when the pane is narrow (OnSizeChanged). -->
+        <Grid Margin="36,20,36,16" ColumnSpacing="16" RowSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="Title" Style="{StaticResource PageTitleStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+            <StackPanel x:Name="Actions" Grid.Column="1" Orientation="Horizontal" Spacing="8" />
+        </Grid>
+        <ScrollViewer x:Name="Scroller" Grid.Row="1">
+            <StackPanel x:Name="Body" Margin="36,0,36,36" Spacing="{StaticResource SettingsCardSpacing}" />
+        </ScrollViewer>
+        <!-- A pane that fills the window instead, such as the log with its own scrolling. -->
+        <Grid x:Name="Fill" Grid.Row="1" Margin="36,0,36,36" Visibility="Collapsed" />
+    </Grid>
+</Page>

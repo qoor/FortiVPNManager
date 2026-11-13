@@ -22,6 +22,16 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="FortiVPNManager.OsIntegration.Tests" />
+    <!-- The app (assembly FortiVPNManager) writes its own faults to the same event log source. -->
+    <InternalsVisibleTo Include="FortiVPNManager" />
+  </ItemGroup>
+
+  <!-- The app's entry is a project of its own in App/, which hosts this library. -->
+  <ItemGroup>
+    <Compile Remove="App\**" />
+    <None Remove="App\**" />
+    <Content Remove="App\**" />
+    <EmbeddedResource Remove="App\**" />
   </ItemGroup>
 
 </Project>

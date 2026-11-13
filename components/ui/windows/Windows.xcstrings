@@ -1,0 +1,400 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%1$@, %2$@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%lld hours": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hours"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld시간"
+          }
+        }
+      }
+    },
+    "%lld hr": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld시간"
+          }
+        }
+      }
+    },
+    "%lld min": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld분"
+          }
+        }
+      }
+    },
+    "%lld minutes": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld분"
+          }
+        }
+      }
+    },
+    "%lld seconds": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld second"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld seconds"
+                }
+              }
+            }
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld초"
+          }
+        }
+      }
+    },
+    "After the end time, reconnects wait while you're away (screen locked or off, PC asleep) and stop after this long.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "종료 시각 이후 자리를 비우면(화면 잠금·꺼짐, 절전) 재연결을 미루고, 이 시간이 지나면 멈춥니다."
+          }
+        }
+      }
+    },
+    "Apply exception rules (Ctrl+S)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "예외 규칙 적용 (Ctrl+S)"
+          }
+        }
+      }
+    },
+    "Check Helper Service…": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 서비스 확인…"
+          }
+        }
+      }
+    },
+    "Clear the log view (Ctrl+L) — the log file is kept": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "화면의 로그 지우기 (Ctrl+L) — 로그 파일은 그대로 둡니다"
+          }
+        }
+      }
+    },
+    "Couldn't change the Windows network settings (%@).": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Windows 네트워크 설정을 바꾸지 못했습니다(%@)."
+          }
+        }
+      }
+    },
+    "Couldn't read the app password from Credential Manager: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자격 증명 관리자에서 앱 비밀번호를 읽지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't save the password to Credential Manager: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자격 증명 관리자에 비밀번호를 저장하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Credential Manager error: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자격 증명 관리자 오류: %@"
+          }
+        }
+      }
+    },
+    "Elsewhere, everything goes through the VPN. Routes are saved in Windows network settings and survive restarts.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 네트워크에서는 모든 트래픽이 VPN을 거칩니다. 라우트는 Windows 네트워크 설정에 저장되어 재시동 후에도 유지됩니다."
+          }
+        }
+      }
+    },
+    "Find in log": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그에서 찾기"
+          }
+        }
+      }
+    },
+    "Find in log (Ctrl+F)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로그에서 찾기 (Ctrl+F)"
+          }
+        }
+      }
+    },
+    "Next match (Enter)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 결과 (Enter)"
+          }
+        }
+      }
+    },
+    "No results": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "검색 결과 없음"
+          }
+        }
+      }
+    },
+    "Not found at %@. Install OpenConnect for Windows in its default folder.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 없습니다. Windows용 OpenConnect를 기본 폴더에 설치하세요."
+          }
+        }
+      }
+    },
+    "Only available for the app installed in Program Files.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Program Files에 설치된 앱에서만 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "Page Up and Page Down change it by 10 minutes": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page Up·Page Down 키로 10분씩 바꿉니다"
+          }
+        }
+      }
+    },
+    "Previous match (Shift+Enter)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이전 결과 (Shift+Enter)"
+          }
+        }
+      }
+    },
+    "Save account settings (Ctrl+S)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계정 설정 저장 (Ctrl+S)"
+          }
+        }
+      }
+    },
+    "Saved in Credential Manager · type to change": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자격 증명 관리자에 저장됨 · 변경할 때만 입력"
+          }
+        }
+      }
+    },
+    "Show in File Explorer": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일 탐색기에서 보기"
+          }
+        }
+      }
+    },
+    "Show the log file in File Explorer": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "파일 탐색기에서 로그 파일 보기"
+          }
+        }
+      }
+    },
+    "Starts a new connection when the PC wakes from sleeping at least the minimum sleep time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최소 잠자기 시간 이상 잠들었다 깨어나면 연결을 새로 맺습니다."
+          }
+        }
+      }
+    },
+    "The imported client's secret is missing from Credential Manager. Import the JSON again.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가져온 클라이언트의 시크릿이 자격 증명 관리자에 없습니다. JSON을 다시 가져오세요."
+          }
+        }
+      }
+    },
+    "While this PC is on one of the networks above, the exception targets skip the VPN and go out directly through that network's router.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "위 네트워크에 연결되어 있을 때 예외 대상은 VPN을 거치지 않고 해당 네트워크의 라우터로 직접 연결합니다."
+          }
+        }
+      }
+    },
+    "Windows did not keep the routes that were written.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기록한 라우트가 Windows 네트워크 설정에 남아 있지 않습니다."
+          }
+        }
+      }
+    },
+    "openconnect did not report its version: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openconnect가 버전을 알려 주지 않았습니다: %@"
+          }
+        }
+      }
+    },
+    "openconnect is not a regular file: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openconnect가 일반 파일이 아닙니다: %@"
+          }
+        }
+      }
+    },
+    "openconnect not found": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openconnect를 찾을 수 없음"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

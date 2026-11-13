@@ -1,0 +1,147 @@
+<Window
+    x:Class="FortiVPNManager.Ui.Settings.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="FortiVPNManager">
+    <!-- Mica as the one base layer, as Windows Settings: the title bar, the navigation and the pages all show it. -->
+    <Window.SystemBackdrop>
+        <MicaBackdrop Kind="Base" />
+    </Window.SystemBackdrop>
+    <Grid x:Name="RootGrid">
+        <Grid.Resources>
+            <!--
+                Narrow windows: the magnifier opens the same search box in a flyout under the title bar, as
+                Windows Settings does. The flyout is only the box and its shadow, at a flyout's 456 px width.
+            -->
+            <Flyout x:Key="SearchFlyout" Opened="OnSearchFlyoutOpened">
+                <Flyout.FlyoutPresenterStyle>
+                    <Style TargetType="FlyoutPresenter">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="CornerRadius" Value="16" />
+                    </Style>
+                </Flyout.FlyoutPresenterStyle>
+                <Grid Width="456">
+                    <AutoSuggestBox
+                        x:Name="FlyoutSearch"
+                        CornerRadius="16"
+                        TextChanged="OnSearchTextChanged"
+                        QuerySubmitted="OnSearchQuerySubmitted">
+                        <AutoSuggestBox.Resources>
+                            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="ControlElevationBorderBrush" />
+                            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ControlElevationBorderBrush" />
+                        </AutoSuggestBox.Resources>
+                        <AutoSuggestBox.TextBoxStyle>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}">
+                                <Setter Property="Padding" Value="40,5,12,6" />
+                            </Style>
+                        </AutoSuggestBox.TextBoxStyle>
+                    </AutoSuggestBox>
+                    <FontIcon
+                        Margin="13,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        Glyph="&#xE721;"
+                        IsHitTestVisible="False" />
+                </Grid>
+            </Flyout>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!--
+            Fluent title bar: the back button, the menu button in narrow windows, the app's name, and the
+            settings search centered in it, as the title bar guidance puts a global search (48 px tall).
+        -->
+        <TitleBar
+            x:Name="AppTitleBar"
+            Height="48"
+            Title="FortiVPNManager"
+            IsBackButtonVisible="True"
+            IsBackButtonEnabled="False"
+            IsPaneToggleButtonVisible="False"
+            Loaded="OnTitleBarLoaded"
+            BackRequested="OnBackRequested"
+            PaneToggleRequested="OnPaneToggleRequested">
+            <TitleBar.Resources>
+                <!--
+                    The title bar keeps 16 px after its content once it hides the title; at the window's
+                    348 px minimum that space is what the magnifier needs.
+                -->
+                <Thickness x:Key="TitleBarCompactContentMargin">0</Thickness>
+            </TitleBar.Resources>
+            <Grid>
+                <!--
+                    Shaped as the search box of Windows Settings (measured on the test PC): 32 px tall and
+                    fully rounded, at most 516 px wide, the magnifier 14 px in from the left and the text at
+                    42 px, with the light border of a button rather than a text box's darker bottom line.
+                -->
+                <Grid x:Name="SearchArea" Width="516" VerticalAlignment="Center">
+                    <AutoSuggestBox
+                        x:Name="Search"
+                        CornerRadius="16"
+                        TextChanged="OnSearchTextChanged"
+                        QuerySubmitted="OnSearchQuerySubmitted">
+                        <AutoSuggestBox.Resources>
+                            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="ControlElevationBorderBrush" />
+                            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ControlElevationBorderBrush" />
+                        </AutoSuggestBox.Resources>
+                        <AutoSuggestBox.TextBoxStyle>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}">
+                                <Setter Property="Padding" Value="40,5,12,6" />
+                            </Style>
+                        </AutoSuggestBox.TextBoxStyle>
+                    </AutoSuggestBox>
+                    <FontIcon
+                        Margin="13,0,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        Glyph="&#xE721;"
+                        IsHitTestVisible="False" />
+                </Grid>
+                <!-- Narrow windows: a magnifier right after the title, a subtle button like the others in the bar. -->
+                <Button
+                    x:Name="NarrowSearchButton"
+                    Width="36"
+                    Height="32"
+                    Margin="8,0,0,0"
+                    Padding="0"
+                    Visibility="Collapsed"
+                    AutomationProperties.AutomationId="NarrowSearchButton"
+                    Click="OnNarrowSearchClick">
+                    <Button.Resources>
+                        <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                        <StaticResource x:Key="ButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    </Button.Resources>
+                    <FontIcon FontSize="14" Glyph="&#xE721;" />
+                </Button>
+            </Grid>
+        </TitleBar>
+        <NavigationView
+            x:Name="Navigation"
+            Grid.Row="1"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            IsPaneToggleButtonVisible="False"
+            OpenPaneLength="280"
+            SelectionChanged="OnSelectionChanged">
+            <!-- The card pattern: the default content layer goes, so the cards sit on Mica as in Windows Settings. -->
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+            </NavigationView.Resources>
+            <Frame x:Name="ContentFrame" Navigated="OnNavigated" />
+        </NavigationView>
+    </Grid>
+</Window>

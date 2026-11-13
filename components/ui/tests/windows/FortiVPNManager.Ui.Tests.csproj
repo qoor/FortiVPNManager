@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The UI's sentences and log lines, compiled here from their sources so the tests need no WinUI. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>FortiVPNManager.Ui.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\contract\windows\FortiVPNManager.Contract.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\windows\Text\*.cs" Link="Text\%(Filename)%(Extension)" />
+    <Compile Include="..\..\windows\SettingsPane.cs" Link="SettingsPane.cs" />
+    <Compile Include="..\..\windows\LogLines.cs" Link="LogLines.cs" />
+    <EmbeddedResource Include="..\..\macos\Localizable.xcstrings" LogicalName="Localizable.xcstrings" />
+    <EmbeddedResource Include="..\..\windows\Windows.xcstrings" LogicalName="Windows.xcstrings" />
+  </ItemGroup>
+
+</Project>

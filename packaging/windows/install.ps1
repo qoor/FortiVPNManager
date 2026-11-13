@@ -1,4 +1,5 @@
-# Puts the build that build.ps1 made in Program Files and registers the Helper service. Run it again
+# Puts the build that build.ps1 made in Program Files, registers the Helper service and adds the app
+# to the Start menu, installing the .NET Desktop Runtime 10 the app needs when it is missing. Run it again
 # to reinstall: the service stops, which ends a VPN connection it runs, the files are replaced and
 # the service starts again. Run from an elevated PowerShell. ASCII only.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\install.ps1 [-User <account or SID>]
@@ -121,6 +122,24 @@ if (-not (Test-Path $client)) {
     Note "OpenConnect is not installed ($client is missing); the app cannot connect until it is"
 }
 
+# The app runs on the PC's .NET Desktop Runtime 10. An app cannot install the runtime it needs to
+# start, so this does it, from Microsoft, after checking the installer is signed by Microsoft.
+$desktopRuntime = Join-Path $env:ProgramFiles 'dotnet\shared\Microsoft.WindowsDesktop.App'
+if (-not ((Test-Path $desktopRuntime) -and @(Get-ChildItem $desktopRuntime -Directory | Where-Object { $_.Name -like '10.*' }).Count -gt 0)) {
+    Note 'installing the .NET Desktop Runtime 10 from Microsoft'
+    $installer = Join-Path $env:TEMP 'windowsdesktop-runtime-10-win-x64.exe'
+    Invoke-WebRequest -Uri 'https://aka.ms/dotnet/10.0/windowsdesktop-runtime-win-x64.exe' -OutFile $installer -UseBasicParsing
+    $signature = Get-AuthenticodeSignature $installer
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+        Remove-Item $installer -ErrorAction SilentlyContinue
+        throw "the downloaded .NET installer is not signed by Microsoft ($($signature.Status))"
+    }
+    $setup = Start-Process $installer -ArgumentList '/install', '/quiet', '/norestart' -Wait -PassThru
+    Remove-Item $installer -ErrorAction SilentlyContinue
+    # 3010: installed, a restart completes it.
+    if ($setup.ExitCode -ne 0 -and $setup.ExitCode -ne 3010) { throw ".NET Desktop Runtime setup failed with exit code $($setup.ExitCode)" }
+}
+
 foreach ($leftover in $new, $old) {
     if (Test-Path $leftover) {
         Remove-Item $leftover -Recurse -Force -ErrorAction SilentlyContinue
@@ -220,6 +239,11 @@ if (Test-Path $old) {
     Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path $old) { Note "$old is still in use; the next install removes it" }
 }
+# The app starts from the Start menu; it lives in the notification area once running.
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\FortiVPNManager.lnk'))
+$shortcut.TargetPath = Join-Path $folder 'FortiVPNManager.exe'
+$shortcut.WorkingDirectory = $folder
+$shortcut.Save()
 $started = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; ProviderName = $helperSource; StartTime = $start } -ErrorAction SilentlyContinue |
     Where-Object { $_.Message -like 'helper * running for *' } | Select-Object -First 1
 if ($started) { Note $started.Message } else { Note 'the Helper runs' }
