@@ -71,10 +71,18 @@
 | config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
 | TLS는 rustls에 ring provider 하나와 platform verifier를 쓴다 | OS의 신뢰 저장소를 따른다. aws-lc-rs는 넣지 않는다. HTTPS는 OS의 proxy 설정을 따른다 |
 | Windows의 UI와 OS 연동은 C# WinUI 3로 만든다 | 사용자 결정이다(2026-11-12, 처음에는 WPF). macOS에서 Swift를 고른 이유와 같다(OS 기본 UI). WinUI 3는 Windows에서만 빌드되지만 빌드와 시험을 Windows PC에서 하므로 문제가 없다 |
+| Windows OS 연동은 화면 없는 C# 라이브러리로 두고 WinUI 앱이 가져다 쓴다 | 런타임 연결, Helper 통로, OS 기능을 UI 없이 시험할 수 있다. Helper 통로의 규칙(같은 빌드로 확인된 연결, 다시 시도, 응답 시간 제한)은 macOS의 Swift와 같다. interface는 Windows가 보여 주는 어댑터 이름으로 부르고, 경로·주소·네트워크 변경 이벤트가 모두 같은 이름을 쓴다. 디스플레이 꺼짐, 앱 활성화, 알림은 창이 있어야 받거나 보일 수 있어 UI와 함께 둔다 |
 | Windows 앱도 런타임을 같은 프로세스에서 시작하고 같은 JSON 메시지를 쓴다 | Rust 시작 함수가 익명 pipe 두 개를 만들어 handle 값만 돌려준다. C#은 이를 stream으로 감싸 읽고 쓰므로 둘 사이에 pointer가 오가지 않는다. C# 쪽 메시지 정의는 Swift처럼 Rust가 만든 fixture로 검사한다 |
 | Windows Helper는 Rust만으로 된 Windows 서비스(LocalSystem)다 | 서비스 진입, 연결 통로, 프로세스 처리를 모두 Rust 라이브러리로 할 수 있어 macOS의 Swift 껍데기 같은 OS 쪽 코드가 필요 없다. 서비스 시작 callback은 인자를 읽지 않으므로 unsafe가 필요 없다 |
 | Windows 앱 ↔ Helper는 named pipe 위의 같은 메시지다 | XPC 자리다. 통로는 설치할 때 정한 사용자와 시스템만 열 수 있게 접근 권한을 둔다. 앱은 통로가 시스템 계정 소유인지 확인한 뒤에 비밀번호를 보낸다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 가로채는 일을 막기 위해서다. 연결한 프로그램이 설치본인지는 unsafe 없이 확인할 방법이 없어 확인하지 않는다(§8) |
-| Windows의 route 읽기·쓰기는 PowerShell route cmdlet을 고정 argv로 실행하고 JSON으로 받는다 | macOS의 networksetup처럼 시스템 명령을 쓴다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없고, route API를 직접 부르면 unsafe가 필요하다 |
+| Windows의 route 읽기·쓰기는 PowerShell route cmdlet을 고정 argv로 실행하고 JSON으로 받는다 | macOS의 networksetup처럼 시스템 명령을 쓴다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없고, route API를 직접 부르면 unsafe가 필요하다. 바꿀 값은 stdin의 JSON으로 넘기고, 명령 문장은 고정한다 |
+| Windows 앱 ↔ Helper 통로의 메시지는 앱 안의 Rust ↔ Swift와 같은 틀(4바이트 길이와 UTF-8 JSON)이고, 요청마다 번호를 붙인다 | XPC의 호출과 응답 자리다. 응답은 요청 번호로 짝을 찾고, 이벤트와 출력은 생긴 순서대로 같은 통로로 간다. 빌드 확인과 유휴 시 종료 요청은 다른 빌드 사이에서 오가므로 모양을 바꾸지 않는다. 앱은 빌드 확인에 자기 빌드를 함께 보내고, Helper는 같은 빌드로 확인된 연결의 연결·OTP·예외 route 요청만 처리한다. Helper가 받는 한 메시지는 1 MiB까지고, 예외 route 요청은 연결마다 한 번에 하나만 받는다(앱도 하나씩 보낸다). 앱이 읽지 않아 보낼 메시지가 256개 넘게 쌓인 연결은 앱이 끝난 것처럼 다룬다. 같은 사용자의 다른 프로그램도 연결할 수 있어서, 큰 길이를 보내거나 요청만 쌓아 Helper의 메모리를 다 쓰게 하지 못하게 한다. 그 통로는 앱이 다음에 쓰거나 끝날 때 닫힌다. 막혀 있는 통로를 밖에서 끊는 안전한 방법이 없기 때문이다 |
+| Windows Helper는 유휴 시 종료 요청에 끝나지 않는다고 답한다 | Windows는 스스로 끝난 서비스를 다음 요청 때 다시 띄우지 않는다. 재설치가 서비스를 멈추고 바꾼 뒤 다시 시작하므로, 빌드가 다르면 설치가 끝나지 않은 것이다. 그때 앱은 버전 불일치를 보인다 |
+| 통로를 열 사용자는 Helper 서비스의 실행 인자로 받는다 | 설치 스크립트가 정해 서비스 설정에 넣는다. 서비스 설정은 관리자만 바꿀 수 있다. 사용자 이름은 바뀔 수 있어서 SID로 넣는다. 통로는 시스템 계정이 소유하고, 그 사용자에게는 통로를 새로 만드는 권한을 주지 않는다. 그 권한이 있으면 같은 이름의 통로를 하나 더 열어 앱의 연결을 가로챌 수 있고, 소유자 확인으로도 구분되지 않는다 |
+| Windows Helper의 실행 기록은 시스템 계정의 프로필 폴더(`C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager`)에 둔다 | 시스템과 관리자만 접근할 수 있는 곳이라 권한을 물려받는다. 폴더 권한을 직접 다루면 unsafe가 필요하다. ProgramData는 일반 사용자도 그 안에 폴더를 먼저 만들 수 있어서 쓰지 않는다 |
+| Windows Helper의 watchdog은 프로세스를 sysinfo로 확인한다 | 실행 파일 경로, 시작 시각, 사용자를 unsafe 없이 읽는다. 시작 시각은 초 단위다. pid, 시작 시각, 경로가 모두 같고 Helper와 같은 사용자(시스템 계정)인 프로세스만 기록한 그 프로세스로 본다 |
+| Windows Helper의 로그는 Windows 이벤트 로그에 쓴다 | macOS 통합 로그의 자리다. 서비스가 시작할 때 시스템 권한으로 로그 출처를 스스로 등록하므로 설치 스크립트가 할 일이 없다 |
+| Windows Helper는 예외 route 요청의 대상을 판단 코어의 규칙으로 확인한다 | 앱이 계획할 때 쓰는 규칙과 같아야 하기 때문이다. macOS에서는 Swift가 같은 규칙을 따로 갖고 있다. 판단 코어는 바깥과 통신하지 않으므로 Helper에 넣어도 하는 일이 늘지 않는다 |
 
 ## 4. 구성과 역할
 
@@ -107,7 +115,7 @@ components/
                                 (macos/: Swift 쪽 정의와 XPC 연결 정의, windows/: C# 쪽 정의)
   core/                         판단 코어: 연결 state machine, config.yaml, 예외 규칙 계산, IMAP·Gmail API·OAuth·OTP 메일 형식. I/O 없음
   runtime/                      런타임: 조율과 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화, UI 메시지
-                                (src/macos/, macos/, src/windows/: 각 OS 앱이 런타임을 시작하는 부분)
+                                (src/macos/, macos/, src/windows.rs: 각 OS 앱이 런타임을 시작하는 부분)
   backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 유예 시간, 검증된 버전, 기존 설정 가져오기
   backend-adapter/openconnect/  backend adapter: 두 번의 실행 인자, 출력 해석, 세션 cookie, logout 요청, 검증된 버전
                                 (OS마다 다른 것: 실행 파일 위치, 환경 변수, 터널 어댑터 줄. 지금은 Windows만)
@@ -126,7 +134,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 packaging/windows/              C# solution, 설치 스크립트
 ```
 
-- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, watchdog, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 watchdog뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다.
+- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, watchdog, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 watchdog뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. Windows Helper 서비스는 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
 - Windows의 Helper 서비스는 macOS의 OS 연동 Helper 자리를 따로 두지 않는다. 서비스 진입, 통로, route 정리를 Rust로 할 수 있어서다.
 - 판단 코어와 watchdog은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
 - **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.
@@ -136,7 +144,7 @@ packaging/windows/              C# solution, 설치 스크립트
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
-- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다. 파일을 Program Files에 복사하고, 서비스를 등록하고(부팅 때 시작, 비정상 종료 때 다시 시작), 통로를 열 사용자를 정한다. 이 사용자는 화면에 로그인한 사용자가 기본이고 직접 지정할 수도 있다. 일반 사용자가 설치하면 스크립트가 관리자 계정으로 돌아서, 실행한 계정을 고르면 정작 사용자의 앱이 연결하지 못하기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). 재설치는 서비스 정지 → 교체 → 시작이다.
+- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다. 파일을 Program Files에 복사하고, 서비스를 등록하고(부팅 때 시작, 비정상 종료 때 다시 시작), 통로를 열 사용자를 정한다. 이 사용자는 화면에 로그인한 사용자가 기본이고 직접 지정할 수도 있다. 일반 사용자가 설치하면 스크립트가 관리자 계정으로 돌아서, 실행한 계정을 고르면 정작 사용자의 앱이 연결하지 못하기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). Windows가 꺼질 때 종료 준비 알림을 받은 Helper를 기다려 줄 시간도 서비스 설정에 넣는다. 재설치는 서비스 정지 → 교체 → 시작이다.
 
 ## 5. 동작 원칙
 
@@ -182,7 +190,12 @@ packaging/windows/              C# solution, 설치 스크립트
 ### 5.5 예외 규칙
 사내망에 직접 연결돼 있을 때, VPN이 가져가는 대역 중 지정한 host나 대역을 그 네트워크의 router로 바로 보낸다. VPN을 재연결해도 SSH 같은 TCP 세션이 끊기지 않게 하려는 것이다.
 - **방식**: 주 네트워크 서비스의 additional routes(`networksetup -setadditionalroutes`)를 쓴다. macOS가 서비스 설정에 저장하고 서비스가 켜질 때마다 넣으므로, 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하게 동작한다. 쓰기에는 root가 필요해서 Helper가 실행한다.
-- **Windows 방식**: 주 interface(VPN 어댑터 제외)의 persistent route를 그 gateway로 쓴다. 성질과 규칙은 macOS와 같고, 앱이 쓴 route는 interface GUID 단위로 기억한다. 밖에서 바뀐 것을 알려 주는 알림이 없어 짧은 주기로도 확인한다.
+- **Windows 방식**: 주 interface(VPN 어댑터 제외)의 persistent route를 그 gateway로 쓴다. 성질과 규칙은 macOS와 같고, 앱이 쓴 route는 interface GUID 단위로 기억한다. 밖에서 바뀐 것을 알려 주는 알림이 없어, OS 연동이 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알리고 런타임이 다시 맞춘다.
+  - 주 interface는 하드웨어 Ethernet·Wi-Fi 어댑터 가운데 default route의 metric이 가장 낮은 것이다. VPN 터널 어댑터는 이 종류가 아니어서 빠진다. FortiClient나 Hyper-V의 가상 어댑터는 Ethernet으로 보고되므로 하드웨어 여부로 뺀다. Hyper-V 외부 스위치처럼 가상 어댑터가 실제 연결을 맡은 PC에서는 주 interface가 없다.
+  - 앱에는 interface GUID를 서비스 ID로, interface 이름을 서비스 이름으로 보낸다. route 목록은 그 interface의 persistent route에서 default route를 뺀 것이다. 고정 IP로 설정한 interface는 default route도 persistent 목록에 두기 때문이다.
+  - 쓸 때는 지금 목록과 비교해 빠진 것을 지우고 새 것을 넣는다. persistent 목록과 지금 쓰는 목록 둘 다에 한다.
+  - 앱이 읽은 interface, router, 주소, route가 그대로인지는 쓰기와 같은 PowerShell 실행 안에서 확인한다. 따로 확인하면 PowerShell이 다시 뜨는 1~3초 사이에 DHCP 갱신 등으로 router가 바뀌어도 옛 router로 쓰게 된다.
+  - route 하나를 바꾸는 데 노트북에서 약 0.05초가 걸린다(2026-11-13). 쓰기의 제한 시간은 기본 20초에 바꿀 route마다 0.2초를 더해, 런타임이 한 번에 바꾸는 최대치(지울 것 100개와 넣을 것 100개)도 60초 안에 들게 한다. 앱은 route 읽기·쓰기의 답을 90초 기다린다. 앱이 먼저 포기하면 Helper가 아직 처리 중인 그 요청 때문에 다음 route 요청을 거절하기 때문이다.
 - **source of truth는 config.yaml**이다. 포맷한 뒤에도 config.yaml만 복원하면 그대로 적용된다.
 - **적용 대역(`routes.networks`)**: 이 Mac의 IPv4 주소가 목록의 대역 안에 있을 때만 적용한다. 밖에서는 앱이 넣은 route를 지워서 모든 트래픽이 VPN을 탄다. 이 목록에는 앱이 스스로 추가하지 않는다.
 - **동기화 원칙**
@@ -357,6 +370,11 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - Windows와 openconnect를 붙이기 전에 따로 했다(사용자 결정). 동작은 바뀌지 않는다.
   - Helper entry에서 앱 요청 처리, 실행 기록, 남은 프로세스 정리를 macOS의 시작 부분과 나눴다. 다른 OS의 Helper가 이 부분을 그대로 쓰게 하려는 것이다. OS마다 다른 것(프로세스 확인과 종료, 실행 기록 폴더 권한)은 backend adapter처럼 OS별 시작 부분이 넘겨준다. 그래서 Helper entry에는 OS 전용 코드가 없다. 어떤 backend adapter를 쓸지도 OS별 시작 부분이 정한다.
   - watchdog은 OS마다 다른 프로세스 처리만 따로 둔다. 실행 명세의 설정 파일은 없어도 되게 했다. 모든 것을 인자로 받는 VPN client도 있기 때문이다. VPN client 값 검사 가운데 client끼리 같은 것은 한곳에 모았다.
+- **2026-11-12 Windows Helper 서비스**
+  - macOS에서 Swift가 하던 일(앱 연결 받기, 버전 확인, route 정리, 예외 route)을 Rust 서비스가 직접 한다. 공통 Helper entry는 그대로 쓴다.
+  - 공통 Helper entry의 로그와 설명에서 SIGTERM을 "종료 요청"으로 바꿨다. Windows의 서비스 정지도 같은 요청으로 들어오기 때문이다. 실행 파일 교체와 유휴 시 종료는 macOS만 보내므로 그 문구(launchd)는 그대로 둔다.
+  - 프로세스 번호는 부호 없는 수로 다룬다. Windows의 pid가 그렇고, macOS의 pid도 양수만 쓴다. pidfile에 적히는 값은 같다.
+  - Windows가 꺼질 때 서비스에 오는 종료 알림은 몇 초만 기다려 준다(노트북은 5초). Helper가 openconnect를 끝낸 뒤 보내는 logout이 잘릴 수 있어서, 다른 서비스와 네트워크가 내려가기 전에 오는 종료 준비(preshutdown) 알림을 받아 실행을 끝낸다.
 - **2026-11-13 앱 아이콘**: 사용자 결정이다. 메뉴바 아이콘과 같은 방패 계열로 하고, 시안 캔버스에서 모양·색·Windows 배경판 여부를 골랐다.
   - 처음 시안의 화려한 배경색, 두 색을 섞은 그라데이션, 반쪽만 밝은 방패는 macOS 27 기본 앱 옆에서 이질감이 커서 버렸다. 기본 앱은 선명한 시스템 색 하나에 밝기만 살짝 바꾸고, 판의 70% 안팎을 채우는 크고 굵은 그림에 그림자를 거의 두지 않는다.
 - **2026-11-14 VPN client는 watchdog만 다룸**: 사용자 결정이다. watchdog이 VPN client의 실행과 수명을 맡는데, Helper entry가 backend adapter를 직접 부르는 것은 잘못이라고 사용자가 정했다. Windows 작업을 올리기 전에 따로 했고, 앱이 보는 동작은 바뀌지 않는다.
@@ -422,6 +440,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - 회사 보안 프로그램이 서비스가 실행하는 PowerShell을 막으면 Windows 예외 규칙과 게이트웨이 host route 정리가 동작하지 않는다.
 - Windows에서 openconnect를 늘 강제로 끝내므로, Helper가 죽어 세션 cookie를 잃으면 그 세션은 idle timeout(50분)까지 서버에 남는다. 지금은 같은 계정의 동시 세션이 허용돼 다음 연결에 지장이 없다. 회사가 동시 접속을 막으면 다시 봐야 한다.
 - logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
+- 같은 사용자의 다른 프로그램이 Helper 서비스보다 먼저 같은 이름의 통로를 만들면 Helper는 통로를 열지 못하고 서비스가 시작에 실패한다. 앱은 그 통로의 소유자가 시스템 계정이 아니어서 비밀번호를 보내지 않는다.
 - 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
 - 아직 확인하지 않은 Windows 동작: route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지, 살아 있는 세션 cookie로 세션 정보를 물었을 때 접근 거부(HTTP 403)가 나온 이유.
 - 추후 과제
