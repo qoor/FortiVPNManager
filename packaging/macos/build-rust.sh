@@ -4,7 +4,7 @@
 set -eu
 package=$1
 lib="lib$(echo "$package" | tr - _).a"
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 # Xcode does not run scripts with the login shell's PATH.
 export PATH="$HOME/.cargo/bin:$PATH"
 # Under DerivedData rather than ./target: `make clean` removes it, and Xcode builds do not wait on

@@ -9,7 +9,7 @@ set -u
 built=$1 installed=$2 app_id=$3
 name=${installed##*/}
 name=${name%.app}
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 log=$root/.build/install.log
 done_file=$root/.build/install.done
 previous=$root/.build/previous.app

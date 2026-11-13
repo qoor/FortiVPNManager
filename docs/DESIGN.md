@@ -120,7 +120,7 @@ components/
   os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
   os-integration/windows/       OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달, Helper 통로
   os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
-packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보
+packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보, 빌드·설치 스크립트
 packaging/windows/              C# solution, 설치 스크립트
 ```
 

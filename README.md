@@ -52,7 +52,7 @@ The client is embedded in the app at build time, so users only need to click **C
 1. In a Google Cloud project, enable the Gmail API and add the `https://www.googleapis.com/auth/gmail.modify` scope
    to the OAuth consent screen (*Internal* if it's only for your organization).
 2. Create an OAuth client of type **Desktop app** and download its JSON.
-3. Copy the downloaded JSON to `packaging/macos/Config/GoogleOAuthClient.json`. This file is listed in `.gitignore`,
+3. Copy the downloaded JSON to `packaging/GoogleOAuthClient.json`. This file is listed in `.gitignore`,
    so it never gets committed (it contains the client secret).
 
 Without the file, the app builds without a built-in client, and you can import the JSON yourself under

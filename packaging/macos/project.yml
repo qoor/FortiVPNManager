@@ -61,8 +61,8 @@ targets:
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # The Rust static library is built for Apple Silicon only.
         ARCHS: arm64
-        # The header and module map of the Rust start function; scripts/build-rust.sh puts the
-        # library in BUILT_PRODUCTS_DIR.
+        # The header and module map of the Rust start function; build-rust.sh puts the library in
+        # BUILT_PRODUCTS_DIR.
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/runtime/macos/include
         LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
         # cargo reads the source tree and writes under DerivedData, and the OAuth-client script below
@@ -71,22 +71,22 @@ targets:
     preBuildScripts:
       - name: Build Rust runtime
         basedOnDependencyAnalysis: false
-        script: '"$SRCROOT/../../scripts/build-rust.sh" fvm-runtime'
+        script: '"$SRCROOT/build-rust.sh" fvm-runtime'
         outputFiles:
           - $(BUILT_PRODUCTS_DIR)/libfvm_runtime.a
     postBuildScripts:
       - name: Embed Google OAuth client
         basedOnDependencyAnalysis: false
         script: |
-          # Copies the gitignored Desktop-app OAuth client (packaging/macos/Config/GoogleOAuthClient.json) into the
-          # app bundle. Without it the app still builds; users then import a client JSON in Settings.
-          src="${SRCROOT}/Config/GoogleOAuthClient.json"
+          # Copies the gitignored Desktop-app OAuth client (packaging/GoogleOAuthClient.json) into the app
+          # bundle. Without it the app still builds; users then import a client JSON in Settings.
+          src="${SRCROOT}/../GoogleOAuthClient.json"
           dst="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleOAuthClient.json"
           if [ -f "$src" ]; then
             install -m 644 "$src" "$dst"
           else
             rm -f "$dst"
-            echo "warning: packaging/macos/Config/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
+            echo "warning: packaging/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
           fi
     dependencies:
       - target: FortiVPNManagerHelper
@@ -119,8 +119,8 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
         # The Rust static library is built for Apple Silicon only.
         ARCHS: arm64
-        # The header and module map of the Rust start function; scripts/build-rust.sh puts the
-        # library in BUILT_PRODUCTS_DIR.
+        # The header and module map of the Rust start function; build-rust.sh puts the library in
+        # BUILT_PRODUCTS_DIR.
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/helper-entry/macos/include
         LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
         # cargo reads the source tree and writes under DerivedData, outside declared inputs and outputs.
@@ -128,7 +128,7 @@ targets:
     preBuildScripts:
       - name: Build Rust Helper entry
         basedOnDependencyAnalysis: false
-        script: '"$SRCROOT/../../scripts/build-rust.sh" fvm-helper-entry-macos'
+        script: '"$SRCROOT/build-rust.sh" fvm-helper-entry-macos'
         outputFiles:
           - $(BUILT_PRODUCTS_DIR)/libfvm_helper_entry_macos.a
 

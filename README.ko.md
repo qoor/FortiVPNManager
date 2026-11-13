@@ -52,7 +52,7 @@ OTP 메일을 가장 빠르게 감지하는 Gmail API 방식은 Google Cloud의 
 1. Google Cloud 프로젝트에서 Gmail API를 사용 설정하고, OAuth 동의 화면(조직 내부용이면 *Internal*)에
    `https://www.googleapis.com/auth/gmail.modify` 범위를 추가합니다.
 2. **데스크톱 앱** 유형의 OAuth 클라이언트를 만들고 JSON을 내려받습니다.
-3. 내려받은 JSON을 `packaging/macos/Config/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
+3. 내려받은 JSON을 `packaging/GoogleOAuthClient.json`으로 복사합니다. 이 파일은 `.gitignore`에 포함되어 있어
    저장소에 올라가지 않습니다(client secret 포함).
 
 파일이 없으면 내장 클라이언트 없이 빌드되며, 설정창 계정 pane의 **OAuth 클라이언트 (고급)**에서 JSON을 직접

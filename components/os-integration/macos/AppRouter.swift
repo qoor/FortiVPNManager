@@ -78,7 +78,7 @@ final class AppRouter {
 
 extension AppInternal.AppFacts {
     /// The running app's facts. The built-in OAuth client is put in the bundle at build time
-    /// (packaging/macos/Config/GoogleOAuthClient.json, gitignored).
+    /// (packaging/GoogleOAuthClient.json, gitignored).
     static func current(bundle: Bundle = .main) -> Self {
         let client = bundle.url(forResource: "GoogleOAuthClient", withExtension: "json")
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
