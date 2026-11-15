@@ -36,7 +36,7 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 ## 버전과 릴리스
 
 - **버전**: `연도.기능.수정`(예: `26.0.0`). 연도는 릴리스하는 해의 끝 두 자리이고, 모든 플랫폼이 저장소 맨 위 `VERSION` 파일의 번호를 씁니다.
-- **릴리스**: `VERSION`을 고쳐 commit한 뒤 `v<버전>` tag를 push하면 GitHub Release에 Windows 설치 패키지가 올라갑니다.
+- **릴리스**: `VERSION`을 고쳐 commit한 뒤 `v<버전>` tag를 push하면 GitHub Release에 Windows 설치 패키지가 올라갑니다. 그 뒤 Mac에서 `scripts/release-pkg.sh`로 macOS 설치 패키지를 더합니다.
 
 ## macOS
 
@@ -71,8 +71,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make build` | Debug 빌드 (`.build/xcode`) |
 | `make verify` | 서명·번들 구성 검사 |
 | `make install` | Release 빌드 설치 및 실행 (`/Applications`) |
+| `make pkg` | Release 빌드로 설치 패키지(`.build/FortiVPNManager-<버전>.pkg`) 생성 |
+| `scripts/release-pkg.sh` | tag의 commit에서 설치 패키지를 만들어 같은 버전의 GitHub Release에 추가 |
 | `make logs` | 앱·Helper 로그 실시간 보기 |
 
+- **설치**: GitHub Release의 pkg 실행. 서명하지 않은 pkg라 처음에는 macOS가 막으므로, 시스템 설정 > 개인정보 보호 및 보안에서 "그래도 열기"를 누른 뒤 설치합니다. openfortivpn은 Homebrew로 따로 설치합니다.
 - **Helper**: `/Applications`에 설치된 앱에서만 등록, 첫 실행 시 시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 승인 필요
 
 ### 파일 위치

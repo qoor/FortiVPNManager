@@ -3,7 +3,8 @@ name: Release
 # A version tag (v…) publishes the Windows installer as a public GitHub Release, built with the
 # Google OAuth client from the repository secret; a manual run makes a draft release instead, to try
 # the result before a tag. A tag is v and the version in VERSION; any other stops before the build.
-# macOS is not released: distributing it needs a paid Apple Developer ID.
+# The macOS installer package is added to the same Release from a Mac (scripts/release-pkg.sh), as
+# the app is signed with that Mac's certificate.
 on:
   push:
     tags: ['v*']

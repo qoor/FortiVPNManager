@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The macOS installer: the app in /Applications, for Apple Silicon and macOS 15 or later, as the app is
+  built (docs/DESIGN.md §5.8). build-pkg.sh puts the app's version in place of the version
+  placeholder (an at sign, VERSION, an at sign).
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>FortiVPNManager</title>
+    <welcome file="Welcome.html" mime-type="text/html"/>
+    <options customize="never" hostArchitectures="arm64"/>
+    <!-- The system domain only: the Helper registers from /Applications alone. -->
+    <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="15.0"/>
+        </allowed-os-versions>
+    </volume-check>
+    <!-- A lower version is refused; the same version installs again. -->
+    <installation-check script="installationCheck()"/>
+    <script><![CDATA[
+function installationCheck() {
+    var installed = system.files.bundleAtPath('/Applications/FortiVPNManager.app');
+    if (installed && installed.CFBundleShortVersionString &&
+        system.compareVersions(installed.CFBundleShortVersionString, '@VERSION@') > 0) {
+        my.result.type = 'Fatal';
+        my.result.title = system.localizedString('NEWER_INSTALLED_TITLE');
+        my.result.message = system.localizedString('NEWER_INSTALLED');
+        return false;
+    }
+    return true;
+}
+]]></script>
+    <choices-outline>
+        <line choice="app"/>
+    </choices-outline>
+    <choice id="app" title="FortiVPNManager" visible="false">
+        <pkg-ref id="com.qoor.FortiVPNManager.pkg"/>
+    </choice>
+    <pkg-ref id="com.qoor.FortiVPNManager.pkg" version="@VERSION@">FortiVPNManager.pkg</pkg-ref>
+    <!-- Installer asks a running app to quit before it installs; preinstall ends any copy left. -->
+    <pkg-ref id="com.qoor.FortiVPNManager.pkg">
+        <must-close>
+            <app id="com.qoor.FortiVPNManager"/>
+        </must-close>
+    </pkg-ref>
+</installer-gui-script>

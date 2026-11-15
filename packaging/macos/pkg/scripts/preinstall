@@ -1,0 +1,20 @@
+#!/bin/sh
+# Run by Installer as root before it replaces the app. In the Installer window the user was asked to
+# quit the app (must-close in Distribution.xml); a copy still running, as after a command-line install,
+# is ended now, in every user's session. Ending it ends the VPN run as a force quit does: the Helper
+# stops the client and restores the routes. The old Helper exits by itself once its binary is replaced
+# and it is idle. The app is not opened again afterwards (docs/DESIGN.md §5.8).
+app=/Applications/FortiVPNManager.app/Contents/MacOS/FortiVPNManager
+
+running() {
+    pgrep -f "^$app( |\$)"
+}
+
+pids=$(running) || exit 0
+kill -TERM $pids 2>/dev/null
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    running >/dev/null || exit 0
+    sleep 1
+done
+pids=$(running) && kill -KILL $pids 2>/dev/null
+exit 0

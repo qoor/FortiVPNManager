@@ -95,6 +95,7 @@
 | WinUI 기본 컨트롤의 문구(입력 칸의 [복사] 메뉴 같은 것)는 한국어와 영어만 담는다 | 사용자 결정이다(2026-11-15). WinUI는 그 문구를 86개 언어로 언어마다 폴더 하나씩 가져와, 설치 파일 279개 가운데 172개가 이것이었다(약 3.4 MB). Windows App SDK에는 이를 줄이는 설정이 없어, 앱 프로젝트가 publish할 때 한국어(ko-KR)와 영어(en-US) 폴더만 남긴다. 앱 자신의 문구도 두 언어뿐이다. 대가로 다른 언어의 Windows에서는 WinUI 문구도 앱 문구처럼 영어로 나온다 |
 | OpenConnect 9.21은 설치 패키지에 넣고, Helper는 그 사본만 실행한다 | 사용자 결정이다(2026-11-13). 패키지 하나로 설치가 끝나게 한다. 앱 폴더 아래에 두므로 관리자만 바꿀 수 있다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. 전에는 사용자가 OpenConnect를 기본 폴더에 따로 설치했다(§7.1) |
 | 앱 버전은 `연도.기능.수정`이고, 모든 플랫폼이 같은 번호를 쓴다 | 사용자 결정이다(2026-11-15). macOS 자체와 Safari·Xcode의 모양을 따르되, 연도 자리는 달력 연도다. 연도가 보이면서 기능 추가와 버그 수정이 구분된다. SemVer와 순수 CalVer(연.월.순번)를 버린 이유와 pre-release 꼬리표를 쓰지 않는 이유는 §7.1에 있다. 규칙은 §4.4에 있다 |
+| macOS 설치 패키지는 서명하지 않은 pkg 하나다 | 사용자 결정이다(2026-11-15). pkg를 만드는 데는 유료 계정이 필요 없지만, pkg 서명(Developer ID Installer 인증서)과 Apple 공증은 유료 계정에서만 된다. 그래서 받은 사람은 처음 열 때 macOS의 차단을 "그래도 열기"로 직접 풀어야 한다. 안의 앱은 지금처럼 Personal Team 인증서로 서명한다. 앱 서명 인증서가 이 Mac의 Keychain에만 있어 CI가 아니라 Mac에서 만든다 |
 
 ## 4. 구성과 역할
 
@@ -164,6 +165,11 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
   - `make build`가 macOS 앱의 버전(정보 창에 보이는 번호)으로, Windows 빌드 스크립트가 MSI의 버전과 파일 이름, 앱 실행 파일의 파일 버전으로 넣는다.
   - 릴리스는 파일을 고쳐 commit한 뒤 `v<버전>` tag를 push한다. tag가 파일의 버전과 다르면 Release가 빌드 전에 멈춘다.
   - 빌드 번호(앱과 Helper가 같은 빌드인지 확인하는 번호, §4.2)는 이와 따로 빌드마다 정한다.
+- **macOS 설치 패키지**: `make pkg`가 Release 빌드로 `.build/FortiVPNManager-<버전>.pkg`를 만든다(§5.8). 버전은 앱의 버전을 그대로 쓴다.
+  - 앱을 담는 component 패키지와, 그것을 감싸 설치 조건, 첫 화면 안내, 앱 닫기를 맡는 product 패키지 두 겹이다. 설정은 `packaging/macos/pkg`에 있다.
+  - 패키지에는 파일의 확장 속성을 넣지 않는다. 넣으면 내려받은 Google OAuth client 파일의 quarantine 표시까지 설치된 앱에 붙는다. macOS가 늘 붙이는 `com.apple.provenance`만 남는다.
+  - 릴리스는 tag의 Release workflow가 Windows MSI를 올린 뒤, 그 tag의 commit에서 `scripts/release-pkg.sh`를 실행한다. 스크립트는 수정한 파일이 없고 지금 commit이 `v<버전>` tag이며 Google OAuth client 파일이 있는지 확인한 뒤, pkg를 만들어 같은 Release에 올리고 SHA-256 목록에 더한다.
+  - 개발용 `make install`은 그대로 쓴다. VPN이 돌아오는지 기다리고, 안 돌아오면 이전 앱으로 되돌린다.
 - **Windows**
   - x64용으로 빌드한다. Rust 부분(Helper, 런타임 DLL, 테스트 실행 파일)은 Mac에서 cargo-xwin으로 MSVC target용으로 교차 빌드하고, 사용자의 Windows PC에서는 cargo를 실행하지 않는다. PC는 앱과 MSI를 빌드하고 테스트를 실행한다(§7.1). 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
   - 설치 패키지(MSI)는 Mac에서 명령 하나(`scripts/msi-windows.sh <PC의 폴더>`)로 만든다. 이 명령은 PC의 저장소 사본을 맞추고, Helper와 런타임 DLL을 release로 교차 빌드해 PC에 복사한 뒤, PC에서 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. 빌드 스크립트는 빌드 번호와 미리 빌드한 두 파일을 받아 앱을 release로 빌드하고 MSI를 만들며, cargo를 실행하지 않는다. CI(`.github/workflows/msi.yml`)는 Windows runner에서 두 파일을 직접 빌드해 같은 방식으로 빌드 스크립트를 부르고, MSI와 pdb를 workflow artifact로 올린다. 빌드 번호는 로컬 빌드처럼 한국 시각으로 정한다. runner의 시계는 UTC라서 그대로 쓰면 나중 빌드의 번호가 더 작아질 수 있다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
@@ -288,6 +294,15 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
     - 서비스가 설치돼 있지 않거나, 사용 안 함이거나, 시작할 권한이 없으면 곧바로 띄운다. 첫 줄은 "Helper 실행을 실패하여 FortiVPNManager를 종료합니다."이고, 그 아래에 이유와 "FortiVPNManager를 다시 설치하거나 관리자에게 문의하세요."를 둔다.
     - 다시 한 시작도 실패하면 첫 줄은 "Helper 시작 도중 오류가 발생하였습니다. FortiVPNManager를 종료합니다. (시도 2/2회)"이고, 그 아래에 이유("Helper가 제때 시작되지 않았습니다" 또는 "Helper가 시작 중 오류로 멈췄습니다")와 같은 안내를 둔다.
   - macOS와 다른 이유: macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 한다. Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다.
+
+### 5.8 macOS 설치 패키지
+사용자 결정이다(2026-11-15). Windows MSI(§5.7)와 같은 결과가 나오게 한다.
+- **설치**: Apple Silicon, macOS 15 이상. 앱은 `/Applications`에만 넣고 위치를 묻지 않는다. Helper는 그 자리의 앱에서만 등록되기 때문이다. 같은 앱이 다른 곳(빌드 폴더 등)에 있어도 그쪽을 바꾸지 않는다. macOS 설치 프로그램은 기본으로 이미 있는 같은 앱을 찾아 그 자리를 바꾸므로 이를 끈다.
+- **설치 화면**: 첫 화면에 설치하는 동안 VPN 연결이 끊기고 앱을 다시 열 때까지 연결되지 않는다는 것과, Homebrew openfortivpn이 필요하다는 것을 알린다. license와 구성 요소 고르기 화면은 없다. 언어는 macOS 언어를 따라 한국어, 그 밖에는 영어다.
+- **처음 열기**: pkg에 서명이 없어 내려받은 pkg를 열면 macOS가 막는다. 시스템 설정 > 개인정보 보호 및 보안의 "그래도 열기"로 연다. 설치 프로그램이 넣은 앱에는 quarantine 표시가 붙지 않으므로 앱을 열 때는 막히지 않을 것으로 본다(확인 전, §9).
+- **업그레이드**: 새 pkg가 설치된 앱을 바꾼다. 더 낮은 버전은 설치하지 않는다(설치 확인 단계에서 이유를 보이고 멈춘다). 같은 버전은 다시 설치할 수 있다.
+- **실행 중인 앱**: 설치 화면은 설치 전에 앱을 닫으라고 하고, 사용자가 동의하면 설치 프로그램이 앱에 종료를 요청한다. 명령줄 설치처럼 그래도 남아 있는 사본은 설치 직전 스크립트가 모든 사용자 세션에서 끝낸다(종료 신호, 10초 뒤 강제 종료). 앱이 끝나면 Helper가 터널을 정상 종료한다(§4.2). 이전 Helper는 실행 파일이 바뀐 것을 알고 유휴 상태에서 스스로 끝난다. 설치 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다.
+- **넣지 않는 것**: openfortivpn은 지금처럼 사용자가 Homebrew로 설치한다. macOS pkg에는 제거 기능이 없어 제거는 앱을 지우는 것이다.
 
 ## 6. 확인된 외부 제약
 구현 전에 소스를 읽거나 이 Mac에서 직접 확인한 사실이다. 바꾸려면 다시 확인해야 한다.
@@ -468,7 +483,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
 - **2026-11-15 CI와 Release**: 사용자 결정이다(§4.4).
   - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
-  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 배포에 유료 Apple Developer ID가 필요해 Release에 넣지 않는다. tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
+  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 처음에 배포에 유료 Apple Developer ID가 필요하다고 보고 Release에 넣지 않았다가, 서명하지 않은 pkg를 Mac에서 올리기로 했다(아래 macOS 설치 패키지). tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
   - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
 - **2026-11-15 Windows 앱 종료 중 다시 실행**: 사용자 결정이다(SPEC F-WN).
   - 앱은 runtime이 연결을 끝낸 뒤 종료를 승인할 때까지(최대 12초) 떠 있다. 그동안 다시 실행하면 새 사본은 아직 키를 가진 이전 사본을 실행 중인 앱으로 보고 시작을 넘긴 뒤 끝났다. 이전 사본은 설정창을 띄웠다가 곧 종료와 함께 사라져, 다시 실행한 것이 없어졌다(notebook에서 사용자가 확인).
@@ -480,6 +495,11 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 연도 자리는 달력 연도이고, 첫 버전은 26.0.0이다(사용자 결정). 처음에는 Apple처럼 그때의 macOS 번호(27)로 정했다가 바꿨다. 그 전의 MSI 버전(26.11.x)이 26.0.0보다 높아, 그 개발 빌드가 깔린 PC는 한 번 제거한 뒤 설치해야 했다.
   - pre-release 꼬리표는 쓰지 않는다. macOS의 버전 칸과 MSI 버전 칸이 숫자 세 자리만 받아, 꼬리표만 다른 빌드가 같은 버전이 된다.
   - 같은 버전 재설치를 허용했다. 버전이 릴리스 때만 바뀌므로 그 사이 개발 빌드끼리 서로를 바꿔 설치할 수 있어야 한다. 빌드마다 product code를 새로 정하므로, 같은 버전의 다른 빌드는 업그레이드처럼 설치된 것을 바꾼다.
+- **2026-11-15 macOS 설치 패키지**: 사용자 결정이다(§3.2, §4.4, §5.8). 실제 설치 시험은 사용자가 따로 한다.
+  - 전에는 macOS 앱을 `make install`로만 설치했고 Release에 넣지 않았다. 유료 계정 없이도 pkg는 만들 수 있고, 서명이 없어 생기는 차단은 "그래도 열기"로 풀 수 있다. Windows의 SmartScreen 경고보다 한 단계 번거롭다.
+  - 설치 뒤 앱을 다시 열지 않는다. Windows MSI와 같게 했다. 대안은 설치 전에 실행 중이던 앱만 다시 여는 것이었다.
+  - 앱 닫기는 macOS 설치 프로그램의 기능(닫아야 할 앱 목록)을 쓰고, 명령줄 설치에는 설치 직전 스크립트가 남은 사본을 끝낸다. Windows는 종료 요청 뒤 남은 사본을 끝내는데, 같은 결과다.
+  - 앱을 복사할 때 ditto의 확장 속성 제외 옵션으로는 Google OAuth client 파일의 quarantine 표시가 남았다(복제된 파일의 속성). 복사한 뒤 속성을 지운다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -550,6 +570,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - 아직 확인하지 않은 Windows 동작
   - route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지. 소스상으로는 스크립트가 끝까지 돈다. 2026-11-13 확인에서는 5초 안에 끝나 제한을 넘기지 않았다.
   - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 예외 route와 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
+- 아직 확인하지 않은 macOS 설치 패키지 동작(§5.8)
+  - 실제 설치 전체: 설치 화면, 앱 닫기, 낮은 버전 거부, 같은 버전 재설치, 명령줄 설치. pkg를 만들고 내용(설치 위치, 버전, 설치 조건, 위치 고정, 속성)만 확인했다.
+  - Personal Team 개발용 서명으로 다른 Mac에서도 Helper가 등록되고 승인되는지. 이 Mac에서만 확인했다.
+  - Personal Team 인증서가 만료된 뒤에도 이미 설치된 앱과 Helper가 계속 동작하는지.
 - 추후 과제
   - Linux 앱(Rust + QML)과 서비스
   - macOS와 Linux의 openconnect: 실행 파일 위치, 환경 변수, 터널 어댑터 줄, 정상 종료 요청(SIGTERM)과 그 뒤의 logout 규칙 확인
@@ -568,6 +592,8 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다.
 9. 보안: `ps`와 로그에 비밀값이 없고, 렌더링된 openfortivpn 설정 파일은 0600이며 종료 후 삭제된다. config.yaml과 state.json은 0600이다. `make verify`가 통과한다.
 10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝낸다. 앱이 곧바로 재연결을 시작하고, 새 Helper가 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그를 남긴다. 남아 있던 openfortivpn과 pppd가 사라지고 새 터널이 올라온다.
+11. pkg 설치: 내려받은 pkg를 열면 막히고, "그래도 열기"로 열린다. 한국어 macOS에서는 한국어, 그 밖에는 영어 화면이 나온다. 앱이 `/Applications`에 들어가고, 빌드 폴더에 같은 앱이 있어도 그쪽은 바뀌지 않는다. 설치된 앱에는 quarantine 표시가 없다.
+12. pkg 업그레이드: 연결된 상태에서 새 pkg를 설치하면 앱을 닫으라는 안내가 나오고, 동의하면 앱이 닫혀 VPN이 끊긴 뒤 설치된다. 설치 뒤 앱을 열면 새 Helper로 연결된다. 같은 버전은 다시 설치되고, 더 낮은 버전은 이유를 보이고 멈춘다. 명령줄 설치(`sudo installer -pkg … -target /`)에서도 실행 중인 앱이 끝난 뒤 설치된다.
 
 **Windows** (위 시나리오 중 OS와 무관한 4·6·7·9는 그대로 하고, 다음을 더한다)
 1. Mac의 config.yaml을 복사한 첫 실행: 비밀번호와 Gmail 인증만 넣으면 연결된다. `vpn.trusted_cert_pins`가 비어 있으면 거부 1회 뒤 즉시 재실행으로 연결되고 값이 저장된다.

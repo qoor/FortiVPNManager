@@ -36,7 +36,7 @@ Without the file, import the JSON in Settings, or use the app password (IMAP) me
 ## Versions and releases
 
 - **Version**: `year.feature.fix` (e.g. `26.0.0`). The year is the last two digits of the release's calendar year, and every platform takes the number in `VERSION` at the repository root.
-- **Release**: change `VERSION`, commit, and push a `v<version>` tag; the Windows installer goes up as a GitHub Release.
+- **Release**: change `VERSION`, commit, and push a `v<version>` tag; the Windows installer goes up as a GitHub Release. Then add the macOS installer package from a Mac with `scripts/release-pkg.sh`.
 
 ## macOS
 
@@ -71,8 +71,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make build` | Debug build (`.build/xcode`) |
 | `make verify` | Signing and bundle layout check |
 | `make install` | Release build, installed and launched (`/Applications`) |
+| `make pkg` | Installer package (`.build/FortiVPNManager-<version>.pkg`) from a Release build |
+| `scripts/release-pkg.sh` | On the tagged commit, builds the installer package and adds it to that version's GitHub Release |
 | `make logs` | Live app and Helper logs |
 
+- **Install**: run the pkg from a GitHub Release. The pkg is unsigned, so macOS blocks it at first; click "Open Anyway" in System Settings > Privacy & Security, then install. Install openfortivpn separately with Homebrew.
 - **Helper**: registered only from an app installed in `/Applications`; approve it on first launch in System Settings > General > Login Items & Extensions
 
 ### File locations

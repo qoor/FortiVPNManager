@@ -17,7 +17,7 @@ SUBSYSTEM    := com.qoor.FortiVPNManager
 # rustup's cargo, which is not on the default PATH (packaging/macos/build-rust.sh uses the same one).
 CARGO        ?= $(HOME)/.cargo/bin/cargo
 
-.PHONY: local-config gen build release test verify install run logs btm clean
+.PHONY: local-config gen build release test verify install pkg run logs btm clean
 
 ## Create packaging/macos/Config/Local.xcconfig with DEVELOPMENT_TEAM from the Apple Development certificate.
 local-config:
@@ -60,6 +60,10 @@ verify:
 ## Install a Release build into /Applications (the only copy allowed to register the helper).
 install: release
 	packaging/macos/install-app.sh "$(DERIVED)/Build/Products/Release/FortiVPNManager.app" "$(INSTALLED)" "$(APP_ID)"
+
+## Build the installer package .build/FortiVPNManager-<version>.pkg from a Release build.
+pkg: release
+	packaging/macos/build-pkg.sh "$(DERIVED)/Build/Products/Release/FortiVPNManager.app" .build
 
 run:
 	open "$(APP)"
