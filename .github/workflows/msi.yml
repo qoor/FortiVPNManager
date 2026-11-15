@@ -1,0 +1,39 @@
+name: MSI
+
+# Builds the Windows installer as packaging/windows/build.ps1 describes and uploads it with its
+# symbols as the artifact "msi". CI and the release workflow call it.
+on:
+  workflow_call:
+
+jobs:
+  msi:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup update --no-self-update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      # Korean time, like local builds: the runner's clock is UTC, and a later build must not get a
+      # smaller number.
+      - id: build
+        run: |
+          $now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'Asia/Seoul')
+          "number=$($now.ToString('yyyyMMddHHmmss'))" >> $env:GITHUB_OUTPUT
+      - run: cargo build --release --package fvm-helper-entry-windows
+        env:
+          FVM_BUILD: ${{ steps.build.outputs.number }}
+      - run: cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
+      - run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+          -Build ${{ steps.build.outputs.number }} -RustOutput target\release
+      - uses: actions/upload-artifact@v5
+        with:
+          name: msi
+          path: |
+            .build/windows/FortiVPNManager-*.msi
+            .build/windows/FortiVPNManager-*.pdb
+          include-hidden-files: true
+          if-no-files-found: error

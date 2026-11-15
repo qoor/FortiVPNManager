@@ -56,6 +56,10 @@ jobs:
       - run: dotnet build packaging/windows/FortiVPNManager.slnx -c Release
       - run: dotnet test packaging/windows/FortiVPNManager.slnx -c Release --no-build
 
+  msi:
+    name: MSI
+    uses: ./.github/workflows/msi.yml
+
   swift-macos:
     name: Swift (macOS)
     runs-on: macos-26
