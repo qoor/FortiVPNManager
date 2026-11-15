@@ -31,7 +31,7 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 2. **데스크톱 앱** 유형의 OAuth 클라이언트를 만들고 JSON을 내려받습니다.
 3. JSON을 `packaging/GoogleOAuthClient.json`으로 복사합니다(저장소 제외 파일).
 
-파일이 없으면 설정창에서 JSON을 직접 가져오거나 앱 비밀번호(IMAP) 방식을 씁니다.
+파일이 없으면 설정창에서 JSON을 직접 가져오거나 앱 비밀번호(IMAP) 방식을 씁니다. GitHub Release의 MSI에는 저장소 비밀값(`GOOGLE_OAUTH_CLIENT_JSON`)의 클라이언트가 내장됩니다.
 
 ## macOS
 
@@ -95,7 +95,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더>` | 미리 빌드한 Rust 결과물로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
 | `scripts/msi-windows.sh <폴더>` | Mac에서 Rust를 빌드하고 Windows PC(ssh)에서 설치 패키지 생성 |
 
-- **설치**: 생성된 MSI 실행
+- **설치**: GitHub Release 또는 직접 생성한 MSI 실행
 
 ### 파일 위치
 

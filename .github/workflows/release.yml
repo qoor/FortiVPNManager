@@ -1,0 +1,42 @@
+name: Release
+
+# A version tag (v…) publishes the Windows installer as a public GitHub Release, built with the
+# Google OAuth client from the repository secret; a manual run makes a draft release instead, to try
+# the result before a tag. macOS is not released: distributing it needs a paid Apple Developer ID.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  msi:
+    name: MSI
+    uses: ./.github/workflows/msi.yml
+    with:
+      oauth-client: true
+    secrets:
+      GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+
+  release:
+    name: Release
+    needs: msi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: msi
+          path: msi
+      - working-directory: msi
+        run: sha256sum FortiVPNManager-* > SHA256SUMS.txt
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            gh release create "$GITHUB_REF_NAME" msi/* -R "$GITHUB_REPOSITORY" --verify-tag \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          else
+            gh release create "test-$GITHUB_RUN_NUMBER" msi/* -R "$GITHUB_REPOSITORY" --draft \
+              --target "$GITHUB_SHA" --title "Test build $GITHUB_RUN_NUMBER" --generate-notes
+          fi

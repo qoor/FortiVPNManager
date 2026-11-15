@@ -158,7 +158,7 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
 - **Windows**
   - x64용으로 빌드한다. Rust 부분(Helper, 런타임 DLL, 테스트 실행 파일)은 Mac에서 cargo-xwin으로 MSVC target용으로 교차 빌드하고, 사용자의 Windows PC에서는 cargo를 실행하지 않는다. PC는 앱과 MSI를 빌드하고 테스트를 실행한다(§7.1). 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
   - 설치 패키지(MSI)는 Mac에서 명령 하나(`scripts/msi-windows.sh <PC의 폴더>`)로 만든다. 이 명령은 PC의 저장소 사본을 맞추고, Helper와 런타임 DLL을 release로 교차 빌드해 PC에 복사한 뒤, PC에서 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. 빌드 스크립트는 빌드 번호와 미리 빌드한 두 파일을 받아 앱을 release로 빌드하고 MSI를 만들며, cargo를 실행하지 않는다. CI(`.github/workflows/msi.yml`)는 Windows runner에서 두 파일을 직접 빌드해 같은 방식으로 빌드 스크립트를 부르고, MSI와 pdb를 workflow artifact로 올린다. 빌드 번호는 로컬 빌드처럼 한국 시각으로 정한다. runner의 시계는 UTC라서 그대로 쓰면 나중 빌드의 번호가 더 작아질 수 있다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
-  - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. 번호는 Helper를 빌드하는 쪽이 정해 Helper에 넣고(`FVM_BUILD`) 빌드 스크립트에 넘기며, 빌드 스크립트가 앱에 같은 번호를 넣는다. 앱은 secret을 보내기 전에 Helper의 번호가 자기 번호와 같은지 확인한다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
+  - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. 번호는 Helper를 빌드하는 쪽이 정해 Helper에 넣고(`FVM_BUILD`) 빌드 스크립트에 넘기며, 빌드 스크립트가 앱에 같은 번호를 넣는다. 앱은 secret을 보내기 전에 Helper의 번호가 자기 번호와 같은지 확인한다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다. Mac의 MSI 명령은 Mac의 그 파일을 PC에 복사하고, Release 빌드는 저장소 비밀값(`GOOGLE_OAUTH_CLIENT_JSON`)으로 그 파일을 만든다(§7.1).
   - 앱은 Native AOT로 미리 컴파일한 실행 파일 하나와 Windows App SDK 가운데 WinUI와 그것이 쓰는 구성 요소를 앱 폴더에 담는다(self-contained, §3.2). PC에 .NET runtime이나 Windows App SDK를 설치하지 않는다.
   - 앱의 디버그 심볼(pdb)은 MSI에 넣지 않는다. 빌드 스크립트가 MSI 옆에 같은 이름(`FortiVPNManager-<버전>.pdb`)으로 두어 그 빌드의 crash dump를 볼 때 쓴다. debugger가 이름으로 찾게 하려면 `FortiVPNManager.pdb`로 바꿔 둔다.
   - OpenConnect 9.21의 파일은 공식 OpenConnect 9.21 Windows 설치본의 프로그램 파일이다. 빌드 스크립트가 이 저장소의 GitHub release(`openconnect-9.21`)에 둔 그 파일들의 zip을 빌드 폴더(`.build`)에 한 번 받아 두고, SHA-256이 다르면 멈추고, 풀어서 MSI에 넣는다. 그래서 빌드하는 쪽에 OpenConnect를 미리 설치하거나 설치본을 여는 도구를 둘 필요가 없다. 같은 release에는 원래 설치본도 그대로 둔다(§7.1). OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 새 설치본의 프로그램 파일을 7-Zip으로 한 번 꺼내 zip으로 만들고, 설치본과 함께 새 release(`openconnect-<버전>`)에 올린 뒤, 빌드 스크립트 맨 위의 버전과 hash, license 문서를 고치고 새 MSI를 만든다.
@@ -456,6 +456,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 받는 곳은 OpenConnect GitLab CI의 원래 artifact 주소가 아니라 이 저장소의 GitHub release다. 그 artifact는 보관 기한이 지났고, tag의 마지막 artifact라서 남아 있을 뿐이다. release에는 설치본을 바꾸지 않은 사본도 둔다.
   - 빌드는 설치본이 아니라 그 프로그램 파일의 zip을 받는다. 설치본은 NSIS 형식이라 Windows의 tar로는 열 수 없고, 실행하면 시작 메뉴와 registry를 건드린다. 7-Zip으로는 열리지만 빌드에 도구가 하나 더 필요해진다. zip은 PowerShell이 그대로 푼다. 7-Zip은 OpenConnect 버전을 올릴 때 zip을 만드는 데만 쓴다.
   - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
+- **2026-11-15 CI와 Release**: 사용자 결정이다(§4.4).
+  - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
+  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 배포에 유료 Apple Developer ID가 필요해 Release에 넣지 않는다. 버전 체계를 바꾸기 전까지 tag는 올리지 않는다(사용자).
+  - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -528,7 +532,6 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 예외 route와 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
 - 추후 과제
   - Linux 앱(Rust + QML)과 서비스
-  - Windows 빌드 환경과 CI(GitHub Actions 후보, 사용자 확인 필요)
   - macOS와 Linux의 openconnect: 실행 파일 위치, 환경 변수, 터널 어댑터 줄, 정상 종료 요청(SIGTERM)과 그 뒤의 logout 규칙 확인
   - 앱 크기 줄이기
   - 지인 배포, 인증서 보안 강화, split DNS, 다중 프로필, 비정상 종료 뒤 터널 이어받기(adopt), root 소유 바이너리 사본

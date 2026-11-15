@@ -31,7 +31,7 @@ A Google Cloud **Desktop app OAuth client** for OTP authentication through the G
 2. Create an OAuth client of type **Desktop app** and download its JSON.
 3. Copy the JSON to `packaging/GoogleOAuthClient.json` (kept out of the repository).
 
-Without the file, import the JSON in Settings, or use the app password (IMAP) method.
+Without the file, import the JSON in Settings, or use the app password (IMAP) method. The MSI in GitHub Releases has the client from the repository secret `GOOGLE_OAUTH_CLIENT_JSON` built in.
 
 ## macOS
 
@@ -95,7 +95,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output |
 | `scripts/msi-windows.sh <folder>` | Rust built on a Mac, installer made on a Windows PC (over ssh) |
 
-- **Install**: run the MSI
+- **Install**: run the MSI from a GitHub Release or your own build
 
 ### File locations
 

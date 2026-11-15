@@ -4,6 +4,14 @@ name: MSI
 # symbols as the artifact "msi". CI and the release workflow call it.
 on:
   workflow_call:
+    inputs:
+      oauth-client:
+        description: Build in the Google OAuth client from the repository secret GOOGLE_OAUTH_CLIENT_JSON
+        type: boolean
+        default: false
+    secrets:
+      GOOGLE_OAUTH_CLIENT_JSON:
+        required: false
 
 jobs:
   msi:
@@ -20,8 +28,16 @@ jobs:
       # smaller number.
       - id: build
         run: |
-          $now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'Asia/Seoul')
+          $now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'Korea Standard Time')
           "number=$($now.ToString('yyyyMMddHHmmss'))" >> $env:GITHUB_OUTPUT
+      # The client is kept out of the repository (GitHub's push protection refuses it), so release
+      # builds take it from the secret; build.ps1 builds it in when the file is there.
+      - if: inputs.oauth-client
+        env:
+          CLIENT: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+        run: |
+          if (-not $env:CLIENT) { throw 'the repository secret GOOGLE_OAUTH_CLIENT_JSON is not set' }
+          [IO.File]::WriteAllText((Join-Path $PWD 'packaging\GoogleOAuthClient.json'), $env:CLIENT)
       - run: cargo build --release --package fvm-helper-entry-windows
         env:
           FVM_BUILD: ${{ steps.build.outputs.number }}
