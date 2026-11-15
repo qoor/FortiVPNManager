@@ -83,5 +83,5 @@ internal static class SystemLog
 
     /// <summary>The category's name as on macOS, such as "bypass-routes".</summary>
     private static string Name(LogCategory category) =>
-        JsonSerializer.Serialize(category, MessageCoding.Options).Trim('"');
+        JsonSerializer.Serialize(category, MessageCoding.Default.LogCategory).Trim('"');
 }

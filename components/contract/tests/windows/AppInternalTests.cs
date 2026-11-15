@@ -147,17 +147,17 @@ public class AppInternalTests
     public void DecodingIsStrict()
     {
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Command>("""{"fly": {}}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"fly": {}}""", MessageCoding.Default.Command));
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Command>("""{"setOpenAtLogin": {"enabled": true, "extra": 1}}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"setOpenAtLogin": {"enabled": true, "extra": 1}}""", MessageCoding.Default.Command));
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Command>("""{"setOpenAtLogin": {}}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"setOpenAtLogin": {}}""", MessageCoding.Default.Command));
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Command>("""{"connect": {}, "disconnect": {}}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"connect": {}, "disconnect": {}}""", MessageCoding.Default.Command));
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<Command>("""{"connect": null}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"connect": null}""", MessageCoding.Default.Command));
         Assert.Throws<JsonException>(() =>
-            JsonSerializer.Deserialize<ToRuntime>("""{"command": {"_0": {"connect": null}}}""", MessageCoding.Options));
+            JsonSerializer.Deserialize("""{"command": {"_0": {"connect": null}}}""", MessageCoding.Default.ToRuntime));
     }
 
     [Fact]

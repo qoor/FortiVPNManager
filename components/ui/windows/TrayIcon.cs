@@ -20,7 +20,7 @@ namespace FortiVPNManager.Ui;
 /// the items below each time it opens and sizes to their text. Its window-based menu takes the items
 /// once and measures them before they are drawn, so it opened empty or cut off.
 /// </remarks>
-public sealed class TrayIcon : IDisposable
+public sealed partial class TrayIcon : IDisposable
 {
     private readonly AppUi ui;
     private readonly Action quit;
@@ -140,7 +140,11 @@ public sealed class TrayIcon : IDisposable
     private sealed record Entry(string? Text, bool Enabled, Action? Run);
 
     /// <summary>The standard menu runs an item through its command; the action runs on the UI thread.</summary>
-    private sealed class MenuCommand(DispatcherQueue dispatcher, Action action) : ICommand
+    /// <remarks>
+    /// The menu takes the command through WinRT, whose code for it a generator adds when the app is
+    /// built for Native AOT; that takes it and the class around it to be partial.
+    /// </remarks>
+    private sealed partial class MenuCommand(DispatcherQueue dispatcher, Action action) : ICommand
     {
         public event EventHandler? CanExecuteChanged
         {

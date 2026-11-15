@@ -1,9 +1,11 @@
+using System.Text.Json.Serialization;
+
 namespace FortiVPNManager.Contract;
 
 public static partial class AppInternal
 {
     /// <summary>User actions (components/contract/src/app_internal/command.rs).</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<Command>))]
     public abstract record Command
     {
         private Command() { }
@@ -68,7 +70,7 @@ public static partial class AppInternal
     }
 
     /// <summary>Minutes are the number as typed.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ConnectionOption>))]
     public abstract record ConnectionOption
     {
         private ConnectionOption() { }
@@ -84,6 +86,7 @@ public static partial class AppInternal
         public sealed record MinSleepMinutes(long Minutes) : ConnectionOption;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<BypassList>))]
     public enum BypassList
     {
         Networks,

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FortiVPNManager.Contract;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -17,9 +18,13 @@ namespace FortiVPNManager.Ui.Settings;
 /// The settings window, laid out as Windows Settings (docs/SETTINGS-UI.md): the panes in the left
 /// navigation, the back button and the settings search in the title bar. Below 800 px of width the
 /// navigation hides behind the menu button and the search becomes a magnifier after the title.
-/// Closing hides the window; the app stays in the notification area. It reopens on the pane and at
-/// the place it was left.
+/// Closing releases the window and all it shows, and the app stays in the notification area; the
+/// next one opens on the pane and at the place this one was left.
 /// </summary>
+/// <remarks>
+/// Hidden instead, a window once opened kept about 60 MB while closed, and the window is mostly
+/// closed (user decision, 2026-11-14).
+/// </remarks>
 public sealed partial class SettingsWindow : Window
 {
     /// <summary>The panes' Segoe Fluent Icons glyphs, in the navigation's order.</summary>
@@ -67,11 +72,7 @@ public sealed partial class SettingsWindow : Window
         Place(placement);
         SizeChanged += (_, args) => ApplyWidth(args.Size.Width);
         ApplyWidth(AppWindow.Size.Width / Scale);
-        AppWindow.Closing += (_, args) =>
-        {
-            args.Cancel = true;
-            Hide();
-        };
+        Closed += (_, _) => OnClosed();
     }
 
     /// <summary>Shows the window on <paramref name="pane"/>, or on the pane last shown.</summary>
@@ -92,18 +93,14 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    /// <summary>Hides the window and keeps where it was and the pane shown.</summary>
-    public void Hide()
+    /// <summary>
+    /// Keeps where the window was and the pane shown for the next one. What is still being typed is
+    /// sent first, as closing takes the field away before it loses focus.
+    /// </summary>
+    private void OnClosed()
     {
-        if (!shown)
-        {
-            return;
-        }
-        shown = false;
-        // What is still being typed is saved first, as closing takes the field away before it loses focus.
-        FinishTyping();
+        (ContentFrame.Content as PanePage)?.Leave();
         new Placement(lastPane, AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height).Save();
-        AppWindow.Hide();
         ui.Send(new AppInternal.Command.SettingsClosed());
     }
 
@@ -364,7 +361,7 @@ public sealed partial class SettingsWindow : Window
         {
             try
             {
-                var placement = JsonSerializer.Deserialize<Placement>(File.ReadAllText(PlacementFile));
+                var placement = JsonSerializer.Deserialize(File.ReadAllText(PlacementFile), PlacementCoding.Default.Placement);
                 // A pane number this build doesn't have, from an edited or older file, opens General.
                 return placement is { } read && !Enum.IsDefined(read.Pane) ? read with { Pane = SettingsPane.General } : placement;
             }
@@ -379,7 +376,7 @@ public sealed partial class SettingsWindow : Window
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(PlacementFile)!);
-                File.WriteAllText(PlacementFile, JsonSerializer.Serialize(this));
+                File.WriteAllText(PlacementFile, JsonSerializer.Serialize(this, PlacementCoding.Default.Placement));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -387,4 +384,8 @@ public sealed partial class SettingsWindow : Window
             }
         }
     }
+
+    /// <summary>The placement file's coding, generated when the app is built (Native AOT).</summary>
+    [JsonSerializable(typeof(Placement))]
+    private sealed partial class PlacementCoding : JsonSerializerContext;
 }

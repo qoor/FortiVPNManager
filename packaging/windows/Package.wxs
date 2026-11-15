@@ -42,6 +42,8 @@
     <Files Directory="AppFolder" Include="$(var.AppFolder)\**">
       <Exclude Files="$(var.AppFolder)\FortiVPNManager.exe" />
       <Exclude Files="$(var.AppFolder)\fvm-helper.exe" />
+      <!-- Symbols serve crash analysis only; build.ps1 keeps the app's next to the MSI. -->
+      <Exclude Files="$(var.AppFolder)\**\*.pdb" />
     </Files>
     <Files Directory="OpenConnectFolder" Include="$(var.OpenConnectFolder)\**" />
     <Files Directory="OpenConnectFolder" Include="$(sys.SOURCEFILEDIR)OpenConnect-licenses\**" />

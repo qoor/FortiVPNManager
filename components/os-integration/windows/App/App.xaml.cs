@@ -25,6 +25,9 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // The settings window is the app's only window; closing it releases it, and the app lives on in
+        // the notification area until it quits.
+        DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
         // A fault on the UI thread stops the app; the event log keeps what it was, as macOS keeps a
         // crash report. Program.Main does the same for the other threads.
         UnhandledException += (_, args) => SystemLog.WriteFault(args.Exception);
@@ -60,7 +63,7 @@ public partial class App : Application
     /// <summary>Ends the app once the runtime approved the quit; called from the runtime's reader thread.</summary>
     private void Quit() => dispatcher.TryEnqueue(() =>
     {
-        ui?.HideSettings();
+        ui?.CloseSettings();
         tray?.Dispose();
         notifier?.Dispose();
         Exit();

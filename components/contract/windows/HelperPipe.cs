@@ -15,7 +15,7 @@ public static class HelperPipe
     public const string Name = "com.qoor.FortiVPNManager.Helper";
 
     /// <summary>Sent by the app. <c>Id</c> names the request in the Helper's answer.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<Request>))]
     public abstract record Request
     {
         private Request() { }
@@ -51,7 +51,7 @@ public static class HelperPipe
     }
 
     /// <summary>Sent by the Helper.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<Message>))]
     public abstract record Message
     {
         private Message() { }

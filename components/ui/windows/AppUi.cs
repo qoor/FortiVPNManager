@@ -76,11 +76,22 @@ public sealed class AppUi
     /// <summary>Lines were added to the log.</summary>
     public event Action<IReadOnlyList<LogLine>>? LogAppended;
 
-    /// <summary>The settings window, made the first time it is needed.</summary>
-    public SettingsWindow Settings => settings ??= new SettingsWindow(this);
+    /// <summary>The settings window, made when it is needed while none is open; closing releases it.</summary>
+    public SettingsWindow Settings
+    {
+        get
+        {
+            if (settings is null)
+            {
+                settings = new SettingsWindow(this);
+                settings.Closed += (_, _) => settings = null;
+            }
+            return settings;
+        }
+    }
 
-    /// <summary>Hides the settings window, when it was ever made; quitting doesn't make one only to hide it.</summary>
-    public void HideSettings() => settings?.Hide();
+    /// <summary>Closes the settings window when it is open; quitting doesn't make one only to close it.</summary>
+    public void CloseSettings() => settings?.Close();
 
     /// <summary>Sends what Settings still has in its fields; quitting asks the runtime only after it.</summary>
     public void FinishSettingsTyping() => settings?.FinishTyping();

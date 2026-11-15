@@ -115,6 +115,10 @@ Invoke-Dotnet @('build', (Join-Path $PSScriptRoot 'FortiVPNManager.Installer.wix
     "-p:CloseRunningScript=$(Get-EncodedScript 'CloseRunning.ps1')",
     "-p:UninstallCleanupScript=$(Get-EncodedScript 'UninstallCleanup.ps1')", '--nologo')
 $msi = Join-Path $root ".build\windows\FortiVPNManager-$version.msi"
+# The app's symbols (its native code's, tens of MB) stay out of the installer (Package.wxs) and next to
+# it, for crash dumps of this build; a debugger looks them up as FortiVPNManager.pdb. Copied first, so a
+# failed copy leaves no installer without its Korean transform under the final name.
+Copy-Item (Join-Path $out 'FortiVPNManager.pdb') ([IO.Path]::ChangeExtension($msi, '.pdb')) -Force
 Copy-Item (Join-Path $msiBuild 'en-US\FortiVPNManager.msi') $msi -Force
 Add-LanguageTransform $msi (Join-Path $msiBuild 'ko-KR\FortiVPNManager.msi') 1042
 Write-Output "build: $build, installer $version in $msi"

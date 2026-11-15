@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FortiVPNManager.Contract;
 
 public static partial class AppInternal
@@ -8,7 +10,7 @@ public static partial class AppInternal
     /// sleeps carry the time taken in the OS callback: their message may reach the runtime only
     /// after the wake.
     /// </summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<SystemEvent>))]
     public abstract record SystemEvent
     {
         private SystemEvent() { }
@@ -45,6 +47,7 @@ public static partial class AppInternal
 
     public sealed record PathInterface(string Name, InterfaceKind Kind);
 
+    [JsonConverter(typeof(EnumNameConverter<InterfaceKind>))]
     public enum InterfaceKind
     {
         Wifi,

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Xunit;
 
 namespace FortiVPNManager.Contract.Tests;
@@ -15,14 +16,14 @@ internal static class Fixtures
     public static string Read(string name, [CallerFilePath] string here = "") =>
         File.ReadAllText(Path.Combine(Path.GetDirectoryName(here)!, "..", "fixtures", name));
 
+    /// <remarks>The coding knows the messages' types, not lists of them, so the items are coded one by one.</remarks>
     public static List<T> RoundTrip<T>(string name)
     {
-        var json = Read(name);
-        var values = JsonSerializer.Deserialize<List<T>>(json, MessageCoding.Options)!;
-        var encoded = JsonSerializer.SerializeToNode(values, MessageCoding.Options);
-        Assert.True(
-            JsonNode.DeepEquals(JsonNode.Parse(json), encoded),
-            $"{name} encodes back as {encoded?.ToJsonString()}");
+        var json = JsonNode.Parse(Read(name))!.AsArray();
+        var coding = (JsonTypeInfo<T>)MessageCoding.Default.Options.GetTypeInfo(typeof(T));
+        var values = json.Select(item => item.Deserialize(coding)!).ToList();
+        var encoded = new JsonArray([.. values.Select(value => JsonSerializer.SerializeToNode(value, coding))]);
+        Assert.True(JsonNode.DeepEquals(json, encoded), $"{name} encodes back as {encoded.ToJsonString()}");
         return values;
     }
 }

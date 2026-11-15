@@ -89,6 +89,9 @@
 | 설치 화면 언어는 Windows 표시 언어를 따른다 | 사용자 결정이다(2026-11-13). 한국어 Windows에서는 한국어, 그 밖에는 영어다. MSI 하나에 한국어 language transform을 넣어 두면 Windows Installer가 표시 언어에 맞춰 스스로 적용한다. 문서화되지 않았지만 오래 유지된 동작이다. 동작하지 않게 되어도 화면이 영어로 나올 뿐 설치는 된다 |
 | 설치 패키지는 Helper 서비스를 등록만 하고 시작하지 않는다. 시작은 앱이 한다 | 사용자 결정이다(2026-11-13). 설치가 Helper의 첫 시작에 걸리는 시간에 묶이지 않게 하기 위해서다. macOS에서 Helper 등록을 앱이 맡는 것과 같은 역할 나눔이다. 서비스 권한은 Windows의 기본값(일반 계정은 다른 서비스처럼 상태와 설정을 볼 수 있다)에 모든 계정의 시작만 더한다(2026-11-14). 멈추기, 설정 바꾸기, 지우기는 관리자만 한다. 시작에 실패하면 앱이 한 번 더 시작한다(§5.7). 전에는 설치 스크립트가 10분까지 다시 시도했다(§7.1) |
 | Windows 앱은 .NET runtime을 함께 담아(self-contained) 배포한다 | 사용자 결정이다(2026-11-13). MSI는 다른 설치 프로그램을 실행할 수 없고, 설치 패키지는 하나이기를 원했다. 대가로 .NET 보안 수정은 앱의 새 빌드로만 들어온다. 전에는 PC의 .NET Desktop Runtime을 쓰고(framework-dependent) 설치 스크립트가 없으면 설치했다(§7.1) |
+| Windows 앱은 Native AOT로 미리 컴파일해 배포한다 | 사용자 결정이다(2026-11-14). 같은 코드의 JIT 빌드보다 working set이 약 40 MB 작고, 앱 폴더가 절반 아래로 줄며(디버그 심볼 빼고 177 MB → 75 MB), 시작할 때 코드를 컴파일하지 않아 알림 영역 아이콘이 약 0.5초 빨리 나온다(§7.1). 줄어든 메모리는 대부분 JIT 컴파일러와 .NET 어셈블리의 코드이고, 이 앱만 쓰는 메모리(private)의 차이는 3~5 MB다. 쓰는 패키지 가운데 AOT를 막는 것은 없었고, 고칠 것은 모두 이 앱의 코드였다. 대가는 다음과 같다. ① reflection에 기대는 코드를 쓸 수 없어 C# 쪽 메시지 JSON coding을 빌드 때 만든다(source generation). 생성기는 메시지가 담은 값의 타입은 따라가지만 case 묶음에서 각 case로는 가지 못한다. 그래서 새 메시지 case마다 coding 목록(`components/contract/windows/MessageCoding.cs`)에 한 줄을 더해야 한다. 빠뜨리면 그 case를 주고받을 때에야 실패하므로, 테스트가 모든 case가 목록에 있는지와 case 묶음·enum마다 converter가 붙어 있는지 확인한다. 설정창 위치 파일도 빌드 때 만든 coding으로 읽고 쓴다. ② WinRT로 넘기는 C# 클래스(알림 영역 메뉴의 명령)는 partial이어야 한다. 그 연결 코드를 생성기가 만들기 때문이다. 생성된 코드가 unsafe를 쓰므로 UI 라이브러리는 unsafe 코드를 허용한다. 직접 쓴 unsafe 코드는 없다. ③ 생성된 coding 때문에 실행 파일이 약 6 MB 커지고, 빌드가 몇 분 더 걸린다. ④ native 코드의 디버그 심볼(약 82 MB)은 설치 패키지에 넣지 않고 MSI 옆에 둔다(§4.4) |
+| Windows App SDK는 2.x를 쓴다(2026-11-14에 2.6.5) | 사용자 결정이다(2026-11-14). 1.8은 2026-09-24에 서비스가 끝나 보안·안정성 수정이 더 나오지 않는다. 2.x는 지금 수정이 나오는 버전이고(2.0 계열은 2027-04-29까지), 2.0부터 버전 번호가 SemVer를 따라 major 버전 안에서는 호환을 깨지 않는다. 옮기면서 앱 코드를 고친 것은 없다. 바뀐 동작 가운데 앱에 닿는 것은 둘이다. 설정창 제목 줄(TitleBar) 안의 빈 곳이 기본으로 창을 끄는 자리가 됐고(2.1), self-contained 앱에서 알림 callback이 실패할 수 있던 문제가 고쳐졌다(2.6). XAML이 만드는 시작 함수는 없애지 않고 이름만 바꾸게 됐지만(2.3) 앱은 자기 시작 함수를 쓰므로 영향이 없다. 대가로 2.x의 업데이트와 다음 major 버전을 따라가야 한다 |
+| Windows App SDK 가운데 앱이 쓰는 WinUI 구성 요소만 담는다. WinUI가 쓰는 Foundation, InteractiveExperiences, Base가 함께 들어오고 AI, ML, Search, Widgets, DWrite, Runtime 구성 요소는 넣지 않는다 | 사용자 결정이다(2026-11-14). 1.8부터 SDK가 구성 요소별 패키지로 나뉘었고, 전체 패키지를 쓰면 쓰지 않는 구성 요소가 앱 폴더에 모두 들어간다. 그렇게 빠진 파일이 57개, 약 50 MB이고 그중 AI·ML의 onnxruntime과 DirectML이 약 39 MB다. 알림 영역 아이콘(H.NotifyIcon)과 Community Toolkit 패키지가 전체 패키지에 의존하므로, 전체 패키지는 버전만 고정하고 쓰지 않는 구성 요소는 하나씩 이름을 들어 파일을 받지 않는다. 대가로 SDK를 올릴 때 새 구성 요소가 생기면 그 목록에 더해야 한다. 빠뜨려도 앱 폴더가 커질 뿐이고 publish 결과에서 드러난다 |
 | OpenConnect 9.21은 설치 패키지에 넣고, Helper는 그 사본만 실행한다 | 사용자 결정이다(2026-11-13). 패키지 하나로 설치가 끝나게 한다. 앱 폴더 아래에 두므로 관리자만 바꿀 수 있다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. 전에는 사용자가 OpenConnect를 기본 폴더에 따로 설치했다(§7.1) |
 
 ## 4. 구성과 역할
@@ -155,7 +158,8 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
   - x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
   - 빌드는 사용자 자신의 계정으로 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. Rust는 사용자마다 설치되므로 관리자 계정에는 없을 수 있다. 스크립트는 release 빌드를 모두 만든 뒤 설치 패키지(MSI)를 만든다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
   - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
-  - 앱은 .NET runtime을 앱 폴더에 함께 담는다(self-contained, §3.2). PC에 runtime을 설치하지 않는다.
+  - 앱은 Native AOT로 미리 컴파일한 실행 파일 하나와 Windows App SDK 가운데 WinUI와 그것이 쓰는 구성 요소를 앱 폴더에 담는다(self-contained, §3.2). PC에 .NET runtime이나 Windows App SDK를 설치하지 않는다.
+  - 앱의 디버그 심볼(pdb)은 MSI에 넣지 않는다. 빌드 스크립트가 MSI 옆에 같은 이름(`FortiVPNManager-<버전>.pdb`)으로 두어 그 빌드의 crash dump를 볼 때 쓴다. debugger가 이름으로 찾게 하려면 `FortiVPNManager.pdb`로 바꿔 둔다.
   - OpenConnect 9.21의 파일은 저장소에서 제외한 빌드 폴더에서 가져온다. 개발자가 공식 OpenConnect 9.21 Windows 설치본에서 한 번 채워 두고, 없으면 빌드가 멈춘다. OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 그 파일을 바꾸고 새 MSI를 만든다.
   - MSI는 WiX Toolset v7로 만든다. v7은 Open Source Maintenance Fee EULA를 빌드에서 명시적으로 수락해야 한다. 그 비용을 내야 하는지는 회사가 판단할 일이다.
   - MSI 버전 번호는 빌드 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
@@ -436,6 +440,12 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - watchdog으로 옮긴 것: client 확인(상태 응답에 쓰는 경로, 버전, 검증 여부, 문제), 실행 준비(실행 명세와 설정 파일), OTP 형식 확인, 메시지에 쓰는 client 이름, 실행 기록과 그에 담는 게이트웨이 조회, 이전 Helper가 남긴 client 프로세스 정리. 2026-11-12에 OS별 시작 부분이 넘겨주던 OS 처리(프로세스 확인과 종료, 실행 기록 폴더 권한)도 watchdog의 OS 부분이 됐다.
   - Helper entry에 남은 것: 앱 연결, 누가 무엇을 할 수 있는지(사용자와 시도의 주인), Helper 자신의 수명(유휴 종료, 교체, 종료 요청), 이전 Helper가 남긴 것의 정리와 route 복구가 끝날 때까지 앱 연결 막기, 실행이 요청한 route 복구를 OS 쪽에 넘기기, watchdog이 알려 준 것으로 만드는 응답, 로그. 시작 함수는 backend adapter와 실행 기록 폴더를 골라 watchdog을 만들어 넘긴다.
   - watchdog이 한 일에 관한 Helper 로그 줄은 watchdog이 만들어 Helper entry를 거쳐 내보낸다. 로그 문구, 실행 기록 폴더의 파일 이름과 형식은 그대로라서 새 Helper가 이전 Helper의 기록을 읽어 정리할 수 있다.
+- **2026-11-14 Windows App SDK 2.x, Native AOT, AI·ML 구성 요소 제외**: 사용자 결정이다(§3.2).
+  - 사전 조사: 쓰는 패키지(WinUI, Community Toolkit, H.NotifyIcon) 가운데 Native AOT를 막는 것은 없었다. 나온 경고는 모두 이 앱의 코드였다(메시지 JSON coding, 설정창 위치 파일, 시스템 로그의 category 이름, WinRT로 넘기는 클래스). 고친 뒤 AOT 빌드의 trim·AOT 경고는 0개다.
+  - 크기: 앱 폴더(디버그 심볼 빼고)가 1.8 JIT 220 MB, 2.6.5 JIT(AI·ML 등 제외) 177 MB, 2.6.5 AOT 75 MB다.
+  - 메모리(노트북, 같은 코드에 설치본과 같은 빌드 번호, 한 번 측정): 시작 3분 뒤 JIT와 AOT의 private bytes는 52.1 MB와 47.3 MB, private working set은 34.7 MB와 31.2 MB, working set은 131.2 MB와 93.1 MB였다. 설정창을 열었다 닫고 2분 뒤에는 110.4 MB와 106.8 MB, 88.7 MB와 85.8 MB, 223.1 MB와 179.5 MB였다. 설정창을 연 것만으로 둘 다 약 60 MB가 늘고, 닫아도(그때는 숨겼다) 줄지 않았다. 알림 영역 아이콘은 프로세스가 생긴 뒤 JIT 1.4초, AOT 0.9초에 나왔다. 처음 보는 실행 파일은 회사 보안 프로그램이 첫 시작을 약 74초 붙잡으므로 한 번 실행해 둔 뒤 쟀다. 사전 조사의 예상(10~20 MB)과 달리 private 메모리의 차이는 작았다.
+  - 설정창: 닫으면 숨기지 않고 없애고, 다시 열 때 새로 만든다(사용자 결정). 사용자는 보통 설정창을 닫아 두고 앱이 스스로 연결하므로, 닫힌 창이 메모리를 붙들 이유가 없다. 창의 자리와 크기, 마지막으로 본 pane은 파일로 이어진다. 바꾼 뒤 AOT 빌드로 한 번 잰 결과, 창은 없어졌지만 메모리는 줄지 않았다(시작 2분 뒤, 연 동안, 닫고 2분 뒤의 private bytes 48.0 MB, 94.7 MB, 94.6 MB, private working set 31.7 MB, 73.8 MB, 73.8 MB, working set 93.7 MB, 161.9 MB, 161.8 MB). 앱이 쉬는 동안에는 GC가 돌지 않아 창이 쓰던 native 객체가 아직 풀리지 않았거나, XAML이 첫 창을 열 때 만든 프로세스 전체의 자원이 남는 것으로 보인다(확인하지 않음). 사용자가 이대로 두기로 했다(2026-11-15).
+  - JSON coding을 메타데이터만 만드는 방식으로도 빌드해 봤지만 실행 파일이 0.2 MB만 줄어 기본 방식을 쓴다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -498,7 +508,8 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
 - 다른 프로그램이 Helper 서비스보다 먼저 같은 이름의 통로를 만들면 Helper는 통로를 열지 못하고 서비스가 시작에 실패한다. 앱은 그 통로의 소유자가 시스템 계정이 아니어서 비밀번호를 보내지 않는다.
 - 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
-- Windows 앱은 .NET runtime을 함께 담으므로 .NET 보안 수정은 앱의 새 빌드로만 들어온다. OpenConnect도 새 MSI로만 바뀐다.
+- Windows 앱은 .NET runtime과 Windows App SDK를 함께 담으므로 그 보안 수정은 앱의 새 빌드로만 들어온다. OpenConnect도 새 MSI로만 바뀐다.
+- Windows App SDK 2.0 계열의 수정은 2027-04-29까지 나온다. 그 전에 다음 major 버전을 검토한다.
 - Windows 설치 화면의 언어는 문서화되지 않은 Windows Installer 동작(MSI에 넣은 language transform을 표시 언어에 맞춰 적용)에 기댄다. 동작하지 않게 되면 화면이 영어로 나오고 설치는 그대로 된다.
 - WiX Toolset v7의 Open Source Maintenance Fee를 내야 하는지는 회사가 판단할 일이다.
 - 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 Windows가 기억하는 자리에 있어야 한다.

@@ -8,7 +8,7 @@ public static partial class AppInternal
     /// Domain sections, drawn as they are (components/contract/src/app_internal/section.rs). Each
     /// value appears once; the UI may show it in several places.
     /// </summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<Section>))]
     public abstract record Section
     {
         private Section() { }
@@ -33,6 +33,7 @@ public static partial class AppInternal
         bool AccountAppliesNextConnection,
         WaitReason? WaitReason = null);
 
+    [JsonConverter(typeof(EnumNameConverter<ConnectionIcon>))]
     public enum ConnectionIcon
     {
         Connected,
@@ -41,7 +42,7 @@ public static partial class AppInternal
         Error,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ConnectionStatus>))]
     public abstract record ConnectionStatus
     {
         private ConnectionStatus() { }
@@ -74,6 +75,7 @@ public static partial class AppInternal
         public sealed record Failed(FailureReason Reason) : ConnectionStatus;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<ConnectProgress>))]
     public enum ConnectProgress
     {
         CheckingReadiness,
@@ -85,7 +87,7 @@ public static partial class AppInternal
         OpeningTunnel,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ProactiveReconnect>))]
     public abstract record ProactiveReconnect
     {
         private ProactiveReconnect() { }
@@ -95,6 +97,7 @@ public static partial class AppInternal
         public sealed record Off : ProactiveReconnect;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<AfterDisconnect>))]
     public enum AfterDisconnect
     {
         Idle,
@@ -103,7 +106,7 @@ public static partial class AppInternal
         Quit,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<FailureReason>))]
     public abstract record FailureReason
     {
         private FailureReason() { }
@@ -122,6 +125,7 @@ public static partial class AppInternal
     }
 
     /// <summary>The Helper's error codes (components/contract/src/app_helper.rs).</summary>
+    [JsonConverter(typeof(EnumNameConverter<HelperErrorCode>))]
     public enum HelperErrorCode
     {
         Busy,
@@ -136,7 +140,7 @@ public static partial class AppInternal
         InternalError,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<WaitReason>))]
     public abstract record WaitReason
     {
         private WaitReason() { }
@@ -150,7 +154,7 @@ public static partial class AppInternal
         public sealed record UserAway : WaitReason;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<SetupItem>))]
     public abstract record SetupItem
     {
         private SetupItem() { }
@@ -176,7 +180,7 @@ public static partial class AppInternal
         ScheduleOutlook? Outlook = null,
         ScheduleHoursError? HoursError = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ScheduleOutlook>))]
     public abstract record ScheduleOutlook
     {
         private ScheduleOutlook() { }
@@ -189,7 +193,7 @@ public static partial class AppInternal
         public sealed record Suspended : ScheduleOutlook;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ScheduleHoursError>))]
     public abstract record ScheduleHoursError
     {
         private ScheduleHoursError() { }
@@ -206,7 +210,7 @@ public static partial class AppInternal
         RegistrationError? RegisterError = null,
         VpnClientInfo? Client = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<HelperState>))]
     public abstract record HelperState
     {
         private HelperState() { }
@@ -230,7 +234,7 @@ public static partial class AppInternal
     /// <summary>components/contract/src/backend.rs</summary>
     public sealed record ClientProblem(ClientProblemKind Kind, string Path);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ClientProblemKind>))]
     public abstract record ClientProblemKind
     {
         private ClientProblemKind() { }
@@ -260,7 +264,7 @@ public static partial class AppInternal
         GoogleConnectBlocker? ConnectBlocker = null,
         GoogleError? GoogleError = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<GoogleAccountStatus>))]
     public abstract record GoogleAccountStatus
     {
         private GoogleAccountStatus() { }
@@ -271,6 +275,7 @@ public static partial class AppInternal
         public sealed record Connected(string Address) : GoogleAccountStatus;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<GoogleConnectBlocker>))]
     public enum GoogleConnectBlocker
     {
         NoOAuthClient,
@@ -278,7 +283,7 @@ public static partial class AppInternal
         SaveAddressFirst,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<OAuthClientSource>))]
     public abstract record OAuthClientSource
     {
         private OAuthClientSource() { }
@@ -288,7 +293,7 @@ public static partial class AppInternal
         public sealed record NotConfigured : OAuthClientSource;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<GoogleError>))]
     public abstract record GoogleError
     {
         private GoogleError() { }
@@ -314,7 +319,7 @@ public static partial class AppInternal
         public sealed record Config(ConfigFileError Error) : GoogleError;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<OAuthClientFileProblem>))]
     public abstract record OAuthClientFileProblem
     {
         private OAuthClientFileProblem() { }
@@ -326,7 +331,7 @@ public static partial class AppInternal
         public sealed record InvalidField(string Name) : OAuthClientFileProblem;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<GmailTest>))]
     public abstract record GmailTest
     {
         private GmailTest() { }
@@ -338,7 +343,7 @@ public static partial class AppInternal
         public sealed record Failed(GmailTestFailure Failure) : GmailTest;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<GmailTestFailure>))]
     public abstract record GmailTestFailure
     {
         private GmailTestFailure() { }
@@ -362,7 +367,7 @@ public static partial class AppInternal
         public sealed record GoogleReturnedError(string Detail) : GmailTestFailure;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ImapFailure>))]
     public abstract record ImapFailure
     {
         private ImapFailure() { }
@@ -374,7 +379,7 @@ public static partial class AppInternal
         public sealed record Rejected(string Command, string Status, string Text) : ImapFailure;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ImapStep>))]
     public abstract record ImapStep
     {
         private ImapStep() { }
@@ -405,7 +410,7 @@ public static partial class AppInternal
 
     public sealed record RuleList(IReadOnlyList<string> Rows, IReadOnlyList<uint> ProblemRows, ButtonState AddRow);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<BypassNotice>))]
     public abstract record BypassNotice
     {
         private BypassNotice() { }
@@ -414,7 +419,7 @@ public static partial class AppInternal
         public sealed record ApplyFailed(ConfigFileError Error) : BypassNotice;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<RowProblem>))]
     public abstract record RowProblem
     {
         private RowProblem() { }
@@ -424,7 +429,7 @@ public static partial class AppInternal
         public sealed record Overlap(string Other) : RowProblem;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<BypassStatus>))]
     public abstract record BypassStatus
     {
         private BypassStatus() { }
@@ -450,7 +455,7 @@ public static partial class AppInternal
             uint? StoppedAfterRetries = null) : BypassStatus;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<BypassFailure>))]
     public abstract record BypassFailure
     {
         private BypassFailure() { }
@@ -513,7 +518,7 @@ public static partial class AppInternal
         ClientSettingsImport? ImportReport = null,
         string? DefaultImportFile = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<AccountFeedback>))]
     public abstract record AccountFeedback
     {
         private AccountFeedback() { }
@@ -522,7 +527,7 @@ public static partial class AppInternal
         public sealed record Failed(AccountSaveError Error) : AccountFeedback;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<AccountSaveError>))]
     public abstract record AccountSaveError
     {
         private AccountSaveError() { }
@@ -536,7 +541,7 @@ public static partial class AppInternal
         public sealed record SecretStore(SecretStoreFailure Failure) : AccountSaveError;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ClientSettingsImport>))]
     public abstract record ClientSettingsImport
     {
         private ClientSettingsImport() { }
@@ -558,7 +563,7 @@ public static partial class AppInternal
         IReadOnlyList<uint> UnreadableLines,
         ImportedPassword? Password = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ImportedPassword>))]
     public abstract record ImportedPassword
     {
         private ImportedPassword() { }
@@ -568,7 +573,7 @@ public static partial class AppInternal
         public sealed record NotSaved(SecretStoreFailure Failure) : ImportedPassword;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ImportError>))]
     public abstract record ImportError
     {
         private ImportError() { }

@@ -132,12 +132,22 @@ public sealed partial class PanePage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        Leave();
+    }
+
+    /// <summary>
+    /// The pane goes away, as another is chosen or the window closes: what is typed is sent, and the
+    /// app's state no longer holds the pane.
+    /// </summary>
+    internal void Leave()
+    {
         FinishTyping();
         if (ui is not null)
         {
             ui.Changed -= Refresh;
         }
         (content as IDisposable)?.Dispose();
+        content = null;
     }
 
     private void Refresh() => content?.Refresh();

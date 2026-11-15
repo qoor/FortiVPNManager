@@ -5,7 +5,7 @@ namespace FortiVPNManager.Contract;
 public static partial class AppInternal
 {
     /// <summary>What the runtime asks of the OS (components/contract/src/app_internal/port.rs).</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<PortRequest>))]
     public abstract record PortRequest
     {
         private PortRequest() { }
@@ -47,7 +47,7 @@ public static partial class AppInternal
         public sealed record FortiClientConnections : PortRequest;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<PortResponse>))]
     public abstract record PortResponse
     {
         private PortResponse() { }
@@ -90,7 +90,7 @@ public static partial class AppInternal
     }
 
     /// <summary>Carried out without an answer.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<PortAction>))]
     public abstract record PortAction
     {
         private PortAction() { }
@@ -110,7 +110,7 @@ public static partial class AppInternal
         public sealed record ApproveQuit : PortAction;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<SecretItem>))]
     public abstract record SecretItem
     {
         private SecretItem() { }
@@ -128,7 +128,7 @@ public static partial class AppInternal
     /// components/contract/src/app_internal/port.rs). JSON payloads and the attempt and reason
     /// values are relayed as they are, never read.
     /// </summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<HelperCall>))]
     public abstract record HelperCall
     {
         private HelperCall() { }
@@ -153,7 +153,7 @@ public static partial class AppInternal
         public sealed record WriteBypassRoutes(string Json) : HelperCall;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<HelperChannelFailure>))]
     public abstract record HelperChannelFailure
     {
         private HelperChannelFailure() { }
@@ -165,6 +165,7 @@ public static partial class AppInternal
         public sealed record UnreadableReply(string Description) : HelperChannelFailure;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<RegistrationStatus>))]
     public enum RegistrationStatus
     {
         NotRegistered,
@@ -173,7 +174,7 @@ public static partial class AppInternal
         NotFound,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<RegistrationError>))]
     public abstract record RegistrationError
     {
         private RegistrationError() { }
@@ -188,6 +189,7 @@ public static partial class AppInternal
     /// <summary>A FortiClient SSL VPN connection: its name and its Server value, usually host:port.</summary>
     public sealed record FortiClientConnection(string Name, string Server);
 
+    [JsonConverter(typeof(EnumNameConverter<LogLevel>))]
     public enum LogLevel
     {
         Info,
@@ -196,6 +198,7 @@ public static partial class AppInternal
     }
 
     /// <summary>The log category.</summary>
+    [JsonConverter(typeof(EnumNameConverter<LogCategory>))]
     public enum LogCategory
     {
         Connection,
@@ -214,7 +217,7 @@ public static partial class AppInternal
         LoginItem,
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<UserNotification>))]
     public abstract record UserNotification
     {
         private UserNotification() { }

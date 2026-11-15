@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FortiVPNManager.Contract;
 
 public static partial class AppInternal
@@ -6,7 +8,7 @@ public static partial class AppInternal
     /// Problems several sections explain (components/contract/src/app_internal/problem.rs). Entry
     /// indexes start at 0.
     /// </summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ConfigFileError>))]
     public abstract record ConfigFileError
     {
         private ConfigFileError() { }
@@ -24,7 +26,7 @@ public static partial class AppInternal
     /// <summary>1-based; columns count Unicode scalars.</summary>
     public sealed record LineColumn(uint Line, uint Column);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ConfigProblemKind>))]
     public abstract record ConfigProblemKind
     {
         private ConfigProblemKind() { }
@@ -59,6 +61,7 @@ public static partial class AppInternal
         public sealed record OverlappingRouteEntry(string Path, uint Index, string Other) : ConfigProblemKind;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<ValueKind>))]
     public enum ValueKind
     {
         Mapping,
@@ -70,7 +73,7 @@ public static partial class AppInternal
 
     public sealed record ConfigWarning(ConfigWarningKind Kind, LineColumn? Location = null);
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ConfigWarningKind>))]
     public abstract record ConfigWarningKind
     {
         private ConfigWarningKind() { }
@@ -85,7 +88,7 @@ public static partial class AppInternal
         public sealed record PermissionsCorrected(uint PreviousMode) : ConfigWarningKind;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<AddressProblem>))]
     public abstract record AddressProblem
     {
         private AddressProblem() { }
@@ -97,7 +100,7 @@ public static partial class AppInternal
         public sealed record HostBitsSet(string Network) : AddressProblem;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<FileProblem>))]
     public abstract record FileProblem
     {
         private FileProblem() { }
@@ -108,7 +111,7 @@ public static partial class AppInternal
         public sealed record Io(string Operation, string Path, int Errno) : FileProblem;
     }
 
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<AccountValueProblem>))]
     public abstract record AccountValueProblem
     {
         private AccountValueProblem() { }
@@ -119,6 +122,7 @@ public static partial class AppInternal
         public sealed record DisallowedCharacters(AccountField Field) : AccountValueProblem;
     }
 
+    [JsonConverter(typeof(EnumNameConverter<AccountField>))]
     public enum AccountField
     {
         Host,

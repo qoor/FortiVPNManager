@@ -11,7 +11,7 @@ namespace FortiVPNManager.Contract;
 public static partial class AppInternal
 {
     /// <summary>Sent to the runtime.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<ToRuntime>))]
     public abstract record ToRuntime
     {
         private ToRuntime() { }
@@ -28,7 +28,7 @@ public static partial class AppInternal
     }
 
     /// <summary>Sent by the runtime.</summary>
-    [Cases]
+    [JsonConverter(typeof(CasesConverter<FromRuntime>))]
     public abstract record FromRuntime
     {
         private FromRuntime() { }
@@ -74,6 +74,7 @@ public static partial class AppInternal
     /// <summary>One line for the Log pane.</summary>
     public sealed record LogLine(DateTimeOffset Time, LogSource Source, string Text);
 
+    [JsonConverter(typeof(EnumNameConverter<LogSource>))]
     public enum LogSource
     {
         Stdout,
@@ -83,12 +84,14 @@ public static partial class AppInternal
         Note,
     }
 
+    [JsonConverter(typeof(EnumNameConverter<OtpMethod>))]
     public enum OtpMethod
     {
         Imap,
         GmailApi,
     }
 
+    [JsonConverter(typeof(EnumNameConverter<Weekday>))]
     public enum Weekday
     {
         Mon,
@@ -103,6 +106,7 @@ public static partial class AppInternal
     /// <summary>A local wall-clock time.</summary>
     public sealed record TimeOfDay(byte Hour, byte Minute);
 
+    [JsonConverter(typeof(EnumNameConverter<ButtonState>))]
     public enum ButtonState
     {
         Hidden,

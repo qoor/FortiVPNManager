@@ -18,7 +18,7 @@ public class LogLinesTests
     public void CopyAllWritesTheLogFileFormat()
     {
         var fixture = JsonNode.Parse(File.ReadAllText(FixturePath("log_copy_all.json")))!;
-        var message = fixture["message"].Deserialize<FromRuntime>(MessageCoding.Options);
+        var message = fixture["message"].Deserialize(MessageCoding.Default.FromRuntime);
         var log = new LogLines();
         log.Append(Assert.IsType<FromRuntime.LogLines>(message).Lines);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(fixture["timeZone"]!.GetValue<string>());

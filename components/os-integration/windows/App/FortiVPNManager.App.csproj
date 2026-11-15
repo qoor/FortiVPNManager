@@ -3,7 +3,9 @@
     The Windows app: its entry, one copy per user, and the runtime, the OS integration and the UI joined.
     Built by packaging/windows/build.ps1, which sets the informational version to the build the Helper
     carries too. The .NET runtime and Windows App SDK ship inside the app's folder, so the PC needs
-    neither installed.
+    neither installed. Published, the app is compiled ahead of time (Native AOT): one native executable
+    instead of the .NET runtime and the app's assemblies, which starts without compiling and takes
+    less memory.
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -19,6 +21,7 @@
     <!-- Without it, publishing leaves out the app's resources (FortiVPNManager.pri and the compiled XAML). -->
     <EnableMsixTooling>true</EnableMsixTooling>
     <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -32,8 +35,22 @@
   <ItemGroup>
     <Content Include="..\..\..\..\packaging\windows\AppIcon.ico" Link="AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!--
+    Of the Windows App SDK, only the WinUI component, which takes Foundation, InteractiveExperiences
+    and Base. The UI's tray icon and Community Toolkit packages take the whole SDK, pinned here as in
+    the UI; its other components would put about 40 MB the app never uses into its folder, onnxruntime
+    and DirectML of the AI and ML components above all, so none of their files are taken.
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.4.89" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Search" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.5" ExcludeAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\contract\windows\FortiVPNManager.Contract.csproj" />
