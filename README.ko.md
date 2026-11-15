@@ -97,7 +97,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 | 명령 | 내용 |
 |---|---|
-| `packaging\windows\build.ps1` | Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
+| `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더>` | 미리 빌드한 Rust 결과물로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
+| `scripts/msi-windows.sh <폴더>` | Mac에서 Rust를 빌드하고 Windows PC(ssh)에서 설치 패키지 생성 |
 
 - **설치**: 생성된 MSI 실행
 

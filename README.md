@@ -97,7 +97,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 | Command | What it does |
 |---|---|
-| `packaging\windows\build.ps1` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) |
+| `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output |
+| `scripts/msi-windows.sh <folder>` | Rust built on a Mac, installer made on a Windows PC (over ssh) |
 
 - **Install**: run the MSI
 

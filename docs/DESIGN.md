@@ -156,14 +156,14 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
 - **Windows**
-  - x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
-  - 빌드는 사용자 자신의 계정으로 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. Rust는 사용자마다 설치되므로 관리자 계정에는 없을 수 있다. 스크립트는 release 빌드를 모두 만든 뒤 설치 패키지(MSI)를 만든다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
-  - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
+  - x64용으로 빌드한다. Rust 부분(Helper, 런타임 DLL, 테스트 실행 파일)은 Mac에서 cargo-xwin으로 MSVC target용으로 교차 빌드하고, 사용자의 Windows PC에서는 cargo를 실행하지 않는다. PC는 앱과 MSI를 빌드하고 테스트를 실행한다(§7.1). 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
+  - 설치 패키지(MSI)는 Mac에서 명령 하나(`scripts/msi-windows.sh <PC의 폴더>`)로 만든다. 이 명령은 PC의 저장소 사본을 맞추고, Helper와 런타임 DLL을 release로 교차 빌드해 PC에 복사한 뒤, PC에서 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. 빌드 스크립트는 빌드 번호와 미리 빌드한 두 파일을 받아 앱을 release로 빌드하고 MSI를 만들며, cargo를 실행하지 않는다. 그래서 Windows에서 Rust를 직접 빌드하는 곳(CI 같은)도 두 파일을 만들어 같은 방식으로 부를 수 있다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
+  - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. 번호는 Helper를 빌드하는 쪽이 정해 Helper에 넣고(`FVM_BUILD`) 빌드 스크립트에 넘기며, 빌드 스크립트가 앱에 같은 번호를 넣는다. 앱은 secret을 보내기 전에 Helper의 번호가 자기 번호와 같은지 확인한다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
   - 앱은 Native AOT로 미리 컴파일한 실행 파일 하나와 Windows App SDK 가운데 WinUI와 그것이 쓰는 구성 요소를 앱 폴더에 담는다(self-contained, §3.2). PC에 .NET runtime이나 Windows App SDK를 설치하지 않는다.
   - 앱의 디버그 심볼(pdb)은 MSI에 넣지 않는다. 빌드 스크립트가 MSI 옆에 같은 이름(`FortiVPNManager-<버전>.pdb`)으로 두어 그 빌드의 crash dump를 볼 때 쓴다. debugger가 이름으로 찾게 하려면 `FortiVPNManager.pdb`로 바꿔 둔다.
   - OpenConnect 9.21의 파일은 저장소에서 제외한 빌드 폴더에서 가져온다. 개발자가 공식 OpenConnect 9.21 Windows 설치본에서 한 번 채워 두고, 없으면 빌드가 멈춘다. OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 그 파일을 바꾸고 새 MSI를 만든다.
   - MSI는 WiX Toolset v7로 만든다. v7은 Open Source Maintenance Fee EULA를 빌드에서 명시적으로 수락해야 한다. 그 비용을 내야 하는지는 회사가 판단할 일이다.
-  - MSI 버전 번호는 빌드 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
+  - MSI 버전 번호는 빌드 번호가 나타내는 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
   - 설치는 관리자 권한으로 MSI를 실행한다(§5.7). MSI가 하는 일은 다음과 같다.
     - 앱, Helper, OpenConnect를 `C:\Program Files\FortiVPNManager`에 넣는다. OpenConnect는 그 아래 `OpenConnect` 폴더에 둔다.
     - Helper 서비스를 SYSTEM 계정으로 등록한다. 부팅 때 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작한다. Helper 없이는 VPN을 쓸 수 없고, 통로 이름을 다른 프로그램이 먼저 차지한 경우처럼 원인이 사라지면 저절로 돌아오기 때문이다. Windows가 꺼질 때 종료 준비(preshutdown) 알림을 받은 Helper를 기다려 줄 시간(30초)도 넣는다. 권한은 Windows의 기본값에 모든 계정의 시작만 더한다(§3.2). 서비스는 시작하지 않는다.
@@ -447,6 +447,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 메모리(노트북, 같은 코드에 설치본과 같은 빌드 번호, 한 번 측정): 시작 3분 뒤 JIT와 AOT의 private bytes는 52.1 MB와 47.3 MB, private working set은 34.7 MB와 31.2 MB, working set은 131.2 MB와 93.1 MB였다. 설정창을 열었다 닫고 2분 뒤에는 110.4 MB와 106.8 MB, 88.7 MB와 85.8 MB, 223.1 MB와 179.5 MB였다. 설정창을 연 것만으로 둘 다 약 60 MB가 늘고, 닫아도(그때는 숨겼다) 줄지 않았다. 알림 영역 아이콘은 프로세스가 생긴 뒤 JIT 1.4초, AOT 0.9초에 나왔다. 처음 보는 실행 파일은 회사 보안 프로그램이 첫 시작을 약 74초 붙잡으므로 한 번 실행해 둔 뒤 쟀다. 사전 조사의 예상(10~20 MB)과 달리 private 메모리의 차이는 작았다.
   - 설정창: 닫으면 숨기지 않고 없애고, 다시 열 때 새로 만든다(사용자 결정). 사용자는 보통 설정창을 닫아 두고 앱이 스스로 연결하므로, 닫힌 창이 메모리를 붙들 이유가 없다. 창의 자리와 크기, 마지막으로 본 pane은 파일로 이어진다. 바꾼 뒤 AOT 빌드로 한 번 잰 결과, 창은 없어졌지만 메모리는 줄지 않았다(시작 2분 뒤, 연 동안, 닫고 2분 뒤의 private bytes 48.0 MB, 94.7 MB, 94.6 MB, private working set 31.7 MB, 73.8 MB, 73.8 MB, working set 93.7 MB, 161.9 MB, 161.8 MB). 앱이 쉬는 동안에는 GC가 돌지 않아 창이 쓰던 native 객체가 아직 풀리지 않았거나, XAML이 첫 창을 열 때 만든 프로세스 전체의 자원이 남는 것으로 보인다(확인하지 않음). 사용자가 이대로 두기로 했다(2026-11-15).
   - JSON coding을 메타데이터만 만드는 방식으로도 빌드해 봤지만 실행 파일이 0.2 MB만 줄어 기본 방식을 쓴다.
+- **2026-11-15 Windows용 Rust 빌드를 모두 Mac에서**: 사용자 결정이다(§4.4).
+  - 회사 PC의 보안 프로그램은 처음 보는 실행 파일을 첫 실행 때 1분에서 몇 분 붙잡는다. cargo가 빌드하며 실행하는 의존성의 build script도 새 실행 파일이라, PC에서 cargo를 돌리면 빌드마다 그만큼 기다렸다.
+  - 테스트 실행 파일은 2026-11-14부터 Mac에서 교차 빌드해 PC에서 실행했다. 이번에 MSI에 넣는 Helper와 런타임 DLL도 Mac에서 빌드하고, 빌드 스크립트는 빌드 번호와 그 두 파일을 받기만 한다. 전에는 빌드 스크립트가 PC에서 cargo로 둘을 만들었다.
+  - PC에서 cargo를 실행하던 스크립트(`scripts/cargo-windows.ps1`)는 지웠다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**

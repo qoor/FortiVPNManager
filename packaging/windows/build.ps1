@@ -1,9 +1,18 @@
-# Builds the Windows app (with its own .NET), the Helper and the runtime DLL for release into
-# .build\windows\FortiVPNManager, with the built-in Google OAuth client when there is one, and from that
-# folder and OpenConnect the installer, .build\windows\FortiVPNManager-<version>.msi. Run it as
-# yourself, without elevation: Rust is installed per user, so an administrator account may have none.
+# Builds the Windows app (with its own .NET) for release into .build\windows\FortiVPNManager, with the
+# Helper and the runtime DLL built beforehand and the built-in Google OAuth client when there is one,
+# and from that folder and OpenConnect the installer, .build\windows\FortiVPNManager-<version>.msi.
+# It runs no cargo: scripts/msi-windows.sh builds the Rust parts on a Mac, as the build PC's security
+# software holds every new executable, build scripts included, for minutes on its first run.
 # ASCII only.
-# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1 -Build <build> -RustOutput <folder>
+# <build> is yyyyMMddHHmmss, which the app takes and the Helper was built with (FVM_BUILD); <folder>
+# holds fvm-helper.exe and fvm_runtime.dll from release builds for x86_64-pc-windows-msvc:
+#   cargo build --release --package fvm-helper-entry-windows
+#   cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
+param(
+    [Parameter(Mandatory)] [string] $Build,
+    [Parameter(Mandatory)] [string] $RustOutput
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $out = Join-Path $root '.build\windows\FortiVPNManager'
@@ -15,10 +24,9 @@ $openConnect = Join-Path $PSScriptRoot 'OpenConnect'
 if (-not (Test-Path (Join-Path $openConnect 'openconnect.exe') -PathType Leaf)) {
     throw "no openconnect.exe in ${openConnect}: install OpenConnect 9.21 with its Windows installer (openconnect-installer-MinGW64-GnuTLS.exe) and copy what it puts in C:\Program Files\OpenConnect there, except 'Uninstall OpenConnect.exe' and 'Online Documentation.url'"
 }
-$now = Get-Date
 # The Helper and the app carry the same build, which the app checks before it sends a secret. The
 # format is the macOS build's.
-$build = $now.ToString('yyyyMMddHHmmss')
+$now = [datetime]::ParseExact($Build, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
 # The installer's version, from the same moment: year, month and the minute of the month, which keeps
 # the third field under Windows Installer's limit of 65535.
 $version = '{0:yy}.{0:MM}.{1}' -f $now, (($now.Day - 1) * 1440 + $now.Hour * 60 + $now.Minute)
@@ -27,13 +35,6 @@ function Invoke-Dotnet([string[]] $arguments) {
     $ErrorActionPreference = 'Continue'
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "dotnet $($arguments[0]) failed with exit code $LASTEXITCODE" }
-}
-
-function Invoke-Cargo([string[]] $arguments) {
-    # cargo reports progress on stderr, which Windows PowerShell may turn into errors under Stop.
-    $ErrorActionPreference = 'Continue'
-    & cargo @arguments
-    if ($LASTEXITCODE -ne 0) { throw "cargo $($arguments -join ' ') failed with exit code $LASTEXITCODE" }
 }
 
 # A script the installer runs, as a PowerShell command, which execution policy does not apply to.
@@ -81,22 +82,13 @@ function Add-LanguageTransform([string] $package, [string] $localized, [int] $la
     }
 }
 
-Push-Location $root
-try {
-    $env:FVM_BUILD = $build
-    Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-entry-windows')
-    Invoke-Cargo @('rustc', '--release', '--package', 'fvm-runtime', '--lib', '--crate-type', 'cdylib')
-} finally {
-    Remove-Item Env:FVM_BUILD -ErrorAction SilentlyContinue
-    Pop-Location
-}
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 # The app takes the build as its informational version, which it reports and checks against the Helper's.
 $app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.App.csproj'
-Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:InformationalVersion=$build", '-o', $out, '--nologo')
-Copy-Item (Join-Path $root 'target\release\fvm-helper.exe') $out
-Copy-Item (Join-Path $root 'target\release\fvm_runtime.dll') $out
+Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
+Copy-Item (Join-Path $RustOutput 'fvm-helper.exe') $out
+Copy-Item (Join-Path $RustOutput 'fvm_runtime.dll') $out
 # The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
 # gitignored as it has the client secret. Without it the app still works; users then import a client
 # JSON in Settings.
@@ -121,4 +113,4 @@ $msi = Join-Path $root ".build\windows\FortiVPNManager-$version.msi"
 Copy-Item (Join-Path $out 'FortiVPNManager.pdb') ([IO.Path]::ChangeExtension($msi, '.pdb')) -Force
 Copy-Item (Join-Path $msiBuild 'en-US\FortiVPNManager.msi') $msi -Force
 Add-LanguageTransform $msi (Join-Path $msiBuild 'ko-KR\FortiVPNManager.msi') 1042
-Write-Output "build: $build, installer $version in $msi"
+Write-Output "build: $Build, installer $version in $msi"
