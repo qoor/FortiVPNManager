@@ -460,6 +460,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
   - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 배포에 유료 Apple Developer ID가 필요해 Release에 넣지 않는다. 버전 체계를 바꾸기 전까지 tag는 올리지 않는다(사용자).
   - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
+- **2026-11-15 Windows 앱 종료 중 다시 실행**: 사용자 결정이다(SPEC F-WN).
+  - 앱은 runtime이 연결을 끝낸 뒤 종료를 승인할 때까지(최대 12초) 떠 있다. 그동안 다시 실행하면 새 사본은 아직 키를 가진 이전 사본을 실행 중인 앱으로 보고 시작을 넘긴 뒤 끝났다. 이전 사본은 설정창을 띄웠다가 곧 종료와 함께 사라져, 다시 실행한 것이 없어졌다(notebook에서 사용자가 확인).
+  - 이제 [종료]를 누르면 앱은 키를 내려놓고 아이콘과 설정창을 바로 없앤 뒤 연결을 끝낸다. 그 사이 시작한 사본은 실행 중인 사본이 되어, 이전 사본의 프로세스가 끝날 때까지(세션마다 하나인 mutex) 기다렸다가 시작한다. 두 사본이 Helper에 끊기와 연결을 동시에 보내지 않게 하려는 것이다.
+  - 2026-11-13과 11-15에 한 번씩 종료 끝에 앱이 비정상 종료(WinUI 내부의 다른 스레드 호출, 0xc000027b)했다. 둘 다 이 상황, 즉 종료 중인 사본이 설정창을 만든 것과 겹친 것으로 보인다. dump가 없어 확인하지는 못했고, notebook에 충돌 dump를 남기게 해 두었다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**

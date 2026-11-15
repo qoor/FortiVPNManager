@@ -24,9 +24,20 @@ public static class Program
     /// </summary>
     private const uint ErrorBox = 0x10 | 0x10000 | 0x40000;
 
+    /// <summary>
+    /// Held by the running copy until its process ends. A copy that quits gives up its key at once and
+    /// ends the tunnel unseen, up to the runtime's quit limit; a copy started meanwhile becomes the
+    /// running one and waits here for that process to end, as if the user had waited. Before, such a
+    /// start handed itself to the quitting copy and ended with it (user decision, 2026-11-15).
+    /// </summary>
+    private const string RunningName = @"Local\FortiVPNManager.Running";
+
     private static readonly object LaunchGate = new();
+    private static AppInstance? instance;
+    private static Mutex? running;
     private static App? launched;
     private static AppActivationArguments? reopenedEarly;
+    private static bool leaving;
 
     [STAThread]
     public static void Main()
@@ -42,6 +53,16 @@ public static class Program
             // The handover is a call to the other process, made off this single-threaded thread.
             Task.Run(() => main.RedirectActivationToAsync(activation).AsTask()).Wait();
             return;
+        }
+        instance = main;
+        running = new Mutex(false, RunningName);
+        try
+        {
+            running.WaitOne();
+        }
+        catch (AbandonedMutexException)
+        {
+            // The copy before ended, as a quitting one does, without releasing it.
         }
         // Windows calls this on a pool thread, and the other copy waits until it returns, so it never
         // waits for this copy's launch.
@@ -77,11 +98,28 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// The app quits: starts from now on go to a new copy, which waits for this process to end. A
+    /// start already on its way here is dropped, as this copy shows nothing more.
+    /// </summary>
+    internal static void Leave()
+    {
+        lock (LaunchGate)
+        {
+            leaving = true;
+        }
+        instance?.UnregisterKey();
+    }
+
     /// <summary>A start of another copy, kept until the app has launched; only the latest counts.</summary>
     private static void Reopened(AppActivationArguments activation)
     {
         lock (LaunchGate)
         {
+            if (leaving)
+            {
+                return;
+            }
             if (launched is null)
             {
                 reopenedEarly = activation;

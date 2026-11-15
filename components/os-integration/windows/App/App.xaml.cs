@@ -46,6 +46,12 @@ public partial class App : Application
         {
             // What is still typed in Settings reaches the runtime before it is asked to quit.
             ui.FinishSettingsTyping();
+            // The app is gone for the user at once while the runtime ends the tunnel, and a start
+            // meanwhile waits for this process instead of handing itself to it (Program.Leave).
+            Program.Leave();
+            ui.CloseSettings();
+            tray?.Dispose();
+            tray = null;
             router.Lifetime.RequestQuit();
         });
         router.Start(facts);
