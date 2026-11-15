@@ -45,6 +45,8 @@ new_names=$(xargs -n1 basename <"$work/new" | paste -sd, -)
 runs=$(while IFS='|' read -r exe package; do printf '%s|%s\n' "$(basename "$exe")" "$package"; done <"$work/tests")
 
 cat >"$work/run.ps1" <<EOF
+# Progress records ("Preparing modules for first use") would arrive as CLIXML on the error stream.
+\$ProgressPreference = 'SilentlyContinue'
 \$root = Join-Path \$env:USERPROFILE 'src\\$folder'
 \$new = '$new_names' -split ',' | Where-Object { \$_ }
 \$tests = @'
