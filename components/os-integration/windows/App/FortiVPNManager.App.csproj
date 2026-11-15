@@ -52,6 +52,21 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.6.5" ExcludeAssets="all" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.5" ExcludeAssets="all" />
   </ItemGroup>
+  <!--
+    WinUI brings its controls' own text (such as a text field's Copy menu) in 86 languages, a folder each.
+    The app speaks only Korean and English, so the published app keeps those two; on Windows in another
+    language WinUI's text falls back to English, as the app's own does (user decision, 2026-11-15).
+  -->
+  <Target Name="KeepKoreanAndEnglishWinUIText" AfterTargets="ComputeResolvedFilesToPublishList">
+    <!-- A condition cannot pass metadata to a property function, so the language folder is metadata first. -->
+    <ItemGroup>
+      <_WinUITextToDrop Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.mui'">
+        <Language>$([System.IO.Path]::GetDirectoryName('%(ResolvedFileToPublish.RelativePath)'))</Language>
+      </_WinUITextToDrop>
+      <_WinUITextToDrop Remove="@(_WinUITextToDrop)" Condition="'%(Language)' == 'ko-KR' or '%(Language)' == 'en-US'" />
+      <ResolvedFileToPublish Remove="@(_WinUITextToDrop)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\..\..\contract\windows\FortiVPNManager.Contract.csproj" />
     <ProjectReference Include="..\FortiVPNManager.OsIntegration.csproj" />

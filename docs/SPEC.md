@@ -734,7 +734,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **세부 기능**
   1. Windows 11 이상 x64에 관리자 권한으로 이 PC 전체에 설치한다(per-machine). 폴더는 `C:\Program Files\FortiVPNManager`로 고정하고 아무것도 묻지 않는다. quiet 설치(`msiexec /qn`)와 화면 설치의 결과는 같다.
   2. 화면은 Welcome(설치하는 동안 VPN 연결이 끊긴다는 안내) → Progress → Finish뿐이다. license, 폴더, 기능 고르기 화면은 없다. 화면 언어는 Windows 표시 언어가 한국어면 한국어, 그 밖에는 영어다.
-  3. 앱(실행에 필요한 .NET runtime과 Windows App SDK 부분 포함), Helper, OpenConnect 9.21(앱 폴더 아래 `OpenConnect`), OpenConnect와 그 안에 든 라이브러리들의 license 문서를 설치한다. PC에 따로 설치하는 것은 없다. 앱이 쓰지 않는 Windows App SDK 구성 요소(AI, ML 등)와 디버그 심볼은 넣지 않는다.
+  3. 앱(실행에 필요한 .NET runtime과 Windows App SDK 부분 포함), Helper, OpenConnect 9.21(앱 폴더 아래 `OpenConnect`), OpenConnect와 그 안에 든 라이브러리들의 license 문서를 설치한다. PC에 따로 설치하는 것은 없다. 앱이 쓰지 않는 Windows App SDK 구성 요소(AI, ML 등), 한국어와 영어 밖의 WinUI 언어 리소스, 디버그 심볼은 넣지 않는다.
   4. Helper 서비스를 SYSTEM 계정으로 등록한다. 부팅 때 자동으로 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작하며, Windows가 꺼질 때는 종료 준비 알림 뒤 Helper를 기다려 준다. 서비스 권한은 Windows의 기본값(일반 계정은 상태와 설정을 볼 수 있다)에 모든 계정의 시작만 더한다. 멈추기, 설정 바꾸기, 지우기는 관리자만 한다. 설치는 서비스를 시작하지 않는다. 앱이 시작한다(F-WN-05).
   5. 앱과 Helper의 이벤트 로그 출처와 모든 사용자의 시작 메뉴 바로 가기를 등록한다.
   6. 설정 > 앱에는 수정(Repair, Remove)과 제거가 있다. 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 필요하다(Windows가 그 위치를 기억한다).
