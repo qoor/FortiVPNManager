@@ -22,9 +22,5 @@ packaging/GoogleOAuthClient.json
 bin/
 obj/
 
-# OpenConnect for the Windows installer, copied from the official OpenConnect Windows installer's
-# folder (packaging/windows/build.ps1)
-packaging/windows/OpenConnect/
-
 # Local OpenConnect test logs; they hold real addresses and never go into the repo
 oc-test/

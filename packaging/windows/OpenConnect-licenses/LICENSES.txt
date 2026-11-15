@@ -36,10 +36,18 @@ wintun.dll
     Wintun 0.14.1: WireGuard LLC's Prebuilt Binaries License - wintun-LICENSE.txt
 
 Source code. The files come from the official OpenConnect 9.21 Windows installer
-(openconnect-installer-MinGW64-GnuTLS.exe), which OpenConnect's CI job "MinGW64/GnuTLS" builds:
-    https://gitlab.com/openconnect/openconnect/-/blob/v9.21/.gitlab-ci.yml
+(openconnect-installer-MinGW64-GnuTLS.exe), which OpenConnect's CI job "MinGW64/GnuTLS" built for the
+tag v9.21:
+    https://gitlab.com/openconnect/openconnect/-/jobs/14877945030/artifacts/raw/openconnect-installer-MinGW64-GnuTLS.exe
+    from https://gitlab.com/openconnect/openconnect/-/blob/v9.21/.gitlab-ci.yml
     in the build image https://gitlab.com/openconnect/build-images
     with the installer script openconnect.nsi.in of https://gitlab.com/openconnect/openconnect/-/tree/v9.21
+FortiVPNManager keeps an unchanged copy of that installer, and the installer's program files in a zip
+from which its build takes them:
+    https://github.com/qoor/FortiVPNManager/releases/download/openconnect-9.21/openconnect-installer-MinGW64-GnuTLS.exe
+    SHA-256 6ee9e8eb9bc59ef70bb0717df7f99703f8a2ccd11d8e45d58a61f9a2e6ef7d00
+    https://github.com/qoor/FortiVPNManager/releases/download/openconnect-9.21/openconnect-9.21-files.zip
+    SHA-256 ae8f338ee69932f03f326447f36f94d461a103be2c3ce15bc495472977141fe5
 The libraries were built with Fedora's MinGW toolchain, as their version strings say; Fedora's MinGW
 packages and their sources are at https://src.fedoraproject.org/rpms/mingw-<name>.
 

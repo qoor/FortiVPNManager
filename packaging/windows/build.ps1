@@ -1,6 +1,8 @@
 # Builds the Windows app (with its own .NET) for release into .build\windows\FortiVPNManager, with the
 # Helper and the runtime DLL built beforehand and the built-in Google OAuth client when there is one,
 # and from that folder and OpenConnect the installer, .build\windows\FortiVPNManager-<version>.msi.
+# OpenConnect comes as the program files of its official Windows installer, in a zip that this
+# downloads once into .build\windows and checks against its SHA-256.
 # It runs no cargo: scripts/msi-windows.sh builds the Rust parts on a Mac, as the build PC's security
 # software holds every new executable, build scripts included, for minutes on its first run.
 # ASCII only.
@@ -13,17 +15,34 @@ param(
     [Parameter(Mandatory)] [string] $Build,
     [Parameter(Mandatory)] [string] $RustOutput
 )
+# The OpenConnect the installer ships: the program files of OpenConnect's official Windows installer, as
+# a zip in this repository's release openconnect-<version>, so that building needs no tool that reads
+# the installer. For a new version, extract the installer's program files once with 7-Zip, leaving out
+# $PLUGINSDIR and the uninstaller it rebuilds ("Uninstall OpenConnect.exe"), upload them as
+# openconnect-<version>-files.zip next to the installer in a release openconnect-<version>, and update
+# these values and OpenConnect-licenses\LICENSES.txt.
+$openConnectVersion = '9.21'
+$openConnectUrl = "https://github.com/qoor/FortiVPNManager/releases/download/openconnect-$openConnectVersion/openconnect-$openConnectVersion-files.zip"
+$openConnectSha256 = 'ae8f338ee69932f03f326447f36f94d461a103be2c3ce15bc495472977141fe5'
+
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $out = Join-Path $root '.build\windows\FortiVPNManager'
 $msiBuild = Join-Path $root '.build\windows\msi'
-# OpenConnect 9.21 as its Windows installer (openconnect-installer-MinGW64-GnuTLS.exe) puts it in
-# C:\Program Files\OpenConnect, but for "Uninstall OpenConnect.exe" and "Online Documentation.url";
-# the installer takes every file here.
-$openConnect = Join-Path $PSScriptRoot 'OpenConnect'
-if (-not (Test-Path (Join-Path $openConnect 'openconnect.exe') -PathType Leaf)) {
-    throw "no openconnect.exe in ${openConnect}: install OpenConnect 9.21 with its Windows installer (openconnect-installer-MinGW64-GnuTLS.exe) and copy what it puts in C:\Program Files\OpenConnect there, except 'Uninstall OpenConnect.exe' and 'Online Documentation.url'"
+# The MSI takes every file in this folder (OpenConnectFolder in FortiVPNManager.Installer.wixproj).
+$openConnect = Join-Path $root '.build\windows\OpenConnect'
+$openConnectZip = Join-Path $root ".build\windows\openconnect-$openConnectVersion-files.zip"
+if (-not (Test-Path $openConnectZip -PathType Leaf)) {
+    & curl.exe --fail --silent --show-error --location --create-dirs --output "$openConnectZip.download" $openConnectUrl
+    if ($LASTEXITCODE -ne 0) { throw "downloading $openConnectUrl failed with curl exit code $LASTEXITCODE" }
+    Move-Item "$openConnectZip.download" $openConnectZip
 }
+$hash = (Get-FileHash $openConnectZip -Algorithm SHA256).Hash
+if ($hash -ne $openConnectSha256) {
+    throw "$openConnectZip has SHA-256 $hash, not $openConnectSha256 of the OpenConnect $openConnectVersion files; delete it to download it again"
+}
+if (Test-Path $openConnect) { Remove-Item $openConnect -Recurse -Force }
+Expand-Archive -Path $openConnectZip -DestinationPath $openConnect
 # The Helper and the app carry the same build, which the app checks before it sends a secret. The
 # format is the macOS build's.
 $now = [datetime]::ParseExact($Build, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)

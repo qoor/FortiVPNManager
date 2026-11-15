@@ -10,7 +10,7 @@
     <Cultures>en-US;ko-KR</Cultures>
     <AcceptEula>wix7</AcceptEula>
     <AppFolder>$(MSBuildThisFileDirectory)..\..\.build\windows\FortiVPNManager</AppFolder>
-    <OpenConnectFolder>$(MSBuildThisFileDirectory)OpenConnect</OpenConnectFolder>
+    <OpenConnectFolder>$(MSBuildThisFileDirectory)..\..\.build\windows\OpenConnect</OpenConnectFolder>
     <DefineConstants>AppFolder=$(AppFolder);OpenConnectFolder=$(OpenConnectFolder);ProductVersion=$(ProductVersion);ProductCode=$(ProductCode);CloseRunningScript=$(CloseRunningScript);UninstallCleanupScript=$(UninstallCleanupScript)</DefineConstants>
     <!-- ICE03 does not know the language IDs that Windows App SDK's resource files carry, and ICE43 and
          ICE57 take the Start menu folder of this per-machine package for a user's. -->

@@ -88,11 +88,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 - .NET 10 SDK
 - The **Desktop development with C++** workload of Visual Studio Build Tools
 
-### One-time setup
-
-1. Install OpenConnect 9.21 with its official Windows installer.
-2. Copy the files in `C:\Program Files\OpenConnect` to `packaging\windows\OpenConnect`.
-
 ### Build and install
 
 | Command | What it does |

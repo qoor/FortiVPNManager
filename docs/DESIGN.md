@@ -161,7 +161,7 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
   - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. 번호는 Helper를 빌드하는 쪽이 정해 Helper에 넣고(`FVM_BUILD`) 빌드 스크립트에 넘기며, 빌드 스크립트가 앱에 같은 번호를 넣는다. 앱은 secret을 보내기 전에 Helper의 번호가 자기 번호와 같은지 확인한다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
   - 앱은 Native AOT로 미리 컴파일한 실행 파일 하나와 Windows App SDK 가운데 WinUI와 그것이 쓰는 구성 요소를 앱 폴더에 담는다(self-contained, §3.2). PC에 .NET runtime이나 Windows App SDK를 설치하지 않는다.
   - 앱의 디버그 심볼(pdb)은 MSI에 넣지 않는다. 빌드 스크립트가 MSI 옆에 같은 이름(`FortiVPNManager-<버전>.pdb`)으로 두어 그 빌드의 crash dump를 볼 때 쓴다. debugger가 이름으로 찾게 하려면 `FortiVPNManager.pdb`로 바꿔 둔다.
-  - OpenConnect 9.21의 파일은 저장소에서 제외한 빌드 폴더에서 가져온다. 개발자가 공식 OpenConnect 9.21 Windows 설치본에서 한 번 채워 두고, 없으면 빌드가 멈춘다. OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 그 파일을 바꾸고 새 MSI를 만든다.
+  - OpenConnect 9.21의 파일은 공식 OpenConnect 9.21 Windows 설치본의 프로그램 파일이다. 빌드 스크립트가 이 저장소의 GitHub release(`openconnect-9.21`)에 둔 그 파일들의 zip을 빌드 폴더(`.build`)에 한 번 받아 두고, SHA-256이 다르면 멈추고, 풀어서 MSI에 넣는다. 그래서 빌드하는 쪽에 OpenConnect를 미리 설치하거나 설치본을 여는 도구를 둘 필요가 없다. 같은 release에는 원래 설치본도 그대로 둔다(§7.1). OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 새 설치본의 프로그램 파일을 7-Zip으로 한 번 꺼내 zip으로 만들고, 설치본과 함께 새 release(`openconnect-<버전>`)에 올린 뒤, 빌드 스크립트 맨 위의 버전과 hash, license 문서를 고치고 새 MSI를 만든다.
   - MSI는 WiX Toolset v7로 만든다. v7은 Open Source Maintenance Fee EULA를 빌드에서 명시적으로 수락해야 한다. 그 비용을 내야 하는지는 회사가 판단할 일이다.
   - MSI 버전 번호는 빌드 번호가 나타내는 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
   - 설치는 관리자 권한으로 MSI를 실행한다(§5.7). MSI가 하는 일은 다음과 같다.
@@ -451,6 +451,11 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 회사 PC의 보안 프로그램은 처음 보는 실행 파일을 첫 실행 때 1분에서 몇 분 붙잡는다. cargo가 빌드하며 실행하는 의존성의 build script도 새 실행 파일이라, PC에서 cargo를 돌리면 빌드마다 그만큼 기다렸다.
   - 테스트 실행 파일은 2026-11-14부터 Mac에서 교차 빌드해 PC에서 실행했다. 이번에 MSI에 넣는 Helper와 런타임 DLL도 Mac에서 빌드하고, 빌드 스크립트는 빌드 번호와 그 두 파일을 받기만 한다. 전에는 빌드 스크립트가 PC에서 cargo로 둘을 만들었다.
   - PC에서 cargo를 실행하던 스크립트(`scripts/cargo-windows.ps1`)는 지웠다.
+- **2026-11-15 OpenConnect 파일을 빌드가 직접 받음**: 사용자 결정이다(§4.4).
+  - 전에는 MSI를 빌드하는 사람이 OpenConnect 9.21을 공식 설치본으로 설치하고, 설치된 폴더의 파일을 저장소에서 제외한 빌드 폴더에 복사해 두어야 했다. 없으면 빌드가 멈췄다.
+  - 받는 곳은 OpenConnect GitLab CI의 원래 artifact 주소가 아니라 이 저장소의 GitHub release다. 그 artifact는 보관 기한이 지났고, tag의 마지막 artifact라서 남아 있을 뿐이다. release에는 설치본을 바꾸지 않은 사본도 둔다.
+  - 빌드는 설치본이 아니라 그 프로그램 파일의 zip을 받는다. 설치본은 NSIS 형식이라 Windows의 tar로는 열 수 없고, 실행하면 시작 메뉴와 registry를 건드린다. 7-Zip으로는 열리지만 빌드에 도구가 하나 더 필요해진다. zip은 PowerShell이 그대로 푼다. 7-Zip은 OpenConnect 버전을 올릴 때 zip을 만드는 데만 쓴다.
+  - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
