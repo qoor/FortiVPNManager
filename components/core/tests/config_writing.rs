@@ -32,7 +32,7 @@ vpn:
   trusted_cert_pins: []
 otp:
   gmail_address: ""
-  method: "imap"
+  method: "gmail_api"
   google_client_id: ""
 connection:
   auto_connect_on_launch: true

@@ -517,8 +517,8 @@ fn accepted_otp_methods() {
         ("\"imap\"", OtpMethod::Imap),
         ("gmail_api", OtpMethod::GmailApi),
         ("'gmail_api'", OtpMethod::GmailApi),
-        ("~", OtpMethod::Imap),
-        ("", OtpMethod::Imap),
+        ("~", OtpMethod::GmailApi),
+        ("", OtpMethod::GmailApi),
     ] {
         let loaded = decode(&format!("otp:\n  method: {raw}\n"));
         assert_eq!(loaded.settings.otp.method, expected, "{raw}");
@@ -561,7 +561,7 @@ fn missing_otp_keys_keep_the_defaults() {
         .settings
         .otp;
     assert_eq!(otp.gmail_address, "a@example.com");
-    assert_eq!(otp.method, OtpMethod::Imap);
+    assert_eq!(otp.method, OtpMethod::GmailApi);
     assert_eq!(otp.google_client_id, "");
 }
 
@@ -571,7 +571,7 @@ fn the_client_id_is_text_as_written() {
         .settings
         .otp;
     assert_eq!(otp.google_client_id, "123-abc.apps.googleusercontent.com");
-    assert_eq!(otp.method, OtpMethod::Imap);
+    assert_eq!(otp.method, OtpMethod::GmailApi);
 }
 
 #[test]

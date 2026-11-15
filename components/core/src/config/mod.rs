@@ -188,7 +188,7 @@ impl Default for Settings {
             },
             otp: Otp {
                 gmail_address: String::new(),
-                method: OtpMethod::Imap,
+                method: OtpMethod::GmailApi,
                 google_client_id: String::new(),
             },
             connection: Connection {
