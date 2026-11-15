@@ -94,6 +94,7 @@
 | Windows App SDK 가운데 앱이 쓰는 WinUI 구성 요소만 담는다. WinUI가 쓰는 Foundation, InteractiveExperiences, Base가 함께 들어오고 AI, ML, Search, Widgets, DWrite, Runtime 구성 요소는 넣지 않는다 | 사용자 결정이다(2026-11-14). 1.8부터 SDK가 구성 요소별 패키지로 나뉘었고, 전체 패키지를 쓰면 쓰지 않는 구성 요소가 앱 폴더에 모두 들어간다. 그렇게 빠진 파일이 57개, 약 50 MB이고 그중 AI·ML의 onnxruntime과 DirectML이 약 39 MB다. 알림 영역 아이콘(H.NotifyIcon)과 Community Toolkit 패키지가 전체 패키지에 의존하므로, 전체 패키지는 버전만 고정하고 쓰지 않는 구성 요소는 하나씩 이름을 들어 파일을 받지 않는다. 대가로 SDK를 올릴 때 새 구성 요소가 생기면 그 목록에 더해야 한다. 빠뜨려도 앱 폴더가 커질 뿐이고 publish 결과에서 드러난다 |
 | WinUI 기본 컨트롤의 문구(입력 칸의 [복사] 메뉴 같은 것)는 한국어와 영어만 담는다 | 사용자 결정이다(2026-11-15). WinUI는 그 문구를 86개 언어로 언어마다 폴더 하나씩 가져와, 설치 파일 279개 가운데 172개가 이것이었다(약 3.4 MB). Windows App SDK에는 이를 줄이는 설정이 없어, 앱 프로젝트가 publish할 때 한국어(ko-KR)와 영어(en-US) 폴더만 남긴다. 앱 자신의 문구도 두 언어뿐이다. 대가로 다른 언어의 Windows에서는 WinUI 문구도 앱 문구처럼 영어로 나온다 |
 | OpenConnect 9.21은 설치 패키지에 넣고, Helper는 그 사본만 실행한다 | 사용자 결정이다(2026-11-13). 패키지 하나로 설치가 끝나게 한다. 앱 폴더 아래에 두므로 관리자만 바꿀 수 있다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. 전에는 사용자가 OpenConnect를 기본 폴더에 따로 설치했다(§7.1) |
+| 앱 버전은 `연도.기능.수정`이고, 모든 플랫폼이 같은 번호를 쓴다 | 사용자 결정이다(2026-11-15). macOS 자체와 Safari·Xcode의 모양을 따르되, 연도 자리는 달력 연도다. 연도가 보이면서 기능 추가와 버그 수정이 구분된다. SemVer와 순수 CalVer(연.월.순번)를 버린 이유와 pre-release 꼬리표를 쓰지 않는 이유는 §7.1에 있다. 규칙은 §4.4에 있다 |
 
 ## 4. 구성과 역할
 
@@ -155,6 +156,14 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
+- **앱 버전**: 저장소 맨 위의 `VERSION` 파일 하나가 정한다(`연도.기능.수정`, §3.2).
+  - 연도는 릴리스하는 해(달력 연도)의 끝 두 자리다. 해가 바뀐 뒤 첫 릴리스가 `새 연도.0.0`이 된다. 첫 버전은 26.0.0이다.
+  - 기능은 새 기능이나 동작 변경이 있으면 올리고 수정을 0으로 돌린다. 수정은 버그 수정만 있을 때 올린다.
+  - pre-release 꼬리표(`-beta.1` 같은 것)는 쓰지 않는다. 시험 배포는 수동 실행한 초안 Release로 한다.
+  - 파일은 릴리스 직전에만 고친다. 그 사이의 개발 빌드는 직전 릴리스의 번호를 갖는다.
+  - `make build`가 macOS 앱의 버전(정보 창에 보이는 번호)으로, Windows 빌드 스크립트가 MSI의 버전과 파일 이름, 앱 실행 파일의 파일 버전으로 넣는다.
+  - 릴리스는 파일을 고쳐 commit한 뒤 `v<버전>` tag를 push한다. tag가 파일의 버전과 다르면 Release가 빌드 전에 멈춘다.
+  - 빌드 번호(앱과 Helper가 같은 빌드인지 확인하는 번호, §4.2)는 이와 따로 빌드마다 정한다.
 - **Windows**
   - x64용으로 빌드한다. Rust 부분(Helper, 런타임 DLL, 테스트 실행 파일)은 Mac에서 cargo-xwin으로 MSVC target용으로 교차 빌드하고, 사용자의 Windows PC에서는 cargo를 실행하지 않는다. PC는 앱과 MSI를 빌드하고 테스트를 실행한다(§7.1). 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
   - 설치 패키지(MSI)는 Mac에서 명령 하나(`scripts/msi-windows.sh <PC의 폴더>`)로 만든다. 이 명령은 PC의 저장소 사본을 맞추고, Helper와 런타임 DLL을 release로 교차 빌드해 PC에 복사한 뒤, PC에서 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. 빌드 스크립트는 빌드 번호와 미리 빌드한 두 파일을 받아 앱을 release로 빌드하고 MSI를 만들며, cargo를 실행하지 않는다. CI(`.github/workflows/msi.yml`)는 Windows runner에서 두 파일을 직접 빌드해 같은 방식으로 빌드 스크립트를 부르고, MSI와 pdb를 workflow artifact로 올린다. 빌드 번호는 로컬 빌드처럼 한국 시각으로 정한다. runner의 시계는 UTC라서 그대로 쓰면 나중 빌드의 번호가 더 작아질 수 있다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
@@ -163,7 +172,7 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
   - 앱의 디버그 심볼(pdb)은 MSI에 넣지 않는다. 빌드 스크립트가 MSI 옆에 같은 이름(`FortiVPNManager-<버전>.pdb`)으로 두어 그 빌드의 crash dump를 볼 때 쓴다. debugger가 이름으로 찾게 하려면 `FortiVPNManager.pdb`로 바꿔 둔다.
   - OpenConnect 9.21의 파일은 공식 OpenConnect 9.21 Windows 설치본의 프로그램 파일이다. 빌드 스크립트가 이 저장소의 GitHub release(`openconnect-9.21`)에 둔 그 파일들의 zip을 빌드 폴더(`.build`)에 한 번 받아 두고, SHA-256이 다르면 멈추고, 풀어서 MSI에 넣는다. 그래서 빌드하는 쪽에 OpenConnect를 미리 설치하거나 설치본을 여는 도구를 둘 필요가 없다. 같은 release에는 원래 설치본도 그대로 둔다(§7.1). OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 새 설치본의 프로그램 파일을 7-Zip으로 한 번 꺼내 zip으로 만들고, 설치본과 함께 새 release(`openconnect-<버전>`)에 올린 뒤, 빌드 스크립트 맨 위의 버전과 hash, license 문서를 고치고 새 MSI를 만든다.
   - MSI는 WiX Toolset v7로 만든다. v7은 Open Source Maintenance Fee EULA를 빌드에서 명시적으로 수락해야 한다. 그 비용을 내야 하는지는 회사가 판단할 일이다.
-  - MSI 버전 번호는 빌드 번호가 나타내는 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
+  - MSI 버전은 앱 버전이다. 전에는 빌드 번호가 나타내는 시각(연.월.그 달 안의 분)으로 만들었다(§7.1).
   - 설치는 관리자 권한으로 MSI를 실행한다(§5.7). MSI가 하는 일은 다음과 같다.
     - 앱, Helper, OpenConnect를 `C:\Program Files\FortiVPNManager`에 넣는다. OpenConnect는 그 아래 `OpenConnect` 폴더에 둔다.
     - Helper 서비스를 SYSTEM 계정으로 등록한다. 부팅 때 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작한다. Helper 없이는 VPN을 쓸 수 없고, 통로 이름을 다른 프로그램이 먼저 차지한 경우처럼 원인이 사라지면 저절로 돌아오기 때문이다. Windows가 꺼질 때 종료 준비(preshutdown) 알림을 받은 Helper를 기다려 줄 시간(30초)도 넣는다. 권한은 Windows의 기본값에 모든 계정의 시작만 더한다(§3.2). 서비스는 시작하지 않는다.
@@ -261,6 +270,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - **설치 화면**: Welcome(설치하는 동안 VPN 연결이 끊긴다는 안내) → Progress → Finish뿐이다. license, 폴더, 기능 고르기 화면은 없다. 언어는 Windows 표시 언어를 따른다(§3.2).
 - **설정 > 앱**: 수정(Repair, Remove)과 제거가 있다. 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 필요하다. Windows가 그 위치를 기억한다.
 - **업그레이드**: 새 MSI가 이전 버전을 바꾼다. 이전 버전 제거는 같은 transaction 안에서 하므로 설치가 실패하면 이전 버전이 돌아온다. 더 낮은 버전은 설치하지 않는다.
+- **같은 버전**: 다시 설치할 수 있다. 같은 버전의 다른 빌드는 업그레이드처럼 설치된 것을 바꾼다. 설치에 쓴 MSI를 다시 실행하면 수정 화면(Repair, Remove)이 열린다.
 - **실행 중인 앱**: 업그레이드와 제거는 실행 중인 앱을 닫는다. Windows 로그아웃 때처럼 종료를 요청하고, 몇 초 뒤에도 남아 있으면 끝낸다. "사용 중인 파일" 창이나 다시 시작 요청은 없다. 업그레이드 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다. 로그인 시 열기가 켜져 있으면 다음 로그인 때 열린다.
 - **제거**: 실제 제거일 때만 한다. 업그레이드 중 이전 버전을 지울 때는 하지 않는다.
   - 앱을 닫고, Helper를 멈추고 서비스를 지운다.
@@ -458,12 +468,18 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
 - **2026-11-15 CI와 Release**: 사용자 결정이다(§4.4).
   - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
-  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 배포에 유료 Apple Developer ID가 필요해 Release에 넣지 않는다. 버전 체계를 바꾸기 전까지 tag는 올리지 않는다(사용자).
+  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 배포에 유료 Apple Developer ID가 필요해 Release에 넣지 않는다. tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
   - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
 - **2026-11-15 Windows 앱 종료 중 다시 실행**: 사용자 결정이다(SPEC F-WN).
   - 앱은 runtime이 연결을 끝낸 뒤 종료를 승인할 때까지(최대 12초) 떠 있다. 그동안 다시 실행하면 새 사본은 아직 키를 가진 이전 사본을 실행 중인 앱으로 보고 시작을 넘긴 뒤 끝났다. 이전 사본은 설정창을 띄웠다가 곧 종료와 함께 사라져, 다시 실행한 것이 없어졌다(notebook에서 사용자가 확인).
   - 이제 [종료]를 누르면 앱은 키를 내려놓고 아이콘과 설정창을 바로 없앤 뒤 연결을 끝낸다. 그 사이 시작한 사본은 실행 중인 사본이 되어, 이전 사본의 프로세스가 끝날 때까지(세션마다 하나인 mutex) 기다렸다가 시작한다. 두 사본이 Helper에 끊기와 연결을 동시에 보내지 않게 하려는 것이다.
   - 2026-11-13과 11-15에 한 번씩 종료 끝에 앱이 비정상 종료(WinUI 내부의 다른 스레드 호출, 0xc000027b)했다. 둘 다 이 상황, 즉 종료 중인 사본이 설정창을 만든 것과 겹친 것으로 보인다. dump가 없어 확인하지는 못했고, notebook에 충돌 dump를 남기게 해 두었다.
+- **2026-11-15 앱 버전 체계**: 사용자 결정이다(§3.2, §4.4).
+  - 전에는 macOS 앱의 버전이 0.1.0으로 고정이었고, MSI 버전은 빌드 시각으로 만들었다. 두 플랫폼의 번호가 달랐고 tag 이름과도 이어지지 않았다.
+  - SemVer를 먼저 검토했다. 원래 라이브러리 API의 호환 규칙이라 앱에서는 major의 뜻을 따로 정해야 하고, Rust 빌드끼리 저장 데이터를 읽어야 하는 정책(§3.1) 때문에 major는 거의 오르지 않는다. 순수 CalVer(연.월.순번)는 변경이 기능 추가인지 버그 수정인지 드러나지 않는다. 그래서 macOS 자체와 Safari·Xcode가 쓰는 `연도.기능.수정`을 골랐다. 메모·메일 같은 macOS 기본 앱의 대부분은 OS와 무관한 자기 번호를 쓴다.
+  - 연도 자리는 달력 연도이고, 첫 버전은 26.0.0이다(사용자 결정). 처음에는 Apple처럼 그때의 macOS 번호(27)로 정했다가 바꿨다. 그 전의 MSI 버전(26.11.x)이 26.0.0보다 높아, 그 개발 빌드가 깔린 PC는 한 번 제거한 뒤 설치해야 했다.
+  - pre-release 꼬리표는 쓰지 않는다. macOS의 버전 칸과 MSI 버전 칸이 숫자 세 자리만 받아, 꼬리표만 다른 빌드가 같은 버전이 된다.
+  - 같은 버전 재설치를 허용했다. 버전이 릴리스 때만 바뀌므로 그 사이 개발 빌드끼리 서로를 바꿔 설치할 수 있어야 한다. 빌드마다 product code를 새로 정하므로, 같은 버전의 다른 빌드는 업그레이드처럼 설치된 것을 바꾼다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -563,7 +579,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 7. 보안: 작업 관리자의 명령줄과 로그에 비밀값이 없다.
 8. 일반 사용자 계정: 관리자 계정 정보를 넣어 MSI를 설치한 뒤, 일반 사용자가 앱을 열면 Helper 서비스를 시작하고 연결된다.
 9. 설치: 화면 설치와 quiet 설치(`msiexec /qn`)의 결과가 같다. 한국어 Windows에서는 한국어, 영어 Windows에서는 영어 화면이 나온다. 설치 직후 Helper 서비스는 멈춰 있고, 앱을 열면 서비스가 실행 중이 된 뒤에 알림 영역 아이콘이 나온다. 새로 설치한 PC에서도 첫 상태 확인에 OpenConnect를 쓸 수 없다는 경고가 없다.
-10. 업그레이드: 연결된 상태에서 새 MSI를 설치하면 앱이 닫히고, "사용 중인 파일" 창이나 다시 시작 요청이 없다. 설치를 실패시키면 이전 버전이 그대로 돌아온다. 더 낮은 버전은 설치되지 않는다.
+10. 업그레이드: 연결된 상태에서 새 MSI를 설치하면 앱이 닫히고, "사용 중인 파일" 창이나 다시 시작 요청이 없다. 설치를 실패시키면 이전 버전이 그대로 돌아온다. 더 낮은 버전은 설치되지 않는다. 같은 버전의 다른 빌드는 설치된 것을 바꾸고, 설정 > 앱에는 하나만 남는다.
 11. 제거: 두 사용자가 예외 규칙을 쓴 PC에서 제거하면 각자 앱이 쓴 예외 route와 로그인 시 열기가 사라지고, 밖에서 넣은 route와 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남는다. Helper 서비스, 실행 기록 폴더, 시작 메뉴 바로 가기, 두 이벤트 로그 출처가 사라진다.
 12. Helper를 쓸 수 없는 앱 시작: 서비스를 사용 안 함으로 바꾼 뒤 앱을 열면 아이콘 없이 "Helper 실행을 실패하여…" 오류 창이 곧바로 뜨고, 닫으면 앱이 끝난다. 시작이 두 번 실패하면 "(시도 2/2회)" 오류 창이 뜨고, 첫 실패는 로그에만 남는다.
 13. Repair: 앱 폴더의 파일을 지운 뒤 설정 > 앱의 수정에서 Repair하면 되살아난다.

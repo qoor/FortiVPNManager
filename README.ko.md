@@ -33,6 +33,11 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 
 파일이 없으면 설정창에서 JSON을 직접 가져오거나 앱 비밀번호(IMAP) 방식을 씁니다. GitHub Release의 MSI에는 저장소 비밀값(`GOOGLE_OAUTH_CLIENT_JSON`)의 클라이언트가 내장됩니다.
 
+## 버전과 릴리스
+
+- **버전**: `연도.기능.수정`(예: `26.0.0`). 연도는 릴리스하는 해의 끝 두 자리이고, 모든 플랫폼이 저장소 맨 위 `VERSION` 파일의 번호를 씁니다.
+- **릴리스**: `VERSION`을 고쳐 commit한 뒤 `v<버전>` tag를 push하면 GitHub Release에 Windows 설치 패키지가 올라갑니다.
+
 ## macOS
 
 ### 요구 사항

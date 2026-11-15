@@ -12,9 +12,10 @@
     <AppFolder>$(MSBuildThisFileDirectory)..\..\.build\windows\FortiVPNManager</AppFolder>
     <OpenConnectFolder>$(MSBuildThisFileDirectory)..\..\.build\windows\OpenConnect</OpenConnectFolder>
     <DefineConstants>AppFolder=$(AppFolder);OpenConnectFolder=$(OpenConnectFolder);ProductVersion=$(ProductVersion);ProductCode=$(ProductCode);CloseRunningScript=$(CloseRunningScript);UninstallCleanupScript=$(UninstallCleanupScript)</DefineConstants>
-    <!-- ICE03 does not know the language IDs that Windows App SDK's resource files carry, and ICE43 and
-         ICE57 take the Start menu folder of this per-machine package for a user's. -->
-    <SuppressIces>ICE03;ICE43;ICE57</SuppressIces>
+    <!-- ICE03 does not know the language IDs that Windows App SDK's resource files carry, ICE43 and
+         ICE57 take the Start menu folder of this per-machine package for a user's, and ICE61 warns of
+         the same version replacing itself, which Package.wxs allows on purpose. -->
+    <SuppressIces>ICE03;ICE43;ICE57;ICE61</SuppressIces>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />

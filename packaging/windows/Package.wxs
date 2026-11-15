@@ -11,8 +11,10 @@
            ProductCode="$(var.ProductCode)" UpgradeCode="{0754BD07-8C6E-45B9-B80D-65266312FA83}"
            Language="!(loc.ProductLanguage)" Scope="perMachine">
     <!-- The old version is removed inside the same transaction, so a failed upgrade puts it back. It is
-         found in whichever language it was installed. -->
-    <MajorUpgrade Schedule="afterInstallInitialize" IgnoreLanguage="yes" DowngradeErrorMessage="!(loc.NewerInstalled)" />
+         found in whichever language it was installed. Another build of the same version replaces the
+         installed one too, as the version changes only for a release (docs/DESIGN.md §5.7). -->
+    <MajorUpgrade Schedule="afterInstallInitialize" IgnoreLanguage="yes" AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="!(loc.NewerInstalled)" />
     <MediaTemplate EmbedCab="yes" />
 
     <!-- Windows Installer reports an old Windows version to a package, so the build comes from the registry. -->

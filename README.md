@@ -33,6 +33,11 @@ A Google Cloud **Desktop app OAuth client** for OTP authentication through the G
 
 Without the file, import the JSON in Settings, or use the app password (IMAP) method. The MSI in GitHub Releases has the client from the repository secret `GOOGLE_OAUTH_CLIENT_JSON` built in.
 
+## Versions and releases
+
+- **Version**: `year.feature.fix` (e.g. `26.0.0`). The year is the last two digits of the release's calendar year, and every platform takes the number in `VERSION` at the repository root.
+- **Release**: change `VERSION`, commit, and push a `v<version>` tag; the Windows installer goes up as a GitHub Release.
+
 ## macOS
 
 ### Requirements

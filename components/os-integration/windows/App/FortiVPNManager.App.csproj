@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     The Windows app: its entry, one copy per user, and the runtime, the OS integration and the UI joined.
-    Built by packaging/windows/build.ps1, which sets the informational version to the build the Helper
-    carries too. The .NET runtime and Windows App SDK ship inside the app's folder, so the PC needs
+    Built by packaging/windows/build.ps1, which sets the version to the app's (VERSION) and the
+    informational version to the build the Helper carries too. The .NET runtime and Windows App SDK ship inside the app's folder, so the PC needs
     neither installed. Published, the app is compiled ahead of time (Native AOT): one native executable
     instead of the .NET runtime and the app's assemblies, which starts without compiling and takes
     less memory.

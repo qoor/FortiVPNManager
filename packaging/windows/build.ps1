@@ -43,12 +43,9 @@ if ($hash -ne $openConnectSha256) {
 }
 if (Test-Path $openConnect) { Remove-Item $openConnect -Recurse -Force }
 Expand-Archive -Path $openConnectZip -DestinationPath $openConnect
-# The Helper and the app carry the same build, which the app checks before it sends a secret. The
-# format is the macOS build's.
-$now = [datetime]::ParseExact($Build, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
-# The installer's version, from the same moment: year, month and the minute of the month, which keeps
-# the third field under Windows Installer's limit of 65535.
-$version = '{0:yy}.{0:MM}.{1}' -f $now, (($now.Day - 1) * 1440 + $now.Hour * 60 + $now.Minute)
+# The app's version, which the app and the installer carry and which names the installer
+# (docs\DESIGN.md 4.4).
+$version = (Get-Content (Join-Path $root 'VERSION') -TotalCount 1).Trim()
 
 function Invoke-Dotnet([string[]] $arguments) {
     $ErrorActionPreference = 'Continue'
@@ -103,9 +100,11 @@ function Add-LanguageTransform([string] $package, [string] $localized, [int] $la
 
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
-# The app takes the build as its informational version, which it reports and checks against the Helper's.
+# The app takes the build as its informational version, which it reports and checks against the
+# Helper's (the Helper carries the same, so the app sends a secret only to its own build), and the
+# version as its file version.
 $app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.App.csproj'
-Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
+Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:Version=$version", "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
 Copy-Item (Join-Path $RustOutput 'fvm-helper.exe') $out
 Copy-Item (Join-Path $RustOutput 'fvm_runtime.dll') $out
 # The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
