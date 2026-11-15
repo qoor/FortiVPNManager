@@ -22,4 +22,8 @@ cargo xwin rustc --release --target "$target" --package fvm-runtime --lib --crat
 remote="%USERPROFILE%\\src\\$folder"
 ssh "$host" "if not exist $remote\\.build\\windows\\rust mkdir $remote\\.build\\windows\\rust"
 scp -q "target/$target/release/fvm-helper.exe" "target/$target/release/fvm_runtime.dll" "$host:src/$folder/.build/windows/rust/"
+# The built-in Google OAuth client is gitignored, so sync-windows.sh does not send it.
+if [ -f packaging/GoogleOAuthClient.json ]; then
+    scp -q packaging/GoogleOAuthClient.json "$host:src/$folder/packaging/"
+fi
 ssh "$host" "powershell -NoProfile -ExecutionPolicy Bypass -File $remote\\packaging\\windows\\build.ps1 -Build $build -RustOutput $remote\\.build\\windows\\rust"
