@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-macos:
+    name: Rust (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup update --no-self-update stable && rustup default stable && rustup component add clippy rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  rust-windows:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup update --no-self-update stable && rustup default stable && rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+      # The macOS Helper entry is macOS only.
+      - run: cargo clippy --workspace --exclude fvm-helper-entry-macos --all-targets -- -D warnings
+      # The Helper's tests that read or change the PC's routing table go through PowerShell, which on
+      # this runner takes longer than the Helper's 20 s limit for a run even one at a time; they run
+      # on the Windows PC (scripts/test-windows.sh).
+      - run: >-
+          cargo test --workspace --exclude fvm-helper-entry-macos --
+          --skip routes::tests::a_bypass_route_already_active_but_not_persistent_is_written
+          --skip routes::tests::a_gateway_host_route_left_behind_is_removed
+          --skip routes::tests::a_write_for_a_network_that_changed_since_it_was_read_changes_nothing
+          --skip routes::tests::bypass_routes_are_written_only_as_read_and_through_the_router
+          --skip routes::tests::routes_this_helper_does_not_write_are_refused_before_powershell
+          --skip routes::tests::values_never_read_are_refused_before_powershell
+          --skip the_bypass_routes_are_read_after_the_build_check
+          --skip a_connection_has_one_route_request_at_a_time
+
+  csharp-windows:
+    name: C# (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build packaging/windows/FortiVPNManager.slnx -c Release
+      - run: dotnet test packaging/windows/FortiVPNManager.slnx -c Release --no-build
+
+  swift-macos:
+    name: Swift (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - run: xcodebuild -version
+      - run: brew install xcodegen
+      - run: xcodegen generate --spec packaging/macos/project.yml
+      # The test bundles need no signing identity.
+      - run: |
+          for scheme in ContractTests HelperTests AppSwiftTests; do
+            xcodebuild -project packaging/macos/FortiVPNManager.xcodeproj -scheme "$scheme" \
+              -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO test
+          done
