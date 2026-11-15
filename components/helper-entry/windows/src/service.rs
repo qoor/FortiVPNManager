@@ -2,11 +2,16 @@
 //! never reads its arguments, so no unsafe code is needed.
 
 use std::path::PathBuf;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, OnceLock};
+use std::thread;
 use std::time::Duration;
 
+use fvm_backend_adapter::openconnect::OpenConnect;
+use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
+use fvm_watchdog::{Timing, Watchdog};
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
 };
@@ -16,7 +21,7 @@ use windows_service::service_dispatcher;
 use crate::Log;
 use crate::pipe::{Exit, Helper, Options};
 
-/// The service's name, which the install script registers.
+/// The service's name, which the installer registers.
 pub const SERVICE_NAME: &str = "FortiVPNManagerHelper";
 /// The event log source the Helper registers and writes to.
 const LOG_SOURCE: &str = "FortiVPNManager Helper";
@@ -31,10 +36,14 @@ const RUN_DIRECTORY: &str =
 const PIPE_ACCESS: &str = "D:P(A;;GA;;;SY)(A;;0x12019b;;;AU)";
 /// How long the drain before exiting waits for apps that stop reading.
 const DRAIN_LIMIT: Duration = Duration::from_secs(1);
-/// What the service control manager is told to wait for while the Helper starts (it first cleans
-/// up after an earlier Helper) and while it stops (it first ends and reports the run).
+/// What the service control manager is told to wait for while the Helper starts (it first runs the
+/// client once and cleans up after an earlier Helper) and while it stops (it first ends and reports
+/// the run).
 const START_WAIT: Duration = Duration::from_secs(60);
 const STOP_WAIT: Duration = Duration::from_secs(30);
+/// How often a long client run at start tells the service control manager that the start goes on;
+/// well within `START_WAIT`.
+const START_PROGRESS: Duration = Duration::from_secs(10);
 
 /// Runs the service until it stops. Fails when the service control manager did not start the
 /// process.
@@ -52,13 +61,18 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         Arc::new(OnceLock::new());
     let status_side = Arc::clone(&status);
     // When Windows shuts down, it first tells the services that accept preshutdown, while other
-    // services and the network still run, and waits for them up to the limit the install script
+    // services and the network still run, and waits for them up to the limit the installer
     // sets; the shutdown notice that follows leaves only a few seconds (5 by default), too few for
     // the logout. A second notice is ignored by the entry.
     let handler = move |control| match control {
         ServiceControl::Stop | ServiceControl::Preshutdown | ServiceControl::Shutdown => {
             if let Some(status) = status_side.get() {
-                report(status, ServiceState::StopPending, ServiceExitCode::Win32(0));
+                report(
+                    status,
+                    ServiceState::StopPending,
+                    ServiceExitCode::Win32(0),
+                    0,
+                );
             }
             // Stop is accepted only once the Helper runs.
             if let Some(helper) = control_side.get() {
@@ -85,12 +99,15 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         &handle,
         ServiceState::StartPending,
         ServiceExitCode::Win32(0),
+        0,
     );
+    let watchdog = Watchdog::new(OpenConnect, PathBuf::from(RUN_DIRECTORY), Timing::default());
+    run_client_once(&handle, &watchdog);
     let options = Options {
         pipe_name: PIPE_NAME.to_owned(),
         // The system account owns the pipe, so no user can change who may do what with it.
         security: format!("O:SYG:SY{PIPE_ACCESS}"),
-        run_directory: PathBuf::from(RUN_DIRECTORY),
+        watchdog,
     };
     let started = match Helper::start(options, Arc::clone(&log)) {
         Ok(started) => started,
@@ -104,12 +121,13 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
                 &handle,
                 ServiceState::Stopped,
                 ServiceExitCode::ServiceSpecific(2),
+                0,
             );
             return;
         }
     };
     let helper = helper.get_or_init(|| started);
-    report(&handle, ServiceState::Running, ServiceExitCode::Win32(0));
+    report(&handle, ServiceState::Running, ServiceExitCode::Win32(0), 0);
     log(
         LogLevel::Notice,
         LogCategory::Helper,
@@ -119,9 +137,42 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         Exit::AfterDraining => helper.drain(DRAIN_LIMIT),
         Exit::Now => {}
     }
-    report(&handle, ServiceState::Stopped, ServiceExitCode::Win32(0));
+    report(&handle, ServiceState::Stopped, ServiceExitCode::Win32(0), 0);
     // The other threads would keep the process alive.
     std::process::exit(0);
+}
+
+/// Has the watchdog run the client once before the Helper takes app connections, so that the
+/// client's first run on this PC is over before the app asks for anything (user decision,
+/// 2026-11-14). Security software can hold a newly installed client's first run for minutes, and a
+/// held process cannot be ended, so this run waits without a time limit: a limit would only report
+/// a working client as broken while the wait went on anyway. Nothing is kept from it; status and
+/// connect check the client again within their short limit, and status reports a missing or broken
+/// one. Meanwhile the service control manager hears every `START_PROGRESS` that the start goes on.
+fn run_client_once(
+    handle: &service_control_handler::ServiceStatusHandle,
+    watchdog: &Watchdog<OpenConnect>,
+) {
+    thread::scope(|scope| {
+        let (done, finished) = mpsc::channel();
+        thread::Builder::new()
+            .name("fvm-helper-client-run".into())
+            .spawn_scoped(scope, move || {
+                let _ = watchdog.find_client(ClientCheckWait::UntilExit);
+                let _ = done.send(());
+            })
+            .expect("starting the client run thread");
+        let mut checkpoint = 0;
+        while let Err(RecvTimeoutError::Timeout) = finished.recv_timeout(START_PROGRESS) {
+            checkpoint += 1;
+            report(
+                handle,
+                ServiceState::StartPending,
+                ServiceExitCode::Win32(0),
+                checkpoint,
+            );
+        }
+    });
 }
 
 /// The event log, with the source registered first; registering needs the system account's rights.
@@ -142,12 +193,13 @@ fn event_log() -> Log {
 }
 
 /// Tells the service control manager the service's state. Only the running service takes stop and
-/// shutdown notices, the pending states say how long to wait, and `exit_code` tells how a stopped
-/// service ended.
+/// shutdown notices, the pending states say how long to wait, `exit_code` tells how a stopped
+/// service ended, and a growing `checkpoint` tells that a pending state goes on.
 fn report(
     handle: &service_control_handler::ServiceStatusHandle,
     state: ServiceState,
     exit_code: ServiceExitCode,
+    checkpoint: u32,
 ) {
     let (controls_accepted, wait_hint) = match state {
         ServiceState::Running => (
@@ -165,7 +217,7 @@ fn report(
         current_state: state,
         controls_accepted,
         exit_code,
-        checkpoint: 0,
+        checkpoint,
         wait_hint,
         process_id: None,
     });

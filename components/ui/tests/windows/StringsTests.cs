@@ -100,6 +100,17 @@ public class StringsTests
         Assert.Equal("Waiting to reconnect (1:12)", waiting.StatusLine(null, time));
     }
 
+    [Fact]
+    public void TheHelperStartMessageSaysWhatWhyAndWhatToDo()
+    {
+        Assert.Equal(
+            "The Helper failed to start, so FortiVPNManager will quit.\nThe Helper service is disabled.\nReinstall FortiVPNManager or contact your administrator.",
+            HelperStartText.Message(HelperStartText.Disabled()));
+        Assert.Equal(
+            "An error occurred while the Helper was starting. FortiVPNManager will quit. (attempt 2/2)\nThe Helper did not start in time.\nReinstall FortiVPNManager or contact your administrator.",
+            HelperStartText.MessageAfterRetry(HelperStartText.TimedOut()));
+    }
+
     private static string Korean(string catalog, string key)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(catalog == "Windows.xcstrings"

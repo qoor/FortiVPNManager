@@ -17,7 +17,7 @@ use fvm_contract::backend::{
 };
 use zeroize::Zeroizing;
 
-const CLIENT_PATH: &str = r"C:\Program Files\OpenConnect\openconnect.exe";
+const CLIENT_PATH: &str = r"C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe";
 const PIN: &str = "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A=";
 const OTHER_PIN: &str = "pin-sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const PLACEHOLDER_PIN: &str = "pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -322,11 +322,15 @@ mod values {
     #[test]
     fn only_the_installed_client_is_ours() {
         assert_eq!(OpenConnect.client_name(), "openconnect");
-        for path in [CLIENT_PATH, r"c:\program files\openconnect\OPENCONNECT.EXE"] {
+        for path in [
+            CLIENT_PATH,
+            r"c:\program files\fortivpnmanager\openconnect\OPENCONNECT.EXE",
+        ] {
             assert!(OpenConnect.is_own_executable(Path::new(path)), "{path}");
         }
         for path in [
-            r"C:\Program Files\OpenConnect\other.exe",
+            r"C:\Program Files\FortiVPNManager\OpenConnect\other.exe",
+            r"C:\Program Files\OpenConnect\openconnect.exe",
             r"C:\Users\alice\openconnect.exe",
             "/opt/homebrew/bin/openconnect",
         ] {
@@ -340,7 +344,9 @@ mod values {
     fn no_client_is_ours_here_yet() {
         assert!(!OpenConnect.is_own_executable(Path::new(CLIENT_PATH)));
         assert!(!OpenConnect.is_own_executable(Path::new("/opt/homebrew/bin/openconnect")));
-        let problem = OpenConnect.locate_client().unwrap_err();
+        let problem = OpenConnect
+            .locate_client(fvm_contract::backend::ClientCheckWait::Limited)
+            .unwrap_err();
         assert_eq!(problem.path, Path::new("openconnect"));
     }
 
@@ -440,7 +446,7 @@ mod output {
         ),
         (
             Stderr,
-            b"Script did not complete within 10 seconds.\nFailed to spawn script 'C:\\Program Files\\OpenConnect\\vpnc-script-win.js' for connect: \xc0\xdf\xb8\xf8\xb5\xc8 \xb1\xe2\xb4\xc9\xc0\xd4\xb4\xcf\xb4\xd9.\nUnexpected pre-PPP packet header for encap 5.\n",
+            b"Script did not complete within 10 seconds.\nFailed to spawn script 'C:\\Program Files\\FortiVPNManager\\OpenConnect\\vpnc-script-win.js' for connect: \xc0\xdf\xb8\xf8\xb5\xc8 \xb1\xe2\xb4\xc9\xc0\xd4\xb4\xcf\xb4\xd9.\nUnexpected pre-PPP packet header for encap 5.\n",
         ),
     ];
 

@@ -17,7 +17,7 @@ use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -58,8 +58,8 @@ impl Backend for OpenConnect {
         "openconnect"
     }
 
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
-        client::locate()
+    fn locate_client(&self, wait: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
+        client::locate(wait)
     }
 
     fn describe_problem(&self, problem: &ClientProblem) -> String {

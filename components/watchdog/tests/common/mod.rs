@@ -17,8 +17,8 @@ use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest,
 };
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, Finding, LaunchSpec, OutputInterpreter, Prompt,
-    RouteRepairOutcome, SessionInputs, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
+    OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs, UntestedVersion,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_watchdog::{Report, Run, StageLimits, Timing, Watchdog};
@@ -59,7 +59,7 @@ impl Backend for FakeOpenFortiVpn {
     }
 
     /// The launch's program, wherever it is.
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
+    fn locate_client(&self, _: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
         Ok(ClientExecutable {
             path: self.launch.program.clone(),
             version: "1.24.1".to_owned(),

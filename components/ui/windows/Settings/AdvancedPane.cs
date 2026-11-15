@@ -9,7 +9,7 @@ namespace FortiVPNManager.Ui.Settings;
 
 /// <summary>
 /// The Advanced pane (components/ui/macos/AdvancedPane.swift): the Helper, the VPN client it runs,
-/// and the settings file. Windows has no approval step for the Helper; the install script registers it.
+/// and the settings file. Windows has no approval step for the Helper; the installer registers it.
 /// </summary>
 internal sealed class AdvancedPane : IPane
 {

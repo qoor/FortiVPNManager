@@ -44,8 +44,9 @@
 | UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
 | Helper 서비스 (Windows) | Helper | Helper entry를 쓰고 OS 연동 Helper의 일을 함: 앱 연결 확인, route 정리, 예외 route 쓰기 |
+| 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | openfortivpn | Helper가 실행 | macOS의 VPN client와 그 pppd |
-| openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트 |
+| openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트. Windows는 앱과 함께 설치한 것 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
@@ -101,8 +102,9 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   - 프로세스 실행, stdin 입력, 출력 줄 조립
   - 단계별 시간 제한, 종료, 종료 사실 기록
   - 실행 기록, 이전 Helper가 남긴 프로세스 정리
+  - Windows Helper가 시작할 때 client 확인을 한 번, 시간 제한 없이 하기
 - **모르는 것**: VPN client 이름과 출력 문구(backend adapter가 안다), route 복구 방법, 앱과의 통신, 실행을 요청한 사용자.
-- **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고, F-VR-06 남은 프로세스 정리와 route 복구
+- **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고, F-VR-06 남은 프로세스 정리와 route 복구. F-WN-03의 시작 때 client 확인을 맡는다.
 
 ## 2.6 Helper entry
 - **설명**: Helper에서 OS에 의존하지 않는 앞단이다. 앱 요청을 받아 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 watchdog에 맡긴다. 상태 같은 응답은 watchdog이 알려 준 것으로 만든다. Helper의 OS별 시작 부분이 backend adapter(macOS는 openfortivpn)와 실행 기록 폴더를 골라 만든 watchdog을 넘겨준다. Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
@@ -143,24 +145,34 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   - 알림 영역 아이콘과 메뉴, 설정창 pane
   - 종류와 값으로 문장 만들기와 번역, 상대 시간 표시
 - **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
-- **제공 기능**: F-WN-01 UI 표시와 문장 (Windows)
+- **제공 기능**: F-WN-01 UI 표시와 문장 (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)의 오류 창
 
 ## 2.11 OS 연동 (Windows)
 - **설명**: 런타임이 요청하는 OS 기능을 Windows에서 제공하고 시스템 이벤트를 알린다. 런타임과 주고받는 메시지는 macOS와 같다.
 - **역할**
+  - 앱 시작 때 Helper 서비스 시작과 기다리기
   - 비밀값 저장, Helper 서비스와의 통신, 알림, 브라우저 열기, 앱 수명
   - 시스템 이벤트와 네트워크 정보
 - **모르는 것**: 이벤트의 의미, 앱이 Helper와 주고받는 내용(버전 확인 제외).
-- **제공 기능**: F-WN-02 OS port (Windows)
+- **제공 기능**: F-WN-02 OS port (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)
 
 ## 2.12 Helper 서비스 (Windows)
 - **설명**: Windows의 Helper다. Helper entry를 그대로 쓰고, macOS에서 OS 연동 Helper가 하는 일을 직접 한다.
 - **역할**
-  - 서비스 수명, 앱 연결 받기와 확인
+  - 서비스 수명(실행 중이라고 알리기 전에 watchdog에 맡기는 VPN client 확인 포함), 앱 연결 받기와 확인
   - Helper entry에 넘길 watchdog 만들기: backend adapter(openconnect)와 실행 기록 폴더 고르기
   - 게이트웨이 host route 정리, 예외 route 읽기·쓰기
 - **모르는 것**: VPN client 출력 문구, 재시도 판단.
 - **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper 서비스 (Windows)
+
+## 2.13 설치 패키지 (Windows)
+- **설명**: Windows에 앱을 설치, 업그레이드, 제거하는 MSI 하나다. 관리자 권한으로 실행된다.
+- **역할**
+  - 앱, Helper, OpenConnect 설치와 업그레이드
+  - Helper 서비스, 이벤트 로그 출처, 시작 메뉴 바로 가기 등록
+  - 제거 때 앱이 PC에 넣은 것(예외 route, 로그인 시 열기, Helper와 그 실행 기록) 정리
+- **모르는 것**: 연결과 VPN client 실행, config.yaml 내용. 사용자 데이터는 제거할 때 앱이 쓴 예외 route 기록만 읽는다.
+- **제공 기능**: F-WN-04 설치, 업그레이드, 제거 (Windows)
 
 # 3. 기능 명세
 
@@ -440,7 +452,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-BR-02 동기화
 - **설명**: 계산한 route를 OS가 저장해 두는 route 목록에 쓰고, 실패하면 다시 시도하고 알린다. macOS는 주 네트워크 서비스의 additional routes, Windows는 주 interface의 persistent route다.
-- **담당**: 런타임, OS 연동 Helper(networksetup) 또는 Helper 서비스(persistent route), OS 연동(알림)
+- **담당**: 런타임, OS 연동 Helper(networksetup) 또는 Helper 서비스(persistent route), OS 연동(알림), 설치 패키지(Windows 제거 때)
 - **입력 / 출력**: config.yaml, 네트워크 설정 변경 / route 쓰기, state.json 기록, OS 알림
 - **세부 기능**
   1. 앱 시작, Helper 준비, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다. Windows는 밖에서 바뀐 persistent route를 알려 주는 알림이 없어 짧은 주기로도 확인한다.
@@ -448,6 +460,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 가져올 대상은 config.yaml에 먼저 저장하고, 그다음 route를 쓴다.
   4. 읽은 뒤 네트워크나 route가 바뀌었으면 쓰지 않는다. 쓴 뒤 다시 읽어 확인하고, 앱이 쓴 route를 state.json에 기록한다.
   5. 쓰기가 계속 실패하면 정해진 횟수만큼 다시 시도한 뒤 macOS 알림을 한 번 보내고 재시도를 그만둔다. 그 뒤에는 네트워크나 규칙이 바뀔 때만 다시 한다.
+  6. Windows에서 앱을 제거하면 설치 패키지가 사용자마다 state.json에 앱이 쓴 것으로 기록된 route만 지운다(F-WN-04). persistent route는 앱이 없어져도 OS에 남기 때문이다.
 - **제약**: OS가 저장해 두므로 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하다. `networksetup`은 실패해도 exit code 0이라 다시 읽어 확인한다. Windows는 persistent route만 읽고 실행 중 route는 보지 않는다. VPN 스크립트가 넣은 게이트웨이 host route가 "밖에서 추가된 route"로 들어오지 않게 하려는 것이다. Windows의 route 명령은 출력이 번역되므로 번역되는 문구를 해석하지 않는다. openconnect의 route 스크립트는 끝날 때 서버가 준 제외 대역과 목적지·mask가 같은 route를 지우므로, 그런 대상은 5번 규칙으로 다시 넣는다.
 
 ### F-BR-03 목록 편집 초안
@@ -468,7 +481,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **세부 기능**
   1. 계정별 실패 기록, 로그인 시 열기를 처음 등록했는지, 네트워크 서비스(Windows는 interface)별로 앱이 쓴 예외 route를 저장한다.
   2. 바뀔 때만 0600으로 원자적으로 쓴다. 읽을 수 없으면 빈 상태로 시작한다.
-  3. 설치된 앱(macOS는 `/Applications`)이 처음 실행되면 로그인 시 열기를 한 번 켠다. 그 뒤 사용자가 끈 것은 존중한다.
+  3. 설치된 앱(macOS는 `/Applications`, Windows는 `C:\Program Files\FortiVPNManager`)이 처음 실행되면 로그인 시 열기를 한 번 켠다. 그 뒤 사용자가 끈 것은 존중한다. Windows에서 앱을 제거하면 모든 사용자의 로그인 시 열기 등록이 지워진다(F-WN-04).
 
 ### F-SR-02 로그
 - **설명**: openfortivpn 원본 출력과 앱·Helper의 설명 줄을 로그 pane과 로그 파일에 남긴다. 추적에 가장 유용하도록 마스킹하지 않는다.
@@ -509,20 +522,22 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-01 client 준비
 - **설명**: 실행할 VPN client를 확인하고, 실행 요청을 검증해 실행 명세를 만든다.
-- **담당**: backend adapter, watchdog
+- **담당**: backend adapter, watchdog(Windows Helper가 시작할 때의 확인 실행도)
 - **입력 / 출력**: 실행 요청 / client 경로와 버전, 실행 명세, 또는 오류
 - **세부 기능**
   1. 관리자만 쓸 수 있는 곳의 실행 파일만 쓴다. 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부한다. 문제는 종류와 경로로 알리고, 문장과 번역은 UI가 만든다.
      - openfortivpn: `/opt/homebrew/bin/openfortivpn`을 끝까지 풀어 Homebrew Cellar 안의 파일만 쓴다.
-     - openconnect: Windows는 `C:\Program Files\OpenConnect\openconnect.exe`만 쓴다. macOS·Linux는 지원할 때 정한다.
+     - openconnect: Windows는 앱과 함께 설치된 `C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe`만 쓴다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. macOS·Linux는 지원할 때 정한다.
      - logout 요청 도구: OS에 들어 있는 것만 쓰고(Windows는 시스템 폴더), 그 도구의 사용자 설정 파일과 proxy 설정은 읽지 않게 한다.
   2. 검증된 버전(openfortivpn 1.24.x, openconnect 9.21)이 아니면 고급 pane에 "검증되지 않은 버전" 경고를 띄운다.
-  3. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 제어 문자 없음, 그 밖의 한도는 VPN client마다 정한다(openfortivpn은 버퍼 안, 비밀번호 255바이트 이하).
-  4. 비밀번호와 openconnect의 세션 cookie는 설정 파일과 argv에 쓰지 않는다. openfortivpn 설정 파일은 0600으로 만들고 실행이 끝나면 지운다. openconnect는 설정 파일 없이 argv만 쓴다.
-  5. verbosity 옵션과 자체 재접속(openfortivpn `--persistent`)을 쓰지 않는다. openconnect는 끊긴 뒤 스스로 다시 붙으려고 기다리지 않게 해서(대기 0초) 첫 재시도가 실패하면 곧바로 끝나게 한다. 재연결은 앱이 OTP와 함께 한다.
-  6. 환경 변수는 꼭 필요한 것만 넘긴다. openfortivpn은 PATH만, openconnect는 그와 route 스크립트가 도는 데 필요한 OS 시스템 변수만 넘긴다.
-  7. openconnect의 realm은 접속 URL의 경로로 넘기고, 인증서 고정 값은 두 실행 모두에 항상 하나 이상 넘긴다(F-CM-09).
-  8. openconnect는 로그인만 하는 실행과, 그 세션 cookie로 터널을 여는 실행의 명세를 함께 만든다(F-VR-02). 세션 cookie로 보낼 logout 요청의 명세도 만든다(F-VR-04).
+  3. openconnect의 버전은 실행해 물어서 알고, 상태 확인과 연결 때마다 다시 확인하며 기억하지 않는다. 이 확인에는 짧은 시간 제한을 둔다.
+  4. Windows Helper의 시작 부분은 실행 중이라고 알리기 전에 watchdog에 같은 확인을 한 번 맡긴다(openconnect `--version` 한 번). 이때는 시간 제한 없이 openconnect가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다(F-WN-03). 새로 설치한 client의 느린 첫 실행이 여기서 끝나므로 3의 짧은 제한으로 충분하고, 앱의 첫 상태 확인은 곧바로 답을 받는다. 이 결과도 기억하지 않는다.
+  5. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 제어 문자 없음, 그 밖의 한도는 VPN client마다 정한다(openfortivpn은 버퍼 안, 비밀번호 255바이트 이하).
+  6. 비밀번호와 openconnect의 세션 cookie는 설정 파일과 argv에 쓰지 않는다. openfortivpn 설정 파일은 0600으로 만들고 실행이 끝나면 지운다. openconnect는 설정 파일 없이 argv만 쓴다.
+  7. verbosity 옵션과 자체 재접속(openfortivpn `--persistent`)을 쓰지 않는다. openconnect는 끊긴 뒤 스스로 다시 붙으려고 기다리지 않게 해서(대기 0초) 첫 재시도가 실패하면 곧바로 끝나게 한다. 재연결은 앱이 OTP와 함께 한다.
+  8. 환경 변수는 꼭 필요한 것만 넘긴다. openfortivpn은 PATH만, openconnect는 그와 route 스크립트가 도는 데 필요한 OS 시스템 변수만 넘긴다.
+  9. openconnect의 realm은 접속 URL의 경로로 넘기고, 인증서 고정 값은 두 실행 모두에 항상 하나 이상 넘긴다(F-CM-09).
+  10. openconnect는 로그인만 하는 실행과, 그 세션 cookie로 터널을 여는 실행의 명세를 함께 만든다(F-VR-02). 세션 cookie로 보낼 logout 요청의 명세도 만든다(F-VR-04).
 - **제약**: `--persistent`는 이메일 OTP 경로에서 쓴 OTP를 다시 보낸다. openfortivpn은 proxy 환경 변수를 읽고, 버퍼보다 긴 값은 조용히 자른다. openconnect의 비밀번호 미리 넣기 옵션은 쓰지 않는다. 인증서 질문이 그 줄을 답으로 읽는다. 비대화 옵션은 OTP 질문까지 막는다. 이 게이트웨이는 끊긴 세션으로 다시 붙는 것을 허용하지 않아서, openconnect가 다시 붙으려 하면 거부되고 logout한 뒤 끝난다. 다시 시도하는 동안에도 터널 어댑터는 남아 있어 앱은 끊긴 것을 알 수 없다. 연결하면서 cookie를 출력하는 openconnect 옵션은 정상 종료할 때까지 출력이 나오지 않아 쓰지 않는다.
 
 ### F-VR-02 실행과 stdin 입력
@@ -600,8 +615,8 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 앱 연결이 끊기면 그 앱의 실행을 끝낸다. 정상 종료, 강제 종료, 크래시가 같은 경로다.
   4. macOS: 유휴 시 종료 요청에는 실행이 없을 때만 응하고 종료한다. 버전 확인과 이 요청의 모양은 빌드가 바뀌어도 바꾸지 않는다.
   5. macOS: 재설치로 실행 파일이 바뀌면 실행이 없을 때 종료하고, launchd가 다음 요청 때 새 Helper를 띄운다.
-  6. SIGTERM이나 서비스 정지 요청을 받으면 실행을 끝내고 보고한 뒤 종료한다. Windows 재설치는 서비스 정지 → 교체 → 시작 순서다.
-- **제약**: 실행 중인 옛 Helper는 재설치 뒤 앱의 서명 확인을 통과하지 못한다. 이 자가 종료 덕분에 `make install`에 sudo가 필요 없다. Windows에서는 실행 중인 실행 파일을 바꿀 수 없어 설치가 서비스를 먼저 멈춘다.
+  6. SIGTERM이나 서비스 정지 요청을 받으면 실행을 끝내고 보고한 뒤 종료한다. Windows의 업그레이드와 제거는 앱을 닫고 서비스를 멈춘 뒤 파일을 바꾸거나 지운다. 업그레이드 뒤 새 Helper는 앱이 시작한다(F-WN-05).
+- **제약**: 실행 중인 옛 Helper는 재설치 뒤 앱의 서명 확인을 통과하지 못한다. 이 자가 종료 덕분에 `make install`에 sudo가 필요 없다. Windows에서는 실행 중인 실행 파일을 바꿀 수 없어 설치 패키지가 서비스를 먼저 멈춘다.
 
 ## 3.9 macOS 부분 (F-SW)
 
@@ -662,9 +677,10 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   1. 알림 영역 아이콘은 앱 아이콘이고, 연결 상태는 툴팁과 메뉴로 알린다. Windows 알림 영역 아이콘은 macOS처럼 상태별 기호로 그리는 방식이 아니어서다(사용자 결정, 2026-11-13). 아이콘을 누르면 macOS 메뉴와 같은 항목의 메뉴(Windows 기본 메뉴)가 열린다.
   2. 설정창은 macOS와 같은 pane을 같은 순서로 두고, macOS처럼 창 왼쪽의 사이드바로 고른다. pane 안의 항목도 macOS와 같은 묶음과 순서로 둔다. 세부는 [SETTINGS-UI.md](SETTINGS-UI.md)를 따른다.
   3. 설정창을 닫아도 앱은 알림 영역에 남는다. 앱을 끝내는 것은 메뉴의 [종료]뿐이다.
-  4. 앱을 켜면 알림 영역 아이콘만 둔다. 설정이 필요하거나 첫 실행에서 설정을 가져왔어도 설정창을 스스로 열지 않는다. 설정창은 아이콘 더블클릭이나 메뉴의 [설정…]으로 연다(사용자 결정, 2026-11-13).
+  4. 앱을 켜면 Helper 서비스가 실행 중이 될 때까지 아무것도 보이지 않고(F-WN-05), 그 뒤 알림 영역 아이콘만 둔다. 설정이 필요하거나 첫 실행에서 설정을 가져왔어도 설정창을 스스로 열지 않는다. 설정창은 아이콘 더블클릭이나 메뉴의 [설정…]으로 연다(사용자 결정, 2026-11-13).
   5. 문장은 macOS와 같은 뜻으로 만들고, Windows 표시 언어(한국어·영어)를 따른다.
   6. Helper 승인 관련 항목은 없다. 일반 pane의 설정 가져오기는 openfortivpn 대신 FortiClient 연결에서 가져온다(F-CF-04).
+  7. OpenConnect는 앱과 함께 설치되므로, OpenConnect를 찾을 수 없거나 쓸 수 없으면 OpenConnect를 따로 설치하라고 하지 않고 FortiVPNManager를 다시 설치하라고 안내한다.
 
 ### F-WN-02 OS port (Windows)
 - **설명**: Rust가 요청하는 OS 기능을 Windows에서 구현하고 시스템 이벤트를 알린다. port의 종류와 메시지는 macOS와 같다.
@@ -674,7 +690,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 | port | Windows 구현 |
 |---|---|
 | 비밀값 저장 | Credential Manager의 사용자 자격 증명. 항목 이름은 macOS Keychain의 서비스 이름과 계정 키를 따른다 |
-| 권한 있는 실행 통로 | Helper 서비스의 설치·실행 상태, 이 PC의 계정이 여는 연결 통로 |
+| 권한 있는 실행 통로 | Helper 서비스의 설치·실행 상태와 시작(F-WN-05), 이 PC의 계정이 여는 연결 통로. 서비스 등록은 설치 패키지가 한다(F-WN-04) |
 | 시스템 이벤트 | 절전과 재개, 세션 잠금과 해제, 디스플레이 꺼짐과 켜짐, 네트워크 주소·연결 변경, 앱 활성화, 시계·시간대 변경 |
 | 화면 상태 | 세션 잠금 여부, 디스플레이 꺼짐 여부 |
 | 네트워크 정보 | interface 목록(주소, gateway, interface GUID), 게이트웨이로 가는 경로 |
@@ -692,23 +708,63 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   5. 시간대는 IANA 이름으로 바꿔 알린다. 판단 코어가 IANA 시간대로 계산하기 때문이다.
   6. interface는 Windows가 보여 주는 어댑터 이름으로 부른다. 경로, 주소, 네트워크 변경 이벤트가 같은 이름을 써야 런타임이 맞춰 볼 수 있다.
   7. persistent route가 바뀌었다는 알림이 없으므로, 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알린다(F-BR-02).
-  8. Windows에서 로그아웃하거나 끌 때는 메뉴의 [종료]와 같이 종료를 요청한다.
+  8. Windows에서 로그아웃하거나 끌 때는 메뉴의 [종료]와 같이 종료를 요청한다. 설치 패키지가 업그레이드나 제거 때 앱을 닫으려고 보내는 요청도 같다(F-WN-04).
 
 ### F-WN-03 Helper 서비스 (Windows)
 - **설명**: Windows의 Helper다. 서비스로 실행되며 Helper entry와 OS 연동 Helper의 일을 함께 한다.
 - **담당**: Helper 서비스
 - **입력 / 출력**: 서비스 시작·정지, 앱 연결과 요청 / 응답, 이벤트와 출력, route 변경
 - **세부 기능**
-  1. 부팅 때 자동으로 시작하고, 비정상 종료하면 Windows가 다시 시작한다. Windows가 꺼질 때는 다른 서비스와 네트워크가 내려가기 전에 오는 종료 준비 알림에서 실행을 끝낸다. 그 뒤의 종료 알림은 몇 초만 기다려 주어 logout이 잘리기 때문이다.
+  1. 설치 패키지가 등록하고(F-WN-04), 부팅 때 자동으로 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작한다. 설치 직후와 업그레이드 뒤처럼 실행 중이 아니면 앱이 시작한다(F-WN-05). Windows가 꺼질 때는 다른 서비스와 네트워크가 내려가기 전에 오는 종료 준비 알림에서 실행을 끝낸다. 그 뒤의 종료 알림은 몇 초만 기다려 주어 logout이 잘리기 때문이다.
   2. 남은 프로세스와 route를 정리한 뒤에(F-VR-06) 앱 연결을 받는다.
-  3. 연결 통로는 이 PC의 계정과 시스템이 열 수 있고(다른 컴퓨터의 연결은 받지 않는다), 시스템 계정이 소유한다. 버전 확인에 직접 답하고, 앱이 함께 보낸 빌드가 같은 연결에서만 연결·OTP·예외 route 요청을 처리한다.
-  4. 유휴 시 종료 요청에는 끝나지 않는다고 답한다. Windows는 끝난 서비스를 다시 띄우지 않고, 재설치가 서비스를 다시 시작하기 때문이다.
-  5. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06). 둘 다 watchdog의 Windows 부분이 한다.
-  6. 예외 route 읽기·쓰기와 게이트웨이 host route 정리를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다. 쓰기 직전에, 쓰기와 한 번에, 앱이 읽은 interface와 route가 그대로인지 확인하고, 그 interface의 gateway로 가는 올바른 대상이나 이미 있던 route만 쓴다.
-  7. 시스템 명령은 고정 argv, 필요한 환경 변수만, shell 없이, 시간 제한을 두고 실행한다. 번역되는 출력은 해석하지 않는다.
-  8. 실행 기록은 시스템과 관리자만 접근할 수 있는 곳에 둔다.
-  9. 로그는 Windows 이벤트 로그에 쓴다.
+  3. Windows에 실행 중이라고 알리기 전에, 시작 부분이 watchdog에 client 확인을 한 번 맡겨 VPN client를 실행해 본다(F-VR-01의 4). 시간 제한 없이 client가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다. 새로 설치한 client의 느린 첫 실행이 서비스가 시작하는 동안에 끝나므로, 앱의 첫 상태 확인은 곧바로 답을 받는다. 결과는 기억하지 않는다. 상태 확인과 연결은 여전히 매번 짧은 제한으로 확인한다.
+  4. 연결 통로는 이 PC의 계정과 시스템이 열 수 있고(다른 컴퓨터의 연결은 받지 않는다), 시스템 계정이 소유한다. 버전 확인에 직접 답하고, 앱이 함께 보낸 빌드가 같은 연결에서만 연결·OTP·예외 route 요청을 처리한다.
+  5. 유휴 시 종료 요청에는 끝나지 않는다고 답한다. Windows는 끝난 서비스를 다시 띄우지 않고, 업그레이드는 앱과 Helper를 함께 바꾼 뒤 다시 연 앱이 새 Helper를 시작하기 때문이다.
+  6. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06). 둘 다 watchdog의 Windows 부분이 한다.
+  7. 예외 route 읽기·쓰기와 게이트웨이 host route 정리를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다. 쓰기 직전에, 쓰기와 한 번에, 앱이 읽은 interface와 route가 그대로인지 확인하고, 그 interface의 gateway로 가는 올바른 대상이나 이미 있던 route만 쓴다.
+  8. 시스템 명령은 고정 argv, 필요한 환경 변수만, shell 없이, 시간 제한을 두고 실행한다. 번역되는 출력은 해석하지 않는다.
+  9. 실행 기록은 시스템과 관리자만 접근할 수 있는 곳에 둔다.
+  10. 로그는 Windows 이벤트 로그에 쓴다. 로그 출처는 설치 패키지가 등록한다(F-WN-04).
 - **제약**: 연결한 프로그램이 설치된 앱인지는 확인하지 않는다. 같은 사용자로 실행되는 다른 프로그램도 연결할 수 있다(DESIGN §8). 그래서 한 메시지의 크기와, 읽지 않은 채 쌓이는 보낼 메시지의 수에 상한을 두고, 예외 route 요청은 연결마다 한 번에 하나만 받는다. 보낼 메시지가 넘친 연결은 앱이 끝난 것처럼 다룬다. 서비스에는 화면이 없어서, 사용자에게 알릴 일은 모두 앱으로 보낸다.
+
+### F-WN-04 설치, 업그레이드, 제거 (Windows)
+- **설명**: 앱, Helper, OpenConnect를 MSI 하나로 설치하고 바꾸고 지운다. 관리자가 배포하든 사용자가 직접 설치하든 결과가 같다(사용자 결정, 2026-11-13).
+- **담당**: 설치 패키지 (Windows)
+- **입력 / 출력**: MSI 실행(화면 또는 quiet), 설정 > 앱의 수정·제거 / 설치된 파일과 등록, 업그레이드, 제거 때의 정리
+- **세부 기능**
+  1. Windows 11 이상 x64에 관리자 권한으로 이 PC 전체에 설치한다(per-machine). 폴더는 `C:\Program Files\FortiVPNManager`로 고정하고 아무것도 묻지 않는다. quiet 설치(`msiexec /qn`)와 화면 설치의 결과는 같다.
+  2. 화면은 Welcome(설치하는 동안 VPN 연결이 끊긴다는 안내) → Progress → Finish뿐이다. license, 폴더, 기능 고르기 화면은 없다. 화면 언어는 Windows 표시 언어가 한국어면 한국어, 그 밖에는 영어다.
+  3. 앱(.NET runtime 포함), Helper, OpenConnect 9.21(앱 폴더 아래 `OpenConnect`), OpenConnect와 그 안에 든 라이브러리들의 license 문서를 설치한다. PC에 따로 설치하는 것은 없다.
+  4. Helper 서비스를 SYSTEM 계정으로 등록한다. 부팅 때 자동으로 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작하며, Windows가 꺼질 때는 종료 준비 알림 뒤 Helper를 기다려 준다. 서비스 권한은 Windows의 기본값(일반 계정은 상태와 설정을 볼 수 있다)에 모든 계정의 시작만 더한다. 멈추기, 설정 바꾸기, 지우기는 관리자만 한다. 설치는 서비스를 시작하지 않는다. 앱이 시작한다(F-WN-05).
+  5. 앱과 Helper의 이벤트 로그 출처와 모든 사용자의 시작 메뉴 바로 가기를 등록한다.
+  6. 설정 > 앱에는 수정(Repair, Remove)과 제거가 있다. 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 필요하다(Windows가 그 위치를 기억한다).
+  7. 새 MSI는 이전 버전을 바꾼다. 이전 버전은 같은 transaction 안에서 지우므로 설치가 실패하면 이전 버전이 돌아온다. 더 낮은 버전은 설치하지 않는다.
+  8. 업그레이드와 제거는 실행 중인 앱을 닫는다. Windows 로그아웃 때처럼 종료를 요청하고(F-WN-02), 몇 초 뒤에도 남아 있으면 끝낸다. "사용 중인 파일" 창과 다시 시작 요청은 없다. 업그레이드 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다. 로그인 시 열기가 켜져 있으면 다음 로그인 때 열린다.
+  9. 제거는 실제 제거일 때만 다음을 한다. 업그레이드 중 이전 버전을 지울 때는 하지 않는다.
+     - 앱을 닫고, Helper를 멈추고 서비스를 지운다.
+     - 이 PC의 사용자마다, 그 사용자의 state.json에 앱이 쓴 것으로 기록된 예외 route만 지운다(F-BR-02). 밖에서 넣은 route는 건드리지 않는다.
+     - 모든 사용자의 로그인 시 열기 등록을 지운다(F-SR-01).
+     - Helper의 실행 기록 폴더, 설치한 파일, 시작 메뉴 바로 가기, 두 이벤트 로그 출처를 지운다.
+  10. 사용자마다의 config.yaml, state.json, 로그, 저장된 비밀값은 남긴다. 데이터를 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
+- **제약**: 설치 패키지는 다른 설치 프로그램을 실행할 수 없어서 필요한 것을 모두 담는다. 화면 언어는 문서화되지 않은 Windows Installer 동작에 기대므로, 동작하지 않게 되면 영어 화면으로 설치된다(DESIGN §9).
+
+### F-WN-05 앱 시작과 Helper 실행 (Windows)
+- **설명**: 앱이 맨 먼저 Helper 서비스가 실행 중이게 한다. Helper 없이는 앱이 쓸모가 없고, 다른 사람은 느린 첫 시작과 앱의 고장을 구분할 수 없으므로 그동안 보이지 않게 기다린다. 실행하지 못하면 이유를 알리고 끝난다(사용자 결정, 2026-11-13·14).
+- **담당**: OS 연동 (Windows), UI (Windows)
+- **입력 / 출력**: Helper 서비스 상태 / 서비스 시작, 알림 영역 아이콘 표시, 또는 오류 창과 앱 종료
+- **세부 기능**
+  1. 앱을 켜면 다른 무엇을 보이거나 시작하기 전에 이 일을 끝낸다. 그동안 알림 영역 아이콘도 없다.
+  2. 서비스가 실행 중이면 곧바로 넘어간다. 시작하는 중이면 기다리고, 멈춰 있으면 시작한 뒤 기다린다. 서비스가 시작 중이라고 알리는 동안에는 얼마가 걸리든 기다린다. 이 흐름에는 시간 제한이 없다.
+  3. 준비는 서비스가 실행 중이라는 것뿐이다. Helper의 첫 답을 따로 기다리지 않고, Helper와 주고받는 응답 시간 제한은 평소와 같다. Helper는 실행 중이라고 알리기 전에 VPN client 확인을 마치므로(F-WN-03) 첫 상태 확인은 곧바로 답을 받는다.
+  4. 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다.
+     - Windows가 기다리기를 그만둬 시작이 실패했으면, 그 시도의 프로세스가 끝날 때까지 기다린 뒤 다시 시작한다.
+     - Helper가 시작하다 오류로 멈췄으면 곧바로 다시 시작한다.
+     - 첫 실패는 보이지 않고 로그에만 남긴다(시도 1/2회).
+  5. 서비스가 설치돼 있지 않거나, 사용 안 함이거나, 시작할 권한이 없으면 곧바로 오류 창을 띄운다. 첫 줄은 "Helper 실행을 실패하여 FortiVPNManager를 종료합니다."이고, 그 아래에 이유와 "FortiVPNManager를 다시 설치하거나 관리자에게 문의하세요."를 둔다.
+  6. 다시 한 시작도 실패하면 오류 창의 첫 줄은 "Helper 시작 도중 오류가 발생하였습니다. FortiVPNManager를 종료합니다. (시도 2/2회)"이고, 그 아래에 이유("Helper가 제때 시작되지 않았습니다" 또는 "Helper가 시작 중 오류로 멈췄습니다")와 5와 같은 안내를 둔다.
+  7. 오류 창을 닫으면 앱이 끝난다. 영어 화면에서는 같은 뜻의 영어 문장이다.
+  8. 서비스가 실행 중이 되면 알림 영역 아이콘을 둔다(F-WN-01).
+- **제약**: 서비스는 SYSTEM 계정으로 돌고 설치 패키지는 서비스를 시작하지 않으므로, 이 PC의 모든 계정에 시작 권한이 있어야 한다(F-WN-04). macOS에는 이 단계가 없다. macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 하지만, Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다.
 
 # 4. 비기능 요구사항
 

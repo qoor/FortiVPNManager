@@ -15,7 +15,7 @@ use std::{env, fs, process};
 use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
 use fvm_contract::app_helper::RunRequest;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
 use fvm_contract::stream;
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ impl Backend for TestBackend {
         OpenFortiVpn.client_name()
     }
 
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
+    fn locate_client(&self, _: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
         self.client.clone()
     }
 

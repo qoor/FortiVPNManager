@@ -35,7 +35,7 @@ use std::time::Duration;
 
 use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest};
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, RouteRepairOutcome, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, RouteRepairOutcome, UntestedVersion,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 
@@ -73,11 +73,13 @@ where
     }
 
     /// The client executable the Helper would run now, with whether its version is outside the
-    /// ones this app was tested with; or why there is none.
+    /// ones this app was tested with; or why there is none. Where finding it runs the client, such
+    /// as to read its version, `wait` says how long that run may take.
     pub fn find_client(
         &self,
+        wait: ClientCheckWait,
     ) -> Result<(ClientExecutable, Option<UntestedVersion>), ClientProblem> {
-        let client = self.backend.locate_client()?;
+        let client = self.backend.locate_client(wait)?;
         let untested = self.backend.untested_version(&client.version);
         Ok((client, untested))
     }
@@ -90,9 +92,12 @@ where
         request: &mut RunRequest,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Result<(Run<B>, ClientExecutable), StartFailure> {
-        let client = self.backend.locate_client().map_err(|problem| {
-            StartFailure::ClientUnavailable(self.backend.describe_problem(&problem))
-        })?;
+        let client = self
+            .backend
+            .locate_client(ClientCheckWait::Limited)
+            .map_err(|problem| {
+                StartFailure::ClientUnavailable(self.backend.describe_problem(&problem))
+            })?;
         let number = self.runs_started + 1;
         let files = RunFiles::new(&self.run_directory, number);
         let launch = self

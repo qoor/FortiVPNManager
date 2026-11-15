@@ -8,17 +8,20 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use fvm_contract::backend::{ClientExecutable, ClientProblem, ClientProblemKind, UntestedVersion};
+use fvm_contract::backend::{
+    ClientCheckWait, ClientExecutable, ClientProblem, ClientProblemKind, UntestedVersion,
+};
 
 use super::platform::CLIENT;
 
 /// The release series whose output wording the adapter was checked against.
 const TESTED_SERIES: &str = "9.21";
-/// `--version` prints and exits at once; a client that does not is not used.
+/// A `Limited` check's limit: `--version` prints and exits at once; a client that does not is not
+/// used.
 const VERSION_LIMIT: Duration = Duration::from_secs(5);
 const VERSION_POLL: Duration = Duration::from_millis(50);
 
-pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
+pub(super) fn locate(wait: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
     let Some(client) = CLIENT else {
         return Err(ClientProblem {
             kind: ClientProblemKind::NotFound {},
@@ -36,7 +39,8 @@ pub(super) fn locate() -> Result<ClientExecutable, ClientProblem> {
     if !metadata.is_file() {
         return Err(problem(ClientProblemKind::NotRegularFile {}));
     }
-    let version = version(&path).ok_or_else(|| problem(ClientProblemKind::NotExecutable {}))?;
+    let version =
+        version(&path, wait).ok_or_else(|| problem(ClientProblemKind::NotExecutable {}))?;
     Ok(ClientExecutable { path, version })
 }
 
@@ -45,7 +49,7 @@ pub(super) fn describe(problem: &ClientProblem) -> String {
     let path = problem.path.display();
     match problem.kind {
         ClientProblemKind::NotFound {} => format!(
-            "openconnect not found at {path}; install OpenConnect {TESTED_SERIES} for Windows in its default folder"
+            "openconnect not found at {path}; it comes with FortiVPNManager, so reinstall FortiVPNManager"
         ),
         ClientProblemKind::OutsideAllowedLocation {} => {
             format!("openconnect is outside its allowed location: {path}")
@@ -79,7 +83,7 @@ pub(super) fn is_own_executable(path: &Path) -> bool {
 }
 
 /// From the first line of `--version`, such as "OpenConnect version v9.21".
-fn version(path: &Path) -> Option<String> {
+fn version(path: &Path, wait: ClientCheckWait) -> Option<String> {
     let mut child = Command::new(path)
         .arg("--version")
         .env_clear()
@@ -88,12 +92,15 @@ fn version(path: &Path) -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let deadline = Instant::now() + VERSION_LIMIT;
+    let deadline = match wait {
+        ClientCheckWait::Limited => Some(Instant::now() + VERSION_LIMIT),
+        ClientCheckWait::UntilExit => None,
+    };
     let status = loop {
         if let Some(status) = child.try_wait().ok()? {
             break status;
         }
-        if Instant::now() >= deadline {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             let _ = child.kill();
             let _ = child.wait();
             return None;

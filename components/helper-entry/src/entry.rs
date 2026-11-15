@@ -12,7 +12,7 @@ use fvm_contract::app_helper::{
     AttemptId, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind, HelperStatus,
     Milestone, RunRequest, StopReason,
 };
-use fvm_contract::backend::{Backend, ClientProblemKind};
+use fvm_contract::backend::{Backend, ClientCheckWait, ClientProblemKind};
 use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
 use fvm_watchdog::{Report, RouteRepair, Run, StartFailure, Watchdog};
 use serde::Serialize;
@@ -437,7 +437,7 @@ where
             .run
             .as_ref()
             .is_some_and(|current| current.run.process_id().is_some());
-        match self.watchdog.find_client() {
+        match self.watchdog.find_client(ClientCheckWait::Limited) {
             Ok((client, untested_version)) => HelperStatus {
                 client_running,
                 client_path: Some(client.path.display().to_string()),

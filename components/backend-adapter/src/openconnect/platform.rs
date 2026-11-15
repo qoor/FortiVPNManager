@@ -4,9 +4,9 @@
 
 #[cfg(windows)]
 mod values {
-    /// Where the OpenConnect installer puts it; only administrators can change it.
+    /// The copy that ships in the app's folder; only administrators can change it.
     pub(in super::super) const CLIENT: Option<&str> =
-        Some(r"C:\Program Files\OpenConnect\openconnect.exe");
+        Some(r"C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe");
     /// Windows' own curl, in System32, which only administrators can change.
     pub(in super::super) const CURL: &str = r"C:\Windows\System32\curl.exe";
     pub(in super::super) const NULL_DEVICE: &str = "NUL";

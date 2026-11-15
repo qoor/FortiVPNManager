@@ -1,0 +1,79 @@
+Licenses of OpenConnect 9.21 and of what its Windows installer bundles, which FortiVPNManager installs
+in this folder. Each text is the upstream project's own file, named <project>-<upstream file name>.
+
+openconnect.exe, libopenconnect-5.dll, list-system-keys.exe
+    OpenConnect: GNU LGPL 2.1 - openconnect-COPYING.LGPL.txt
+vpnc-script-win.js
+    vpnc-scripts: GNU GPL 2 - vpnc-scripts-COPYING.txt
+libgnutls-30.dll
+    GnuTLS: GNU LGPL 2.1 or later - gnutls-COPYING.LESSERv2.txt
+libnettle-8.dll, libhogweed-6.dll
+    Nettle: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
+    nettle-COPYING.LESSERv3.txt, nettle-COPYINGv3.txt, nettle-COPYINGv2.txt
+libgmp-10.dll
+    GNU MP 6.3.0: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
+    gmp-COPYING.LESSERv3.txt, gmp-COPYINGv3.txt, gmp-COPYINGv2.txt
+libtasn1-6.dll
+    GNU Libtasn1 4.21.0: GNU LGPL 2.1 or later - libtasn1-COPYING.LESSERv2.txt
+libxml2-2.dll
+    libxml2: MIT License - libxml2-Copyright.txt
+zlib1.dll
+    zlib 1.3.2: zlib License - zlib-LICENSE.txt
+liblz4.dll
+    LZ4 library 1.9.4: BSD 2-Clause License - lz4-LICENSE.txt
+iconv.dll
+    win-iconv: public domain - win-iconv-readme.txt
+libintl-8.dll
+    GNU gettext's libintl 0.23.1: GNU LGPL 2.1 or later - gettext-libintl-COPYING.LIB.txt
+libgcc_s_seh-1.dll
+    GCC 14 runtime library: GNU GPL 3 with the GCC Runtime Library Exception 3.1 -
+    gcc-COPYING3.txt, gcc-COPYING.RUNTIME.txt
+libwinpthread-1.dll
+    mingw-w64 winpthreads: MIT License, with parts under a BSD license - winpthreads-COPYING.txt
+libstoken-1.dll
+    stoken: GNU LGPL 2.1 - stoken-COPYING.LIB.txt
+wintun.dll
+    Wintun 0.14.1: WireGuard LLC's Prebuilt Binaries License - wintun-LICENSE.txt
+
+Source code. The files come from the official OpenConnect 9.21 Windows installer
+(openconnect-installer-MinGW64-GnuTLS.exe), which OpenConnect's CI job "MinGW64/GnuTLS" builds:
+    https://gitlab.com/openconnect/openconnect/-/blob/v9.21/.gitlab-ci.yml
+    in the build image https://gitlab.com/openconnect/build-images
+    with the installer script openconnect.nsi.in of https://gitlab.com/openconnect/openconnect/-/tree/v9.21
+The libraries were built with Fedora's MinGW toolchain, as their version strings say; Fedora's MinGW
+packages and their sources are at https://src.fedoraproject.org/rpms/mingw-<name>.
+
+OpenConnect 9.21
+    https://www.infradead.org/openconnect/download/openconnect-9.21.tar.gz
+    https://gitlab.com/openconnect/openconnect/-/tree/v9.21
+vpnc-script-win.js (the file is its own source)
+    https://gitlab.com/openconnect/vpnc-scripts/-/blob/6cdb2fe2d75be324564fe27ff85a5e1bb17a66b0/vpnc-script-win.js
+GnuTLS 3.8.11
+    https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.11.tar.xz
+Nettle (version not identified)
+    https://ftp.gnu.org/gnu/nettle/
+    https://src.fedoraproject.org/rpms/mingw-nettle
+GNU MP 6.3.0
+    https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+GNU Libtasn1 4.21.0
+    https://ftp.gnu.org/gnu/libtasn1/libtasn1-4.21.0.tar.gz
+libxml2 2.12.9
+    https://download.gnome.org/sources/libxml2/2.12/libxml2-2.12.9.tar.xz
+zlib 1.3.2
+    https://github.com/madler/zlib/releases/tag/v1.3.2
+LZ4 1.9.4
+    https://github.com/lz4/lz4/releases/tag/v1.9.4
+win-iconv (version not identified)
+    https://github.com/win-iconv/win-iconv
+    https://src.fedoraproject.org/rpms/mingw-win-iconv
+GNU gettext 0.23.1
+    https://ftp.gnu.org/gnu/gettext/gettext-0.23.1.tar.xz
+GCC 14.2.1 runtime library (Fedora MinGW 14.2.1)
+    https://src.fedoraproject.org/rpms/mingw-gcc
+mingw-w64 winpthreads (version not identified)
+    https://sourceforge.net/projects/mingw-w64/
+    https://src.fedoraproject.org/rpms/mingw-winpthreads
+stoken (version not identified)
+    https://github.com/cernekee/stoken
+Wintun 0.14.1
+    https://git.zx2c4.com/wintun/tag/?h=0.14.1

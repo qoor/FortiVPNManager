@@ -10,7 +10,6 @@
 
 use std::collections::HashMap;
 use std::io::{self, Read};
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -24,7 +23,7 @@ use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel
 use fvm_contract::helper_pipe::{MAX_MESSAGE_BYTES, PipeMessage, PipeRequest};
 use fvm_contract::stream;
 use fvm_helper_entry::Inbox;
-use fvm_watchdog::{Timing, Watchdog};
+use fvm_watchdog::Watchdog;
 use interprocess::os::windows::named_pipe::{
     DuplexPipeStream, PipeListener, PipeListenerOptions, PipeMode, RecvPipeStream, SendPipeStream,
     pipe_mode,
@@ -48,8 +47,8 @@ pub struct Options {
     pub pipe_name: String,
     /// The pipe's security descriptor in SDDL: who may connect, and its owner.
     pub security: String,
-    /// Where the watchdog keeps its run files; only the Helper may write there.
-    pub run_directory: PathBuf,
+    /// The VPN client, with its run files where only the Helper may write.
+    pub watchdog: Watchdog<OpenConnect>,
 }
 
 /// How the entry wants the Helper to end.
@@ -90,8 +89,7 @@ impl Helper {
         });
         let (ready_sender, ready) = mpsc::channel();
         let entry_side = Arc::clone(&relay);
-        let watchdog = Watchdog::new(OpenConnect, options.run_directory, Timing::default());
-        let inbox = fvm_helper_entry::start(watchdog, move |message| {
+        let inbox = fvm_helper_entry::start(options.watchdog, move |message| {
             if let FromEntry::Ready {} = message {
                 // The entry says it once; nothing waits for it afterwards.
                 let _ = ready_sender.send(());

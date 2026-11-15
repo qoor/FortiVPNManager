@@ -177,7 +177,7 @@ public static class ConnectionText
         SetupItem.GmailCredential { Method: OtpMethod.Imap } => L("Enter Gmail App Password…"),
         SetupItem.GmailCredential => L("Connect Google Account…"),
         SetupItem.ConfigFile => L("Check Settings File Error…"),
-        // Windows has no approval: the install script registers the Helper service.
+        // Windows has no approval: the installer registers the Helper service.
         SetupItem.HelperApproval => L("Check Helper Service…"),
         SetupItem.HelperVersion => L("Check Helper Version…"),
         _ => throw new InvalidOperationException($"unknown setup item {item}"),

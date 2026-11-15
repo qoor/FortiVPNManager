@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="ko-KR" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="ProductLanguage" Value="1042" />
+  <String Id="NeedsWindows11" Value="[ProductName]은(는) Windows 11 이상에서만 설치할 수 있습니다." />
+  <String Id="NeedsAdministrator" Value="[ProductName]을(를) 설치하려면 관리자 권한이 필요합니다." />
+  <String Id="NewerInstalled" Value="[ProductName]의 최신 버전이 이미 설치되어 있습니다." />
+  <String Id="WelcomeDlgDescription" Value="컴퓨터에 [ProductName]을(를) 설치합니다. 설치하는 동안 VPN 연결이 끊어집니다. 설치하려면 &quot;다음&quot;을 클릭하고 설치 마법사를 끝내려면 &quot;취소&quot;를 클릭하십시오." />
+  <String Id="MaintenanceWelcomeDlgDescription" Value="[ProductName]을(를) 복구하거나 제거할 수 있습니다. 이 작업을 하는 동안 VPN 연결이 끊어집니다. 계속하려면 &quot;다음&quot;을 클릭하고 설치 마법사를 끝내려면 &quot;취소&quot;를 클릭하십시오." />
+</WixLocalization>

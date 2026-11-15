@@ -25,15 +25,10 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
-        Running = this;
-        // A fault stops the app; the event log keeps what it was, as macOS keeps a crash report.
+        // A fault on the UI thread stops the app; the event log keeps what it was, as macOS keeps a
+        // crash report. Program.Main does the same for the other threads.
         UnhandledException += (_, args) => SystemLog.WriteFault(args.Exception);
-        // The same for a fault on another thread, such as the runtime link's reader and writer.
-        AppDomain.CurrentDomain.UnhandledException += (_, args) => SystemLog.WriteFault((Exception)args.ExceptionObject);
     }
-
-    /// <summary>The running app, which a second start hands its activation to.</summary>
-    public static App? Running { get; private set; }
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
@@ -55,6 +50,7 @@ public partial class App : Application
         {
             ui.Settings.Show(SettingsPane.ExceptionRules);
         }
+        Program.Launched(this);
     }
 
     /// <summary>The app was started again: a notification opens its pane, anything else the settings window.</summary>

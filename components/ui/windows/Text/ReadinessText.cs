@@ -25,7 +25,7 @@ public static class ReadinessText
         _ => throw new InvalidOperationException($"unknown Helper state {state}"),
     };
 
-    /// <summary>Why registering the Helper failed. On Windows the install script registers it, which the description says.</summary>
+    /// <summary>Why registering the Helper failed. On Windows the installer registers it, which the description says.</summary>
     public static string HelperMessage(this RegistrationError error) => error switch
     {
         RegistrationError.Failed failed => failed.Description,
@@ -38,7 +38,7 @@ public static class ReadinessText
     /// <summary>What is wrong with openconnect. Windows looks for it in one place and checks only these.</summary>
     public static string Message(this ClientProblem problem) => problem.Kind switch
     {
-        ClientProblemKind.NotFound => L("Not found at %@. Install OpenConnect for Windows in its default folder.", problem.Path),
+        ClientProblemKind.NotFound => L("OpenConnect is not at %@. Reinstall FortiVPNManager.", problem.Path),
         ClientProblemKind.NotRegularFile => L("openconnect is not a regular file: %@", problem.Path),
         ClientProblemKind.NotExecutable => L("openconnect did not report its version: %@", problem.Path),
         _ => throw new InvalidOperationException($"Windows does not report {problem.Kind} for openconnect"),

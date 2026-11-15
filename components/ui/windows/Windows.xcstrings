@@ -125,6 +125,16 @@
         }
       }
     },
+    "An error occurred while the Helper was starting. FortiVPNManager will quit. (attempt 2/2)": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 시작 도중 오류가 발생하였습니다. FortiVPNManager를 종료합니다. (시도 2/2회)"
+          }
+        }
+      }
+    },
     "Apply exception rules (Ctrl+S)": {
       "localizations": {
         "ko": {
@@ -275,22 +285,22 @@
         }
       }
     },
-    "Not found at %@. Install OpenConnect for Windows in its default folder.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@에 없습니다. Windows용 OpenConnect를 기본 폴더에 설치하세요."
-          }
-        }
-      }
-    },
     "Only available for the app installed in Program Files.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "Program Files에 설치된 앱에서만 사용할 수 있습니다."
+          }
+        }
+      }
+    },
+    "OpenConnect is not at %@. Reinstall FortiVPNManager.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenConnect가 %@ 경로에 없습니다. FortiVPNManager를 다시 설치하세요."
           }
         }
       }
@@ -311,6 +321,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "이전 결과 (Shift+Enter)"
+          }
+        }
+      }
+    },
+    "Reinstall FortiVPNManager or contact your administrator.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FortiVPNManager를 다시 설치하거나 관리자에게 문의하세요."
           }
         }
       }
@@ -365,12 +385,72 @@
         }
       }
     },
+    "The Helper did not start in time.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 제때 시작되지 않았습니다."
+          }
+        }
+      }
+    },
+    "The Helper failed to start, so FortiVPNManager will quit.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 실행을 실패하여 FortiVPNManager를 종료합니다."
+          }
+        }
+      }
+    },
+    "The Helper service is disabled.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 서비스가 사용 안 함으로 설정되어 있습니다."
+          }
+        }
+      }
+    },
+    "The Helper service is not installed.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper 서비스가 설치되어 있지 않습니다."
+          }
+        }
+      }
+    },
+    "The Helper stopped with an error while starting.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper가 시작 중 오류로 멈췄습니다."
+          }
+        }
+      }
+    },
     "The imported client's secret is missing from Credential Manager. Import the JSON again.": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "가져온 클라이언트의 시크릿이 자격 증명 관리자에 없습니다. JSON을 다시 가져오세요."
+          }
+        }
+      }
+    },
+    "This account has no permission to start the Helper service.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 계정에는 Helper 서비스를 시작할 권한이 없습니다."
           }
         }
       }

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FortiVPNManager for Windows: the app, the Helper service and OpenConnect, per machine in
+  C:\Program Files\FortiVPNManager, for Windows 11 on x64. The installer never starts the Helper or the
+  app; the app starts the Helper. An upgrade, repair or uninstall closes the app and stops the Helper
+  first, which ends a VPN connection.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="FortiVPNManager" Manufacturer="FortiVPNManager" Version="$(var.ProductVersion)"
+           ProductCode="$(var.ProductCode)" UpgradeCode="{0754BD07-8C6E-45B9-B80D-65266312FA83}"
+           Language="!(loc.ProductLanguage)" Scope="perMachine">
+    <!-- The old version is removed inside the same transaction, so a failed upgrade puts it back. It is
+         found in whichever language it was installed. -->
+    <MajorUpgrade Schedule="afterInstallInitialize" IgnoreLanguage="yes" DowngradeErrorMessage="!(loc.NewerInstalled)" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Windows Installer reports an old Windows version to a package, so the build comes from the registry. -->
+    <Property Id="WINDOWSBUILD">
+      <RegistrySearch Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR WINDOWSBUILD &gt;= 22000" Message="!(loc.NeedsWindows11)" />
+    <Launch Condition="Privileged" Message="!(loc.NeedsAdministrator)" />
+
+    <Icon Id="AppIcon.ico" SourceFile="$(sys.SOURCEFILEDIR)AppIcon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <!-- The maintenance dialog greys out its Change button only while ARPNOMODIFY is set, and the Apps
+         list hides Modify, which opens that dialog for Repair and Remove, once it is registered; so it
+         is set for the dialog and cleared before the product is registered. -->
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <SetProperty Id="ARPNOMODIFY" Value="" Before="RegisterProduct" Sequence="execute" />
+    <UIRef Id="InstallerUi" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <!-- Private IDs: the folder is fixed, as the app and the Helper look for their files there. -->
+      <Directory Id="AppFolder" Name="FortiVPNManager">
+        <Directory Id="OpenConnectFolder" Name="OpenConnect" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Files Directory="AppFolder" Include="$(var.AppFolder)\**">
+      <Exclude Files="$(var.AppFolder)\FortiVPNManager.exe" />
+      <Exclude Files="$(var.AppFolder)\fvm-helper.exe" />
+    </Files>
+    <Files Directory="OpenConnectFolder" Include="$(var.OpenConnectFolder)\**" />
+    <Files Directory="OpenConnectFolder" Include="$(sys.SOURCEFILEDIR)OpenConnect-licenses\**" />
+
+    <Component Directory="AppFolder">
+      <File Source="$(var.AppFolder)\FortiVPNManager.exe">
+        <Shortcut Name="FortiVPNManager" Directory="ProgramMenuFolder" WorkingDirectory="AppFolder" Advertise="no" />
+      </File>
+      <!-- The app's event log source (components/os-integration/windows/SystemLog.cs), as
+           New-EventLog registers one. -->
+      <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\FortiVPNManager" ForceDeleteOnUninstall="yes">
+        <RegistryValue Name="EventMessageFile" Type="expandable" Value="[WindowsFolder]Microsoft.NET\Framework64\v4.0.30319\EventLogMessages.dll" />
+      </RegistryKey>
+    </Component>
+
+    <Component Directory="AppFolder">
+      <File Source="$(var.AppFolder)\fvm-helper.exe" />
+      <!-- components/helper-entry/windows/src/service.rs -->
+      <ServiceInstall Name="FortiVPNManagerHelper" DisplayName="FortiVPNManager Helper" Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem">
+        <!-- When Windows shuts down it waits this long for the Helper to end the run and log out
+             while the network still runs; the Helper asks as long for a stop (STOP_WAIT). A failed
+             start or an exit with an error counts as a failure too (HelperRecovery). -->
+        <ServiceConfig PreShutdownDelay="30000" FailureActionsWhen="failedToStopOrReturnedError" OnInstall="yes" OnReinstall="yes" />
+        <!-- Windows' own rights for a service; besides, every account of the PC, as on the Helper's
+             pipe, may start the service and ask whether it runs, which the app does. -->
+        <PermissionEx Sddl="D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;LCRP;;;AU)" />
+      </ServiceInstall>
+      <!-- Windows Installer waits at most 30 s for a stop, as long as the Helper's may take, so
+           CloseRunning waits for it instead. -->
+      <ServiceControl Name="FortiVPNManagerHelper" Stop="both" Remove="uninstall" Wait="no" />
+      <!-- The event log source the Helper registers itself when it starts (the eventlog crate), with
+           the same value. -->
+      <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\EventLog\Application\FortiVPNManager Helper" ForceDeleteOnUninstall="yes">
+        <RegistryValue Name="EventMessageFile" Type="string" Value="[AppFolder]fvm-helper.exe" />
+      </RegistryKey>
+    </Component>
+
+    <!-- The app quits on the message Windows sends when the session ends (SystemEvents.cs). It is sent
+         before Windows Installer looks for files in use, and a copy still running afterwards is ended by
+         CloseRunning. -->
+    <util:CloseApplication Target="FortiVPNManager.exe" EndSessionMessage="yes" RebootPrompt="no" Timeout="10" />
+    <!-- Without Restart Manager, the files-in-use dialog lists only programs with a titled window, which
+         the app then no longer is. Restart Manager would list, and in a quiet install try to shut down,
+         the openconnect the Helper runs, which StopServices and CloseRunning end before any file
+         changes. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+
+    <!-- The Helper is restarted after every failure: at 5 s, 5 s, then every minute, as Windows repeats
+         the last action; the count starts over after a day without one. The VPN needs the Helper, and a
+         cause such as another program holding the pipe's name may go away. Windows Installer's own
+         table for this fails, opening the service without the right restart actions need, so sc.exe
+         sets them, as Microsoft advises. -->
+    <SetProperty Id="HelperRecovery" Before="HelperRecovery" Sequence="execute"
+                 Value="&quot;[System64Folder]sc.exe&quot; failure FortiVPNManagerHelper reset= 86400 actions= restart/5000/restart/5000/restart/60000" />
+    <CustomAction Id="HelperRecovery" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="no" Return="check" />
+    <!-- A removal that is rolled back, such as an upgrade's of the old version, makes the service again
+         from Windows Installer's data, without the restart actions, so they are set once more. Rollback
+         runs backwards, so these run after the service is back. -->
+    <SetProperty Id="HelperRecoveryRollback" Before="HelperRecoveryRollback" Sequence="execute"
+                 Value="&quot;[System64Folder]sc.exe&quot; failure FortiVPNManagerHelper reset= 86400 actions= restart/5000/restart/5000/restart/60000" />
+    <CustomAction Id="HelperRecoveryRollback" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="rollback" Impersonate="no" Return="ignore" />
+    <SetProperty Id="HelperFailureFlagRollback" Before="HelperFailureFlagRollback" Sequence="execute"
+                 Value="&quot;[System64Folder]sc.exe&quot; failureflag FortiVPNManagerHelper 1" />
+    <CustomAction Id="HelperFailureFlagRollback" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="rollback" Impersonate="no" Return="ignore" />
+
+    <!-- The installer's two scripts run as PowerShell commands, which execution policy does not apply
+         to, as the system account. -->
+    <Property Id="CloseRunningScript" Value="$(var.CloseRunningScript)" />
+    <SetProperty Id="CloseRunning" Before="CloseRunning" Sequence="execute"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoLogo -NoProfile -NonInteractive -EncodedCommand [CloseRunningScript]" />
+    <CustomAction Id="CloseRunning" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="no" Return="ignore" />
+    <Property Id="UninstallCleanupScript" Value="$(var.UninstallCleanupScript)" />
+    <SetProperty Id="UninstallCleanup" Before="UninstallCleanup" Sequence="execute"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoLogo -NoProfile -NonInteractive -EncodedCommand [UninstallCleanupScript]" />
+    <CustomAction Id="UninstallCleanup" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Impersonate="no" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="InstallValidate" />
+      <Custom Action="CloseRunning" After="StopServices" />
+      <Custom Action="HelperRecoveryRollback" Before="DeleteServices" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="HelperFailureFlagRollback" Before="DeleteServices" Condition="REMOVE~=&quot;ALL&quot;" />
+      <!-- A real uninstall only, not an upgrade removing the old version; after the service is deleted,
+           so a Helper that had to be ended is not started again by Windows' recovery meanwhile. -->
+      <Custom Action="UninstallCleanup" After="DeleteServices" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="HelperRecovery" After="MsiConfigureServices" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

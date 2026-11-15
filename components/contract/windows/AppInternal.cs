@@ -53,7 +53,7 @@ public static partial class AppInternal
     }
 
     /// <param name="AppBuild">The build the Helper must also report.</param>
-    /// <param name="InstalledCopy">The app runs from where it was installed, the only copy allowed to register the Helper and the login item (on Windows the install script registers the Helper).</param>
+    /// <param name="InstalledCopy">The app runs from where it was installed, the only copy allowed to register the Helper and the login item (on Windows the installer registers the Helper).</param>
     /// <param name="BuiltInOauthClient">The OAuth client JSON built into the app, if this build has one.</param>
     /// <param name="TimeZone">The system time zone's IANA name, such as <c>Asia/Seoul</c>.</param>
     public sealed record AppFacts(

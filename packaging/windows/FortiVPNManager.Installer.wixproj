@@ -1,0 +1,23 @@
+<Project Sdk="WixToolset.Sdk/7.0.1">
+  <!--
+    The Windows installer, one .msi per culture, which build.ps1 turns into the one .msi it ships: the
+    English package with the Korean one embedded as a language transform. build.ps1 passes the version,
+    the product code both cultures share, and the two scripts the installer runs, encoded.
+  -->
+  <PropertyGroup>
+    <OutputName>FortiVPNManager</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Cultures>en-US;ko-KR</Cultures>
+    <AcceptEula>wix7</AcceptEula>
+    <AppFolder>$(MSBuildThisFileDirectory)..\..\.build\windows\FortiVPNManager</AppFolder>
+    <OpenConnectFolder>$(MSBuildThisFileDirectory)OpenConnect</OpenConnectFolder>
+    <DefineConstants>AppFolder=$(AppFolder);OpenConnectFolder=$(OpenConnectFolder);ProductVersion=$(ProductVersion);ProductCode=$(ProductCode);CloseRunningScript=$(CloseRunningScript);UninstallCleanupScript=$(UninstallCleanupScript)</DefineConstants>
+    <!-- ICE03 does not know the language IDs that Windows App SDK's resource files carry, and ICE43 and
+         ICE57 take the Start menu folder of this per-machine package for a user's. -->
+    <SuppressIces>ICE03;ICE43;ICE57</SuppressIces>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="7.0.1" />
+  </ItemGroup>
+</Project>

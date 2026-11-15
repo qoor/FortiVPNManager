@@ -19,7 +19,7 @@ use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 #[cfg(unix)]
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -74,7 +74,8 @@ impl Backend for OpenFortiVpn {
         "openfortivpn"
     }
 
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
+    /// openfortivpn is found without running it, so `wait` does not matter.
+    fn locate_client(&self, _wait: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
         client::locate()
     }
 

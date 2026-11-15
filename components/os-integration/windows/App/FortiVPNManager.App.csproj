@@ -2,13 +2,13 @@
   <!--
     The Windows app: its entry, one copy per user, and the runtime, the OS integration and the UI joined.
     Built by packaging/windows/build.ps1, which sets the informational version to the build the Helper
-    carries too. .NET comes from the PC (install.ps1 makes sure it is there); Windows App SDK ships with
-    the app, so nothing else needs installing.
+    carries too. The .NET runtime and Windows App SDK ship inside the app's folder, so the PC needs
+    neither installed.
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
     <AssemblyName>FortiVPNManager</AssemblyName>
     <RootNamespace>FortiVPNManager.App</RootNamespace>
     <Platforms>x64</Platforms>
@@ -18,7 +18,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- Without it, publishing leaves out the app's resources (FortiVPNManager.pri and the compiled XAML). -->
     <EnableMsixTooling>true</EnableMsixTooling>
-    <SelfContained>false</SelfContained>
+    <SelfContained>true</SelfContained>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

@@ -6,7 +6,7 @@ using static FortiVPNManager.Contract.AppInternal;
 namespace FortiVPNManager.OsIntegration;
 
 /// <summary>
-/// The Helper service, which the install script registers, and the app's login item, a value under
+/// The Helper service, which the installer registers, and the app's login item, a value under
 /// the user's Run key. Only the installed copy registers the login item, so the system never starts a
 /// build somewhere else.
 /// </summary>
@@ -18,7 +18,7 @@ internal static class ServiceRegistration
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "FortiVPNManager";
 
-    /// <summary>Where the install script puts the app.</summary>
+    /// <summary>Where the installer puts the app.</summary>
     public static string InstallFolder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "FortiVPNManager");
 
@@ -45,7 +45,7 @@ internal static class ServiceRegistration
 
     public static PortResponse RegisterHelper() =>
         new PortResponse.RegistrationFailed(
-            new RegistrationError.Failed("the install script registers the Helper service"));
+            new RegistrationError.Failed("the installer registers the Helper service"));
 
     public static PortResponse LoginItemStatus()
     {

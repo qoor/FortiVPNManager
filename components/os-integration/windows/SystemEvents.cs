@@ -47,7 +47,8 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         // These come through the subscribing thread's SynchronizationContext, and WinUI's UI thread has
         // one that cannot deliver them. Subscribed from a pool thread, which has none, they come on the
         // thread .NET keeps for its hidden window, so the wait on signing out holds up no app window.
-        // This must be the app's first use of them: the first one decides that thread, once.
+        // The first use of them decides that thread, once, so the wait for the Helper at launch, the
+        // app's first use, subscribes the same way.
         Task.Run(Subscribe).Wait();
         NetworkChange.NetworkAddressChanged += (_, _) => NetworkChanged();
         NetworkChanged();

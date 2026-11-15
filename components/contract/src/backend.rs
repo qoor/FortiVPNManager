@@ -19,8 +19,9 @@ pub trait Backend {
     /// "<name> is not running".
     fn client_name(&self) -> &'static str;
 
-    /// Finds the client executable the Helper may run as root.
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem>;
+    /// Finds the client executable the Helper may run as root. Where finding it runs the client,
+    /// such as to read its version, `wait` says how long that run may take.
+    fn locate_client(&self, wait: ClientCheckWait) -> Result<ClientExecutable, ClientProblem>;
 
     /// English description of `problem` that the current app shows as it is.
     fn describe_problem(&self, problem: &ClientProblem) -> String;
@@ -53,6 +54,15 @@ pub trait Backend {
     /// Whether an executable belongs to this client, so that a process of it left behind by an
     /// earlier Helper may be stopped.
     fn is_own_executable(&self, path: &Path) -> bool;
+}
+
+/// How long `Backend::locate_client` waits for a run of the client.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ClientCheckWait {
+    /// Up to the adapter's time limit; a client still running then counts as not executable.
+    Limited,
+    /// Until the client exits.
+    UntilExit,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

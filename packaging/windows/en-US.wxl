@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="ProductLanguage" Value="1033" />
+  <String Id="NeedsWindows11" Value="[ProductName] requires Windows 11 or later." />
+  <String Id="NeedsAdministrator" Value="Installing [ProductName] requires administrator rights." />
+  <String Id="NewerInstalled" Value="A newer version of [ProductName] is already installed." />
+  <String Id="WelcomeDlgDescription" Value="Setup will install [ProductName] on your computer. The VPN connection is cut during the installation. Click Next to install or Cancel to exit Setup." />
+  <String Id="MaintenanceWelcomeDlgDescription" Value="Setup can repair or remove [ProductName]. The VPN connection is cut while it does. Click Next to continue or Cancel to exit Setup." />
+</WixLocalization>

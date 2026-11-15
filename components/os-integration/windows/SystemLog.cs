@@ -8,8 +8,8 @@ using static FortiVPNManager.Contract.AppInternal;
 namespace FortiVPNManager.OsIntegration;
 
 /// <summary>
-/// The Windows event log, in macOS unified log's place, under the runtime's categories. The install
-/// script registers the source, which takes administrator rights; until then a line is dropped.
+/// The Windows event log, in macOS unified log's place, under the runtime's categories. The installer
+/// registers the source, which takes administrator rights; until then a line is dropped.
 /// </summary>
 internal static class SystemLog
 {

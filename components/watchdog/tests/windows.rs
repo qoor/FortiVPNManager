@@ -17,8 +17,8 @@ use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
-    Backend, ClientExecutable, ClientProblem, LaunchSpec, RouteRepairOutcome, SessionLaunch,
-    UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, RouteRepairOutcome,
+    SessionLaunch, UntestedVersion,
 };
 use fvm_watchdog::{Report, Run, Timing, Watchdog};
 
@@ -73,7 +73,7 @@ impl Backend for Scripted {
         OpenConnect.client_name()
     }
 
-    fn locate_client(&self) -> Result<ClientExecutable, ClientProblem> {
+    fn locate_client(&self, _: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
         Ok(ClientExecutable {
             path: PathBuf::from(CMD),
             version: "9.21".to_owned(),

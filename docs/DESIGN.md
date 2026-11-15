@@ -56,6 +56,8 @@
 | Windows에서는 openconnect를 늘 강제로 끝내고, 그것이 띄운 route 스크립트도 함께 끝낸다 | Windows에는 signal이 없다. openconnect가 logout하는 정상 종료 수단은 console 이벤트뿐인데, 다른 프로세스의 console에 붙어 이벤트를 보내는 시험 실행 파일을 회사 PC의 보안 프로그램(AhnLab MDS)이 악성으로 막았다(2026-11-12). 그래서 늘 강제로 끝내고 Helper가 logout한다. 터널 직후에 끝내면 route 스크립트가 아직 돌고 있어, 함께 끝내지 않으면 정리한 게이트웨이 host route를 스크립트가 다시 넣을 수 있다 |
 | Windows는 터널이 올라온 뒤 요청 없이 끝난 openconnect를 모두 강제 종료로 본다 | 사용자 결정이다(2026-11-11). signal이 없어서 밖에서 끝낸 것을 구분할 수 없다. 로그인은 이미 성공했으므로 FortiGate 차단과 무관하다. 접속 직후 끊기는 일이 반복돼도 곧바로 재연결은 한 번뿐이고, 그 뒤 backoff하다 시도 상한에서 멈춘다 |
 | Windows 예외 규칙은 주 interface의 persistent route로 둔다 | OS가 저장해 두고 다시 넣으므로 macOS의 additional routes와 성질이 같다. persistent 목록에는 VPN 스크립트가 넣는 실행 중 route가 없어서 "앱이 넣은 것"과 "밖에서 넣은 것"의 구분이 그대로 성립한다. VPN이 받은 대역보다 좁은 예외 route가 먼저 선택되는 것을 실제 PC에서 확인했다 |
+| Windows Helper는 실행 중이라고 알리기 전에 openconnect 버전 확인을 한 번, 시간 제한 없이 해 둔다. 상태 확인과 연결 때의 확인은 5초 제한 그대로이고, 결과는 기억하지 않는다 | 사용자 결정이다(2026-11-13·14). 회사 PC에서는 새로 설치한 client의 첫 실행이 늦게 시작될 수 있다. 그렇게 붙잡힌 프로세스는 끝낼 수도 없어서, 5초 제한을 둔 Helper가 실제로는 그만큼 기다린 뒤 client를 쓸 수 없다고 잘못 알렸다(§6). 그래서 Helper의 시작 부분이 watchdog에 client 확인을 한 번 맡기고(openconnect `--version` 한 번), watchdog은 이때만 openconnect가 끝날 때까지 기다린다. 그동안 Windows에는 시작 중이라고 알린다. 느린 첫 실행이 Helper가 시작하는 동안에 끝나므로, 그 뒤의 확인은 원래의 5초 제한으로 충분하고 앱의 첫 상태 확인은 곧바로 답을 받는다. 확인 결과를 기억해 두는 장치는 두지 않는다. 특정 PC 환경에 맞춘 기능을 더하는 것은 사용자가 거절했다 |
+| Windows 앱은 시작하자마자, 무엇을 보이거나 시작하기 전에 Helper 서비스부터 실행 중이게 한다. 실행 중이 아니면 시작하고 기다리며, 실행하지 못하면 오류 창을 띄운 뒤 끝난다 | 사용자 결정이다(2026-11-13·14, Windows만). Helper 없이는 앱이 쓸모가 없다. 다른 사람은 느린 첫 시작과 앱의 고장을 구분할 수 없으므로 보이지 않게 기다리는 편이 낫고, 진짜 실패는 분명한 문구로 알린다. 기다리는 것은 서비스가 실행 중이 되는 것뿐이고 시간 제한은 없다. Helper의 답을 따로 기다리지 않고, 앱의 평소 응답 시간 제한은 그대로다. 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다(§5.7). macOS와 다른 것은 OS의 차이 때문이다. macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 한다. Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다 |
 | 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명은 라이브러리 원문(영어)을 그대로 보인다(§7.2) |
 
 ### 3.2 구조와 기술
@@ -77,12 +79,17 @@
 | Windows 앱 ↔ Helper는 named pipe 위의 같은 메시지다 | XPC 자리다. 통로는 이 PC의 계정과 시스템이 열 수 있고, 다른 컴퓨터의 연결은 받지 않는다. 처음에는 설치할 때 정한 사용자 한 명으로 제한했으나, 문제가 될 소지만 있고 실질적인 이득이 없어 없앴다(사용자 결정, 2026-11-13). 실행은 그것을 시작한 Windows 세션의 것이다. 앱은 통로가 시스템 계정 소유인지 확인한 뒤에 비밀번호를 보낸다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 가로채는 일을 막기 위해서다. 연결한 프로그램이 설치본인지는 unsafe 없이 확인할 방법이 없어 확인하지 않는다(§8) |
 | Windows의 route 읽기·쓰기는 PowerShell route cmdlet을 고정 argv로 실행하고 JSON으로 받는다 | macOS의 networksetup처럼 시스템 명령을 쓴다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없고, route API를 직접 부르면 unsafe가 필요하다. 바꿀 값은 stdin의 JSON으로 넘기고, 명령 문장은 고정한다 |
 | Windows 앱 ↔ Helper 통로의 메시지는 앱 안의 Rust ↔ Swift와 같은 틀(4바이트 길이와 UTF-8 JSON)이고, 요청마다 번호를 붙인다 | XPC의 호출과 응답 자리다. 응답은 요청 번호로 짝을 찾고, 이벤트와 출력은 생긴 순서대로 같은 통로로 간다. 빌드 확인과 유휴 시 종료 요청은 다른 빌드 사이에서 오가므로 모양을 바꾸지 않는다. 앱은 빌드 확인에 자기 빌드를 함께 보내고, Helper는 같은 빌드로 확인된 연결의 연결·OTP·예외 route 요청만 처리한다. Helper가 받는 한 메시지는 1 MiB까지고, 예외 route 요청은 연결마다 한 번에 하나만 받는다(앱도 하나씩 보낸다). 앱이 읽지 않아 보낼 메시지가 256개 넘게 쌓인 연결은 앱이 끝난 것처럼 다룬다. 이 PC의 다른 프로그램도 연결할 수 있어서, 큰 길이를 보내거나 요청만 쌓아 Helper의 메모리를 다 쓰게 하지 못하게 한다. 그 통로는 앱이 다음에 쓰거나 끝날 때 닫힌다. 막혀 있는 통로를 밖에서 끊는 안전한 방법이 없기 때문이다 |
-| Windows Helper는 유휴 시 종료 요청에 끝나지 않는다고 답한다 | Windows는 스스로 끝난 서비스를 다음 요청 때 다시 띄우지 않는다. 재설치가 서비스를 멈추고 바꾼 뒤 다시 시작하므로, 빌드가 다르면 설치가 끝나지 않은 것이다. 그때 앱은 버전 불일치를 보인다 |
+| Windows Helper는 유휴 시 종료 요청에 끝나지 않는다고 답한다 | Windows는 스스로 끝난 서비스를 다음 요청 때 다시 띄우지 않는다. 업그레이드는 앱을 닫고 Helper를 멈춘 뒤 둘을 함께 바꾸고, 다시 연 앱이 새 Helper를 시작한다. 그래서 빌드가 다르면 설치가 끝나지 않은 것이다. 그때 앱은 버전 불일치를 보인다 |
 | 통로는 시스템 계정이 소유하고, 사용자에게는 통로를 새로 만드는 권한을 주지 않는다 | 그 권한이 있으면 같은 이름의 통로를 하나 더 열어 앱의 연결을 가로챌 수 있고, 소유자 확인으로도 구분되지 않는다 |
 | Windows Helper의 실행 기록은 시스템 계정의 프로필 폴더(`C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager`)에 둔다 | 시스템과 관리자만 접근할 수 있는 곳이라 권한을 물려받는다. 폴더 권한을 직접 다루면 unsafe가 필요하다. ProgramData는 일반 사용자도 그 안에 폴더를 먼저 만들 수 있어서 쓰지 않는다 |
 | Windows Helper의 watchdog은 프로세스를 sysinfo로 확인한다 | 실행 파일 경로, 시작 시각, 사용자를 unsafe 없이 읽는다. 시작 시각은 초 단위다. pid, 시작 시각, 경로가 모두 같고 Helper와 같은 사용자(시스템 계정)인 프로세스만 기록한 그 프로세스로 본다 |
-| Windows Helper의 로그는 Windows 이벤트 로그에 쓴다 | macOS 통합 로그의 자리다. 서비스가 시작할 때 시스템 권한으로 로그 출처를 스스로 등록하므로 설치 스크립트가 할 일이 없다 |
+| Windows Helper의 로그는 Windows 이벤트 로그에 쓴다 | macOS 통합 로그의 자리다. 앱과 Helper의 로그 출처는 설치 패키지가 등록하고, 제거할 때 함께 지운다. 전에는 Helper가 시작할 때 스스로 등록했다 |
 | Windows Helper는 예외 route 요청의 대상을 판단 코어의 규칙으로 확인한다 | 앱이 계획할 때 쓰는 규칙과 같아야 하기 때문이다. macOS에서는 Swift가 같은 규칙을 따로 갖고 있다. 판단 코어는 바깥과 통신하지 않으므로 Helper에 넣어도 하는 일이 늘지 않는다 |
+| Windows 설치 패키지는 WiX Toolset v7로 만든 MSI 하나다 | 사용자 결정이다(2026-11-13). quiet 설치와 GPO 소프트웨어 배포가 되고, 설치가 실패하면 transaction 전체가 되돌아간다. 버린 대안은 다음과 같다. **MSIX**: SYSTEM 서비스에는 restricted capability가 필요한데 App Installer가 이를 거부한다고 알려져 있어 더블클릭 설치가 되지 않는다. 서비스 설정이 이름, 시작 유형, 계정, 인자뿐이라 recovery 동작, preshutdown 대기, 권한을 줄 수 없다. 설치·제거 때의 처리가 없어 앱이 넣은 route를 지울 수 없다. AppData와 HKCU 쓰기가 가상화되고, 신뢰된 서명이 필수다. **Inno Setup 같은 EXE 설치 프로그램**: transaction rollback과 GPO 소프트웨어 배포가 없다. **언어 선택용 WiX Burn setup.exe**: 층이 하나 늘고, 빌드마다 새로 생기는 setup.exe가 회사 PC에서 첫 실행 때 시작 전에 붙잡힌다 |
+| 설치 화면 언어는 Windows 표시 언어를 따른다 | 사용자 결정이다(2026-11-13). 한국어 Windows에서는 한국어, 그 밖에는 영어다. MSI 하나에 한국어 language transform을 넣어 두면 Windows Installer가 표시 언어에 맞춰 스스로 적용한다. 문서화되지 않았지만 오래 유지된 동작이다. 동작하지 않게 되어도 화면이 영어로 나올 뿐 설치는 된다 |
+| 설치 패키지는 Helper 서비스를 등록만 하고 시작하지 않는다. 시작은 앱이 한다 | 사용자 결정이다(2026-11-13). 설치가 Helper의 첫 시작에 걸리는 시간에 묶이지 않게 하기 위해서다. macOS에서 Helper 등록을 앱이 맡는 것과 같은 역할 나눔이다. 서비스 권한은 Windows의 기본값(일반 계정은 다른 서비스처럼 상태와 설정을 볼 수 있다)에 모든 계정의 시작만 더한다(2026-11-14). 멈추기, 설정 바꾸기, 지우기는 관리자만 한다. 시작에 실패하면 앱이 한 번 더 시작한다(§5.7). 전에는 설치 스크립트가 10분까지 다시 시도했다(§7.1) |
+| Windows 앱은 .NET runtime을 함께 담아(self-contained) 배포한다 | 사용자 결정이다(2026-11-13). MSI는 다른 설치 프로그램을 실행할 수 없고, 설치 패키지는 하나이기를 원했다. 대가로 .NET 보안 수정은 앱의 새 빌드로만 들어온다. 전에는 PC의 .NET Desktop Runtime을 쓰고(framework-dependent) 설치 스크립트가 없으면 설치했다(§7.1) |
+| OpenConnect 9.21은 설치 패키지에 넣고, Helper는 그 사본만 실행한다 | 사용자 결정이다(2026-11-13). 패키지 하나로 설치가 끝나게 한다. 앱 폴더 아래에 두므로 관리자만 바꿀 수 있다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. 전에는 사용자가 OpenConnect를 기본 폴더에 따로 설치했다(§7.1) |
 
 ## 4. 구성과 역할
 
@@ -95,7 +102,7 @@
   - Swift의 OS 연동 Helper(XPC, launchd, 서명 확인, route 복구, networksetup)가 Rust Helper entry를 같은 프로세스에서 시작한다. Helper entry는 앱 요청을 판단하고, VPN client에 관한 일은 backend adapter를 쓰는 watchdog에 맡긴다.
   - 상태를 저장하지 않고 config.yaml도 읽지 않는다. 앱이 보낸 값 중 검증을 통과한 것만 쓴다. 환경 변수는 PATH만 넘긴다(openfortivpn이 proxy 환경 변수를 읽기 때문, §6).
 - **둘을 나눈 이유**: root로 실행되는 코드를 최소로 줄이기 위해서다. 앱은 root 권한 없이 자유롭게 재시작하거나 재설치할 수 있다.
-- **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, macOS Helper의 Swift 부분이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다.
+- **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, macOS Helper의 Swift 부분이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다. 설치 패키지는 서비스를 등록만 하고, 실행 중이 아니면 앱이 시작한다(§5.7).
 
 ### 4.2 앱과 Helper 사이의 규칙
 - XPC 연결은 양쪽이 서로의 code signing requirement(Team ID + signing identifier)를 확인한다. 비밀번호는 Helper의 버전을 확인한 뒤에만 보낸다.
@@ -131,7 +138,7 @@ components/
   os-integration/windows/       OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달, Helper 통로
   os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
 packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보, 빌드·설치 스크립트
-packaging/windows/              C# solution, 빌드·설치 스크립트
+packaging/windows/              C# solution, 빌드 스크립트, 설치 패키지(MSI) 정의
 ```
 
 - **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, watchdog, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 watchdog뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. Windows Helper 서비스는 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
@@ -144,7 +151,18 @@ packaging/windows/              C# solution, 빌드·설치 스크립트
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
 - `make test`는 Rust 테스트 전체와 Swift 테스트 묶음(공통 계약, Helper, 앱의 UI·OS 연동)을 돌린다.
 - `make install`은 앱 종료, 교체, 재실행을 분리된 background 작업으로 한다. 앱을 끄면 VPN이 끊기고, 설치를 실행한 세션이 VPN을 타고 있으면 그 세션과 함께 설치가 중간에 죽을 수 있기 때문이다. 설치 전에 VPN이 연결되어 있었는데 새 빌드로 터널이 돌아오지 않으면 이전 앱을 되돌려 놓는다.
-- **Windows**: x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다. 빌드는 사용자 자신의 계정으로 빌드 스크립트(`packaging/windows/build.ps1`)를 실행해 release 빌드를 만든다. Rust는 사용자마다 설치되므로 관리자 계정에는 없을 수 있다. 설치는 관리자 권한으로 한 번 실행하는 스크립트다(`packaging/windows/install.ps1`). 그 빌드를 Program Files에 넣고, 서비스를 등록한다. 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다. 서비스는 부팅 때 시작하고, 비정상 종료하거나 시작에 실패할 때마다 다시 시작한다(5초, 5초, 그 뒤 1분마다). Helper 없이는 VPN을 쓸 수 없고, 통로 이름을 다른 프로그램이 먼저 차지한 경우처럼 원인이 사라지면 저절로 돌아오기 때문이다. 앱이 쓸 이벤트 로그 출처도 여기서 등록한다(등록에만 관리자 권한이 필요하다). Windows가 꺼질 때 종료 준비 알림을 받은 Helper를 기다려 줄 시간(30초)도 서비스 설정에 넣는다. sc.exe에는 이 설정이 없어 서비스 API를 직접 부른다. 재설치는 서비스 정지 → 교체 → 시작이다. 새 파일은 옆 폴더에 먼저 두고, Helper 프로세스까지 끝난 뒤 앱 폴더를 이름 바꾸기 한 번으로 통째로 바꾼다. 앱처럼 폴더 안의 프로그램이 실행 중이면 이름 바꾸기가 실패하고, 그때는 아무것도 바꾸지 않은 채 Helper를 다시 시작하고 끝난다. PowerShell의 폴더 옮기기는 이름 바꾸기가 실패하면 파일을 하나씩 옮겨, 쓰이는 파일만 남기고 Helper 실행 파일은 옮겨 버린다(2026-11-13 노트북에서 확인). 회사 보안 프로그램이 새 실행 파일을 몇 분 붙잡아 Windows가 서비스 시작에 주는 30초를 넘기므로, 시작이 실패하면 10분까지 다시 시도한다. OpenConnect가 설치돼 있지 않으면 알리고 설치는 계속한다. 앱의 준비 상태에도 나오기 때문이다.
+- **Windows**
+  - x64용으로 빌드한다. 빌드와 테스트는 사용자의 Windows PC에서 MSVC toolchain으로 한다. 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
+  - 빌드는 사용자 자신의 계정으로 빌드 스크립트(`packaging/windows/build.ps1`)를 실행한다. Rust는 사용자마다 설치되므로 관리자 계정에는 없을 수 있다. 스크립트는 release 빌드를 모두 만든 뒤 설치 패키지(MSI)를 만든다. 설치 스크립트(`install.ps1`)는 지웠다(§7.1).
+  - 앱과 Helper는 같은 빌드 번호를 갖고, 형식은 macOS 빌드와 같다. macOS 빌드와 같은 Google OAuth client 파일(`packaging/GoogleOAuthClient.json`, 저장소 제외)이 있으면 빌드 결과에 함께 넣어 앱의 내장 client가 되게 한다.
+  - 앱은 .NET runtime을 앱 폴더에 함께 담는다(self-contained, §3.2). PC에 runtime을 설치하지 않는다.
+  - OpenConnect 9.21의 파일은 저장소에서 제외한 빌드 폴더에서 가져온다. 개발자가 공식 OpenConnect 9.21 Windows 설치본에서 한 번 채워 두고, 없으면 빌드가 멈춘다. OpenConnect와 그 안에 든 라이브러리들의 license 문서도 함께 설치한다. OpenConnect를 바꾸려면 그 파일을 바꾸고 새 MSI를 만든다.
+  - MSI는 WiX Toolset v7로 만든다. v7은 Open Source Maintenance Fee EULA를 빌드에서 명시적으로 수락해야 한다. 그 비용을 내야 하는지는 회사가 판단할 일이다.
+  - MSI 버전 번호는 빌드 시각으로 만든다(연.월.그 달 안의 분). MSI의 버전 칸에는 yyyyMMddHHmmss 빌드 번호가 들어가지 않기 때문이다. 첫 자리는 255까지라 연도는 두 자리로 쓴다.
+  - 설치는 관리자 권한으로 MSI를 실행한다(§5.7). MSI가 하는 일은 다음과 같다.
+    - 앱, Helper, OpenConnect를 `C:\Program Files\FortiVPNManager`에 넣는다. OpenConnect는 그 아래 `OpenConnect` 폴더에 둔다.
+    - Helper 서비스를 SYSTEM 계정으로 등록한다. 부팅 때 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작한다. Helper 없이는 VPN을 쓸 수 없고, 통로 이름을 다른 프로그램이 먼저 차지한 경우처럼 원인이 사라지면 저절로 돌아오기 때문이다. Windows가 꺼질 때 종료 준비(preshutdown) 알림을 받은 Helper를 기다려 줄 시간(30초)도 넣는다. 권한은 Windows의 기본값에 모든 계정의 시작만 더한다(§3.2). 서비스는 시작하지 않는다.
+    - 앱과 Helper의 이벤트 로그 출처와 모든 사용자의 시작 메뉴 바로 가기를 등록한다.
 
 ## 5. 동작 원칙
 
@@ -196,6 +214,7 @@ packaging/windows/              C# solution, 빌드·설치 스크립트
   - 쓸 때는 지금 목록과 비교해 빠진 것을 지우고 새 것을 넣는다. persistent 목록과 지금 쓰는 목록 둘 다에 한다.
   - 앱이 읽은 interface, router, 주소, route가 그대로인지는 쓰기와 같은 PowerShell 실행 안에서 확인한다. 따로 확인하면 PowerShell이 다시 뜨는 1~3초 사이에 DHCP 갱신 등으로 router가 바뀌어도 옛 router로 쓰게 된다.
   - route 하나를 바꾸는 데 노트북에서 약 0.05초가 걸린다(2026-11-13). 쓰기의 제한 시간은 기본 20초에 바꿀 route마다 0.2초를 더해, 런타임이 한 번에 바꾸는 최대치(지울 것 100개와 넣을 것 100개)도 60초 안에 들게 한다. 앱은 route 읽기·쓰기의 답을 90초 기다린다. 앱이 먼저 포기하면 Helper가 아직 처리 중인 그 요청 때문에 다음 route 요청을 거절하기 때문이다.
+  - 앱을 제거하면 사용자마다 앱이 쓴 것으로 기록한 route만 지운다(§5.7). persistent route는 앱이 없어져도 OS에 남기 때문이다.
 - **source of truth는 config.yaml**이다. 포맷한 뒤에도 config.yaml만 복원하면 그대로 적용된다.
 - **적용 대역(`routes.networks`)**: 이 Mac의 IPv4 주소가 목록의 대역 안에 있을 때만 적용한다. 밖에서는 앱이 넣은 route를 지워서 모든 트래픽이 VPN을 탄다. 이 목록에는 앱이 스스로 추가하지 않는다.
 - **동기화 원칙**
@@ -230,6 +249,30 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - UI는 판단하지 않는다. 받은 도메인 구역을 그리고, 사용자의 조작을 명령으로 보낸다. 로그 pane의 [모두 복사]는 UI가 화면에 가진 줄로 만든다.
 - 기존 `~/.config/openfortivpn/config`가 있으면 첫 실행 때 값을 가져온다. 원본 파일은 수정하지 않는다.
 - macOS 알림은 설정창이 닫혀 있어도 사용자가 알아야 하는 문제(예외 규칙 쓰기 실패)에만 쓴다. 알림을 누르면 예외 규칙 pane이 열린다.
+
+### 5.7 Windows 설치와 앱 시작
+사용자 결정이다(2026-11-13). 관리자가 배포하든 사용자가 직접 설치하든 같은 결과가 나오게 한다.
+- **설치**: Windows 11 이상, x64. 관리자 권한으로 이 PC 전체에 설치한다(per-machine). 폴더는 `C:\Program Files\FortiVPNManager`로 고정하고 아무것도 묻지 않는다. quiet 설치(`msiexec /qn`)와 화면 설치의 결과가 같다.
+- **설치 화면**: Welcome(설치하는 동안 VPN 연결이 끊긴다는 안내) → Progress → Finish뿐이다. license, 폴더, 기능 고르기 화면은 없다. 언어는 Windows 표시 언어를 따른다(§3.2).
+- **설정 > 앱**: 수정(Repair, Remove)과 제거가 있다. 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 필요하다. Windows가 그 위치를 기억한다.
+- **업그레이드**: 새 MSI가 이전 버전을 바꾼다. 이전 버전 제거는 같은 transaction 안에서 하므로 설치가 실패하면 이전 버전이 돌아온다. 더 낮은 버전은 설치하지 않는다.
+- **실행 중인 앱**: 업그레이드와 제거는 실행 중인 앱을 닫는다. Windows 로그아웃 때처럼 종료를 요청하고, 몇 초 뒤에도 남아 있으면 끝낸다. "사용 중인 파일" 창이나 다시 시작 요청은 없다. 업그레이드 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다. 로그인 시 열기가 켜져 있으면 다음 로그인 때 열린다.
+- **제거**: 실제 제거일 때만 한다. 업그레이드 중 이전 버전을 지울 때는 하지 않는다.
+  - 앱을 닫고, Helper를 멈추고 서비스를 지운다.
+  - 이 PC의 사용자마다, 그 사용자의 상태 파일에 앱이 쓴 것으로 기록된 예외 route만 지운다(§5.5). 밖에서 넣은 route는 건드리지 않는다.
+  - 모든 사용자의 로그인 시 열기 등록을 지운다.
+  - Helper의 실행 기록 폴더, 설치한 파일, 시작 메뉴 바로 가기, 두 이벤트 로그 출처를 지운다.
+  - 사용자마다의 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남긴다.
+  - 데이터를 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
+- **앱 시작** (Windows만)
+  - 앱이 맨 먼저 하는 일은 Helper 서비스가 실행 중이게 하는 것이다. 무엇을 보이거나 시작하기 전에 이 일을 끝낸다. 실행 중이 아니면 시작하고, 시작하는 동안 기다린다. 그동안은 알림 영역 아이콘도 없다(설정창은 원래 시작할 때 열지 않는다).
+  - 준비란 서비스가 실행 중이라는 것뿐이다. Helper의 첫 답을 따로 기다리지 않고, 앱의 평소 응답 시간 제한도 그대로다. Helper는 실행 중이라고 알리기 전에 VPN client를 한 번 확인해 두므로(§3.1) 첫 상태 확인은 곧바로 답을 받는다.
+  - 기다림에 시간 제한은 없다. 서비스가 시작 중이라고 알리는 동안에는 얼마가 걸리든 기다린다(사용자 결정, 2026-11-14).
+  - 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다. Windows가 기다리기를 그만둬 시작이 실패했으면 그 시도의 프로세스가 끝날 때까지 기다렸다가, Helper가 시작하다 오류로 멈췄으면 곧바로 다시 시작한다. 첫 실패는 보이지 않고 로그에만 남긴다(시도 1/2회).
+  - 오류 창을 닫으면 앱이 끝난다.
+    - 서비스가 설치돼 있지 않거나, 사용 안 함이거나, 시작할 권한이 없으면 곧바로 띄운다. 첫 줄은 "Helper 실행을 실패하여 FortiVPNManager를 종료합니다."이고, 그 아래에 이유와 "FortiVPNManager를 다시 설치하거나 관리자에게 문의하세요."를 둔다.
+    - 다시 한 시작도 실패하면 첫 줄은 "Helper 시작 도중 오류가 발생하였습니다. FortiVPNManager를 종료합니다. (시도 2/2회)"이고, 그 아래에 이유("Helper가 제때 시작되지 않았습니다" 또는 "Helper가 시작 중 오류로 멈췄습니다")와 같은 안내를 둔다.
+  - macOS와 다른 이유: macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 한다. Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다.
 
 ## 6. 확인된 외부 제약
 구현 전에 소스를 읽거나 이 Mac에서 직접 확인한 사실이다. 바꾸려면 다시 확인해야 한다.
@@ -309,6 +352,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - logout 요청의 응답은 가짜 cookie에도 같다(HTTP 200, 같은 길이). 그래서 응답으로 성공 여부를 알 수 없다.
   - Windows의 curl은 `-k`를 줘도 공개 키 고정 값이 틀리면 통신하지 않는다.
 - Wintun은 openconnect 설치본에 들어 있고, 쓸 때마다 "experimental" 경고를 낸다. 날짜와 Windows 오류 문장 같은 일부 출력은 시스템 언어로 번역되고 UTF-8이 아니다.
+- 회사 PC에서는 새로 설치한 openconnect의 첫 실행(버전 확인)도 처음 보는 실행 파일처럼 늦게 시작됐다. 붙잡힌 동안에는 프로세스를 강제로 끝낼 수도 없어서, 5초 제한을 둔 Helper가 그 프로세스가 끝날 때까지 기다린 뒤 client를 쓸 수 없다고 알렸다.
 
 **Windows route**
 - `route -p add`로 넣은 route는 persistent 목록에 들어가고 곧바로 쓰인다. VPN이 받은 /24보다 좁은 /32 예외 route가 먼저 선택됐고, VPN 정상 종료와 강제 종료 뒤에도 남았다.
@@ -378,6 +422,16 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - Windows가 꺼질 때 서비스에 오는 종료 알림은 몇 초만 기다려 준다(노트북은 5초). Helper가 openconnect를 끝낸 뒤 보내는 logout이 잘릴 수 있어서, 다른 서비스와 네트워크가 내려가기 전에 오는 종료 준비(preshutdown) 알림을 받아 실행을 끝낸다.
 - **2026-11-13 앱 아이콘**: 사용자 결정이다. 메뉴바 아이콘과 같은 방패 계열로 하고, 시안 캔버스에서 모양·색·Windows 배경판 여부를 골랐다.
   - 처음 시안의 화려한 배경색, 두 색을 섞은 그라데이션, 반쪽만 밝은 방패는 macOS 27 기본 앱 옆에서 이질감이 커서 버렸다. 기본 앱은 선명한 시스템 색 하나에 밝기만 살짝 바꾸고, 판의 70% 안팎을 채우는 크고 굵은 그림에 그림자를 거의 두지 않는다.
+- **2026-11-13 Windows 설치 패키지(MSI)**: 사용자 결정이다.
+  - 그때까지는 관리자 PowerShell에서 설치 스크립트(`install.ps1`)를 실행했다. 스크립트는 빌드를 Program Files에 넣고, 서비스를 등록하고 시작하고, 앱의 이벤트 로그 출처와 시작 메뉴 바로 가기를 만들었다. 앱 UI를 붙일 때(같은 날) 앱은 PC의 .NET Desktop Runtime을 쓰기로(framework-dependent) 하고, 없으면 스크립트가 Microsoft에서 받아 설치했다. OpenConnect는 사용자가 기본 폴더(`C:\Program Files\OpenConnect`)에 따로 설치했고, 없으면 스크립트는 알리기만 했다.
+  - 스크립트에서 얻은 교훈: 앱 폴더는 이름 바꾸기 한 번으로 통째로 바꿔야 했다. PowerShell의 폴더 옮기기는 이름 바꾸기가 실패하면 파일을 하나씩 옮겨, 쓰이는 파일만 남기고 Helper 실행 파일은 옮겨 버렸다(노트북에서 확인). 회사 PC에서는 새 Helper 실행 파일이 몇 분 붙잡혀 Windows가 서비스 시작에 주는 30초를 넘겼으므로, 시작이 실패하면 10분까지 다시 시도했다.
+  - 바꾼 것: MSI 하나(WiX Toolset v7)로 설치, 업그레이드, 제거를 한다(§3.2, §5.7). MSIX, EXE 설치 프로그램, 언어 선택용 setup.exe를 버린 이유는 §3.2에 있다. 설치 스크립트는 지웠다.
+  - .NET은 self-contained로 바꿨다. MSI는 다른 설치 프로그램을 실행할 수 없고, 설치 패키지는 하나이기를 원했다. 대가로 .NET 보안 수정은 앱의 새 빌드로만 들어온다.
+  - OpenConnect 9.21을 MSI에 넣었다. Helper는 앱 폴더 아래의 그 사본만 실행하고, 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다.
+  - 설치는 Helper를 시작하지 않고, 앱이 시작한다. 설치가 Helper의 첫 시작에 걸리는 시간에 묶이지 않게 하기 위해서다. 시작 재시도도 설치에서 앱으로 옮겼다. 앱은 스크립트의 10분 재시도 대신 시간 제한 없이 기다리고, 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다(2026-11-14).
+  - 앱의 이벤트 로그 출처에 더해 Helper가 시작할 때 스스로 등록하던 출처도 MSI가 등록하고, 제거할 때 둘 다 지운다.
+  - Windows 앱은 시작하자마자 Helper 서비스가 실행 중이게 하고, 그때까지 아무것도 보이지 않는다(§3.1, §5.7). 기다리는 것은 서비스 실행뿐이고 앱의 평소 응답 시간 제한은 그대로다. macOS 앱이 먼저 떠서 Helper 승인을 안내하는 것과 다른 것은 OS의 차이 때문이다.
+  - 새로 설치한 openconnect의 느린 첫 실행은 Helper의 시작 안으로 옮겼다(§3.1). Helper가 실행 중이라고 알리기 전에 watchdog이 client 확인(openconnect 버전 확인)을 한 번, openconnect가 끝날 때까지 시간 제한 없이 한다. 그래서 상태 확인과 연결 때의 확인은 원래의 5초 제한을 그대로 둔다. 결과를 기억해 두는 안은 사용자가 거절했다.
 - **2026-11-14 VPN client는 watchdog만 다룸**: 사용자 결정이다. watchdog이 VPN client의 실행과 수명을 맡는데, Helper entry가 backend adapter를 직접 부르는 것은 잘못이라고 사용자가 정했다. Windows 작업을 올리기 전에 따로 했고, 앱이 보는 동작은 바뀌지 않는다.
   - watchdog으로 옮긴 것: client 확인(상태 응답에 쓰는 경로, 버전, 검증 여부, 문제), 실행 준비(실행 명세와 설정 파일), OTP 형식 확인, 메시지에 쓰는 client 이름, 실행 기록과 그에 담는 게이트웨이 조회, 이전 Helper가 남긴 client 프로세스 정리. 2026-11-12에 OS별 시작 부분이 넘겨주던 OS 처리(프로세스 확인과 종료, 실행 기록 폴더 권한)도 watchdog의 OS 부분이 됐다.
   - Helper entry에 남은 것: 앱 연결, 누가 무엇을 할 수 있는지(사용자와 시도의 주인), Helper 자신의 수명(유휴 종료, 교체, 종료 요청), 이전 Helper가 남긴 것의 정리와 route 복구가 끝날 때까지 앱 연결 막기, 실행이 요청한 route 복구를 OS 쪽에 넘기기, watchdog이 알려 준 것으로 만드는 응답, 로그. 시작 함수는 backend adapter와 실행 기록 폴더를 골라 watchdog을 만들어 넘긴다.
@@ -426,7 +480,8 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - 강화 옵션(인증서 변경 시 확인, root 소유 바이너리 사본, 게이트웨이 고정과 관리자 인증)은 추후 과제다.
 - **Windows**
   - 비밀값은 Credential Manager에 저장하고, Helper에는 named pipe로 메모리 안에서만 전달한다.
-  - openconnect는 관리자만 쓸 수 있는 Program Files의 것만, logout 요청용 curl은 System32의 것만 실행한다.
+  - openconnect는 앱과 함께 설치한 사본(관리자만 바꿀 수 있는 앱 폴더 안)만, logout 요청용 curl은 System32의 것만 실행한다.
+  - Helper 서비스 권한은 Windows의 기본값을 그대로 두고 모든 계정에 시작만 더한다. 일반 계정은 다른 서비스처럼 상태와 설정을 볼 수 있고, 멈추기, 설정 바꾸기, 지우기는 관리자만 한다.
   - 세션 cookie는 Helper 메모리에만 두고, openconnect와 curl에는 stdin으로 넘긴다. 로그에는 값을 남기지 않는다.
   - 감수하는 위험: 서명 확인이 없어서, 이 PC의 다른 프로그램도 Helper에 연결해 연결, 해제, 예외 route 쓰기를 요청할 수 있다. Helper는 받은 값을 모두 다시 검증하므로 요청할 수 있는 일은 앱으로 할 수 있는 일로 한정된다. 위의 1·3번 위험은 Windows에도 같다.
 
@@ -443,7 +498,13 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
 - 다른 프로그램이 Helper 서비스보다 먼저 같은 이름의 통로를 만들면 Helper는 통로를 열지 못하고 서비스가 시작에 실패한다. 앱은 그 통로의 소유자가 시스템 계정이 아니어서 비밀번호를 보내지 않는다.
 - 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
-- 아직 확인하지 않은 Windows 동작: route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지. 소스상으로는 스크립트가 끝까지 돈다. 2026-11-13 확인에서는 5초 안에 끝나 제한을 넘기지 않았다.
+- Windows 앱은 .NET runtime을 함께 담으므로 .NET 보안 수정은 앱의 새 빌드로만 들어온다. OpenConnect도 새 MSI로만 바뀐다.
+- Windows 설치 화면의 언어는 문서화되지 않은 Windows Installer 동작(MSI에 넣은 language transform을 표시 언어에 맞춰 적용)에 기댄다. 동작하지 않게 되면 화면이 영어로 나오고 설치는 그대로 된다.
+- WiX Toolset v7의 Open Source Maintenance Fee를 내야 하는지는 회사가 판단할 일이다.
+- 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 Windows가 기억하는 자리에 있어야 한다.
+- 아직 확인하지 않은 Windows 동작
+  - route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지. 소스상으로는 스크립트가 끝까지 돈다. 2026-11-13 확인에서는 5초 안에 끝나 제한을 넘기지 않았다.
+  - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 예외 route와 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
 - 추후 과제
   - Linux 앱(Rust + QML)과 서비스
   - Windows 빌드 환경과 CI(GitHub Actions 후보, 사용자 확인 필요)
@@ -472,4 +533,9 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 5. 예외 규칙: 유선과 Wi-Fi 각각에서 대상이 직접 경로로 가고, VPN 재연결 뒤에도 유지된다.
 6. 네트워크를 잠깐 끊었다가 되돌림: openconnect가 곧바로 끝나고, 네트워크가 돌아오면 다시 연결된다. 절전과 재개
 7. 보안: 작업 관리자의 명령줄과 로그에 비밀값이 없다.
-8. 일반 사용자 계정: 관리자 계정 정보를 넣어 설치한 뒤, 일반 사용자의 앱이 서비스에 연결된다.
+8. 일반 사용자 계정: 관리자 계정 정보를 넣어 MSI를 설치한 뒤, 일반 사용자가 앱을 열면 Helper 서비스를 시작하고 연결된다.
+9. 설치: 화면 설치와 quiet 설치(`msiexec /qn`)의 결과가 같다. 한국어 Windows에서는 한국어, 영어 Windows에서는 영어 화면이 나온다. 설치 직후 Helper 서비스는 멈춰 있고, 앱을 열면 서비스가 실행 중이 된 뒤에 알림 영역 아이콘이 나온다. 새로 설치한 PC에서도 첫 상태 확인에 OpenConnect를 쓸 수 없다는 경고가 없다.
+10. 업그레이드: 연결된 상태에서 새 MSI를 설치하면 앱이 닫히고, "사용 중인 파일" 창이나 다시 시작 요청이 없다. 설치를 실패시키면 이전 버전이 그대로 돌아온다. 더 낮은 버전은 설치되지 않는다.
+11. 제거: 두 사용자가 예외 규칙을 쓴 PC에서 제거하면 각자 앱이 쓴 예외 route와 로그인 시 열기가 사라지고, 밖에서 넣은 route와 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남는다. Helper 서비스, 실행 기록 폴더, 시작 메뉴 바로 가기, 두 이벤트 로그 출처가 사라진다.
+12. Helper를 쓸 수 없는 앱 시작: 서비스를 사용 안 함으로 바꾼 뒤 앱을 열면 아이콘 없이 "Helper 실행을 실패하여…" 오류 창이 곧바로 뜨고, 닫으면 앱이 끝난다. 시작이 두 번 실패하면 "(시도 2/2회)" 오류 창이 뜨고, 첫 실패는 로그에만 남는다.
+13. Repair: 앱 폴더의 파일을 지운 뒤 설정 > 앱의 수정에서 Repair하면 되살아난다.
