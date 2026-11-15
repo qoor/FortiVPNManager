@@ -95,7 +95,8 @@
 | WinUI 기본 컨트롤의 문구(입력 칸의 [복사] 메뉴 같은 것)는 한국어와 영어만 담는다 | 사용자 결정이다(2026-11-15). WinUI는 그 문구를 86개 언어로 언어마다 폴더 하나씩 가져와, 설치 파일 279개 가운데 172개가 이것이었다(약 3.4 MB). Windows App SDK에는 이를 줄이는 설정이 없어, 앱 프로젝트가 publish할 때 한국어(ko-KR)와 영어(en-US) 폴더만 남긴다. 앱 자신의 문구도 두 언어뿐이다. 대가로 다른 언어의 Windows에서는 WinUI 문구도 앱 문구처럼 영어로 나온다 |
 | OpenConnect 9.21은 설치 패키지에 넣고, Helper는 그 사본만 실행한다 | 사용자 결정이다(2026-11-13). 패키지 하나로 설치가 끝나게 한다. 앱 폴더 아래에 두므로 관리자만 바꿀 수 있다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. 전에는 사용자가 OpenConnect를 기본 폴더에 따로 설치했다(§7.1) |
 | 앱 버전은 `연도.기능.수정`이고, 모든 플랫폼이 같은 번호를 쓴다 | 사용자 결정이다(2026-11-15). macOS 자체와 Safari·Xcode의 모양을 따르되, 연도 자리는 달력 연도다. 연도가 보이면서 기능 추가와 버그 수정이 구분된다. SemVer와 순수 CalVer(연.월.순번)를 버린 이유와 pre-release 꼬리표를 쓰지 않는 이유는 §7.1에 있다. 규칙은 §4.4에 있다 |
-| macOS 설치 패키지는 서명하지 않은 pkg 하나다 | 사용자 결정이다(2026-11-15). pkg를 만드는 데는 유료 계정이 필요 없지만, pkg 서명(Developer ID Installer 인증서)과 Apple 공증은 유료 계정에서만 된다. 그래서 받은 사람은 처음 열 때 macOS의 차단을 "그래도 열기"로 직접 풀어야 한다. 안의 앱은 지금처럼 Personal Team 인증서로 서명한다. 앱 서명 인증서가 이 Mac의 Keychain에만 있어 CI가 아니라 Mac에서 만든다 |
+| macOS 설치 패키지는 서명하지 않은 pkg 하나다 | 사용자 결정이다(2026-11-15). pkg를 만드는 데는 유료 계정이 필요 없지만, pkg 서명(Developer ID Installer 인증서)과 Apple 공증은 유료 계정에서만 된다. 그래서 받은 사람은 처음 열 때 macOS의 차단을 "그래도 열기"로 직접 풀어야 한다. 안의 앱은 지금처럼 Personal Team 인증서로 서명한다. Release용 pkg는 CD가 저장소 비밀값의 인증서로 앱을 서명해 만든다(2026-11-16) |
+| CI는 push와 pull request마다, CD(Release)는 버전 tag push와 수동 실행 때만 돈다 | 사용자 결정이다(2026-11-16). 서명 키를 쓰는 일은 Release를 만들 때로 한정한다. CI는 키 없이 임시 서명(ad-hoc)으로 macOS pkg까지 만들어 패키징이 깨지지 않았는지 본다. 그 pkg는 Helper를 등록할 수 없어 올리지 않는다 |
 
 ## 4. 구성과 역할
 
@@ -168,7 +169,10 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
 - **macOS 설치 패키지**: `make pkg`가 Release 빌드로 `.build/FortiVPNManager-<버전>.pkg`를 만든다(§5.8). 버전은 앱의 버전을 그대로 쓴다.
   - 앱을 담는 component 패키지와, 그것을 감싸 설치 조건, 첫 화면 안내, 앱 닫기를 맡는 product 패키지 두 겹이다. 설정은 `packaging/macos/pkg`에 있다.
   - 패키지에는 파일의 확장 속성을 넣지 않는다. 넣으면 내려받은 Google OAuth client 파일의 quarantine 표시까지 설치된 앱에 붙는다. macOS가 늘 붙이는 `com.apple.provenance`만 남는다.
-  - 릴리스는 tag의 Release workflow가 Windows MSI를 올린 뒤, 그 tag의 commit에서 `scripts/release-pkg.sh`를 실행한다. 스크립트는 수정한 파일이 없고 지금 commit이 `v<버전>` tag이며 Google OAuth client 파일이 있는지 확인한 뒤, pkg를 만들어 같은 Release에 올리고 SHA-256 목록에 더한다.
+  - 릴리스용 pkg는 CD(`.github/workflows/release.yml`)가 MSI와 함께 만들어 같은 Release에 올리고, SHA-256 목록도 둘을 함께 담는다. 만드는 단계는 `.github/workflows/pkg.yml` 하나이고 CI와 CD가 같이 쓴다.
+    - CD: 그 실행에서만 쓰는 임시 Keychain에 저장소 비밀값(`MACOS_SIGNING_CERTIFICATE`는 인증서와 키의 .p12를 base64로, `MACOS_SIGNING_CERTIFICATE_PASSWORD`는 그 암호)과 Apple 중간 인증서(WWDR G3)를 넣는다. Xcode의 자동 서명은 Apple 계정이 필요해, 계정 없이 그 인증서로 직접 서명한다. `make verify`로 Mac 빌드와 같은 Team ID와 식별자인지 확인한 뒤 pkg를 만든다. 내장 Google OAuth client는 MSI와 같은 비밀값을 쓴다.
+    - CI: 키 없이 임시 서명(ad-hoc)으로 같은 pkg를 만들어 보고 올리지 않는다.
+    - 빌드 명령의 서명 방식은 `make`의 `SIGNING`으로 고른다. 비우면 지금처럼 Xcode 계정이 자동 서명한다. 빌드 번호는 MSI처럼 한국 시각이다.
   - 개발용 `make install`은 그대로 쓴다. VPN이 돌아오는지 기다리고, 안 돌아오면 이전 앱으로 되돌린다.
 - **Windows**
   - x64용으로 빌드한다. Rust 부분(Helper, 런타임 DLL, 테스트 실행 파일)은 Mac에서 cargo-xwin으로 MSVC target용으로 교차 빌드하고, 사용자의 Windows PC에서는 cargo를 실행하지 않는다. PC는 앱과 MSI를 빌드하고 테스트를 실행한다(§7.1). 런타임은 Windows 빌드 때만 DLL로 만든다. 빌드 설정에 DLL을 넣으면 macOS에서도 함께 생겨, 앱이 정적 라이브러리 대신 그 파일에 연결될 수 있기 때문이다.
@@ -483,7 +487,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
 - **2026-11-15 CI와 Release**: 사용자 결정이다(§4.4).
   - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
-  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 처음에 배포에 유료 Apple Developer ID가 필요하다고 보고 Release에 넣지 않았다가, 서명하지 않은 pkg를 Mac에서 올리기로 했다(아래 macOS 설치 패키지). tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
+  - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 처음에 배포에 유료 Apple Developer ID가 필요하다고 보고 Release에 넣지 않았다가, 서명하지 않은 pkg를 Mac에서 올리기로 했다(아래 macOS 설치 패키지). 2026-11-16부터는 CD가 만든다(아래 macOS pkg CD). tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
   - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
 - **2026-11-15 Windows 앱 종료 중 다시 실행**: 사용자 결정이다(SPEC F-WN).
   - 앱은 runtime이 연결을 끝낸 뒤 종료를 승인할 때까지(최대 12초) 떠 있다. 그동안 다시 실행하면 새 사본은 아직 키를 가진 이전 사본을 실행 중인 앱으로 보고 시작을 넘긴 뒤 끝났다. 이전 사본은 설정창을 띄웠다가 곧 종료와 함께 사라져, 다시 실행한 것이 없어졌다(notebook에서 사용자가 확인).
@@ -500,6 +504,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 설치 뒤 앱을 다시 열지 않는다. Windows MSI와 같게 했다. 대안은 설치 전에 실행 중이던 앱만 다시 여는 것이었다.
   - 앱 닫기는 macOS 설치 프로그램의 기능(닫아야 할 앱 목록)을 쓰고, 명령줄 설치에는 설치 직전 스크립트가 남은 사본을 끝낸다. Windows는 종료 요청 뒤 남은 사본을 끝내는데, 같은 결과다.
   - 앱을 복사할 때 ditto의 확장 속성 제외 옵션으로는 Google OAuth client 파일의 quarantine 표시가 남았다(복제된 파일의 속성). 복사한 뒤 속성을 지운다.
+- **2026-11-16 macOS pkg CD**: 사용자 결정이다(§3.2, §4.4).
+  - 전에는 Release workflow가 MSI를 올린 뒤 Mac에서 스크립트로 pkg를 만들어 같은 Release에 더했다(26.0.0이 그렇게 나갔다). 앱 서명 인증서가 이 Mac의 Keychain에만 있었기 때문이다. 그 스크립트는 지웠다.
+  - 이제 CD가 저장소 비밀값의 인증서로 서명해 만든다. 대가로 서명 키가 GitHub에도 있게 됐고, 사용자가 그 위험을 받아들였다(§8의 2번).
+  - CI는 매 commit마다 돌고, 서명과 Release는 버전 tag push와 수동 실행 때만 한다(사용자). CI는 MSI를 매 commit 만들어 보는 것처럼 pkg도 키 없이 만들어 본다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -539,7 +547,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - XPC는 양쪽 모두 Team ID와 signing identifier를 확인한다. Helper는 검증된 값만 받고, config.yaml은 읽지 않는다.
 - **감수하는 위험** (개인 Mac, 사용자 결정)
   1. **서버 인증서 자동 신뢰**: 공용 Wi-Fi 등에서 능동적인 MITM 공격자가 가짜 인증서를 내밀면 자동으로 신뢰한다. 그러면 VPN 비밀번호와 실시간 OTP가 넘어갈 수 있다. OTP를 자동 제출하므로 사람이 알아챌 틈이 없다.
-  2. **같은 사용자 권한의 코드가 root로 이어지는 경로**: Homebrew 바이너리 변조, Personal Team 키를 이용한 앱 사칭, `/Applications`의 앱 바꿔치기가 가능하다.
+  2. **같은 사용자 권한의 코드가 root로 이어지는 경로**: Homebrew 바이너리 변조, Personal Team 키를 이용한 앱 사칭, `/Applications`의 앱 바꿔치기가 가능하다. 2026-11-16부터 그 키는 CD 서명용 저장소 비밀값에도 있다. 저장소 쓰기 권한이나 workflow를 손에 넣은 사람은 키를 꺼내 Helper가 믿는 앱에 서명할 수 있다.
   3. **config.yaml 변조**: `vpn.host`를 바꾸면 1번과 결합해 자격증명이 다른 서버로 갈 수 있다. Keychain 항목이 `username@host` 단위라 host가 바뀌면 비밀번호를 다시 입력해야 하므로 부분적으로 완화된다.
 - 강화 옵션(인증서 변경 시 확인, root 소유 바이너리 사본, 게이트웨이 고정과 관리자 인증)은 추후 과제다.
 - **Windows**
@@ -553,7 +561,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - FortiOS 7.6.3 이상으로 게이트웨이를 올리면 openfortivpn을 쓸 수 없다. openconnect의 `--protocol=fortinet`도 같은 SSL VPN tunnel mode라 대안이 되지 않는다. 대안은 아직 없다.
 - 잠자기 중 PPP kernel extension panic 보고가 있다(openfortivpn #1278).
 - health check가 프로세스와 interface로 한정돼 있어 서버 idle-timeout으로 죽은 연결은 늦게 감지될 수 있다.
-- Personal Team 인증서는 1년마다 만료된다.
+- Personal Team 인증서는 1년마다 만료된다(지금 것은 2027-10-15). 갱신하면 CD 서명용 저장소 비밀값 두 개도 바꿔야 Release가 만들어진다.
 - openfortivpn을 업그레이드하면 출력 문자열이 바뀔 수 있다. 검증된 버전이 아니면 고급 pane에 경고를 띄운다.
 - Windows에서 openconnect를 쓸 때의 경고(§6)는 알려진 문제로 두고 써 보면서 개선한다. driver는 Wintun을 기본으로 하고, 불안정하면 TAP을 검토한다.
 - Windows는 터널 뒤 요청 없는 종료를 모두 강제 종료로 보므로, 접속 직후 스스로 끊기는 일이 반복되면 두 번째에 멈추지 않고 시도 상한(한 시간 12번)까지 로그인과 OTP 메일이 반복된다.

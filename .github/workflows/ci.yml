@@ -60,6 +60,11 @@ jobs:
     name: MSI
     uses: ./.github/workflows/msi.yml
 
+  # Without a signing key; the release workflow builds the signed package.
+  pkg:
+    name: pkg
+    uses: ./.github/workflows/pkg.yml
+
   swift-macos:
     name: Swift (macOS)
     runs-on: macos-26

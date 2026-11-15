@@ -1,0 +1,88 @@
+name: pkg
+
+# Builds the macOS installer package with make pkg (docs/DESIGN.md §4.4). CI builds it on every push
+# without a signing key, signed ad hoc, to keep the packaging working; such a package cannot register
+# the Helper and is not uploaded. The release workflow builds it signed with the Personal Team
+# certificate from the repository secrets and uploads it as the artifact "pkg".
+on:
+  workflow_call:
+    inputs:
+      sign:
+        description: Sign with the certificate in MACOS_SIGNING_CERTIFICATE and upload the package
+        type: boolean
+        default: false
+      oauth-client:
+        description: Build in the Google OAuth client from the repository secret GOOGLE_OAUTH_CLIENT_JSON
+        type: boolean
+        default: false
+    secrets:
+      GOOGLE_OAUTH_CLIENT_JSON:
+        required: false
+      MACOS_SIGNING_CERTIFICATE:
+        required: false
+      MACOS_SIGNING_CERTIFICATE_PASSWORD:
+        required: false
+
+jobs:
+  pkg:
+    name: macOS
+    runs-on: macos-26
+    env:
+      # Korean time for the build number, like local builds and the MSI's.
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup update --no-self-update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: brew install xcodegen
+      - if: inputs.oauth-client
+        env:
+          CLIENT: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+        run: |
+          if [ -z "$CLIENT" ]; then
+            echo '::error::the repository secret GOOGLE_OAUTH_CLIENT_JSON is not set'
+            exit 1
+          fi
+          printf '%s' "$CLIENT" > packaging/GoogleOAuthClient.json
+      # A keychain for this run only, with the certificate, its key and Apple's intermediate
+      # certificate that the signature chains to. make finds the team in it (make local-config).
+      - if: inputs.sign
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$CERTIFICATE" ] || [ -z "$CERTIFICATE_PASSWORD" ]; then
+            echo '::error::the repository secrets MACOS_SIGNING_CERTIFICATE and MACOS_SIGNING_CERTIFICATE_PASSWORD are not set'
+            exit 1
+          fi
+          keychain=$RUNNER_TEMP/signing.keychain-db
+          password=$(openssl rand -base64 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -f pkcs12 -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/signing.p12"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/wwdr-g3.cer" \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          security import "$RUNNER_TEMP/wwdr-g3.cer" -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+      # Without a key: no team, and an ad-hoc signature.
+      - if: ${{ !inputs.sign }}
+        run: printf '// CI builds without a signing team\n' > packaging/macos/Config/Local.xcconfig
+      # No Apple account here, so the certificate signs directly instead of Xcode's automatic signing.
+      - run: make pkg SIGNING="$SIGNING"
+        env:
+          SIGNING: ${{ inputs.sign && 'CODE_SIGN_STYLE=Manual' || 'CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-' }}
+      # The app and the Helper carry the certificate's team and their identifiers, as built on the Mac.
+      - if: inputs.sign
+        run: make verify CONFIG=Release
+      - if: inputs.sign
+        uses: actions/upload-artifact@v5
+        with:
+          name: pkg
+          path: .build/FortiVPNManager-*.pkg
+          if-no-files-found: error
+      - if: always() && inputs.sign
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

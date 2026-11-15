@@ -1,10 +1,9 @@
 name: Release
 
-# A version tag (v…) publishes the Windows installer as a public GitHub Release, built with the
-# Google OAuth client from the repository secret; a manual run makes a draft release instead, to try
-# the result before a tag. A tag is v and the version in VERSION; any other stops before the build.
-# The macOS installer package is added to the same Release from a Mac (scripts/release-pkg.sh), as
-# the app is signed with that Mac's certificate.
+# CD: a version tag (v…) publishes the Windows and macOS installers as a public GitHub Release, built
+# with the Google OAuth client from the repository secret, the macOS app signed with the Personal Team
+# certificate from the repository secrets; a manual run makes a draft release instead, to try the
+# result before a tag. A tag is v and the version in VERSION; any other stops before the build.
 on:
   push:
     tags: ['v*']
@@ -33,9 +32,21 @@ jobs:
     secrets:
       GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
 
+  pkg:
+    name: pkg
+    needs: version
+    uses: ./.github/workflows/pkg.yml
+    with:
+      sign: true
+      oauth-client: true
+    secrets:
+      GOOGLE_OAUTH_CLIENT_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}
+      MACOS_SIGNING_CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
+      MACOS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_SIGNING_CERTIFICATE_PASSWORD }}
+
   release:
     name: Release
-    needs: msi
+    needs: [msi, pkg]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -43,16 +54,20 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: msi
-          path: msi
-      - working-directory: msi
+          path: release
+      - uses: actions/download-artifact@v5
+        with:
+          name: pkg
+          path: release
+      - working-directory: release
         run: sha256sum FortiVPNManager-* > SHA256SUMS.txt
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then
-            gh release create "$GITHUB_REF_NAME" msi/* -R "$GITHUB_REPOSITORY" --verify-tag \
+            gh release create "$GITHUB_REF_NAME" release/* -R "$GITHUB_REPOSITORY" --verify-tag \
               --title "$GITHUB_REF_NAME" --generate-notes
           else
-            gh release create "test-$GITHUB_RUN_NUMBER" msi/* -R "$GITHUB_REPOSITORY" --draft \
+            gh release create "test-$GITHUB_RUN_NUMBER" release/* -R "$GITHUB_REPOSITORY" --draft \
               --target "$GITHUB_SHA" --title "Test build $GITHUB_RUN_NUMBER" --generate-notes
           fi

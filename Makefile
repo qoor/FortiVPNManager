@@ -7,7 +7,10 @@ CONFIG       ?= Debug
 BUILD_NUMBER := $(shell date +%Y%m%d%H%M%S)
 # The app's version, the same on every platform (docs/DESIGN.md §4.4).
 VERSION      := $(shell cat VERSION)
-APP          := $(DERIVED)/Build/Products/$(CONFIG)/FortiVPNManager.app
+# Signing settings added to the build. Without them the Apple account in Xcode signs automatically;
+# CI and CD, which have no account, pass their own (.github/workflows/pkg.yml).
+SIGNING      ?=
+APP         := $(DERIVED)/Build/Products/$(CONFIG)/FortiVPNManager.app
 HELPER       := $(APP)/Contents/MacOS/FortiVPNManagerHelper
 INSTALLED    := /Applications/FortiVPNManager.app
 APP_ID       := com.qoor.FortiVPNManager
@@ -32,7 +35,7 @@ gen:
 build: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) \
 		-derivedDataPath $(DERIVED) -allowProvisioningUpdates \
-		MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER) build
+		MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER) $(SIGNING) build
 
 release:
 	$(MAKE) build CONFIG=Release
