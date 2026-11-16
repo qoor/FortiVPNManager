@@ -8,13 +8,14 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest,
+    ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, VpnClient,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
@@ -52,8 +53,6 @@ pub struct FakeOpenFortiVpn {
 }
 
 impl Backend for FakeOpenFortiVpn {
-    type Interpreter = FakeInterpreter;
-
     fn client_name(&self) -> &'static str {
         "openfortivpn"
     }
@@ -89,8 +88,8 @@ impl Backend for FakeOpenFortiVpn {
         Ok(())
     }
 
-    fn interpreter(&self) -> FakeInterpreter {
-        FakeInterpreter::default()
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
+        Box::new(FakeInterpreter::default())
     }
 
     fn stop_grace_period(&self) -> Duration {
@@ -298,14 +297,19 @@ pub fn start_run(
     directory: &RunDirectory,
     setup: &Setup,
     on_report: impl FnMut(Report) + Send + 'static,
-) -> Run<FakeOpenFortiVpn> {
+) -> Run {
     let backend = FakeOpenFortiVpn {
         launch,
         grace_period: setup.grace_period,
     };
-    let mut watchdog = Watchdog::new(backend, directory.path.clone(), setup.timing);
+    let mut watchdog = Watchdog::new(
+        vec![(VpnClient::Openfortivpn, Arc::new(backend))],
+        directory.path.clone(),
+        setup.timing,
+    );
     let mut request = RunRequest {
         attempt_id: ATTEMPT.parse().unwrap(),
+        client: VpnClient::Openfortivpn,
         host: GATEWAY.to_owned(),
         port: 443,
         username: "alice".to_owned(),
@@ -354,7 +358,7 @@ pub enum Delivered {
 }
 
 pub struct Session {
-    pub run: Run<FakeOpenFortiVpn>,
+    pub run: Run,
     reports: Receiver<Report>,
     pub delivered: Vec<Delivered>,
     pub record: RecordFile,

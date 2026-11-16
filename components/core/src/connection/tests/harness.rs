@@ -6,8 +6,8 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
-    AttemptId, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone, ProcessExitStatus,
-    StopInitiator, StopReason,
+    AttemptId, ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
+    ProcessExitStatus, StopInitiator, StopReason, VpnClient,
 };
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
 use fvm_contract::app_internal::port::InterfaceAddress;
@@ -108,6 +108,7 @@ pub(super) fn account() -> VpnAccount {
         port: 8443,
         username: "alice".to_owned(),
         realm: String::new(),
+        client: VpnClient::Openfortivpn,
         trusted_certs: vec![pin_old()],
     }
 }
@@ -180,10 +181,13 @@ pub(super) fn ready() -> ReadinessFacts {
             build: APP_BUILD.to_owned(),
             status: Some(HelperStatus {
                 client_running: false,
-                client_path: Some("/opt/homebrew/Cellar/vpn/1.24.1/bin/vpn".to_owned()),
-                client_version: Some("1.24.1".to_owned()),
-                client_problem: None,
-                untested_version: None,
+                clients: vec![ClientStatus {
+                    client: VpnClient::Openfortivpn,
+                    path: Some("/opt/homebrew/Cellar/vpn/1.24.1/bin/vpn".to_owned()),
+                    version: Some("1.24.1".to_owned()),
+                    problem: None,
+                    untested_version: None,
+                }],
             }),
         },
     }
@@ -829,7 +833,7 @@ pub(super) fn saved_ledger(effects: &[Effect]) -> Option<FailureLedger> {
 
 pub(super) fn saved_certs(effects: &[Effect]) -> Option<Vec<String>> {
     effects.iter().rev().find_map(|effect| match effect {
-        Effect::SaveTrustedCerts(certs) => Some(certs.clone()),
+        Effect::SaveTrustedCerts { certs, .. } => Some(certs.clone()),
         _ => None,
     })
 }

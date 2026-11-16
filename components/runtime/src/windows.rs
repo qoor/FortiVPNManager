@@ -65,7 +65,7 @@ fn paths() -> Paths {
     Paths {
         config: home.join(r".config\FortiVPNManager\config.yaml"),
         state: local.join(r"FortiVPNManager\state.json"),
-        log: local.join(r"FortiVPNManager\Logs\openconnect.log"),
+        log: local.join(r"FortiVPNManager\Logs\vpn_backend.log"),
         client_settings: ClientSettings::FortiClient,
     }
 }
@@ -126,7 +126,7 @@ mod tests {
                 .ends_with(r".config\FortiVPNManager\config.yaml")
         );
         assert!(paths.state.ends_with(r"FortiVPNManager\state.json"));
-        assert!(paths.log.ends_with(r"FortiVPNManager\Logs\openconnect.log"));
+        assert!(paths.log.ends_with(r"FortiVPNManager\Logs\vpn_backend.log"));
         assert!(paths.config.starts_with(env::home_dir().unwrap()));
         assert!(matches!(paths.client_settings, ClientSettings::FortiClient));
     }

@@ -7,6 +7,7 @@ use fvm_contract::app_internal::section::{
 };
 use fvm_core::config;
 
+use crate::client;
 use crate::orchestration::Runtime;
 
 fn setting(value: i64, range: &std::ops::RangeInclusive<i64>) -> MinutesSetting {
@@ -84,6 +85,8 @@ impl Runtime {
                 ),
             },
             options_error: self.options.options_error.clone(),
+            vpn_client: client::chosen(settings),
+            vpn_client_error: self.options.vpn_client_error.clone(),
             open_at_login: self.options.open_at_login.clone(),
             log_file: self.log_file_path(),
         }

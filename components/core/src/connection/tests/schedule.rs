@@ -1,6 +1,6 @@
 //! Scheduled hours and time away.
 
-use fvm_contract::app_helper::{HelperErrorCode, Milestone, StopReason};
+use fvm_contract::app_helper::{HelperErrorCode, Milestone, StopReason, VpnClient};
 use fvm_contract::app_internal::section::{ConnectionIcon, ScheduleOutlook};
 use fvm_contract::app_internal::{TimeOfDay, Weekday};
 use jiff::tz::TimeZone;
@@ -201,7 +201,10 @@ fn the_start_clears_a_failure_like_connect() {
     h.send(Input::RunRejected(id, HelperErrorCode::ClientUnavailable));
     assert_eq!(
         h.cm.phase,
-        Phase::Failed(Failure::Helper(HelperErrorCode::ClientUnavailable))
+        Phase::Failed(Failure::Helper {
+            code: HelperErrorCode::ClientUnavailable,
+            client: VpnClient::Openfortivpn,
+        })
     );
     h.fire(TimerKind::Schedule);
     assert_eq!(reason(&h), Some(AttemptReason::Scheduled));

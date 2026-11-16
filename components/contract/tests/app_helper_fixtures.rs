@@ -54,6 +54,7 @@ fn run_request() {
     both_ways(
         RunRequest {
             attempt_id: attempt(),
+            client: VpnClient::Openfortivpn,
             host: "vpn.example.com".into(),
             port: 443,
             username: "alice".into(),
@@ -70,6 +71,7 @@ fn run_request_without_realm() {
     both_ways(
         RunRequest {
             attempt_id: attempt(),
+            client: VpnClient::Openconnect,
             host: "192.0.2.10".into(),
             port: 10443,
             username: "bob".into(),
@@ -285,12 +287,23 @@ fn output_lines() {
 
 #[test]
 fn helper_statuses() {
+    let found = |client, path: &str, version: &str| ClientStatus {
+        client,
+        path: Some(path.into()),
+        version: Some(version.into()),
+        problem: None,
+        untested_version: None,
+    };
     let running = HelperStatus {
         client_running: true,
-        client_path: Some(CELLAR_PATH.into()),
-        client_version: Some("1.24.1".into()),
-        client_problem: None,
-        untested_version: None,
+        clients: vec![
+            found(VpnClient::Openfortivpn, CELLAR_PATH, "1.24.1"),
+            found(
+                VpnClient::Openconnect,
+                "/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect",
+                "9.21",
+            ),
+        ],
     };
     both_ways(
         running,
@@ -299,27 +312,47 @@ fn helper_statuses() {
 
     let untested = HelperStatus {
         client_running: false,
-        client_path: Some("/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn".into()),
-        client_version: Some("1.25.0".into()),
-        client_problem: None,
-        untested_version: Some(UntestedVersion {
-            tested_series: "1.24".into(),
-        }),
+        clients: vec![ClientStatus {
+            untested_version: Some(UntestedVersion {
+                tested_series: "1.24".into(),
+            }),
+            ..found(
+                VpnClient::Openfortivpn,
+                "/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn",
+                "1.25.0",
+            )
+        }],
     };
     both_ways(
         untested,
         include_str!("fixtures/app-helper/helper_status_untested.json"),
     );
 
+    let script = "/opt/homebrew/etc/vpnc/vpnc-script";
     let missing = HelperStatus {
         client_running: false,
-        client_path: None,
-        client_version: None,
-        client_problem: Some(ClientProblem {
-            kind: ClientProblemKind::NotFound {},
-            path: "/opt/homebrew/bin/openfortivpn".into(),
-        }),
-        untested_version: None,
+        clients: vec![
+            ClientStatus {
+                client: VpnClient::Openfortivpn,
+                path: None,
+                version: None,
+                problem: Some(ClientProblem {
+                    kind: ClientProblemKind::NotFound {},
+                    path: "/opt/homebrew/bin/openfortivpn".into(),
+                }),
+                untested_version: None,
+            },
+            ClientStatus {
+                client: VpnClient::Openconnect,
+                path: Some(script.into()),
+                version: None,
+                problem: Some(ClientProblem {
+                    kind: ClientProblemKind::WritableByOthers { mode: 0o775 },
+                    path: script.into(),
+                }),
+                untested_version: None,
+            },
+        ],
     };
     both_ways(
         missing,

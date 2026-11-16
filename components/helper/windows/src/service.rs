@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
@@ -101,7 +102,11 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         ServiceExitCode::Win32(0),
         0,
     );
-    let watchdog = Watchdog::new(OpenConnect, PathBuf::from(RUN_DIRECTORY), Timing::default());
+    let watchdog = Watchdog::new(
+        vec![(VpnClient::Openconnect, Arc::new(OpenConnect))],
+        PathBuf::from(RUN_DIRECTORY),
+        Timing::default(),
+    );
     run_client_once(&handle, &watchdog);
     let options = Options {
         pipe_name: PIPE_NAME.to_owned(),
@@ -149,16 +154,13 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
 /// a working client as broken while the wait went on anyway. Nothing is kept from it; status and
 /// connect check the client again within their short limit, and status reports a missing or broken
 /// one. Meanwhile the service control manager hears every `START_PROGRESS` that the start goes on.
-fn run_client_once(
-    handle: &service_control_handler::ServiceStatusHandle,
-    watchdog: &Watchdog<OpenConnect>,
-) {
+fn run_client_once(handle: &service_control_handler::ServiceStatusHandle, watchdog: &Watchdog) {
     thread::scope(|scope| {
         let (done, finished) = mpsc::channel();
         thread::Builder::new()
             .name("fvm-helper-client-run".into())
             .spawn_scoped(scope, move || {
-                let _ = watchdog.find_client(ClientCheckWait::UntilExit);
+                let _ = watchdog.find_clients(ClientCheckWait::UntilExit);
                 let _ = done.send(());
             })
             .expect("starting the client run thread");

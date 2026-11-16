@@ -21,7 +21,7 @@ use fvm_contract::app_internal::{ButtonState, SecretText};
 use fvm_core::config::{CertificateList, Settings};
 use fvm_core::connection;
 
-use crate::client::{self, Client};
+use crate::client;
 use crate::files;
 use crate::orchestration::{ClientSettings, Runtime};
 
@@ -173,9 +173,13 @@ impl Forms {
             app_password_entered: !self.app_password.0.is_empty(),
             vpn_password_stored: self.vpn_password_stored,
             app_password_stored: self.app_password_stored,
-            saved_account_problem: Client
-                .check_account(&vpn.host, &vpn.username, &vpn.realm)
-                .err(),
+            saved_account_problem: client::check_account(
+                client::chosen(settings),
+                &vpn.host,
+                &vpn.username,
+                &vpn.realm,
+            )
+            .err(),
             feedback: self.feedback.clone(),
             save: enabled(self.has_changes()),
             revert: enabled(self.has_changes()),
@@ -254,6 +258,7 @@ impl Runtime {
     /// "Save": checks the draft, writes the changed fields, then the passwords under the account
     /// that was saved.
     pub(crate) fn save_account(&mut self) {
+        let client = client::chosen(self.config.settings());
         let forms = &mut self.forms;
         forms.feedback = None;
         let fail = |forms: &mut Forms, error: AccountSaveError| {
@@ -278,11 +283,11 @@ impl Runtime {
         if !app_password.is_empty() && address.is_empty() {
             return fail(forms, AccountSaveError::AppPasswordNeedsAddress {});
         }
-        if let Err(problem) = Client.check_account(&host, &username, &realm) {
+        if let Err(problem) = client::check_account(client, &host, &username, &realm) {
             return fail(forms, AccountSaveError::AccountValue { problem });
         }
         if !vpn_password.is_empty()
-            && let Err(error) = Client.check_vpn_password(&vpn_password)
+            && let Err(error) = client::check_vpn_password(client, &vpn_password)
         {
             return fail(forms, error);
         }
@@ -503,10 +508,10 @@ impl Runtime {
         }
         self.config_reloaded();
         let saved = self.config.settings().clone();
-        let trusted = match client::CERTIFICATES {
-            CertificateList::Digests => saved.vpn.trusted_certs.len(),
-            CertificateList::Pins => saved.vpn.trusted_cert_pins.len(),
-        };
+        let trusted = saved
+            .vpn
+            .trusted(CertificateList::of(client::chosen(&saved)))
+            .len();
         let report = ImportReport {
             source: connection.name.clone(),
             host: saved.vpn.host.clone(),

@@ -5,13 +5,14 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
-    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
+    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, VpnClient,
 };
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, BypassRoutesChange, BypassRoutesOutcome, FromEntry, NetworkCheck,
@@ -64,7 +65,11 @@ impl OsSide {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&folder).unwrap();
-        let watchdog = Watchdog::new(OpenConnect, folder.join("run"), Timing::default());
+        let watchdog = Watchdog::new(
+            vec![(VpnClient::Openconnect, Arc::new(OpenConnect))],
+            folder.join("run"),
+            Timing::default(),
+        );
         let (sender, messages) = mpsc::channel();
         let inbox = entry::start(watchdog, move |message| {
             let _ = sender.send(message.clone());

@@ -103,7 +103,7 @@ public static class ConnectionText
         FailureReason.GmailRejected => L("Check Google account connection"),
         FailureReason.TooManyReconnects => L("Too many reconnects"),
         FailureReason.Network => L("Network error"),
-        FailureReason.Helper helper => helper.Code.Summary(),
+        FailureReason.Helper helper => helper.Code.Summary(helper.Client),
         _ => throw new InvalidOperationException($"unknown failure {reason}"),
     };
 
@@ -123,7 +123,7 @@ public static class ConnectionText
         FailureReason.TooManyReconnects reconnects => L("Automatic reconnection stopped after too many sign-in attempts within %@.", time.SpelledOut(reconnects.WindowSeconds)),
         FailureReason.Network => L("Couldn't connect to the VPN server."),
         FailureReason.Helper { Code: HelperErrorCode.InvalidRequest } => L("The connection request was rejected. Check the account and VPN password."),
-        FailureReason.Helper helper => L("Helper error: %@", helper.Code.Summary()),
+        FailureReason.Helper helper => L("Helper error: %@", helper.Code.Summary(helper.Client)),
         _ => throw new InvalidOperationException($"unknown failure {reason}"),
     };
 
@@ -147,11 +147,11 @@ public static class ConnectionText
         _ => L("Show Log"),
     };
 
-    public static string Summary(this HelperErrorCode code) => code switch
+    public static string Summary(this HelperErrorCode code, VpnClient client) => code switch
     {
         HelperErrorCode.Busy => L("Helper is busy with another connection"),
         HelperErrorCode.InvalidRequest => L("Invalid connection request"),
-        HelperErrorCode.ClientUnavailable => L("openconnect not found"),
+        HelperErrorCode.ClientUnavailable => L("%@ not found", client.ToString().ToLowerInvariant()),
         HelperErrorCode.NotAuthorized => L("Helper refused the request"),
         _ => L("Helper internal error"),
     };

@@ -1,6 +1,6 @@
 //! Gateway certificate auto-trust, retry values and the failure ledger.
 
-use fvm_contract::app_helper::{Milestone, StopReason};
+use fvm_contract::app_helper::{Milestone, StopReason, VpnClient};
 
 use super::super::certs::{gateway_change_drops_certs, merge_trusted_certs};
 use super::super::machine::{AttemptReason, Phase, RetryReason};
@@ -45,7 +45,10 @@ fn a_rejection_learns_the_value_and_retries_at_once_without_counting() {
         effects,
         [
             Effect::AttemptBegun(second.clone()),
-            Effect::SaveTrustedCerts(vec![digest('a'), pin_old()]),
+            Effect::SaveTrustedCerts {
+                client: VpnClient::Openfortivpn,
+                certs: vec![digest('a'), pin_old()]
+            },
             Effect::CloseOtpSession {
                 attempt: first,
                 check_spam: false
@@ -169,6 +172,17 @@ fn a_gateway_change_drops_the_values() {
         a.trusted_certs = vec![digest('b')];
     });
     assert!(!gateway_change_drops_certs(&account(), &supplied));
+    let switched = moved(|a| {
+        a.host = "vpn2.example.com".into();
+        a.client = VpnClient::Openconnect;
+        a.trusted_certs = vec![];
+    });
+    assert!(gateway_change_drops_certs(&account(), &switched));
+    let only_switched = moved(|a| {
+        a.client = VpnClient::Openconnect;
+        a.trusted_certs = vec![];
+    });
+    assert!(!gateway_change_drops_certs(&account(), &only_switched));
 }
 
 /// The values belong to the old gateway, the other OS's list included, so both lists are cleared
@@ -204,6 +218,19 @@ fn a_new_gateway_clears_both_certificate_lists() {
         0
     );
     assert_eq!(h.cm.settings.account.trusted_certs, [digest('c')]);
+}
+
+#[test]
+fn a_new_gateway_with_another_client_clears_both_certificate_lists() {
+    let mut h = Harness::new();
+    h.launch_with(false, None);
+    let mut moved = account();
+    moved.host = "vpn2.example.com".into();
+    moved.client = VpnClient::Openconnect;
+    moved.trusted_certs = vec![];
+    let effects = h.send(Input::SettingsChanged(with_account(moved)));
+    assert!(effects.contains(&Effect::ClearTrustedCerts));
+    assert!(h.cm.settings.account.trusted_certs.is_empty());
 }
 
 #[test]
@@ -261,6 +288,30 @@ fn a_rejection_from_the_old_gateway_is_not_learned_for_the_new_one() {
         h.start_tunnel();
         assert_eq!(started_certs(&h), [digest('b')]);
     }
+}
+
+#[test]
+fn a_rejection_from_a_run_of_the_other_client_is_not_learned() {
+    let mut h = Harness::new();
+    h.launch();
+    h.send(Input::ReadinessChecked(ready()));
+    let first = h.attempt().unwrap().id.clone();
+    h.send(Input::OtpSessionReady(first.clone()));
+    let mut switched = account();
+    switched.client = VpnClient::Openconnect;
+    switched.trusted_certs = vec![];
+    let effects = h.send(Input::SettingsChanged(with_account(switched)));
+    assert!(effects.contains(&Effect::CheckReadiness));
+    let effects = h.exit_for(&first, rejected(&[digest('a')]));
+    assert_eq!(saved_certs(&effects), None);
+    assert!(h.cm.settings.account.trusted_certs.is_empty());
+    let second = h.start_tunnel();
+    assert_eq!(run_starts(&h.effects)[0].client, VpnClient::Openconnect);
+    let effects = h.exit_for(&second, rejected(&[digest('b')]));
+    assert!(effects.contains(&Effect::SaveTrustedCerts {
+        client: VpnClient::Openconnect,
+        certs: vec![digest('b')],
+    }));
 }
 
 // MARK: Values

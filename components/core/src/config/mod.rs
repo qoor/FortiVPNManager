@@ -14,6 +14,7 @@ mod tree;
 
 use std::ops::RangeInclusive;
 
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::problem::{ConfigProblem, ConfigWarning};
 use fvm_contract::app_internal::{OtpMethod, TimeOfDay, Weekday};
 
@@ -38,6 +39,10 @@ const OTP_METHODS: [(&str, OtpMethod); 2] = [
     ("imap", OtpMethod::Imap),
     ("gmail_api", OtpMethod::GmailApi),
 ];
+const VPN_CLIENTS: [(&str, VpnClient); 2] = [
+    ("openfortivpn", VpnClient::Openfortivpn),
+    ("openconnect", VpnClient::Openconnect),
+];
 const WEEKDAYS: [(&str, Weekday); 7] = [
     ("mon", Weekday::Mon),
     ("tue", Weekday::Tue),
@@ -49,16 +54,17 @@ const WEEKDAYS: [(&str, Weekday); 7] = [
 ];
 
 /// What the file needs from the VPN clients' backend adapters and from the OS the app runs on.
-/// One file serves both OSes, each with its own client, so both certificate lists are read and
-/// written back; the app uses only its client's list.
+/// One file serves both OSes, so both certificate lists and the macOS client choice are read and
+/// written back on either; the app uses only the list of the client it runs.
 pub struct ClientRules<'a> {
-    /// The client this app runs, as the comments of a written file show it.
+    /// The client whose settings file the first launch imports, as the comments of a written file
+    /// show it.
     pub name: &'a str,
     /// The OS the comments of a written file describe.
     pub platform: Platform,
-    /// The list the client trusts. Values of the other list that cannot be used are dropped
-    /// without a warning: the app on the other OS warns about them.
-    pub certificate_list: CertificateList,
+    /// The lists of the clients this OS can run. Values of another list that cannot be used are
+    /// dropped without a warning: the app on the other OS warns about them.
+    pub certificate_lists: &'a [CertificateList],
     /// The canonical form of a digest (`vpn.trusted_certs`), or `None` when the text is not one.
     pub digest_value: &'a dyn Fn(&str) -> Option<String>,
     /// The canonical form of a pin (`vpn.trusted_cert_pins`), or `None` when the text is not one.
@@ -80,6 +86,15 @@ pub enum CertificateList {
     Pins,
 }
 
+impl CertificateList {
+    pub fn of(client: VpnClient) -> Self {
+        match client {
+            VpnClient::Openfortivpn => Self::Digests,
+            VpnClient::Openconnect => Self::Pins,
+        }
+    }
+}
+
 /// Everything config.yaml holds. Passwords are never part of it. Missing keys and null values
 /// read as the defaults.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -98,6 +113,7 @@ pub struct Vpn {
     pub username: String,
     /// Empty means none.
     pub realm: String,
+    pub client: VpnClient,
     /// Gateway certificate digests to trust, newest first, in canonical form. Managed by the app.
     pub trusted_certs: Vec<String>,
     /// Gateway public key pins to trust, newest first, in canonical form. Managed by the app.
@@ -183,6 +199,7 @@ impl Default for Settings {
                 port: 443,
                 username: String::new(),
                 realm: String::new(),
+                client: VpnClient::Openconnect,
                 trusted_certs: Vec::new(),
                 trusted_cert_pins: Vec::new(),
             },

@@ -40,7 +40,7 @@ fn paths() -> Paths {
     Paths {
         config: home.join(".config/FortiVPNManager/config.yaml"),
         state: home.join("Library/Application Support/FortiVPNManager/state.json"),
-        log: home.join("Library/Logs/FortiVPNManager/openfortivpn.log"),
+        log: home.join("Library/Logs/FortiVPNManager/vpn_backend.log"),
         client_settings: ClientSettings::OpenFortiVpn { home },
     }
 }

@@ -1,14 +1,18 @@
 //! The macOS Helper's Rust start. Swift reaches the Helper's Rust side only through the socket
 //! returned by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`, and
-//! the shared Helper entry has the watchdog run the VPN client with the openfortivpn backend adapter.
+//! the shared Helper entry has the watchdog run the VPN client each run request names with its
+//! backend adapter.
 
 use std::io::{self, BufReader};
 use std::os::fd::IntoRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 
+use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::Backend;
 use fvm_contract::stream;
 use fvm_helper_core::process::{Timing, Watchdog};
@@ -20,18 +24,19 @@ const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
 #[unsafe(no_mangle)]
 pub extern "C" fn fvm_helper_entry_start() -> i32 {
-    start(OpenFortiVpn, PathBuf::from(RUN_DIRECTORY)).into_raw_fd()
+    let clients: Vec<(VpnClient, Arc<dyn Backend>)> = vec![
+        (VpnClient::Openfortivpn, Arc::new(OpenFortiVpn)),
+        (VpnClient::Openconnect, Arc::new(OpenConnect)),
+    ];
+    start(clients, PathBuf::from(RUN_DIRECTORY)).into_raw_fd()
 }
 
-/// Starts the Helper entry for `backend`'s client, keeping its files in `run_directory`, and returns
+/// Starts the Helper entry for `clients`, keeping their files in `run_directory`, and returns
 /// Swift's end of the stream. The entry says "ready" once it has cleaned up after an earlier Helper.
-pub fn start<B>(backend: B, run_directory: PathBuf) -> UnixStream
-where
-    B: Backend + Send + Sync + 'static,
-{
+pub fn start(clients: Vec<(VpnClient, Arc<dyn Backend>)>, run_directory: PathBuf) -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
     let writer = ours.try_clone().expect("cloning the socket to Swift");
-    let watchdog = Watchdog::new(backend, run_directory, Timing::default());
+    let watchdog = Watchdog::new(clients, run_directory, Timing::default());
     let inbox = fvm_helper_core::entry::start(watchdog, move |message| {
         stream::send(&mut &writer, message).expect("writing a message to Swift");
     });

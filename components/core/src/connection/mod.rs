@@ -26,7 +26,9 @@ mod tests;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, HelperEvent, RunRequest, StopReason};
+use fvm_contract::app_helper::{
+    AttemptId, HelperErrorCode, HelperEvent, RunRequest, StopReason, VpnClient,
+};
 use fvm_contract::app_internal::event::PathInterface;
 use fvm_contract::app_internal::port::{InterfaceAddress, RegistrationError};
 use fvm_contract::app_internal::{OtpMethod, SecretText};
@@ -66,9 +68,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// The settings file's values, which its reader checked against these types' ranges, with the
-    /// certificate values of the list `certificates` that the VPN client trusts.
-    pub fn new(settings: &crate::config::Settings, certificates: CertificateList) -> Self {
+    /// The settings file's values, which its reader checked against these types' ranges, for runs
+    /// of `client`, with the certificate values it trusts.
+    pub fn new(settings: &crate::config::Settings, client: VpnClient) -> Self {
         let connection = &settings.connection;
         let minutes =
             |value: i64| u32::try_from(value).expect("the settings file checks the minute ranges");
@@ -79,7 +81,8 @@ impl Settings {
                     .expect("the settings file checks the port range"),
                 username: settings.vpn.username.clone(),
                 realm: settings.vpn.realm.clone(),
-                trusted_certs: settings.vpn.trusted(certificates).to_vec(),
+                client,
+                trusted_certs: settings.vpn.trusted(CertificateList::of(client)).to_vec(),
             },
             connection: ConnectionSettings {
                 session_max_minutes: minutes(connection.session_max_minutes),
@@ -107,6 +110,7 @@ pub struct VpnAccount {
     pub username: String,
     /// Empty for none.
     pub realm: String,
+    pub client: VpnClient,
     /// Newest first, at most [`crate::config::MAX_TRUSTED_CERTS`].
     pub trusted_certs: Vec<String>,
 }
@@ -121,6 +125,7 @@ impl VpnAccount {
     pub fn run_request(&self, attempt: AttemptId, password: String) -> RunRequest {
         RunRequest {
             attempt_id: attempt,
+            client: self.client,
             host: self.host.clone(),
             port: i64::from(self.port),
             username: self.username.clone(),
@@ -305,7 +310,10 @@ pub enum Effect {
         reason: StopReason,
     },
     /// Write the VPN client's certificate list with exactly these values.
-    SaveTrustedCerts(Vec<String>),
+    SaveTrustedCerts {
+        client: VpnClient,
+        certs: Vec<String>,
+    },
     /// Empty both certificate lists: the server address or port changed, so the values, the other
     /// OS's included, belong to the old gateway.
     ClearTrustedCerts,

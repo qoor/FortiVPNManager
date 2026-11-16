@@ -3,8 +3,8 @@
 # 0. 문서 정보
 - 목적: 구현과 검증의 기준이 되는 기능 명세
 - 범위
-  - macOS + openfortivpn, Windows + openconnect
-  - openconnect 처리: OS와 무관한 규칙(macOS·Linux 확장 대비)
+  - macOS + openconnect(기본) 또는 openfortivpn, Windows + openconnect
+  - openconnect 처리: OS와 무관한 규칙(Linux 확장 대비)
   - Linux: 자리만 확보
 - OS 표기
   - Keychain: 각 OS의 비밀값 저장소(Windows는 Credential Manager)
@@ -53,8 +53,8 @@
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
 | Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 세 모듈 사용, 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
-| openfortivpn | Helper가 실행 | macOS의 VPN client와 pppd |
-| openconnect | Helper가 실행 | Windows의 VPN client와 route 설정 스크립트(앱과 함께 설치) |
+| openfortivpn | Helper가 실행 | macOS에서 고를 수 있는 VPN client와 pppd |
+| openconnect | Helper가 실행 | Windows와 macOS(기본)의 VPN client, route 설정 스크립트 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
@@ -80,7 +80,8 @@
   - entry 모듈: 요청별 허용 여부 판단
   - VPN client 관련 처리: process·recovery 모듈에 위임
   - backend adapter 사용: process·recovery 모듈 한정, entry 모듈의 직접 접근 금지
-  - backend adapter와 실행 기록 폴더 선택: Helper의 OS별 시작 부분
+  - backend adapter와 실행 기록 폴더 제공: Helper의 OS별 시작 부분
+  - 실행별 backend adapter: 실행 요청의 VPN client 기준
   - 이벤트·출력: 순서대로 앱에 전달
 - 바깥
   - Gmail·Google 통신과 파일 처리: 런타임
@@ -102,7 +103,7 @@
 - 역할
   - Connection Manager 규칙, 표시 값, 준비 상태 판정
   - 예외 규칙 계산, config.yaml·IMAP·Gmail API·OAuth·OTP 메일 형식
-- 모르는 것: 파일, 네트워크, 타이머 실행, VPN client 이름, 화면 문장
+- 모르는 것: 파일, 네트워크, 타이머 실행, VPN client별 처리 규칙, 화면 문장
 - 제공 기능: F-CM-01~11, F-CF-01, F-BR-01, F-BR-03
 
 ## 2.3 런타임
@@ -352,11 +353,11 @@
   2. VPN client별 목록
      - openfortivpn의 SHA-256 digest: `vpn.trusted_certs`
      - openconnect의 `pin-sha256:` 값: `vpn.trusted_cert_pins`
-     - 현재 VPN client의 목록만 사용, 그 목록의 문제만 경고
+     - 현재 VPN client의 목록만 사용, 그 OS에서 쓸 수 있는 목록의 문제만 경고
      - 다른 목록은 그대로 유지, 형식이 맞지 않는 값은 파일 재작성 시 제외
   3. 새 값은 목록 앞에 추가, 최대 4개 유지
-  4. 저장 조건: 현재 설정된 게이트웨이를 향한 실행 한정
-  5. 서버 주소·port 변경 시 두 목록 초기화, 사용자가 직접 넣은 값은 그대로 사용
+  4. 저장 조건: 현재 설정된 게이트웨이와 VPN client의 실행 한정
+  5. 서버 주소·port 변경 시 두 목록 초기화, 사용자가 직접 넣은 값은 그대로 사용(VPN client도 함께 바뀐 경우 제외)
   6. openconnect: 저장된 값이 없어도 맞지 않는 자리표시 값 1개 전달
 
 ### F-CM-10 표시 결정
@@ -405,6 +406,8 @@
      - macOS: 권한이 0600이 아니면 경고
      - Windows: 사용자 profile의 기본 권한 사용
   5. 같은 파일의 두 OS 공용, 앱이 쓰는 설명 주석은 해당 OS 기준(비밀값 저장소, 네트워크와 router 명칭)
+  6. `vpn.client`: macOS의 VPN client(openconnect 기본, openfortivpn), 다음 연결부터 적용
+     - Windows: 값과 무관하게 openconnect 실행
 
 ### F-CF-02 설정 저장
 - 설명: 설정창 변경과 앱이 학습한 값의 config.yaml·Keychain 저장
@@ -618,6 +621,7 @@
 - 세부 기능
   1. Helper가 보낸 순서대로 줄 수집, 시각과 출처 추가
   2. 메모리에는 최근 줄만 유지, 파일은 0600 권한의 덧붙이기와 크기 초과 시 회전
+     - 로그 파일: VPN client와 무관한 하나의 파일
   3. 앱 종료 전 파일 쓰기 완료, [지우기]는 화면만 비움
   4. [모두 복사]: UI가 화면에 가진 줄로 로그 파일과 같은 형식의 텍스트 생성
   5. 설명 줄: 영어, 비밀값과 config.yaml 내용 기록 금지
@@ -672,11 +676,11 @@
      - logout 요청 도구: OS 내장 도구 한정, 그 도구의 사용자 설정 파일과 proxy 설정 미사용
      - 문제 전달: 종류와 경로, 문장과 번역은 UI 담당
   2. 검증된 버전이 아니면 고급 pane에 "검증되지 않은 버전" 경고
-  3. openconnect 버전: 실행해서 확인, 상태 확인·연결 때마다 재확인, 결과 미보관, 짧은 시간 제한
+  3. openconnect 버전: 실행해서 확인, 실행 파일이 바뀐 경우에만 재확인, 짧은 시간 제한
   4. Windows Helper 시작: 실행 중 알림 전 process 모듈의 같은 확인 1회
      - 시간 제한 없이 openconnect 종료까지 대기, 그동안 Windows에 시작 중 알림(F-WN-03)
-     - 결과 미보관
   5. Helper의 모든 값 재검증(앱 불신)
+     - VPN client: 그 OS가 실행할 수 없는 client 요청 거부
      - host: IPv4 또는 host 이름 한정, 제어 문자 금지
      - 그 밖의 한도: VPN client별 기준
   6. 비밀번호와 openconnect 세션 cookie: 설정 파일·argv 기록 금지
@@ -726,11 +730,13 @@
      - 게이트웨이 연결, OTP prompt
      - 인증됨: 첫 실행의 세션 cookie 줄, 둘째 실행의 IP 할당 줄
      - 터널 IP
-     - 터널 올라옴: 터널 어댑터 생성 줄 기준(Windows, 다른 OS는 지원 시 결정)
+     - 터널 올라옴: Windows는 터널 어댑터 생성 줄, macOS는 route 스크립트 connect 단계 완료 줄
      - 인증서 값: 맞지 않는 고정 값에 대한 거부 줄
   4. 단계 보고: 단계별 1회, 증가 순서 한정
-  5. openfortivpn의 route 복원 미완료 종료 추적
-  6. route 스크립트: 완료 대기 없음, 시간 제한 초과로 나오는 "스크립트 실패" 줄은 실패 미처리
+  5. route 복원 미완료 종료 추적(openconnect는 터널 설정 이후의 모든 종료)
+  6. route 스크립트
+     - macOS: connect 단계 완료 대기
+     - Windows: 완료 대기 없음, 시간 제한 초과로 나오는 "스크립트 실패" 줄은 실패 미처리
 
 ### F-VR-04 시간 제한과 종료
 - 설명: 단계별 시간 제한으로 진행하지 못하는 client 종료, 요청 시 정해진 순서의 종료
@@ -756,8 +762,8 @@
 - 세부 기능
   1. 담는 내용: 가장 멀리 간 단계, 종료 주체와 이유, 학습한 인증서 값, 실패 단서, 터널 유지 시간, 종료 상태
   2. logout 요청(F-VR-04) 후 route 미정리 시 정리 후 보고
-     - openfortivpn: default route 확인
-     - openconnect: 게이트웨이로 가는 host route 확인
+     - macOS: default route와 게이트웨이로 가는 host route 확인
+     - Windows: 게이트웨이로 가는 host route 확인
   3. 보고: 실행마다 정확히 1회, 마지막 메시지
 
 ### F-VR-06 남은 프로세스 정리와 route 복구
@@ -800,11 +806,13 @@
   1. 표시 대상: 메뉴바 아이콘과 메뉴, 설정창(일반·계정·연결 관리·예외 규칙·고급·로그 pane)
      - pane 선택: 시스템 설정과 같은 사이드바와 설정 검색
      - 인증서 항목 없음
+     - VPN client 선택: 고급 pane
   2. 버튼 상태와 값: 구역 값 그대로
      - 예외: 메뉴와 일반 pane의 [연결]·[연결 해제]·[지금 재연결]은 항상 표시, 숨김 값이면 흐리게 표시
   3. UI 결정 범위: 문장 조립, 설정 필요 항목별 동작 버튼과 실패 안내 버튼이 여는 pane
   4. 문장: 판단 코어가 보낸 종류와 값으로 생성과 번역, "헬퍼" 대신 "Helper" 표기
   5. 로그 pane 색: 출처가 아닌 `ERROR:`·`WARN:` 머리 기준
+  6. VPN client를 찾을 수 없을 때: 고른 client의 설치 안내
 
 ### F-SW-02 OS port
 - 설명: 판단 코어·런타임이 요청한 OS 기능의 macOS 제공, 시스템 이벤트 전달
@@ -863,7 +871,7 @@
      - 설정 필요·첫 실행 설정 가져오기에도 설정창 자동 열기 없음
      - 설정창 열기: 아이콘 더블클릭, 메뉴의 [설정…]
   5. 문장: macOS와 같은 뜻, Windows 표시 언어(한국어·영어) 기준
-  6. Helper 승인 항목 없음, 설정 가져오기는 FortiClient 연결 기준(F-CF-04)
+  6. Helper 승인 항목·VPN client 선택 없음, 설정 가져오기는 FortiClient 연결 기준(F-CF-04)
   7. OpenConnect를 찾을 수 없거나 쓸 수 없을 때: FortiVPNManager 재설치 안내, OpenConnect 별도 설치 안내 없음
 
 ### F-WN-02 OS port (Windows)
@@ -909,7 +917,6 @@
   2. 남은 프로세스와 route 정리(F-VR-06) 후 앱 연결 수락
   3. 실행 중 알림 전 process 모듈의 client 확인 1회(F-VR-01의 4)
      - 시간 제한 없이 client 종료까지 대기, 그동안 시작 중 알림
-     - 결과 미보관, 상태 확인과 연결은 매번 짧은 제한으로 확인
   4. 연결 통로
      - 이 PC의 계정과 시스템만 열기 가능, 다른 컴퓨터의 연결 거부
      - 시스템 계정 소유

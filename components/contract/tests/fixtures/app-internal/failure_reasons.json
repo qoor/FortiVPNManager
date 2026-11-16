@@ -40,36 +40,43 @@
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "busy"
     }
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "invalidRequest"
     }
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "unknownAttempt"
     }
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "wrongPhase"
     }
   },
   {
     "helper": {
+      "client": "openfortivpn",
       "code": "binaryUnavailable"
     }
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "notAuthorized"
     }
   },
   {
     "helper": {
+      "client": "openconnect",
       "code": "internalError"
     }
   }

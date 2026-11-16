@@ -4,6 +4,7 @@
 mod common;
 
 use common::*;
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::problem::{ConfigProblemKind, ConfigWarning, ConfigWarningKind};
 use fvm_core::config::{self, Settings};
@@ -371,10 +372,10 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
     );
 }
 
-/// The app on each OS warns only about its own client's list; the other is kept for the app on the
-/// other OS, without the values that list cannot use.
+/// The app on each OS warns only about the lists of the clients it can run, both on macOS; the other
+/// is kept for the app on the other OS, without the values that list cannot use.
 #[test]
-fn only_the_clients_own_list_warns() {
+fn only_the_lists_of_the_oss_clients_warn() {
     let yaml = format!(
         "vpn:\n  trusted_certs:\n    - {a}\n    - not-a-digest\n    - {a}\n  trusted_cert_pins:\n    - {pin}\n    - not-a-pin\n    - {pin}\n",
         a = digest_a(),
@@ -400,7 +401,7 @@ fn only_the_clients_own_list_warns() {
             ),
         ]
     };
-    assert_eq!(on_macos.warnings, expected(4));
+    assert_eq!(on_macos.warnings, [expected(4), expected(8)].concat());
     assert_eq!(on_windows.warnings, expected(8));
 }
 
@@ -412,17 +413,18 @@ fn pins_past_the_limit_are_dropped() {
         .collect();
     let items: String = pins.iter().map(|pin| format!("    - {pin}\n")).collect();
     let yaml = format!("vpn:\n  trusted_cert_pins:\n{items}");
-    let loaded = config::read(yaml.as_bytes(), &windows_client()).unwrap();
-    assert_eq!(loaded.settings.vpn.trusted_cert_pins, pins[..4]);
-    assert_eq!(
-        loaded.warnings,
-        [warning(
-            ConfigWarningKind::TooManyTrustedCerts { limit: 4 },
-            7,
-            7
-        )]
-    );
-    assert!(decode(&yaml).warnings.is_empty());
+    let too_many = [warning(
+        ConfigWarningKind::TooManyTrustedCerts { limit: 4 },
+        7,
+        7,
+    )];
+    for loaded in [
+        config::read(yaml.as_bytes(), &windows_client()).unwrap(),
+        decode(&yaml),
+    ] {
+        assert_eq!(loaded.settings.vpn.trusted_cert_pins, pins[..4]);
+        assert_eq!(loaded.warnings, too_many);
+    }
 }
 
 #[test]
@@ -506,6 +508,63 @@ fn deep_block_sequences_read_too() {
             .collect::<Vec<_>>(),
         [unknown("notes")]
     );
+}
+
+// MARK: VPN client
+
+#[test]
+fn accepted_vpn_clients() {
+    for (raw, expected) in [
+        ("openfortivpn", VpnClient::Openfortivpn),
+        ("\"openconnect\"", VpnClient::Openconnect),
+        ("'openconnect'", VpnClient::Openconnect),
+        ("~", VpnClient::Openconnect),
+        ("", VpnClient::Openconnect),
+    ] {
+        let loaded = decode(&format!("vpn:\n  client: {raw}\n"));
+        assert_eq!(loaded.settings.vpn.client, expected, "{raw}");
+        assert!(loaded.warnings.is_empty());
+    }
+}
+
+#[test]
+fn a_missing_vpn_client_is_openconnect() {
+    let vpn = decode("vpn:\n  host: vpn.example.com\n").settings.vpn;
+    assert_eq!(vpn.client, VpnClient::Openconnect);
+}
+
+#[test]
+fn other_vpn_clients_are_errors_at_the_value() {
+    for raw in ["OpenConnect", "forticlient", "\"\"", "true"] {
+        let error =
+            load_error(&format!("vpn:\n  host: vpn.example.com\n  client: {raw}\n")).unwrap();
+        let text = if raw == "\"\"" { "" } else { raw };
+        assert_eq!(
+            error.kind,
+            ConfigProblemKind::InvalidChoice {
+                path: "vpn.client".into(),
+                raw: text.into(),
+                allowed: vec!["openfortivpn".into(), "openconnect".into()],
+            },
+            "{raw}"
+        );
+        assert_eq!(error.location, loc(3, 11), "{raw}");
+    }
+}
+
+#[test]
+fn the_windows_app_keeps_the_macs_vpn_client() {
+    let yaml = "vpn:\n  host: vpn.example.com\n  client: openfortivpn\n";
+    let loaded = config::read(yaml.as_bytes(), &windows_client()).unwrap();
+    assert_eq!(loaded.settings.vpn.client, VpnClient::Openfortivpn);
+    let Ok(config::Update::Write { text, .. }) =
+        config::update(Some(yaml.as_bytes()), &windows_client(), |settings| {
+            settings.vpn.port = 8443;
+        })
+    else {
+        panic!("the change is written");
+    };
+    assert!(text.contains("\n  client: \"openfortivpn\"\n"), "{text}");
 }
 
 // MARK: OTP method

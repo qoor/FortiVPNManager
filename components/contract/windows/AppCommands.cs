@@ -45,6 +45,8 @@ public static partial class AppInternal
         public sealed record SetScheduleHours(TimeOfDay Start, TimeOfDay End) : Command;
 
         public sealed record SetOpenAtLogin(bool Enabled) : Command;
+        public sealed record SetVpnClient(VpnClient Client) : Command;
+
         public sealed record RegisterHelper : Command;
         public sealed record OpenHelperApprovalSettings : Command;
 

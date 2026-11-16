@@ -669,7 +669,7 @@ impl ConnectionManager {
         if key != self.ledger.account_key {
             self.ledger = FailureLedger::new(key);
         }
-        if !self.settings.account.same_identity(old) {
+        if !self.settings.account.same_identity(old) || self.settings.account.client != old.client {
             self.check_readiness();
         }
     }
@@ -1111,7 +1111,10 @@ impl ConnectionManager {
                         HelperErrorCode::ClientUnavailable
                         | HelperErrorCode::InvalidRequest
                         | HelperErrorCode::NotAuthorized,
-                    ) => self.fail(Failure::Helper(code)),
+                    ) => self.fail(Failure::Helper {
+                        code,
+                        client: attempt.account.client,
+                    }),
                     (
                         None,
                         HelperErrorCode::Busy
@@ -1793,7 +1796,14 @@ impl ConnectionManager {
 
     fn learn_certificates(&mut self, facts: &ExitFacts) {
         // A run started before a server address or port change saw the old gateway's certificate.
-        if facts.cert_rejected_digests.is_empty() || !self.run_is_for_current_gateway() {
+        let run_of_other_client = self
+            .run_account
+            .as_ref()
+            .is_some_and(|run| run.client != self.settings.account.client);
+        if facts.cert_rejected_digests.is_empty()
+            || !self.run_is_for_current_gateway()
+            || run_of_other_client
+        {
             return;
         }
         let merged = merge_trusted_certs(
@@ -1804,7 +1814,10 @@ impl ConnectionManager {
             return;
         }
         self.settings.account.trusted_certs = merged.clone();
-        self.effects.push(Effect::SaveTrustedCerts(merged));
+        self.effects.push(Effect::SaveTrustedCerts {
+            client: self.settings.account.client,
+            certs: merged,
+        });
     }
 
     // MARK: Outcomes

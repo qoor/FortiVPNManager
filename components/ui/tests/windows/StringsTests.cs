@@ -62,7 +62,7 @@ public class StringsTests
         try
         {
             Assert.Equal(Korean("Localizable.xcstrings", "Not connected"), L("Not connected"));
-            Assert.Equal(Korean("Windows.xcstrings", "openconnect not found"), L("openconnect not found"));
+            Assert.Equal(Korean("Windows.xcstrings", "Check Helper Service…"), L("Check Helper Service…"));
         }
         finally
         {
@@ -98,6 +98,11 @@ public class StringsTests
         Assert.Equal("Connected · 1 hr 23 min", connected.StatusLine(null, time, includesPlannedReconnect: false));
         var waiting = connected with { Status = new ConnectionStatus.WaitingToReconnect(now.AddSeconds(72)) };
         Assert.Equal("Waiting to reconnect (1:12)", waiting.StatusLine(null, time));
+        var refused = connected with
+        {
+            Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.ClientUnavailable, VpnClient.Openconnect)),
+        };
+        Assert.Equal("Error: openconnect not found", refused.StatusLine(null, time));
     }
 
     [Fact]

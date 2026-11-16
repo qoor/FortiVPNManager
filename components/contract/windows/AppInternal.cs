@@ -94,6 +94,13 @@ public static partial class AppInternal
         GmailApi,
     }
 
+    [JsonConverter(typeof(EnumNameConverter<VpnClient>))]
+    public enum VpnClient
+    {
+        Openfortivpn,
+        Openconnect,
+    }
+
     [JsonConverter(typeof(EnumNameConverter<Weekday>))]
     public enum Weekday
     {

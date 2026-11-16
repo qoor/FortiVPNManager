@@ -191,6 +191,16 @@
         }
       }
     },
+    "%@ not found": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@을(를) 찾을 수 없음"
+          }
+        }
+      }
+    },
     "%@ rejected (%@): %@": {
       "localizations": {
         "ko": {
@@ -477,6 +487,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@에 적용했습니다(라우터 %@)."
+          }
+        }
+      }
+    },
+    "Applies from the next connection.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다음 연결부터 적용됩니다."
           }
         }
       }
@@ -2411,6 +2431,16 @@
         }
       }
     },
+    "Not a regular file: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일반 파일이 아닙니다: %@"
+          }
+        }
+      }
+    },
     "Not a tested version (%@.x), so connecting may fail.": {
       "localizations": {
         "ko": {
@@ -2481,6 +2511,16 @@
         }
       }
     },
+    "Not executable, or it did not report its version: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "실행할 수 없거나 버전을 알려 주지 않았습니다: %@"
+          }
+        }
+      }
+    },
     "Not found": {
       "localizations": {
         "ko": {
@@ -2491,12 +2531,18 @@
         }
       }
     },
-    "Not found at %@. Install it with brew install openfortivpn.": {
+    "Not found at %@. Install with: brew install %@": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Not found at %1$@. Install with: brew install %2$@"
+          }
+        },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@에 없습니다. brew install openfortivpn으로 설치하세요."
+            "value": "%@에 없습니다. 설치: brew install %@"
           }
         }
       }
@@ -4331,6 +4377,22 @@
         }
       }
     },
+    "Writable by other users (mode %@); not run: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "Writable by other users (mode %1$@); not run: %2$@"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 사용자도 수정할 수 있어(mode %@) 실행하지 않습니다: %@"
+          }
+        }
+      }
+    },
     "Write it as a decimal number without leading zeros (e.g. %@: 443).": {
       "localizations": {
         "ko": {
@@ -4461,6 +4523,16 @@
         }
       }
     },
+    "openconnect": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "openconnect"
+          }
+        }
+      }
+    },
     "openfortivpn": {
       "localizations": {
         "ko": {
@@ -4477,52 +4549,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "openfortivpn 설정 파일이 없습니다: %@"
-          }
-        }
-      }
-    },
-    "openfortivpn is not a regular file: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openfortivpn이 일반 파일이 아닙니다: %@"
-          }
-        }
-      }
-    },
-    "openfortivpn is not executable: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openfortivpn에 실행 권한이 없습니다: %@"
-          }
-        }
-      }
-    },
-    "openfortivpn is writable by other users (mode %@); refusing to run it: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "openfortivpn is writable by other users (mode %1$@); refusing to run it: %2$@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "다른 사용자도 openfortivpn을 수정할 수 있어(mode %@) 실행하지 않습니다: %@"
-          }
-        }
-      }
-    },
-    "openfortivpn not found": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openfortivpn을 찾을 수 없음"
           }
         }
       }

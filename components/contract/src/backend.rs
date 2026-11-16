@@ -1,6 +1,6 @@
-//! What a backend adapter provides for one VPN client. The Helper's OS start picks the adapter and
-//! the watchdog runs the client with what it returns, so neither hard-codes the client's name,
-//! options or output wording.
+//! What a backend adapter provides for one VPN client. The Helper's OS start hands the watchdog the
+//! adapter of every client its OS can run, and the watchdog runs the client each run request names
+//! with what its adapter returns, so neither hard-codes a client's name, options or output wording.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -12,9 +12,7 @@ use zeroize::Zeroizing;
 
 use crate::app_helper::{Milestone, OutputSource, RunRequest};
 
-pub trait Backend {
-    type Interpreter: OutputInterpreter + Send;
-
+pub trait Backend: Send + Sync {
     /// The client's name as the Helper's English errors and Log lines show it, such as
     /// "<name> is not running".
     fn client_name(&self) -> &'static str;
@@ -46,7 +44,7 @@ pub trait Backend {
     fn check_otp(&self, code: &str) -> Result<(), String>;
 
     /// A fresh interpreter for one run.
-    fn interpreter(&self) -> Self::Interpreter;
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send>;
 
     /// How long the client may take to end after the OS's stop request before it is killed.
     fn stop_grace_period(&self) -> Duration;

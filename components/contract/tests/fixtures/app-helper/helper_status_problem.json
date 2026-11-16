@@ -1,1 +1,1 @@
-{"childAlive":false,"clientProblem":{"kind":{"notFound":{}},"path":"\/opt\/homebrew\/bin\/openfortivpn"}}
+{"childAlive":false,"clients":[{"client":"openfortivpn","problem":{"kind":{"notFound":{}},"path":"\/opt\/homebrew\/bin\/openfortivpn"}},{"client":"openconnect","path":"\/opt\/homebrew\/etc\/vpnc\/vpnc-script","problem":{"kind":{"writableByOthers":{"mode":509}},"path":"\/opt\/homebrew\/etc\/vpnc\/vpnc-script"}}]}

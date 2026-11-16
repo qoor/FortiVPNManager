@@ -1,6 +1,7 @@
 //! Shared helpers for the config.yaml tests.
 #![allow(dead_code)]
 
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::problem::{ConfigProblem, ConfigProblemKind, LineColumn};
 use fvm_contract::app_internal::{OtpMethod, TimeOfDay, Weekday};
 use fvm_core::config::{
@@ -29,12 +30,12 @@ fn pin_value(text: &str) -> Option<String> {
     .then(|| text.to_owned())
 }
 
-/// The macOS app's rules: openfortivpn's digests.
+/// The macOS app's rules: openfortivpn's digests and openconnect's pins.
 pub fn client() -> ClientRules<'static> {
     ClientRules {
         name: "openfortivpn",
         platform: Platform::MacOs,
-        certificate_list: CertificateList::Digests,
+        certificate_lists: &[CertificateList::Digests, CertificateList::Pins],
         digest_value: &certificate_value,
         pin_value: &pin_value,
     }
@@ -45,7 +46,7 @@ pub fn windows_client() -> ClientRules<'static> {
     ClientRules {
         name: "openconnect",
         platform: Platform::Windows,
-        certificate_list: CertificateList::Pins,
+        certificate_lists: &[CertificateList::Pins],
         digest_value: &certificate_value,
         pin_value: &pin_value,
     }
@@ -124,6 +125,7 @@ pub fn non_default() -> Settings {
     settings.vpn.port = 8443;
     settings.vpn.username = "bob".into();
     settings.vpn.realm = "corp".into();
+    settings.vpn.client = VpnClient::Openfortivpn;
     settings.vpn.trusted_certs = vec![digest_a(), digest_b()];
     settings.vpn.trusted_cert_pins = vec![pin_a()];
     settings.otp.gmail_address = "otp@example.com".into();

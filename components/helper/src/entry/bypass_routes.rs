@@ -12,7 +12,6 @@ use fvm_contract::app_helper::{
     BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperError,
     HelperErrorCode,
 };
-use fvm_contract::backend::Backend;
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, FromEntry, LogCategory, LogLevel,
     NetworkCheck,
@@ -124,10 +123,7 @@ pub(super) fn left_after_removal(
     }
 }
 
-impl<B> Entry<B>
-where
-    B: Backend + Send + Sync + 'static,
-{
+impl Entry {
     pub(super) fn read_bypass_routes(&mut self, app: u64, id: u64) {
         self.queue_bypass_job(Job::Read { app, id });
     }

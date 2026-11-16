@@ -494,16 +494,6 @@
           }
         }
       }
-    },
-    "openconnect not found": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openconnect를 찾을 수 없음"
-          }
-        }
-      }
     }
   },
   "version": "1.0"

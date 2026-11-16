@@ -9,11 +9,11 @@ use std::path::Path;
 
 use common::Run;
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{AttemptId, Milestone, OutputSource, RunRequest};
+use fvm_contract::app_helper::{AttemptId, Milestone, OutputSource, RunRequest, VpnClient};
 use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
-    Backend, ClientExecutable, Finding, LaunchSpec, OutputInterpreter, Prompt, SessionInputs,
+    Backend, ClientExecutable, Finding, LaunchSpec, Prompt, SessionInputs,
 };
 use zeroize::Zeroizing;
 
@@ -28,6 +28,7 @@ fn request() -> RunRequest {
         attempt_id: "6B1D9B3E-2C1F-4E55-9C0B-3F0A2B4C5D6E"
             .parse::<AttemptId>()
             .unwrap(),
+        client: VpnClient::Openconnect,
         host: "203.0.113.10".into(),
         port: 8443,
         username: "alice".into(),
@@ -54,6 +55,13 @@ fn launch(request: &RunRequest) -> Result<LaunchSpec, String> {
 mod launching {
     use super::*;
 
+    #[cfg(target_os = "macos")]
+    const ROUTE_SCRIPT: &[&str] = &[
+        "--script=/opt/homebrew/etc/vpnc/vpnc-script; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo 'FortiVPNManager: route script finished connecting'; fi; exit $code",
+    ];
+    #[cfg(not(target_os = "macos"))]
+    const ROUTE_SCRIPT: &[&str] = &[];
+
     /// The login run prints the session; the tunnel run reads it on stdin and gives up reconnecting
     /// at once.
     #[test]
@@ -73,16 +81,15 @@ mod launching {
         assert_eq!(spec.config_file, None);
         let later = spec.session.expect("the runs after the login");
         assert_eq!(later.tunnel.program, Path::new(CLIENT_PATH));
-        assert_eq!(
-            later.tunnel.args,
-            [
-                "--protocol=fortinet",
-                &format!("--servercert={PIN}"),
-                "--reconnect-timeout=0",
-                "--cookie-on-stdin",
-                "https://203.0.113.10:8443/",
-            ]
-        );
+        let servercert = format!("--servercert={PIN}");
+        let mut tunnel = vec!["--protocol=fortinet", servercert.as_str()];
+        tunnel.extend(ROUTE_SCRIPT);
+        tunnel.extend([
+            "--reconnect-timeout=0",
+            "--cookie-on-stdin",
+            "https://203.0.113.10:8443/",
+        ]);
+        assert_eq!(later.tunnel.args, tunnel);
         assert_eq!(later.tunnel.env, spec.env);
         assert_eq!(
             (later.tunnel.config_file, later.tunnel.session),
@@ -338,8 +345,26 @@ mod values {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn only_homebrews_client_is_ours() {
+        assert_eq!(OpenConnect.client_name(), "openconnect");
+        assert!(OpenConnect.is_own_executable(Path::new(
+            "/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect"
+        )));
+        for path in [
+            "/opt/homebrew/bin/openconnect",
+            "/opt/homebrew/Cellar/openconnect",
+            "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn",
+            "/usr/local/bin/openconnect",
+            CLIENT_PATH,
+        ] {
+            assert!(!OpenConnect.is_own_executable(Path::new(path)), "{path}");
+        }
+    }
+
     /// openconnect is not supported on this OS yet.
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn no_client_is_ours_here_yet() {
         assert!(!OpenConnect.is_own_executable(Path::new(CLIENT_PATH)));
@@ -375,15 +400,12 @@ mod output {
     /// "네트워크" in the PC's code page (CP949), as Windows error messages arrive.
     const CP949_TEXT: &[u8] = b"\xb3\xd7\xc6\xae\xbf\xf6\xc5\xa9";
 
-    fn run() -> Run<fvm_backend_adapter::openconnect::Interpreter> {
+    fn run() -> Run {
         Run::with(OpenConnect.interpreter())
     }
 
     /// Reads in order; returns the prompts reported.
-    fn replay(
-        run: &mut Run<fvm_backend_adapter::openconnect::Interpreter>,
-        reads: &[(OutputSource, &[u8])],
-    ) -> Vec<Prompt> {
+    fn replay(run: &mut Run, reads: &[(OutputSource, &[u8])]) -> Vec<Prompt> {
         reads
             .iter()
             .filter_map(|&(source, bytes)| run.read(source, bytes))
@@ -477,6 +499,26 @@ mod output {
             [Prompt::Password, Prompt::Otp]
         );
         assert_eq!(replay(&mut run, &TUNNEL_RUN), []);
+        assert_eq!(run.findings, logged_in());
+        assert!(run.interpreter.routes_left_unrestored());
+    }
+
+    #[test]
+    fn the_route_script_line_shows_the_tunnel_up() {
+        let mut run = run();
+        replay(&mut run, &LOGIN_RUN);
+        let tunnel_run: [(OutputSource, &[u8]); 3] = [
+            (
+                Stdout,
+                b"GET https://203.0.113.10:8443/remote/fortisslvpn_xml?dual_stack=1\nConnected to HTTPS on 203.0.113.10 with ciphersuite (TLS1.3)-(ECDHE-SECP384R1)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)\nGot Legacy IP address 10.10.0.5\n",
+            ),
+            (
+                Stdout,
+                b"Configured as 10.10.0.5, with SSL connected and DTLS in progress\nFortiVPNManager: route script finished connecting.\n echo FortiVPNManager: route script finished connecting\n",
+            ),
+            (Stdout, b"FortiVPNManager: route script finished connecting\n"),
+        ];
+        assert_eq!(replay(&mut run, &tunnel_run), []);
         assert_eq!(run.findings, logged_in());
         assert!(run.interpreter.routes_left_unrestored());
     }

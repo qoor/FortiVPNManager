@@ -28,6 +28,7 @@ vpn:
   port: 443
   username: ""
   realm: ""
+  client: "openconnect"
   trusted_certs: []
   trusted_cert_pins: []
 otp:
@@ -58,6 +59,7 @@ fn every_key_has_a_comment() {
         "port:",
         "username:",
         "realm:",
+        "client:",
         "trusted_certs:",
         "trusted_cert_pins:",
         "gmail_address:",
@@ -349,6 +351,8 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "an existing openfortivpn config",
         "the Mac asleep",
         "router of the active network service",
+        "brew install <name>",
+        "pin-sha256:...), used by openconnect",
     ] {
         assert!(macos.contains(wording), "{wording}");
     }
@@ -358,10 +362,16 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "in Credential Manager per 'username@server address'",
         "the PC asleep",
         "gateway of the active network interface",
+        "always uses the openconnect that comes with the app",
     ] {
         assert!(windows.contains(wording), "{wording}");
     }
-    for wording in ["Keychain", "Mac", "network service", "openfortivpn"] {
+    for wording in [
+        "Keychain",
+        "Mac",
+        "network service",
+        "an existing openfortivpn config",
+    ] {
         assert!(!windows.contains(wording), "{wording}");
     }
 }

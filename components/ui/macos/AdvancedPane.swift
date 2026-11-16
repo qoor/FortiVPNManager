@@ -9,9 +9,7 @@ struct AdvancedPane: View {
         SettingsForm(navigation: navigation) {
             if let readiness = ui.readiness, let config = ui.config {
                 helperSection(readiness)
-                if let client = readiness.client {
-                    clientSection(client)
-                }
+                clientSection(config, found: readiness.client)
                 settingsFileSection(config.file)
             }
         }
@@ -42,31 +40,49 @@ struct AdvancedPane: View {
     }
 
     /// The VPN client the Helper runs.
-    private func clientSection(_ client: AppInternal.VpnClientInfo) -> some View {
+    private func clientSection(_ config: AppInternal.ConfigSection, found: AppInternal.VpnClientInfo?) -> some View {
         Section("VPN client") {
-            LabeledContent("Type") {
-                Text(verbatim: "openfortivpn")
+            Picker(selection: vpnClient(config)) {
+                ForEach([AppInternal.VpnClient.openconnect, .openfortivpn], id: \.self) { client in
+                    Text(verbatim: client.rawValue).tag(client)
+                }
+            } label: {
+                RowTitle("Type", detail: Text("Applies from the next connection."))
             }
             .searchAnchor("Type", navigation)
-            LabeledContent("Version", value: client.version ?? String(localized: "Unknown"))
-                .searchAnchor("Version", navigation)
-            // The Homebrew path runs long and would wrap; the button shows it in Finder, the help tag as text.
-            LabeledContent("Path") {
-                if let path = client.path {
-                    Button("Show in Finder") { revealInFinder(path) }
-                        .help(path)
-                } else {
-                    Text("Not found")
+            if let error = config.vpnClientError {
+                NoticeRow(text: error.message, style: .error)
+            }
+            if let found {
+                LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
+                    .searchAnchor("Version", navigation)
+                // The Homebrew path runs long and would wrap; the button shows it in Finder, the help tag as text.
+                LabeledContent("Path") {
+                    if let path = found.path {
+                        Button("Show in Finder") { revealInFinder(path) }
+                            .help(path)
+                    } else {
+                        Text("Not found")
+                    }
+                }
+                .searchAnchor("Path", navigation)
+                if let untested = found.untestedVersion {
+                    NoticeRow(text: untested.message, style: .warning)
+                }
+                if let problem = found.problem {
+                    NoticeRow(text: problem.message(installing: config.vpnClient), style: .error)
                 }
             }
-            .searchAnchor("Path", navigation)
-            if let untested = client.untestedVersion {
-                NoticeRow(text: untested.message, style: .warning)
-            }
-            if let problem = client.problem {
-                NoticeRow(text: problem.message, style: .error)
-            }
         }
+    }
+
+    private func vpnClient(_ config: AppInternal.ConfigSection) -> Binding<AppInternal.VpnClient> {
+        Binding(
+            get: { config.vpnClient },
+            set: { client in
+                if client != config.vpnClient { ui.send(.setVpnClient(client: client)) }
+            }
+        )
     }
 
     private func settingsFileSection(_ file: AppInternal.ConfigFileState) -> some View {

@@ -19,7 +19,8 @@ use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 #[cfg(unix)]
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
+    UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -68,8 +69,6 @@ impl OpenFortiVpn {
 
 #[cfg(unix)]
 impl Backend for OpenFortiVpn {
-    type Interpreter = Interpreter;
-
     fn client_name(&self) -> &'static str {
         "openfortivpn"
     }
@@ -100,8 +99,8 @@ impl Backend for OpenFortiVpn {
         crate::values::check_otp(code)
     }
 
-    fn interpreter(&self) -> Interpreter {
-        Interpreter::default()
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
+        Box::new(Interpreter::default())
     }
 
     fn stop_grace_period(&self) -> Duration {

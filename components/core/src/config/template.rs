@@ -11,7 +11,7 @@ use super::text::disallowed_in_value;
 use super::{
     AWAY_MINUTES, ClientRules, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS,
     MIN_SLEEP_MINUTES, OTP_METHODS, PORTS, Platform, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings,
-    WEEKDAYS, minutes, normalized_days,
+    VPN_CLIENTS, WEEKDAYS, minutes, normalized_days,
 };
 use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, vpn_server_target};
 
@@ -135,6 +135,7 @@ struct Wording {
     network: &'static str,
     router: &'static str,
     port: String,
+    client: &'static str,
 }
 
 fn wording(client: &ClientRules<'_>) -> Wording {
@@ -149,6 +150,7 @@ fn wording(client: &ClientRules<'_>) -> Wording {
                 "Filled in on first launch from an existing {} config, if any (e.g. 8443). 443 is the default when the file has no value.",
                 client.name
             ),
+            client: r#"VPN client: "openfortivpn" or "openconnect", each installed with Homebrew (brew install <name>). The app on Windows always uses the openconnect that comes with it."#,
         },
         Platform::Windows => Wording {
             secret_store: "Credential Manager",
@@ -158,6 +160,7 @@ fn wording(client: &ClientRules<'_>) -> Wording {
             router: "gateway",
             port: "VPN gateway port (e.g. 8443). 443 is the default when the file has no value."
                 .to_owned(),
+            client: "VPN client the app on macOS runs. This PC always uses the openconnect that comes with the app and keeps this value as it is.",
         },
     }
 }
@@ -170,6 +173,7 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         network,
         router,
         port: port_comment,
+        client: client_comment,
     } = wording(client);
     let vpn = &settings.vpn;
     let otp = &settings.otp;
@@ -182,6 +186,11 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         .find(|&&(_, method)| method == otp.method)
         .map(|&(spelling, _)| spelling)
         .expect("every method has a spelling");
+    let client = VPN_CLIENTS
+        .iter()
+        .find(|&&(_, client)| client == vpn.client)
+        .map(|&(spelling, _)| spelling)
+        .expect("every client has a spelling");
     let days = normalized_days(&schedule.days)
         .iter()
         .map(|&day| {
@@ -223,11 +232,13 @@ vpn:
   username: {username}
   # Authentication realm. Leave it empty ("") if not needed.
   realm: {realm}
+  # {client_comment}
+  client: {client}
   # Server certificate values the app trusts. It fills them in on the first connection and manages them; no need to edit by hand.
   # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries per list). A new server address or port clears both lists.
-  # SHA-256 digests of the certificate, used on macOS.
+  # SHA-256 digests of the certificate, used by openfortivpn.
   trusted_certs:{trusted_certs}
-  # Public key pins of the certificate (pin-sha256:...), used on Windows.
+  # Public key pins of the certificate (pin-sha256:...), used by openconnect.
   trusted_cert_pins:{trusted_cert_pins}
 otp:
   # Gmail (Google Workspace) address that receives the OTP emails. The app password is in {secret_store}.
@@ -259,6 +270,7 @@ routes:
         port = vpn.port,
         username = quoted(&vpn.username),
         realm = quoted(&vpn.realm),
+        client = quoted(client),
         gmail_address = quoted(&otp.gmail_address),
         method = quoted(method),
         google_client_id = quoted(&otp.google_client_id),

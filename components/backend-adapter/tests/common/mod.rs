@@ -7,28 +7,26 @@
 use std::mem;
 
 #[cfg(unix)]
-use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
+use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_helper::OutputSource;
 #[cfg(unix)]
 use fvm_contract::backend::Backend;
 use fvm_contract::backend::{Finding, OutputInterpreter, Prompt};
 
-pub struct Run<I> {
-    pub interpreter: I,
+pub struct Run {
+    pub interpreter: Box<dyn OutputInterpreter + Send>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     pub findings: Vec<Finding>,
 }
 
-#[cfg(unix)]
-impl Run<Interpreter> {
+impl Run {
+    #[cfg(unix)]
     pub fn new() -> Self {
         Self::with(OpenFortiVpn.interpreter())
     }
-}
 
-impl<I: OutputInterpreter> Run<I> {
-    pub fn with(interpreter: I) -> Self {
+    pub fn with(interpreter: Box<dyn OutputInterpreter + Send>) -> Self {
         Self {
             interpreter,
             stdout: Vec::new(),

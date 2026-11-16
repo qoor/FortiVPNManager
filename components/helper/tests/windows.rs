@@ -8,17 +8,19 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use fvm_backend_adapter::openconnect::{Interpreter, OpenConnect};
+use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, StopInitiator, StopReason,
+    VpnClient,
 };
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, RouteRepairOutcome,
-    SessionLaunch, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
+    RouteRepairOutcome, SessionLaunch, UntestedVersion,
 };
 use fvm_helper_core::process::{Report, Run, Timing, Watchdog};
 
@@ -67,8 +69,6 @@ exit /b 0\r
 struct Scripted(LaunchSpec);
 
 impl Backend for Scripted {
-    type Interpreter = Interpreter;
-
     fn client_name(&self) -> &'static str {
         OpenConnect.client_name()
     }
@@ -101,7 +101,7 @@ impl Backend for Scripted {
         OpenConnect.check_otp(code)
     }
 
-    fn interpreter(&self) -> Interpreter {
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
         OpenConnect.interpreter()
     }
 
@@ -177,7 +177,7 @@ impl Drop for Scratch {
 }
 
 struct Session {
-    run: Run<Scripted>,
+    run: Run,
     reports: Receiver<Report>,
     lines: Vec<(OutputSource, String)>,
     milestones: Vec<Milestone>,
@@ -186,10 +186,14 @@ struct Session {
 
 impl Session {
     fn start(scratch: &Scratch, launch: LaunchSpec) -> Self {
-        let mut watchdog =
-            Watchdog::new(Scripted(launch), scratch.run_directory(), Timing::default());
+        let mut watchdog = Watchdog::new(
+            vec![(VpnClient::Openconnect, Arc::new(Scripted(launch)))],
+            scratch.run_directory(),
+            Timing::default(),
+        );
         let mut request = RunRequest {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
+            client: VpnClient::Openconnect,
             host: "203.0.113.10".to_owned(),
             port: 443,
             username: "alice".to_owned(),

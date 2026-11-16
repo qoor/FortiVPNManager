@@ -70,7 +70,7 @@ final class LogLines {
 }
 
 /// `<ISO 8601 local time with milliseconds> [out|err|▸] <text>`, the line format of the log file
-/// (`openfortivpn.log`), such as `2026-10-15T14:03:22.123+09:00 [out] INFO:   Connected to gateway.`
+/// (`vpn_backend.log`), such as `2026-10-15T14:03:22.123+09:00 [out] INFO:   Connected to gateway.`
 enum LogLineFormat {
     static func fileLine(_ line: AppInternal.LogLine, timeZone: TimeZone, afterAnother: Bool) -> String {
         gap(before: line, afterAnother: afterAnother)

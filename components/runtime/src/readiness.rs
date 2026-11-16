@@ -11,7 +11,7 @@ use fvm_contract::app_internal::port::{
 };
 use fvm_core::connection::{self, HelperFacts, ReadinessFacts};
 
-use crate::client::Client;
+use crate::client;
 use crate::orchestration::Runtime;
 
 /// Gives the system time to start the replaced Helper.
@@ -100,9 +100,13 @@ impl Runtime {
         let address = settings.otp.gmail_address.clone();
         let account_values_usable = !vpn.host.is_empty()
             && !vpn.username.is_empty()
-            && Client
-                .check_account(&vpn.host, &vpn.username, &vpn.realm)
-                .is_ok();
+            && client::check_account(
+                client::chosen(&settings),
+                &vpn.host,
+                &vpn.username,
+                &vpn.realm,
+            )
+            .is_ok();
         let mut facts = ReadinessFacts {
             config_valid: self.config.is_valid(),
             account_complete: account_values_usable && !address.is_empty(),

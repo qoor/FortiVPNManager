@@ -62,6 +62,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Command.SetConnectionOption), TypeInfoPropertyName = "CommandSetConnectionOption")]
 [JsonSerializable(typeof(AppInternal.Command.SetScheduleHours), TypeInfoPropertyName = "CommandSetScheduleHours")]
 [JsonSerializable(typeof(AppInternal.Command.SetOpenAtLogin), TypeInfoPropertyName = "CommandSetOpenAtLogin")]
+[JsonSerializable(typeof(AppInternal.Command.SetVpnClient), TypeInfoPropertyName = "CommandSetVpnClient")]
 [JsonSerializable(typeof(AppInternal.Command.RegisterHelper), TypeInfoPropertyName = "CommandRegisterHelper")]
 [JsonSerializable(typeof(AppInternal.Command.OpenHelperApprovalSettings), TypeInfoPropertyName = "CommandOpenHelperApprovalSettings")]
 [JsonSerializable(typeof(AppInternal.Command.SetBypassRows), TypeInfoPropertyName = "CommandSetBypassRows")]

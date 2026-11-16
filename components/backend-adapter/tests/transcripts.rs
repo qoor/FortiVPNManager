@@ -10,7 +10,7 @@ use std::ops::Range;
 
 use common::Run;
 use fvm_contract::app_helper::{Milestone, OutputSource};
-use fvm_contract::backend::{Finding, OutputInterpreter, Prompt};
+use fvm_contract::backend::{Finding, Prompt};
 
 const DIGEST: &str = "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11";
 
@@ -126,7 +126,7 @@ fn reads(length: usize, cuts: &BTreeSet<usize>) -> Vec<Range<usize>> {
 struct Replay {
     /// The prompts reported between one stdin pause and the next, the last entry after the last pause.
     prompts_per_pause: Vec<Vec<Prompt>>,
-    run: Run<fvm_backend_adapter::openfortivpn::Interpreter>,
+    run: Run,
 }
 
 fn replay(

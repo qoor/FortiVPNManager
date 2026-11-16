@@ -233,7 +233,7 @@ mod tests {
         getrandom::fill(&mut random).unwrap();
         let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
         let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
-        let path = directory.join("openfortivpn.log");
+        let path = directory.join("vpn_backend.log");
         let note = |text: String, starts_attempt: bool| LogLine {
             time: UNIX_EPOCH,
             source: LogSource::Note,
@@ -266,7 +266,7 @@ mod tests {
         getrandom::fill(&mut random).unwrap();
         let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
         let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
-        let path = directory.join("openfortivpn.log");
+        let path = directory.join("vpn_backend.log");
         let mut log = LogFile::new(path.clone());
         let big = LogLine {
             time: UNIX_EPOCH,
@@ -285,11 +285,11 @@ mod tests {
         assert_eq!(
             names,
             [
-                "openfortivpn.log",
-                "openfortivpn.log.1",
-                "openfortivpn.log.2",
-                "openfortivpn.log.3",
-                "openfortivpn.log.4"
+                "vpn_backend.log",
+                "vpn_backend.log.1",
+                "vpn_backend.log.2",
+                "vpn_backend.log.3",
+                "vpn_backend.log.4"
             ]
         );
         fs::remove_dir_all(directory).unwrap();

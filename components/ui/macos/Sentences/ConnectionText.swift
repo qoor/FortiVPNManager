@@ -89,7 +89,7 @@ extension AppInternal.FailureReason {
             }
         case .tooManyReconnects: String(localized: "Too many reconnects")
         case .network: String(localized: "Network error")
-        case let .helper(code): code.summary
+        case let .helper(code, client): code.summary(client: client)
         }
     }
 
@@ -123,10 +123,10 @@ extension AppInternal.FailureReason {
             String(localized: "Automatic reconnection stopped after too many sign-in attempts within \(time.spelledOut(seconds: windowSeconds)).")
         case .network:
             String(localized: "Couldn't connect to the VPN server.")
-        case .helper(.invalidRequest):
+        case .helper(.invalidRequest, _):
             String(localized: "The connection request was rejected. Check the account and VPN password.")
-        case let .helper(code):
-            String(localized: "Helper error: \(code.summary)")
+        case let .helper(code, client):
+            String(localized: "Helper error: \(code.summary(client: client))")
         }
     }
 
@@ -135,7 +135,7 @@ extension AppInternal.FailureReason {
         switch self {
         // `.invalidRequest`: an account value or the VPN password the Helper refused (the log shows
         // which).
-        case .vpnLoginRejected, .otpNotReceived, .gmailRejected, .helper(.invalidRequest): .account
+        case .vpnLoginRejected, .otpNotReceived, .gmailRejected, .helper(.invalidRequest, _): .account
         case .helper: .advanced
         case .otpRejected, .tunnelSetupFailed, .tunnelModeRejected, .droppedEarly, .certificateChangedAfterLogin,
              .tooManyReconnects, .network: .log
@@ -153,11 +153,11 @@ extension AppInternal.FailureReason {
 }
 
 extension AppInternal.HelperErrorCode {
-    var summary: String {
+    func summary(client: AppInternal.VpnClient) -> String {
         switch self {
         case .busy: String(localized: "Helper is busy with another connection")
         case .invalidRequest: String(localized: "Invalid connection request")
-        case .clientUnavailable: String(localized: "openfortivpn not found")
+        case .clientUnavailable: String(localized: "\(client.rawValue) not found")
         case .notAuthorized: String(localized: "Helper refused the request")
         case .unknownAttempt, .wrongPhase, .internalError: String(localized: "Helper internal error")
         }

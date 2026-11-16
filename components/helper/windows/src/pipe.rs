@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode};
 use fvm_contract::helper_internal::{
     AppRequest, BypassRoutesChange, FromEntry, LogCategory, LogLevel, ToEntry,
@@ -48,7 +47,7 @@ pub struct Options {
     /// The pipe's security descriptor in SDDL: who may connect, and its owner.
     pub security: String,
     /// The VPN client, with its run files where only the Helper may write.
-    pub watchdog: Watchdog<OpenConnect>,
+    pub watchdog: Watchdog,
 }
 
 /// How the entry wants the Helper to end.

@@ -70,12 +70,20 @@ impl fmt::Display for AttemptId {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VpnClient {
+    Openfortivpn,
+    Openconnect,
+}
+
 /// Everything the Helper needs for one run. The Helper checks every value again before use.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunRequest {
     #[serde(rename = "attemptID")]
     pub attempt_id: AttemptId,
+    pub client: VpnClient,
     pub host: String,
     /// Not narrowed here: an out-of-range port is a validation error, not an unreadable request.
     pub port: i64,
@@ -92,6 +100,7 @@ impl fmt::Debug for RunRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunRequest")
             .field("attempt_id", &self.attempt_id)
+            .field("client", &self.client)
             .field("host", &self.host)
             .field("port", &self.port)
             .field("username", &self.username)
@@ -287,17 +296,21 @@ pub struct OutputLine {
 pub struct HelperStatus {
     #[serde(rename = "childAlive")]
     pub client_running: bool,
-    #[serde(rename = "openfortivpnPath", skip_serializing_if = "Option::is_none")]
-    pub client_path: Option<String>,
-    #[serde(
-        rename = "openfortivpnVersion",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub client_version: Option<String>,
-    #[serde(rename = "clientProblem", skip_serializing_if = "Option::is_none")]
-    pub client_problem: Option<ClientProblem>,
-    /// The backend adapter's judgment of `client_version`.
-    #[serde(rename = "untestedVersion", skip_serializing_if = "Option::is_none")]
+    pub clients: Vec<ClientStatus>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientStatus {
+    pub client: VpnClient,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<ClientProblem>,
+    /// The backend adapter's judgment of `version`.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub untested_version: Option<UntestedVersion>,
 }
 

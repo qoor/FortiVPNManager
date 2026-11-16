@@ -3,8 +3,8 @@
 //! output lines, stage time limits, stopping, the logout, the exit report). The run record its
 //! processes go into, and stopping what an earlier Helper left, are `recovery`'s. Everything that
 //! depends on the client, its name, options, prompts, output wording and how it is stopped, comes
-//! from the `Backend` the Helper's OS start chose; only this module and `recovery`, which gets it
-//! from here, use it.
+//! from the `Backend` of the client each run request names, out of those the Helper's OS start
+//! hands over; only this module and `recovery`, which gets them from here, use them.
 //!
 //! On Unix the process this runs in must ignore SIGPIPE. The password and the OTP go to the client's stdin
 //! pipe, and a write after the client exited must fail with EPIPE instead of killing the process.
@@ -29,7 +29,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest};
+use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest, VpnClient};
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, UntestedVersion,
 };
@@ -40,44 +40,45 @@ pub use run::Run;
 use crate::recovery::run_directory::RunFiles;
 use crate::recovery::{self, Failure, RouteRepair};
 
-/// The Helper's VPN client: the one `B` describes, with its runs' files in a directory only the
-/// Helper may use.
-pub struct Watchdog<B> {
-    backend: Arc<B>,
+/// The VPN clients the Helper can run, each with the adapter that describes it, and their runs'
+/// files in a directory only the Helper may use.
+pub struct Watchdog {
+    clients: Vec<(VpnClient, Arc<dyn Backend>)>,
     run_directory: PathBuf,
     timing: Timing,
     /// Numbers the runs' config files.
     runs_started: u64,
 }
 
-impl<B> Watchdog<B>
-where
-    B: Backend + Send + Sync + 'static,
-{
-    pub fn new(backend: B, run_directory: PathBuf, timing: Timing) -> Self {
+pub type FoundClient = Result<(ClientExecutable, Option<UntestedVersion>), ClientProblem>;
+
+impl Watchdog {
+    pub fn new(
+        clients: Vec<(VpnClient, Arc<dyn Backend>)>,
+        run_directory: PathBuf,
+        timing: Timing,
+    ) -> Self {
         Self {
-            backend: Arc::new(backend),
+            clients,
             run_directory,
             timing,
             runs_started: 0,
         }
     }
 
-    /// The client's name as the Helper's English errors and log lines show it.
-    pub fn client_name(&self) -> &'static str {
-        self.backend.client_name()
-    }
-
-    /// The client executable the Helper would run now, with whether its version is outside the
-    /// ones this app was tested with; or why there is none. Where finding it runs the client, such
+    /// Each client's executable the Helper would run now. Where finding one runs the client, such
     /// as to read its version, `wait` says how long that run may take.
-    pub fn find_client(
-        &self,
-        wait: ClientCheckWait,
-    ) -> Result<(ClientExecutable, Option<UntestedVersion>), ClientProblem> {
-        let client = self.backend.locate_client(wait)?;
-        let untested = self.backend.untested_version(&client.version);
-        Ok((client, untested))
+    pub fn find_clients(&self, wait: ClientCheckWait) -> Vec<(VpnClient, FoundClient)> {
+        self.clients
+            .iter()
+            .map(|(client, backend)| {
+                let found = backend.locate_client(wait).map(|executable| {
+                    let untested = backend.untested_version(&executable.version);
+                    (executable, untested)
+                });
+                (*client, found)
+            })
+            .collect()
     }
 
     /// Starts a run for `request`, which the backend adapter checks again, since the Helper does
@@ -87,17 +88,25 @@ where
         &mut self,
         request: &mut RunRequest,
         on_report: impl FnMut(Report) + Send + 'static,
-    ) -> Result<(Run<B>, ClientExecutable), StartFailure> {
-        let client = self
-            .backend
+    ) -> Result<(Run, ClientExecutable), StartFailure> {
+        let backend = self
+            .clients
+            .iter()
+            .find(|(client, _)| *client == request.client)
+            .map(|(_, backend)| Arc::clone(backend))
+            .ok_or_else(|| {
+                StartFailure::InvalidRequest(
+                    "this Helper does not run the requested VPN client".to_owned(),
+                )
+            })?;
+        let client = backend
             .locate_client(ClientCheckWait::Limited)
             .map_err(|problem| {
-                StartFailure::ClientUnavailable(self.backend.describe_problem(&problem))
+                StartFailure::ClientUnavailable(backend.describe_problem(&problem))
             })?;
         let number = self.runs_started + 1;
         let files = RunFiles::new(&self.run_directory, number);
-        let launch = self
-            .backend
+        let launch = backend
             .launch_spec(&client, request, &files.config)
             .map_err(StartFailure::InvalidRequest)?;
         // The run directory also holds the pidfile, so it is prepared without a config file too.
@@ -108,10 +117,13 @@ where
                     .as_ref()
                     .map_or(Ok(()), |contents| files.write_config(contents))
             })
-            .map_err(StartFailure::RunFiles)?;
+            .map_err(|failure| StartFailure::RunFiles {
+                client_name: backend.client_name(),
+                failure,
+            })?;
         self.runs_started = number;
         let run = Run::start(
-            Arc::clone(&self.backend),
+            backend,
             &client,
             &launch,
             request,
@@ -122,7 +134,7 @@ where
         Ok((run, client))
     }
 
-    /// Runs `recovery::clean_up` with this client and run directory, which `entry` cannot reach.
+    /// Runs `recovery::clean_up` with these clients and run directory, which `entry` cannot reach.
     pub fn clean_up(
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
@@ -130,7 +142,7 @@ where
         remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
     ) -> Vec<AddedRoute> {
         recovery::clean_up(
-            &*self.backend,
+            &self.clients,
             &self.run_directory,
             log,
             repair_routes,
@@ -153,7 +165,10 @@ pub enum StartFailure {
     /// The adapter refused a value of the request; its English reason for the app.
     InvalidRequest(String),
     /// The run directory or the run's config file could not be written.
-    RunFiles(Failure),
+    RunFiles {
+        client_name: &'static str,
+        failure: Failure,
+    },
 }
 
 /// What a run tells its caller, in order. Lines are reported before the event they led to.

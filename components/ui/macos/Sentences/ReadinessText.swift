@@ -63,18 +63,18 @@ extension AppInternal.UntestedVersion {
 }
 
 extension AppInternal.ClientProblem {
-    var message: String {
+    func message(installing client: AppInternal.VpnClient) -> String {
         switch kind {
         case .notFound:
-            String(localized: "Not found at \(path). Install it with brew install openfortivpn.")
+            String(localized: "Not found at \(path). Install with: brew install \(client.rawValue)")
         case .outsideAllowedLocation:
             String(localized: "Points outside the Homebrew Cellar: \(path)")
         case .notRegularFile:
-            String(localized: "openfortivpn is not a regular file: \(path)")
+            String(localized: "Not a regular file: \(path)")
         case let .writableByOthers(mode):
-            String(localized: "openfortivpn is writable by other users (mode \(String(mode, radix: 8))); refusing to run it: \(path)")
+            String(localized: "Writable by other users (mode \(String(mode, radix: 8))); not run: \(path)")
         case .notExecutable:
-            String(localized: "openfortivpn is not executable: \(path)")
+            String(localized: "Not executable, or it did not report its version: \(path)")
         }
     }
 }

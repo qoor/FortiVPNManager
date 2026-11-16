@@ -45,7 +45,6 @@ Without the file, import the JSON in Settings, or use the app password (IMAP) me
 - macOS 15 or later, Apple Silicon
 - Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Rust (install with [rustup](https://rustup.rs))
-- openfortivpn (`brew install openfortivpn`)
 - An **Apple Development** signing certificate created with a free Apple ID (no paid developer account required)
 
 ### One-time setup
@@ -74,7 +73,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make pkg` | Installer package (`.build/FortiVPNManager-<version>.pkg`) from a Release build |
 | `make logs` | Live app and Helper logs |
 
-- **Install**: run the pkg from a GitHub Release. The pkg is unsigned, so macOS blocks it at first; click "Open Anyway" in System Settings > Privacy & Security, then install. Install openfortivpn separately with Homebrew.
+- **Install**: run the pkg from a GitHub Release. The pkg is unsigned, so macOS blocks it at first; click "Open Anyway" in System Settings > Privacy & Security, then install.
 - **Helper**: registered only from an app installed in `/Applications`; approve it on first launch in System Settings > General > Login Items & Extensions
 
 ### File locations
@@ -84,7 +83,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | Settings | `~/.config/FortiVPNManager/config.yaml` |
 | Passwords, Google sign-in tokens | Login Keychain |
 | App state (failure counts, etc.) | `~/Library/Application Support/FortiVPNManager/state.json` |
-| Raw openfortivpn log | `~/Library/Logs/FortiVPNManager/openfortivpn.log` |
+| Raw VPN client log | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
 
 ## Windows
 
@@ -111,7 +110,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | Settings | `%USERPROFILE%\.config\FortiVPNManager\config.yaml` |
 | Passwords, Google sign-in tokens | Credential Manager |
 | App state (failure counts, etc.) | `%LOCALAPPDATA%\FortiVPNManager\state.json` |
-| Raw OpenConnect log | `%LOCALAPPDATA%\FortiVPNManager\Logs\openconnect.log` |
+| Raw VPN client log | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
 
 ## Architecture
 

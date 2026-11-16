@@ -1,9 +1,9 @@
 //! openconnect 9.21 with its fortinet protocol; on Windows with the Wintun driver its installer
 //! brings. Its options, prompts and output wording are only known here, and are the same on every
-//! OS; what differs per OS is in `platform`, where only Windows is supported so far. Unlike
-//! openfortivpn it takes everything as arguments, asks for the password only after it verified the
-//! gateway, and runs its own route script. An attempt logs in and opens the tunnel in separate runs,
-//! so the Helper holds the session cookie and can log out when it has to end the tunnel by force.
+//! OS; what differs per OS is in `platform`. Unlike openfortivpn it takes everything as arguments,
+//! asks for the password only after it verified the gateway, and runs its own route script. An
+//! attempt logs in and opens the tunnel in separate runs, so the Helper holds the session cookie
+//! and can log out when it has to end the tunnel by force.
 
 mod client;
 mod output;
@@ -17,7 +17,8 @@ use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
+    UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -52,8 +53,6 @@ impl OpenConnect {
 }
 
 impl Backend for OpenConnect {
-    type Interpreter = Interpreter;
-
     fn client_name(&self) -> &'static str {
         "openconnect"
     }
@@ -84,8 +83,8 @@ impl Backend for OpenConnect {
         crate::values::check_otp(code)
     }
 
-    fn interpreter(&self) -> Interpreter {
-        Interpreter::default()
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
+        Box::new(Interpreter::default())
     }
 
     /// Where the OS has a stop request (SIGTERM), openconnect logs out and its route script

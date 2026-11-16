@@ -35,8 +35,8 @@ use crate::recovery::RouteRepair;
 use crate::recovery::run_directory::{RunFiles, RunRecord};
 
 /// Controls a started run. Dropping it does not stop the run.
-pub struct Run<B> {
-    backend: Arc<B>,
+pub struct Run {
+    backend: Arc<dyn Backend>,
     inputs: Sender<Input>,
     /// 0 once the client is about to be reaped.
     process_id: Arc<AtomicU32>,
@@ -44,10 +44,7 @@ pub struct Run<B> {
     run_thread: ThreadId,
 }
 
-impl<B> Run<B>
-where
-    B: Backend + Send + Sync + 'static,
-{
+impl Run {
     /// Starts `client` as `launch` says, for one run of `request`, and calls `on_report` in order
     /// on the run's own thread until the `Exited` event, which is also how a failed start is
     /// reported. The run's first line names the client and its version. `on_report` must never
@@ -58,7 +55,7 @@ where
     /// interpreter expects one there, and is then zeroed. The process must ignore SIGPIPE (see the
     /// `process` documentation).
     pub(crate) fn start(
-        backend: Arc<B>,
+        backend: Arc<dyn Backend>,
         client: &ClientExecutable,
         launch: &LaunchSpec,
         request: &mut RunRequest,
@@ -194,6 +191,11 @@ where
         let _ = self.inputs.send(Input::Stop(reason));
     }
 
+    /// The client's name as the Helper's English errors and log lines show it.
+    pub fn client_name(&self) -> &'static str {
+        self.backend.client_name()
+    }
+
     /// The client's process id until it exits and is reaped.
     pub fn process_id(&self) -> Option<u32> {
         match self.process_id.load(Ordering::Relaxed) {
@@ -319,9 +321,9 @@ fn report_spawn_failure(
     }));
 }
 
-struct Watch<B: Backend, R> {
-    backend: Arc<B>,
-    interpreter: B::Interpreter,
+struct Watch<R> {
+    backend: Arc<dyn Backend>,
+    interpreter: Box<dyn OutputInterpreter + Send>,
     /// Names the run in the Helper's log.
     attempt: AttemptId,
     files: RunFiles,
@@ -410,7 +412,7 @@ impl Stream {
     }
 }
 
-impl<B: Backend, R: FnMut(Report)> Watch<B, R> {
+impl<R: FnMut(Report)> Watch<R> {
     fn run(mut self, client_line: OutputLine, command: String, inputs: &Receiver<Input>) {
         let Phase::Running(child) = &self.phase else {
             unreachable!("a run starts with the client running")

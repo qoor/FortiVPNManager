@@ -244,6 +244,8 @@ private extension AppInternal {
                     reconnectAfterSleep: false, minSleepMinutes: MinutesSetting(value: 30, minimum: 1, maximum: 1440)
                 ),
                 optionsError: optionsError,
+                vpnClient: .openfortivpn,
+                vpnClientError: nil,
                 openAtLogin: OpenAtLogin(available: true, enabled: true, requiresApproval: false, error: nil),
                 logFile: "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log"
             )
@@ -325,13 +327,13 @@ private extension AppInternal {
             .gmailRejected(method: .imap),
             .tooManyReconnects(windowSeconds: 3600),
             .network,
-            .helper(code: .busy),
-            .helper(code: .invalidRequest),
-            .helper(code: .unknownAttempt),
-            .helper(code: .wrongPhase),
-            .helper(code: .clientUnavailable),
-            .helper(code: .notAuthorized),
-            .helper(code: .internalError),
+            .helper(code: .busy, client: .openconnect),
+            .helper(code: .invalidRequest, client: .openconnect),
+            .helper(code: .unknownAttempt, client: .openconnect),
+            .helper(code: .wrongPhase, client: .openconnect),
+            .helper(code: .clientUnavailable, client: .openfortivpn),
+            .helper(code: .notAuthorized, client: .openconnect),
+            .helper(code: .internalError, client: .openconnect),
         ]
 
         static let waitReasons: [WaitReason] = [
@@ -546,6 +548,8 @@ private extension AppInternal {
                     reconnectAfterSleep: true, minSleepMinutes: MinutesSetting(value: 30, minimum: 1, maximum: 1440)
                 ),
                 optionsError: nil,
+                vpnClient: .openconnect,
+                vpnClientError: unreadableFile,
                 openAtLogin: OpenAtLogin(available: false, enabled: false, requiresApproval: true, error: .notInstalledCopy),
                 logFile: "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log"
             ),
@@ -752,6 +756,8 @@ private extension AppInternal {
             .command(.setConnectionOption(option: .minSleepMinutes(minutes: 30))),
             .command(.setScheduleHours(start: TimeOfDay(hour: 9, minute: 0), end: TimeOfDay(hour: 18, minute: 30))),
             .command(.setOpenAtLogin(enabled: true)),
+            .command(.setVpnClient(client: .openconnect)),
+            .command(.setVpnClient(client: .openfortivpn)),
             .command(.registerHelper),
             .command(.openHelperApprovalSettings),
             .command(.setBypassRows(list: .networks, rows: ["10.20.161.0/24"])),

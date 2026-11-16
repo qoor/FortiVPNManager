@@ -4,9 +4,11 @@
 
 use std::net::Ipv4Addr;
 use std::path::Path;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::Backend;
 use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel};
 
@@ -17,15 +19,15 @@ use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
 const KILL_LIMIT: Duration = Duration::from_secs(2);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Cleans up after an earlier Helper in `directory`. If it died during a run of `backend`'s client,
-/// stops the client processes its pidfile names that still run, calls `repair_routes` with the
+/// Cleans up after an earlier Helper in `directory`. If it died during a run, stops the processes
+/// its pidfile names that still run and belong to one of `clients`, calls `repair_routes` with the
 /// run's gateway, if it is known, and removes the files it left once that returns. The routes are
 /// repaired whenever a pidfile is left, even an unreadable one, since a run did not finish. Then
 /// `remove_bypass_routes` gets the exception routes it recorded and answers those still in the
 /// routing table, which stay recorded and are returned as this Helper's. `log` takes lines for the
 /// Helper's log.
-pub(crate) fn clean_up<B: Backend>(
-    backend: &B,
+pub(crate) fn clean_up(
+    clients: &[(VpnClient, Arc<dyn Backend>)],
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
     repair_routes: impl FnOnce(Option<Ipv4Addr>),
@@ -56,7 +58,11 @@ pub(crate) fn clean_up<B: Backend>(
             .processes
             .into_iter()
             .filter(|process| {
-                backend.is_own_executable(Path::new(&process.path)) && process.is_running()
+                let path = Path::new(&process.path);
+                clients
+                    .iter()
+                    .any(|(_, backend)| backend.is_own_executable(path))
+                    && process.is_running()
             })
             .collect();
         if !orphans.is_empty() {
@@ -69,7 +75,12 @@ pub(crate) fn clean_up<B: Backend>(
                     pids(&orphans)
                 ),
             );
-            terminate(&orphans, backend.stop_grace_period(), &log);
+            let grace_period = clients
+                .iter()
+                .map(|(_, backend)| backend.stop_grace_period())
+                .max()
+                .unwrap_or_default();
+            terminate(&orphans, grace_period, &log);
         }
         repair_routes(record.gateway);
     }

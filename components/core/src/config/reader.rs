@@ -16,8 +16,8 @@ use super::tree::{Kind, Node, Tree, scalar_text};
 use super::{
     AWAY_MINUTES, CertificateList, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES,
     MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect,
-    ReconnectAfterSleep, Routes, SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn,
-    WEEKDAYS, minutes, normalized_days,
+    ReconnectAfterSleep, Routes, SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings,
+    VPN_CLIENTS, Vpn, WEEKDAYS, minutes, normalized_days,
 };
 use crate::bypass_rules::{MAX_ENTRIES, vpn_server_target};
 
@@ -206,6 +206,7 @@ impl<'t, 'a> Fields<'t, 'a> {
                     &mut vpn.realm,
                     string(value, "vpn.realm")?.map(str::to_owned),
                 ),
+                "client" => set(&mut vpn.client, choice(value, "vpn.client", &VPN_CLIENTS)?),
                 "trusted_certs" => {
                     vpn.trusted_certs = self.trusted(value, CertificateList::Digests)?;
                 }
@@ -389,7 +390,7 @@ impl<'t, 'a> Fields<'t, 'a> {
 
     /// Values that are not of the list's format, repeats and values past the limit are dropped
     /// rather than failing the file: the app manages the lists and learns a value again. Only the
-    /// client's own list warns.
+    /// lists of the clients this OS can run warn.
     fn trusted(
         &mut self,
         node: &Node<'_>,
@@ -402,7 +403,7 @@ impl<'t, 'a> Fields<'t, 'a> {
         let Some(items) = sequence(node, path)? else {
             return Ok(Vec::new());
         };
-        let warns = list == self.client.certificate_list;
+        let warns = self.client.certificate_lists.contains(&list);
         let mut values: Vec<String> = Vec::new();
         for (index, &item) in items.iter().enumerate() {
             let item = self.tree.node(item);

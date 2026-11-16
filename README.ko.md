@@ -45,7 +45,6 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 - macOS 15 이상, Apple Silicon
 - Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Rust ([rustup](https://rustup.rs)으로 설치)
-- openfortivpn (`brew install openfortivpn`)
 - 무료 Apple ID로 만든 **Apple Development** 서명 인증서 (유료 개발자 계정 불필요)
 
 ### 처음 한 번 준비
@@ -74,7 +73,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make pkg` | Release 빌드로 설치 패키지(`.build/FortiVPNManager-<버전>.pkg`) 생성 |
 | `make logs` | 앱·Helper 로그 실시간 보기 |
 
-- **설치**: GitHub Release의 pkg 실행. 서명하지 않은 pkg라 처음에는 macOS가 막으므로, 시스템 설정 > 개인정보 보호 및 보안에서 "그래도 열기"를 누른 뒤 설치합니다. openfortivpn은 Homebrew로 따로 설치합니다.
+- **설치**: GitHub Release의 pkg 실행. 서명하지 않은 pkg라 처음에는 macOS가 막으므로, 시스템 설정 > 개인정보 보호 및 보안에서 "그래도 열기"를 누른 뒤 설치합니다.
 - **Helper**: `/Applications`에 설치된 앱에서만 등록, 첫 실행 시 시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 승인 필요
 
 ### 파일 위치
@@ -84,7 +83,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | 설정 | `~/.config/FortiVPNManager/config.yaml` |
 | 비밀번호, Google 로그인 토큰 | 로그인 Keychain |
 | 앱 상태 (실패 횟수 등) | `~/Library/Application Support/FortiVPNManager/state.json` |
-| openfortivpn 원본 로그 | `~/Library/Logs/FortiVPNManager/openfortivpn.log` |
+| VPN client 원본 로그 | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
 
 ## Windows
 
@@ -111,7 +110,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | 설정 | `%USERPROFILE%\.config\FortiVPNManager\config.yaml` |
 | 비밀번호, Google 로그인 토큰 | Credential Manager |
 | 앱 상태 (실패 횟수 등) | `%LOCALAPPDATA%\FortiVPNManager\state.json` |
-| OpenConnect 원본 로그 | `%LOCALAPPDATA%\FortiVPNManager\Logs\openconnect.log` |
+| VPN client 원본 로그 | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
 
 ## 구조
 

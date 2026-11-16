@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason};
+use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason, VpnClient};
 use fvm_contract::app_internal::ButtonState;
-use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus};
+use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus, FailureReason};
 
 use super::super::machine::{AttemptReason, Phase, RetryReason};
 use super::super::{Effect, Failure, Input, OtpFailure, TimerKind};
@@ -687,15 +687,24 @@ fn connect_rejections_are_classified_by_code() {
         (Code::InternalError, None),
         (
             Code::ClientUnavailable,
-            Some(Failure::Helper(Code::ClientUnavailable)),
+            Some(Failure::Helper {
+                code: Code::ClientUnavailable,
+                client: VpnClient::Openfortivpn,
+            }),
         ),
         (
             Code::InvalidRequest,
-            Some(Failure::Helper(Code::InvalidRequest)),
+            Some(Failure::Helper {
+                code: Code::InvalidRequest,
+                client: VpnClient::Openfortivpn,
+            }),
         ),
         (
             Code::NotAuthorized,
-            Some(Failure::Helper(Code::NotAuthorized)),
+            Some(Failure::Helper {
+                code: Code::NotAuthorized,
+                client: VpnClient::Openfortivpn,
+            }),
         ),
     ] {
         let mut h = Harness::new();
@@ -715,6 +724,26 @@ fn connect_rejections_are_classified_by_code() {
             None => assert_eq!(wait_reason(&h), Some(RetryReason::Network), "{code:?}"),
         }
     }
+}
+
+#[test]
+fn a_refusal_names_the_client_the_attempt_asked_for() {
+    let mut h = Harness::new();
+    h.launch();
+    let id = h.start_tunnel();
+    let mut switched = settings();
+    switched.account.client = VpnClient::Openconnect;
+    h.send(Input::SettingsChanged(switched));
+    h.send(Input::RunRejected(id, HelperErrorCode::ClientUnavailable));
+    assert_eq!(
+        h.cm.connection_section().status,
+        ConnectionStatus::Failed {
+            reason: FailureReason::Helper {
+                code: HelperErrorCode::ClientUnavailable,
+                client: VpnClient::Openfortivpn,
+            },
+        }
+    );
 }
 
 #[test]

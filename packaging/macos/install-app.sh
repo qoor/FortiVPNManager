@@ -13,12 +13,13 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 log=$root/.build/install.log
 done_file=$root/.build/install.done
 previous=$root/.build/previous.app
-vpn_log=$HOME/Library/Logs/FortiVPNManager/openfortivpn.log
+vpn_log=$HOME/Library/Logs/FortiVPNManager/vpn_backend.log
 tunnel_wait=90
 
-# openfortivpn.log lines start with ISO-8601 local timestamps, so the first 19 characters compare as strings.
+# vpn_backend.log lines start with ISO-8601 local timestamps, so the first 19 characters compare as strings.
 tunnel_up_since() {
-    awk -v start="$1" 'substr($0, 1, 19) > start && /Tunnel is up and running\./ { up = 1; exit }
+    awk -v start="$1" 'substr($0, 1, 19) > start &&
+        (/Tunnel is up and running\./ || / \[out\] FortiVPNManager: route script finished connecting$/) { up = 1; exit }
         END { exit !up }' "$vpn_log" 2>/dev/null
 }
 
@@ -39,7 +40,7 @@ quit_app() {
 swap() {
     set -x
     vpn_was_up=no
-    pgrep -x openfortivpn >/dev/null && vpn_was_up=yes
+    { pgrep -x openfortivpn || pgrep -x openconnect; } >/dev/null && vpn_was_up=yes
     quit_app
     rm -rf "$previous"
     if [ -e "$installed" ]; then

@@ -3,7 +3,8 @@
 //! the app's requests from what the watchdog and the OS side tell it, and decides when the Helper
 //! exits. Everything about the VPN client, from checking it to stopping what an earlier Helper left,
 //! is `process`'s and `recovery`'s, which the OS's start hands over as a `Watchdog` with the backend
-//! adapter and the run directory it chose. The entry uses no OS-specific API.
+//! adapters of the clients its OS can run and the run directory it chose. The entry uses no
+//! OS-specific API.
 //!
 //! The OS side's messages and the current run's reports arrive on one channel and are handled one at
 //! a time on one thread. So what reaches an app keeps the order in which it happened, and the run
@@ -19,10 +20,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
-    AttemptId, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind, HelperStatus,
-    Milestone, RunRequest, StopReason,
+    AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
+    HelperStatus, Milestone, RunRequest, StopReason,
 };
-use fvm_contract::backend::{Backend, ClientCheckWait, ClientProblemKind};
+use fvm_contract::backend::{ClientCheckWait, ClientProblemKind};
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, ToEntry,
 };
@@ -56,10 +57,7 @@ impl Inbox {
 /// Starts the entry on its own thread with `watchdog` for the VPN client. `send` takes the entry's
 /// messages for the OS side, in order, on the entry's thread; the first is "ready", once the
 /// watchdog cleaned up after an earlier Helper.
-pub fn start<B>(watchdog: Watchdog<B>, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox
-where
-    B: Backend + Send + Sync + 'static,
-{
+pub fn start(watchdog: Watchdog, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox {
     let (sender, events) = mpsc::channel();
     let inbox = Inbox(sender.clone());
     thread::Builder::new()
@@ -94,10 +92,7 @@ impl OsSide {
     }
 }
 
-fn serve<B>(watchdog: Watchdog<B>, os: OsSide, sender: Sender<Event>, events: Receiver<Event>)
-where
-    B: Backend + Send + Sync + 'static,
-{
+fn serve(watchdog: Watchdog, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
     let left = clean_up(&watchdog, &os, &events);
     os.send(&FromEntry::Ready {});
     Entry {
@@ -120,10 +115,7 @@ where
 /// before any app connection is accepted. Returns the exception routes that could not be removed.
 /// Until "ready", the OS side accepts no app connection and passes on no stop request, so the
 /// answers to these requests are the only messages it sends.
-fn clean_up<B>(watchdog: &Watchdog<B>, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute>
-where
-    B: Backend + Send + Sync + 'static,
-{
+fn clean_up(watchdog: &Watchdog, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute> {
     watchdog.clean_up(
         |level, category, message| os.log(level, category, message),
         |gateway| {
@@ -172,15 +164,15 @@ where
     )
 }
 
-struct Entry<B> {
-    watchdog: Watchdog<B>,
+struct Entry {
+    watchdog: Watchdog,
     os: OsSide,
     events: Receiver<Event>,
     /// For the run's reports.
     sender: Sender<Event>,
     /// Admitted app connections that are still open, with their uid.
     apps: HashMap<u64, u32>,
-    run: Option<CurrentRun<B>>,
+    run: Option<CurrentRun>,
     executable_replaced: bool,
     lifecycle: Lifecycle,
     /// The current run's route repair while the OS side carries it out.
@@ -189,11 +181,11 @@ struct Entry<B> {
 }
 
 /// The one run at a time and who owns it.
-struct CurrentRun<B> {
+struct CurrentRun {
     attempt: AttemptId,
     owner_app: u64,
     owner_uid: u32,
-    run: Run<B>,
+    run: Run,
 }
 
 enum Lifecycle {
@@ -221,10 +213,7 @@ impl Lifecycle {
     }
 }
 
-impl<B> Entry<B>
-where
-    B: Backend + Send + Sync + 'static,
-{
+impl Entry {
     fn run(mut self) -> ! {
         loop {
             let event = match self.lifecycle.deadline() {
@@ -410,12 +399,11 @@ where
                 "the Helper is shutting down; try again shortly",
             ));
         }
-        let client_name = self.watchdog.client_name();
         if let Some(current) = &self.run {
             return Err(if current.owner_uid == uid {
                 error(
                     HelperErrorCode::Busy,
-                    format!("{client_name} is already running"),
+                    format!("{} is already running", current.run.client_name()),
                 )
             } else {
                 error(
@@ -435,7 +423,10 @@ where
                 error(HelperErrorCode::ClientUnavailable, message)
             }
             StartFailure::InvalidRequest(reason) => error(HelperErrorCode::InvalidRequest, reason),
-            StartFailure::RunFiles(failure) => {
+            StartFailure::RunFiles {
+                client_name,
+                failure,
+            } => {
                 self.os.log(
                     LogLevel::Error,
                     LogCategory::Helper,
@@ -451,8 +442,10 @@ where
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
-                "run {} started for uid {uid} with {client_name} {}",
-                request.attempt_id, client.version
+                "run {} started for uid {uid} with {} {}",
+                request.attempt_id,
+                run.client_name(),
+                client.version
             ),
         );
         self.run = Some(CurrentRun {
@@ -489,7 +482,7 @@ where
     }
 
     /// The current run if `attempt` names it and `uid` owns it.
-    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun<B>, HelperError> {
+    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun, HelperError> {
         let current = self
             .run
             .as_ref()
@@ -518,23 +511,33 @@ where
             .run
             .as_ref()
             .is_some_and(|current| current.run.process_id().is_some());
-        match self.watchdog.find_client(ClientCheckWait::Limited) {
-            Ok((client, untested_version)) => HelperStatus {
-                client_running,
-                client_path: Some(client.path.display().to_string()),
-                client_version: Some(client.version),
-                client_problem: None,
-                untested_version,
-            },
-            Err(problem) => HelperStatus {
-                client_running,
-                // Nothing was found where the client is looked for, so there is no path to show.
-                client_path: (problem.kind != ClientProblemKind::NotFound {})
-                    .then(|| problem.path.display().to_string()),
-                client_version: None,
-                client_problem: Some(problem),
-                untested_version: None,
-            },
+        let clients = self
+            .watchdog
+            .find_clients(ClientCheckWait::Limited)
+            .into_iter()
+            .map(|(client, found)| match found {
+                Ok((executable, untested_version)) => ClientStatus {
+                    client,
+                    path: Some(executable.path.display().to_string()),
+                    version: Some(executable.version),
+                    problem: None,
+                    untested_version,
+                },
+                Err(problem) => ClientStatus {
+                    client,
+                    // Nothing was found where the client is looked for, so there is no path to
+                    // show.
+                    path: (problem.kind != ClientProblemKind::NotFound {})
+                        .then(|| problem.path.display().to_string()),
+                    version: None,
+                    problem: Some(problem),
+                    untested_version: None,
+                },
+            })
+            .collect();
+        HelperStatus {
+            client_running,
+            clients,
         }
     }
 

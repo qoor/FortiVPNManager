@@ -8,14 +8,16 @@ use std::io::{self, BufRead, BufReader};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use std::{env, fs, process};
 
-use fvm_backend_adapter::openfortivpn::{Interpreter, OpenFortiVpn};
-use fvm_contract::app_helper::RunRequest;
+use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
+use fvm_contract::app_helper::{RunRequest, VpnClient};
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
+    UntestedVersion,
 };
 use fvm_contract::stream;
 use serde_json::{Value, json};
@@ -49,8 +51,6 @@ pub struct TestBackend {
 }
 
 impl Backend for TestBackend {
-    type Interpreter = Interpreter;
-
     fn client_name(&self) -> &'static str {
         OpenFortiVpn.client_name()
     }
@@ -90,7 +90,7 @@ impl Backend for TestBackend {
         OpenFortiVpn.check_otp(code)
     }
 
-    fn interpreter(&self) -> Interpreter {
+    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
         OpenFortiVpn.interpreter()
     }
 
@@ -204,7 +204,10 @@ impl Swift {
             record: scratch.root.join("record.txt"),
             grace_period: setup.grace_period,
         };
-        let stream = fvm_helper_macos::start(backend, scratch.run_directory());
+        let stream = fvm_helper_macos::start(
+            vec![(VpnClient::Openfortivpn, Arc::new(backend))],
+            scratch.run_directory(),
+        );
         let reader = BufReader::new(stream.try_clone().unwrap());
         Self {
             stream,
@@ -457,6 +460,7 @@ fn embedded(json: &Value) -> Value {
 pub fn connect_request(attempt: &str) -> Value {
     connect_request_with(json!({
         "attemptID": attempt,
+        "client": "openfortivpn",
         "host": GATEWAY,
         "port": 443,
         "username": "alice",

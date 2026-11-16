@@ -2,7 +2,7 @@
 
 use std::time::SystemTime;
 
-use fvm_contract::app_helper::HelperErrorCode;
+use fvm_contract::app_helper::{HelperErrorCode, VpnClient};
 
 use super::policy;
 
@@ -31,7 +31,10 @@ pub enum Failure {
     TooManyReconnects,
     Network,
     /// The Helper refused to start the VPN client.
-    Helper(HelperErrorCode),
+    Helper {
+        code: HelperErrorCode,
+        client: VpnClient,
+    },
 }
 
 /// What state.json keeps for one account, so the retry rules survive a relaunch.

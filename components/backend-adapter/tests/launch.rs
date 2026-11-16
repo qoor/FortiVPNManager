@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-use fvm_contract::app_helper::RunRequest;
+use fvm_contract::app_helper::{RunRequest, VpnClient};
 use fvm_contract::backend::{Backend, ClientExecutable, LaunchSpec};
 
 const DIGEST_A: &str = "4d1b72371c42a69bd949048883897aa673059f2e7b1cc992a650584132aae8f3";
@@ -19,6 +19,7 @@ const INVALID_HOST: &str = "host must be a DNS hostname (letters, digits and hyp
 fn request() -> RunRequest {
     RunRequest {
         attempt_id: "6F9619FF-8B86-D011-B42D-00C04FC964FF".parse().unwrap(),
+        client: VpnClient::Openfortivpn,
         host: "vpn.example.com".into(),
         port: 8443,
         username: "alice".into(),

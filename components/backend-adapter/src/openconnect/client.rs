@@ -1,18 +1,20 @@
 //! Which openconnect executable the Helper may run, and which leftover processes are ours. Only the
-//! copy at the OS's fixed location is run, which only administrators can change (`platform`).
+//! copy at the OS's place is run, which only administrators, or on macOS Homebrew's owner, can
+//! change (`platform`).
 
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::backend::{
     ClientCheckWait, ClientExecutable, ClientProblem, ClientProblemKind, UntestedVersion,
 };
 
-use super::platform::CLIENT;
+use super::platform::{self, INSTALL_HINT};
 
 /// The release series whose output wording the adapter was checked against.
 const TESTED_SERIES: &str = "9.21";
@@ -21,26 +23,23 @@ const TESTED_SERIES: &str = "9.21";
 const VERSION_LIMIT: Duration = Duration::from_secs(5);
 const VERSION_POLL: Duration = Duration::from_millis(50);
 
+static KNOWN_VERSION: Mutex<Option<(FileStamp, String)>> = Mutex::new(None);
+
+#[derive(PartialEq)]
+struct FileStamp {
+    path: PathBuf,
+    modified: SystemTime,
+    size: u64,
+}
+
 pub(super) fn locate(wait: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
-    let Some(client) = CLIENT else {
+    let path = platform::executable()?;
+    let Some(version) = known_version(&path, wait) else {
         return Err(ClientProblem {
-            kind: ClientProblemKind::NotFound {},
-            path: PathBuf::from("openconnect"),
+            kind: ClientProblemKind::NotExecutable {},
+            path,
         });
     };
-    let path = PathBuf::from(client);
-    let problem = |kind| ClientProblem {
-        kind,
-        path: path.clone(),
-    };
-    // Not followed: a link swapped in would point the Helper at something else.
-    let metadata =
-        fs::symlink_metadata(&path).map_err(|_| problem(ClientProblemKind::NotFound {}))?;
-    if !metadata.is_file() {
-        return Err(problem(ClientProblemKind::NotRegularFile {}));
-    }
-    let version =
-        version(&path, wait).ok_or_else(|| problem(ClientProblemKind::NotExecutable {}))?;
     Ok(ClientExecutable { path, version })
 }
 
@@ -48,9 +47,9 @@ pub(super) fn locate(wait: ClientCheckWait) -> Result<ClientExecutable, ClientPr
 pub(super) fn describe(problem: &ClientProblem) -> String {
     let path = problem.path.display();
     match problem.kind {
-        ClientProblemKind::NotFound {} => format!(
-            "openconnect not found at {path}; it comes with FortiVPNManager, so reinstall FortiVPNManager"
-        ),
+        ClientProblemKind::NotFound {} => {
+            format!("openconnect not found at {path}; {INSTALL_HINT}")
+        }
         ClientProblemKind::OutsideAllowedLocation {} => {
             format!("openconnect is outside its allowed location: {path}")
         }
@@ -61,7 +60,7 @@ pub(super) fn describe(problem: &ClientProblem) -> String {
             "openconnect is writable by other users (mode {mode:o}); refusing to run it: {path}"
         ),
         ClientProblemKind::NotExecutable {} => {
-            format!("openconnect did not report its version: {path}")
+            format!("openconnect is not executable or did not report its version: {path}")
         }
     }
 }
@@ -75,11 +74,26 @@ pub(super) fn untested_version(version: &str) -> Option<UntestedVersion> {
     })
 }
 
-/// Windows paths ignore case.
 pub(super) fn is_own_executable(path: &Path) -> bool {
-    CLIENT
-        .zip(path.to_str())
-        .is_some_and(|(client, path)| path.eq_ignore_ascii_case(client))
+    platform::is_own_executable(path)
+}
+
+fn known_version(path: &Path, wait: ClientCheckWait) -> Option<String> {
+    let metadata = fs::symlink_metadata(path).ok()?;
+    let stamp = FileStamp {
+        path: path.to_owned(),
+        modified: metadata.modified().ok()?,
+        size: metadata.len(),
+    };
+    let mut known = KNOWN_VERSION.lock().expect("a version check never panics");
+    if let Some((checked, version)) = known.as_ref()
+        && *checked == stamp
+    {
+        return Some(version.clone());
+    }
+    let version = version(path, wait)?;
+    *known = Some((stamp, version.clone()));
+    Some(version)
 }
 
 /// From the first line of `--version`, such as "OpenConnect version v9.21".
@@ -128,6 +142,51 @@ fn parse_version(output: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn the_version_is_asked_again_only_when_the_file_changes() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process;
+
+        let directory = std::env::temp_dir().join(format!("fvm-oc-version-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let runs = directory.join("runs");
+        let client = directory.join("openconnect");
+        let write = |version: &str| {
+            fs::write(
+                &client,
+                format!(
+                    "#!/bin/sh\necho run >> '{}'\necho 'OpenConnect version v{version}'\n",
+                    runs.display()
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&client, fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        let run_count = || {
+            fs::read_to_string(&runs)
+                .unwrap_or_default()
+                .lines()
+                .count()
+        };
+        write("9.21");
+        for _ in 0..3 {
+            assert_eq!(
+                known_version(&client, ClientCheckWait::Limited).as_deref(),
+                Some("9.21")
+            );
+        }
+        assert_eq!(run_count(), 1);
+        write("9.210");
+        assert_eq!(
+            known_version(&client, ClientCheckWait::Limited).as_deref(),
+            Some("9.210")
+        );
+        assert_eq!(run_count(), 2);
+        fs::remove_dir_all(&directory).unwrap();
+    }
 
     #[test]
     fn version_comes_from_the_first_line() {

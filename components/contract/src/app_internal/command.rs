@@ -6,6 +6,7 @@
 use serde::Deserialize;
 
 use super::{OtpMethod, SecretText, TimeOfDay, Weekday};
+use crate::app_helper::VpnClient;
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -58,6 +59,9 @@ pub enum Command {
     },
     SetOpenAtLogin {
         enabled: bool,
+    },
+    SetVpnClient {
+        client: VpnClient,
     },
     RegisterHelper {},
     /// Opens the system settings where the Helper is approved, then follows the approval.

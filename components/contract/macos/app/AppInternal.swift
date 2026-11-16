@@ -72,6 +72,11 @@ nonisolated enum AppInternal {
         case gmailApi
     }
 
+    enum VpnClient: String, Codable, Sendable, CaseIterable {
+        case openfortivpn
+        case openconnect
+    }
+
     enum Weekday: String, Codable, Sendable, CaseIterable {
         case mon, tue, wed, thu, fri, sat, sun
     }

@@ -1,8 +1,8 @@
 //! Reading an attempt's openconnect output, its login run and then its tunnel run. The tunnel run
 //! writes its progress to stdout and its prompts and errors to stderr, each line as it happens; the
 //! login run writes its progress to stderr too, and only its session lines to stdout. The route
-//! script's output never reaches either. Some text, such as dates and Windows error messages,
-//! is in the system's language and code page.
+//! script's output reaches them on macOS only. Some text, such as dates and Windows error
+//! messages, is in the system's language and code page.
 
 use std::net::Ipv4Addr;
 
@@ -20,6 +20,7 @@ const CERTIFICATE_REJECTED: &str = " specified via --servercert match server's c
 /// The login run's last lines, shell-quoted: `COOKIE='SVPNCOOKIE=…'`, then HOST, CONNECT_URL,
 /// FINGERPRINT and RESOLVE, which hold no secret.
 const COOKIE_LINE: &str = "COOKIE=";
+pub(super) const ROUTES_SET_UP: &str = "FortiVPNManager: route script finished connecting";
 
 #[derive(Default)]
 pub struct Interpreter {
@@ -73,6 +74,9 @@ impl Interpreter {
         // would otherwise carry the cookie into the log.
         if let Some(at) = text.find(COOKIE_LINE) {
             return Some(session(&text[at + COOKIE_LINE.len()..]));
+        }
+        if text == ROUTES_SET_UP {
+            return Some(Finding::Milestone(Milestone::TunnelUp));
         }
         if text.starts_with("Got Legacy IP address ") {
             return Some(Finding::Milestone(Milestone::Authenticated));

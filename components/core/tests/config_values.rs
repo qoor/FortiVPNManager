@@ -43,6 +43,7 @@ vpn:
   port: 8443
   username: bob
   realm: corp
+  client: openfortivpn
   trusted_certs:
     - {a}
     - \"{b}\"
@@ -89,7 +90,7 @@ routes:
 fn a_full_document_in_flow_style() {
     let yaml = format!(
         "{{schema_version: 1, vpn: {{host: vpn.example.com, port: 8443, username: bob, realm: corp,
- trusted_certs: [{a}, '{b}'], trusted_cert_pins: [\"{pin}\"]}},
+ client: \"openfortivpn\", trusted_certs: [{a}, '{b}'], trusted_cert_pins: [\"{pin}\"]}},
  otp: {{gmail_address: otp@example.com, method: \"gmail_api\", google_client_id: '{GOOGLE_CLIENT_ID}'}},
  connection: {{auto_connect_on_launch: false, session_max_minutes: 175,
  proactive_reconnect: {{enabled: false, margin_minutes: 7}},

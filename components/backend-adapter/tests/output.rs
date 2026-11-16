@@ -283,7 +283,7 @@ fn ignores_a_malformed_value() {
 
 // Routes
 
-fn interpreter_after(lines: &[&str]) -> impl OutputInterpreter {
+fn interpreter_after(lines: &[&str]) -> Box<dyn OutputInterpreter + Send> {
     let mut interpreter = OpenFortiVpn.interpreter();
     for line in lines {
         interpreter.line(OutputSource::Stdout, line);

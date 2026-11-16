@@ -1,8 +1,8 @@
 import Foundation
 import SystemConfiguration
 
-/// Repairs the IPv4 routing table after openfortivpn exited without restoring it: restores the
-/// default route via the primary service's router and removes the gateway host route openfortivpn
+/// Repairs the IPv4 routing table after the VPN client exited without restoring it: restores the
+/// default route via the primary service's router and removes the gateway host route the client
 /// added. The router is checked as dotted-quad IPv4 before it reaches `/sbin/route`; the gateway
 /// comes from the Helper entry as an IPv4 address.
 enum RouteRepair {
@@ -48,7 +48,7 @@ enum RouteRepair {
     }
 
     /// Deletes the static host route to the gateway (`route add -host <gateway> <router>` by
-    /// openfortivpn), if it is still there. `nil` when there was nothing to delete.
+    /// openfortivpn or vpnc-script), if it is still there. `nil` when there was nothing to delete.
     private static func removeHostRoute(to gateway: String) -> Bool? {
         guard let entry = RouteTable.lookup(gateway),
               entry.destination == gateway,

@@ -14,7 +14,7 @@ use fvm_helper_core::process::{Report, Run};
 #[test]
 fn submit_otp_and_stop_from_on_report_panic() {
     let directory = RunDirectory::new();
-    let cell: Arc<OnceLock<Run<FakeOpenFortiVpn>>> = Arc::new(OnceLock::new());
+    let cell: Arc<OnceLock<Run>> = Arc::new(OnceLock::new());
     let shared = Arc::clone(&cell);
     let (results, received) = mpsc::channel();
     let launch = shell(

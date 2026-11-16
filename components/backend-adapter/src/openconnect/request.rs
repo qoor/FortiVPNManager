@@ -10,7 +10,8 @@ use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{ClientExecutable, LaunchSpec, SessionLaunch};
 
-use super::platform::{CURL, NULL_DEVICE, SYSTEM_VARIABLES};
+use super::output::ROUTES_SET_UP;
+use super::platform::{CURL, NULL_DEVICE, ROUTE_SCRIPT, SYSTEM_VARIABLES};
 use crate::values;
 
 // openfortivpn's limits, so that one config.yaml and one password work with both clients.
@@ -65,6 +66,7 @@ pub(super) fn launch_spec(
     let tunnel = ["--protocol=fortinet".to_owned()]
         .into_iter()
         .chain(servercert)
+        .chain(ROUTE_SCRIPT.map(|script| format!("--script={}", script_command(script))))
         .chain([
             "--reconnect-timeout=0".to_owned(),
             "--cookie-on-stdin".to_owned(),
@@ -85,6 +87,12 @@ pub(super) fn launch_spec(
         })),
         ..run(login)
     })
+}
+
+fn script_command(script: &str) -> String {
+    format!(
+        "{script}; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo '{ROUTES_SET_UP}'; fi; exit $code"
+    )
 }
 
 /// What openconnect itself sends when it logs out. curl checks the gateway's public key against the
@@ -261,5 +269,50 @@ fn base64_value(byte: u8) -> Option<u8> {
         b'+' => Some(62),
         b'/' => Some(63),
         _ => None,
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::{self, Command};
+
+    use super::*;
+
+    #[test]
+    fn the_script_command_reports_only_a_successful_connect_and_keeps_the_status() {
+        let directory = env::temp_dir().join(format!("fvm-script-command-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        for code in [0, 3] {
+            let script = directory.join(format!("vpnc-script-{code}"));
+            fs::write(
+                &script,
+                format!("#!/bin/sh\necho \"script $reason\"\nexit {code}\n"),
+            )
+            .unwrap();
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+            for reason in ["pre-init", "connect", "disconnect"] {
+                let output = Command::new("/bin/sh")
+                    .arg("-c")
+                    .arg(script_command(script.to_str().unwrap()))
+                    .env_clear()
+                    .env("reason", reason)
+                    .output()
+                    .unwrap();
+                let mut expected = format!("script {reason}\n");
+                if reason == "connect" && code == 0 {
+                    expected.push_str(&format!("{ROUTES_SET_UP}\n"));
+                }
+                assert_eq!(
+                    String::from_utf8_lossy(&output.stdout),
+                    expected,
+                    "{reason} {code}"
+                );
+                assert_eq!(output.status.code(), Some(code), "{reason} {code}");
+            }
+        }
+        fs::remove_dir_all(&directory).unwrap();
     }
 }

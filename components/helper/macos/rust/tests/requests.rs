@@ -42,7 +42,10 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     assert_eq!(record, json!({"processes": [], "gatewayIP": GATEWAY}));
     assert_eq!(
         swift.status(1),
-        json!({"childAlive": true, "openfortivpnPath": "/bin/sh", "openfortivpnVersion": "1.24.1"})
+        json!({
+            "childAlive": true,
+            "clients": [{"client": "openfortivpn", "path": "/bin/sh", "version": "1.24.1"}],
+        })
     );
 
     let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
@@ -263,8 +266,33 @@ fn a_bad_connect_request_starts_nothing() {
         1,
         connect_request_with(json!({
             "attemptID": ATTEMPT,
+            "client": "openfortivpn",
             "host": GATEWAY,
             "port": 0,
+            "username": "alice",
+            "trustedCerts": [],
+            "password": PASSWORD,
+        })),
+    );
+    let other_client = swift.request(
+        1,
+        connect_request_with(json!({
+            "attemptID": ATTEMPT,
+            "client": "openconnect",
+            "host": GATEWAY,
+            "port": 443,
+            "username": "alice",
+            "trustedCerts": [],
+            "password": PASSWORD,
+        })),
+    );
+    let unknown_client = swift.request(
+        1,
+        connect_request_with(json!({
+            "attemptID": ATTEMPT,
+            "client": "forticlient",
+            "host": GATEWAY,
+            "port": 443,
             "username": "alice",
             "trustedCerts": [],
             "password": PASSWORD,
@@ -277,6 +305,17 @@ fn a_bad_connect_request_starts_nothing() {
     assert_eq!(
         swift.reply(invalid),
         error("invalidRequest", "port must be between 1 and 65535")
+    );
+    assert_eq!(
+        swift.reply(other_client),
+        error(
+            "invalidRequest",
+            "this Helper does not run the requested VPN client"
+        )
+    );
+    assert_eq!(
+        swift.reply(unknown_client),
+        error("invalidRequest", "could not decode the connect request")
     );
     assert_eq!(swift.status(1)["childAlive"], false);
     assert!(swift.events(1).is_empty());
@@ -300,7 +339,10 @@ fn a_client_that_is_not_found_has_no_path_in_the_status() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "clientProblem": {"kind": {"notFound": {}}, "path": "/opt/homebrew/bin/openfortivpn"},
+            "clients": [{
+                "client": "openfortivpn",
+                "problem": {"kind": {"notFound": {}}, "path": "/opt/homebrew/bin/openfortivpn"},
+            }],
         })
     );
     assert_eq!(
@@ -324,8 +366,11 @@ fn a_client_with_another_problem_keeps_its_path_in_the_status() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "openfortivpnPath": path,
-            "clientProblem": {"kind": {"notExecutable": {}}, "path": path},
+            "clients": [{
+                "client": "openfortivpn",
+                "path": path,
+                "problem": {"kind": {"notExecutable": {}}, "path": path},
+            }],
         })
     );
 }
@@ -344,9 +389,12 @@ fn the_status_carries_the_adapters_version_judgment() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "openfortivpnPath": "/bin/sh",
-            "openfortivpnVersion": "1.25.0",
-            "untestedVersion": {"testedSeries": "1.24"},
+            "clients": [{
+                "client": "openfortivpn",
+                "path": "/bin/sh",
+                "version": "1.25.0",
+                "untestedVersion": {"testedSeries": "1.24"},
+            }],
         })
     );
 }
