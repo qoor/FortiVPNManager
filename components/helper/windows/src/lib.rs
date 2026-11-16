@@ -5,6 +5,7 @@
 #![cfg(windows)]
 
 mod command;
+pub mod os_api;
 mod pipe;
 mod routes;
 mod service;

@@ -68,7 +68,7 @@
 | Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 macOS 시작 crate)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
 | 메시지 타입은 Rust가 기준이다 | Swift 쪽 Codable 정의는 Rust가 만든 예시 JSON(fixture)으로 맞는지 테스트한다. gRPC, MessagePack, protobuf는 쓰지 않는다 |
 | UI 상태는 도메인 구역 단위로 보낸다 | 화면 모양의 전체 상태는 비효율적이고 공통 부분을 화면 변경에 묶는다. 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 구역 중 바뀐 것만 통째로 보내고, 로그는 추가분만 보낸다. 판단(버튼 상태, "다음 연결부터 적용" 등)은 공통 부분이 하고, 문장은 모두 UI가 만들어 번역한다 |
-| Rust에 unsafe 블록을 두지 않는다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시만 허용한다 |
+| Rust에 unsafe 블록을 두지 않는다. 예외는 시작 함수의 이름 표시와 Windows Helper의 os_api 모듈이다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시는 허용한다. Windows Helper가 VPN 네트워크 설정을 직접 적용하려면 Windows API(IP Helper)를 불러야 해서, 그 API를 safe 함수로 감싸는 모듈 하나에만 unsafe를 허용한다(2026-11-16). 작업 공간 전체의 금지 설정은 그대로 두고 그 모듈에만 허용을 표시한다. 다른 코드는 Windows API를 직접 부르지 않고 이 모듈의 함수를 쓴다. 쓰는 곳이 Windows Helper 서비스뿐이라 서비스 crate 안에 두고, 다른 곳에서 필요해지면 crate로 나눈다 |
 | SIGPIPE: Rust가 socketpair 양쪽에 SIGPIPE 금지를 켜고, Helper 프로세스는 SIGPIPE 전체를 무시한다 | main이 Swift라 Rust의 SIGPIPE 무시가 적용되지 않는다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없어서, Helper 전체의 무시를 process 모듈의 전제 조건으로 둔다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
 | 내부 오류는 곧바로 중단한다 | 억지 예외 처리 대신 panic은 abort하고 crash report를 남긴다. Release 빌드에도 줄 번호를 남긴다 |
 | config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
@@ -144,7 +144,7 @@ components/
                                  rust/: 시작 함수(fvm-helper-macos). backend adapter와 실행 기록 폴더를 골라 process 모듈에
                                  주고 entry를 시작한다)
   helper/windows/               Helper OS 영역 (Windows): Helper 서비스 실행 파일(fvm-helper-windows). 서비스 진입, 앱 연결
-                                통로, route 정리, 예외 route
+                                통로, route 정리, 예외 route. 그 안의 os_api 모듈이 Windows API(IP Helper)를 safe 함수로 감싼다
   ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
   ui/windows/                   UI: 알림 영역 아이콘과 설정창, 모든 문장과 번역
   os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
@@ -153,7 +153,7 @@ packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, Launch
 packaging/windows/              C# solution, 빌드 스크립트, 설치 패키지(MSI) 정의
 ```
 
-- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. Helper 공통 부분 → 공통 계약. Helper OS 영역의 Rust 부분(macOS 시작 함수, Windows Helper 서비스) → Helper 공통 부분, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 process 모듈과 recovery 모듈뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. entry 모듈이 backend adapter에 직접 접근하지 못하는 것은 compiler가 막는다. backend adapter는 process 모듈의 VPN client 처리가 비공개로 갖고 있기 때문이다. 반면 process 모듈의 OS별 프로세스 처리와 실행 기록 폴더를 다루는 코드는 recovery 모듈이 쓰므로 crate 안 어디서나 쓸 수 있고, entry 모듈이 이것을 쓰지 않는 것은 약속으로 지킨다. 한 crate 안의 형제 모듈에는 "process와 recovery에만 공개"를 표시할 방법이 없다. Helper OS 영역 (Windows)은 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
+- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. Helper 공통 부분 → 공통 계약. Helper OS 영역의 Rust 부분(macOS 시작 함수, Windows Helper 서비스) → Helper 공통 부분, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 process 모듈과 recovery 모듈뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. entry 모듈이 backend adapter에 직접 접근하지 못하는 것은 compiler가 막는다. backend adapter는 process 모듈의 VPN client 처리가 비공개로 갖고 있기 때문이다. 반면 process 모듈의 OS별 프로세스 처리와 실행 기록 폴더를 다루는 코드는 recovery 모듈이 쓰므로 crate 안 어디서나 쓸 수 있고, entry 모듈이 이것을 쓰지 않는 것은 약속으로 지킨다. 한 crate 안의 형제 모듈에는 "process와 recovery에만 공개"를 표시할 방법이 없다. Helper OS 영역 (Windows)은 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다. Windows API의 binding(windows-sys)은 그 안의 os_api 모듈만 쓴다.
 - Helper OS 영역 (Windows)은 Helper 서비스 crate 하나가 맡고, macOS처럼 다른 언어로 된 부분을 따로 두지 않는다. 서비스 진입, 통로, route 정리를 Rust로 할 수 있어서다.
 - 판단 코어와 Helper 공통 부분은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
 - **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.

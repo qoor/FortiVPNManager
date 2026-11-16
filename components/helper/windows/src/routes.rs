@@ -439,17 +439,20 @@ fn error(code: HelperErrorCode, message: impl Into<String>) -> HelperError {
     }
 }
 
+/// The library's tests that add or remove routes, directly or as the on-link routes of an address,
+/// take turns, and so do the tests that need the primary interface's routes to stay as they read
+/// them.
+#[cfg(test)]
+pub(crate) static ROUTE_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     //! These change the test PC's routing table, only for TEST-NET-1 addresses (192.0.2.0/24),
     //! which nothing uses, and put back what they changed.
 
-    use std::sync::{Arc, Mutex, PoisonError};
+    use std::sync::{Arc, PoisonError};
 
     use super::*;
-
-    /// The tests that write bypass routes change the same list, so they take turns.
-    static ROUTE_WRITES: Mutex<()> = Mutex::new(());
 
     fn quiet() -> Log {
         Arc::new(|_, _, _| {})
@@ -493,6 +496,7 @@ New-NetRoute -AddressFamily IPv4 -DestinationPrefix $in.prefix -InterfaceIndex $
     #[test]
     fn a_gateway_host_route_left_behind_is_removed() {
         let log = quiet();
+        let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
         let gateway: Ipv4Addr = "192.0.2.77".parse().unwrap();
         add_active_only(gateway);
         assert_eq!(repair(Some(gateway), &log), RouteRepairOutcome::Repaired);

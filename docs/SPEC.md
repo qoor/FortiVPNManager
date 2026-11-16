@@ -790,7 +790,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 - **비밀값**: 비밀번호, OTP, token, client secret은 argv, 파일, 환경 변수, 로그에 남지 않는다. Helper에는 앱과 Helper 사이의 연결로 메모리 안에서만 전달한다.
 - **fail fast**: Rust panic은 그 자리에서 중단하고 crash report를 남긴다. 있을 수 없는 상태를 위한 복구 경로를 만들지 않는다.
-- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 crate마다 하나만).
+- **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다. 예외는 시작 함수 표시(crate마다 하나만)와 Windows Helper 서비스의 os_api 모듈이다. os_api는 Helper가 쓰는 Windows API를 safe 함수로 감싸고, 다른 코드는 Windows API를 직접 부르지 않고 이 함수를 쓴다.
 - **OS 앱 쪽과 Rust**: 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. OS 앱 쪽 코드(Swift, C#)가 OS API를 직접 부를 때는 그 API에 필요한 포인터 API나 호출 선언을 쓸 수 있다.
 - **다른 OS 빌드**: 공통 crate는 한 OS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 process 모듈의 OS 부분(프로세스 실행·확인·종료, 실행 기록 폴더의 접근 권한), Helper OS 영역(시작 부분 포함), port 구현뿐이다.
 - **영어**: 코드, 주석, 앱과 Helper의 로그는 영어로 쓴다.

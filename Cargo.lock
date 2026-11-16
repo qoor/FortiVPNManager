@@ -435,6 +435,7 @@ dependencies = [
  "serde_json",
  "widestring",
  "windows-service",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 
