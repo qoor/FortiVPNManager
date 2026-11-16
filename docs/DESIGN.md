@@ -170,7 +170,7 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
   - 앱을 담는 component 패키지와, 그것을 감싸 설치 조건, 첫 화면 안내, 앱 닫기를 맡는 product 패키지 두 겹이다. 설정은 `packaging/macos/pkg`에 있다.
   - 패키지에는 파일의 확장 속성을 넣지 않는다. 넣으면 내려받은 Google OAuth client 파일의 quarantine 표시까지 설치된 앱에 붙는다. macOS가 늘 붙이는 `com.apple.provenance`만 남는다.
   - 릴리스용 pkg는 CD(`.github/workflows/release.yml`)가 MSI와 함께 만들어 같은 Release에 올리고, SHA-256 목록도 둘을 함께 담는다. 만드는 단계는 `.github/workflows/pkg.yml` 하나이고 CI와 CD가 같이 쓴다.
-    - CD: 그 실행에서만 쓰는 임시 Keychain에 저장소 비밀값(`MACOS_SIGNING_CERTIFICATE`는 인증서와 키의 .p12를 base64로, `MACOS_SIGNING_CERTIFICATE_PASSWORD`는 그 암호)과 Apple 중간 인증서(WWDR G3)를 넣는다. Xcode의 자동 서명은 Apple 계정이 필요해, 계정 없이 그 인증서로 직접 서명한다. `make verify`로 Mac 빌드와 같은 Team ID와 식별자인지 확인한 뒤 pkg를 만든다. 내장 Google OAuth client는 MSI와 같은 비밀값을 쓴다.
+    - CD: 그 실행에서만 쓰는 임시 Keychain에 저장소 비밀값(`MACOS_SIGNING_CERTIFICATE`는 인증서와 키의 .p12를 base64로, `MACOS_SIGNING_CERTIFICATE_PASSWORD`는 그 암호)를 넣는다. `security export`로 만든 .p12에는 Apple 중간 인증서(WWDR G3)도 들어 있다. Xcode의 자동 서명은 Apple 계정이 필요해, 계정 없이 그 인증서로 직접 서명한다. `make verify`로 Mac 빌드와 같은 Team ID와 식별자인지 확인한 뒤 pkg를 만든다. 내장 Google OAuth client는 MSI와 같은 비밀값을 쓴다.
     - CI: 키 없이 임시 서명(ad-hoc)으로 같은 pkg를 만들어 보고 올리지 않는다.
     - 빌드 명령의 서명 방식은 `make`의 `SIGNING`으로 고른다. 비우면 지금처럼 Xcode 계정이 자동 서명한다. 빌드 번호는 MSI처럼 한국 시각이다.
   - 개발용 `make install`은 그대로 쓴다. VPN이 돌아오는지 기다리고, 안 돌아오면 이전 앱으로 되돌린다.

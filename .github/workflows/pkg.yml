@@ -44,8 +44,9 @@ jobs:
             exit 1
           fi
           printf '%s' "$CLIENT" > packaging/GoogleOAuthClient.json
-      # A keychain for this run only, with the certificate, its key and Apple's intermediate
-      # certificate that the signature chains to. make finds the team in it (make local-config).
+      # A keychain for this run only, with the certificate and its key. make finds the team in it
+      # (make local-config). The .p12 from security export also holds Apple's intermediate certificate
+      # (WWDR G3) that the signature chains to; importing that again fails as an item already present.
       - if: inputs.sign
         env:
           CERTIFICATE: ${{ secrets.MACOS_SIGNING_CERTIFICATE }}
@@ -63,9 +64,6 @@ jobs:
           printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/signing.p12"
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -f pkcs12 -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           rm "$RUNNER_TEMP/signing.p12"
-          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/wwdr-g3.cer" \
-            https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
-          security import "$RUNNER_TEMP/wwdr-g3.cer" -k "$keychain"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
       # Without a key: no team, and an ad-hoc signature.
