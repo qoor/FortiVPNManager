@@ -20,10 +20,10 @@ use fvm_contract::backend::{ClientProblem, ClientProblemKind, UntestedVersion};
 use serde::Serialize;
 use serde_json::Value;
 
+/// Relative to the package folder, where cargo and `scripts/test-windows.sh` run the tests: a path
+/// fixed at build time names this Mac's tree on the Windows PC that runs the cross-built test.
 fn path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/app-internal")
-        .join(name)
+    PathBuf::from("tests/fixtures/app-internal").join(name)
 }
 
 /// Rust-sent: `value` encodes to the fixture `name`.

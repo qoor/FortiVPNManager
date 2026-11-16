@@ -3,7 +3,10 @@
 # compiled there: the PC's security software holds every new executable for a minute or two on its
 # first start, build scripts included. New test executables are copied, started all at once with the
 # arguments cargo uses (the hold is per file and arguments) and an environment that makes them exit
-# before any test, then run one by one in their package folder, as cargo would.
+# before any test, then run one by one in their package folder, as cargo would. The runner goes there
+# as a file too: sent on the ssh command line, a whole-workspace run passed the Windows limit on its
+# length. A run counts only if it reports every program; until then the new ones stay unrecorded, so
+# the next run starts them ahead again.
 # Usage: scripts/test-windows.sh <folder> [cargo test options, such as --package fvm-watchdog]
 # <folder> is the PC's copy of this tree under %USERPROFILE%\src, kept current by sync-windows.sh,
 # which this runs first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm and lld.
@@ -49,12 +52,13 @@ cat >"$work/run.ps1" <<EOF
 \$ProgressPreference = 'SilentlyContinue'
 \$root = Join-Path \$env:USERPROFILE 'src\\$folder'
 \$new = '$new_names' -split ',' | Where-Object { \$_ }
-\$tests = @'
+# @() keeps a single program a list: Windows PowerShell gives one [pscustomobject] no Count.
+\$tests = @(@'
 $runs
 '@ -split "\`n" | Where-Object { \$_.Trim() } | ForEach-Object {
     \$exe, \$package = \$_.Trim() -split '\|'
     [pscustomobject]@{ Name = \$exe; Exe = Join-Path \$root ".windows-tests\\\$exe"; Dir = Join-Path \$root \$package }
-}
+})
 \$started = foreach (\$test in \$tests | Where-Object { \$new -contains \$_.Name }) {
     \$start = New-Object System.Diagnostics.ProcessStartInfo \$test.Exe
     \$start.WorkingDirectory = \$test.Dir
@@ -76,7 +80,14 @@ foreach (\$test in \$tests) {
 "windows tests: \$(\$tests.Count) programs, \$(\$started.Count) new, \$failed failed"
 exit [int](\$failed -gt 0)
 EOF
+scp -q "$work/run.ps1" "$host:src/$folder/.windows-tests/run.ps1"
 code=0
-ssh "$host" "powershell -NoProfile -EncodedCommand $(iconv -f UTF-8 -t UTF-16LE "$work/run.ps1" | base64)" | grep -v '^#< CLIXML\|^<Objs' || code=$?
+ssh "$host" "powershell -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\\src\\$folder\\.windows-tests\\run.ps1" |
+    tee "$work/output" | grep -v '^#< CLIXML\|^<Objs' || code=$?
+programs=$(wc -l <"$work/tests" | tr -d ' ')
+if ! tr -d '\r' <"$work/output" | grep -q "^windows tests: $programs programs, "; then
+    echo "test-windows: the run on $host did not report all $programs test programs" >&2
+    exit 1
+fi
 mv "$work/now" "$state"
 exit $code
