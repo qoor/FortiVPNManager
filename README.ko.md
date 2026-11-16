@@ -21,7 +21,7 @@ FortiGate SSL VPN 자동 재접속 관리 앱입니다.
 - **설정**: YAML 기반 설정 파일 지원
 - **계정 관리**: OS 인증 정보 저장소(macOS Keychain / Windows Credential Manager)를 통해 안전하게 인증 정보 관리
 
-문서: [설계](docs/DESIGN.md) · [기능 명세](docs/SPEC.md) · [설정 UI](docs/SETTINGS-UI.md)
+문서: [설계](docs/DESIGN.md) · [기능 명세](docs/SPEC.md)
 
 ## Google OAuth 클라이언트 (선택)
 

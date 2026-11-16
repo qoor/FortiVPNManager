@@ -15,7 +15,7 @@ using static FortiVPNManager.Ui.Text.Strings;
 namespace FortiVPNManager.Ui.Settings;
 
 /// <summary>
-/// The settings window, laid out as Windows Settings (docs/SETTINGS-UI.md): the panes in the left
+/// The settings window, laid out as Windows Settings: the panes in the left
 /// navigation, the back button and the settings search in the title bar. Below 800 px of width the
 /// navigation hides behind the menu button and the search becomes a magnifier after the title.
 /// Closing releases the window and all it shows, and the app stays in the notification area; the

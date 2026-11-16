@@ -38,7 +38,7 @@ public sealed record SearchItem(SettingsPane Pane, string Key, string Title, str
 public sealed record SearchResult(SettingsPane Pane, SearchItem? Item);
 
 /// <summary>
-/// The settings search (components/ui/macos/SettingsNavigation.swift, docs/SETTINGS-UI.md §5): pane
+/// The settings search (components/ui/macos/SettingsNavigation.swift): pane
 /// and setting names in the app's language and in English, every term matching. A pane whose own
 /// name matches is the result itself, so it lists none of its settings; settings the panes don't show
 /// now are left out.

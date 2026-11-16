@@ -21,7 +21,7 @@ An app that keeps a FortiGate SSL VPN connected by reconnecting automatically.
 - **Settings**: A YAML settings file
 - **Account management**: Credentials kept safely in the OS credential store (macOS Keychain / Windows Credential Manager)
 
-Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md) · [Settings UI](docs/SETTINGS-UI.md)
+Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md)
 
 ## Google OAuth client (optional)
 
