@@ -661,103 +661,133 @@
 ## 3.8 VPN 실행 (F-VR, Helper 쪽)
 
 ### F-VR-01 client 준비
-- **설명**: 실행할 VPN client를 확인하고, 실행 요청을 검증해 실행 명세를 만든다.
-- **담당**: backend adapter, process 모듈(Windows Helper가 시작할 때의 확인 실행도)
-- **입력 / 출력**: 실행 요청 / client 경로와 버전, 실행 명세, 또는 오류
-- **세부 기능**
-  1. 관리자만 쓸 수 있는 곳의 실행 파일만 쓴다. 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부한다. 문제는 종류와 경로로 알리고, 문장과 번역은 UI가 만든다.
-     - openfortivpn: `/opt/homebrew/bin/openfortivpn`을 끝까지 풀어 Homebrew Cellar 안의 파일만 쓴다.
-     - openconnect: Windows는 앱과 함께 설치된 `C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe`만 쓴다. 따로 설치된 OpenConnect는 쓰지도 건드리지도 않는다. macOS·Linux는 지원할 때 정한다.
-     - logout 요청 도구: OS에 들어 있는 것만 쓰고(Windows는 시스템 폴더), 그 도구의 사용자 설정 파일과 proxy 설정은 읽지 않게 한다.
-  2. 검증된 버전(openfortivpn 1.24.x, openconnect 9.21)이 아니면 고급 pane에 "검증되지 않은 버전" 경고를 띄운다.
-  3. openconnect의 버전은 실행해 물어서 알고, 상태 확인과 연결 때마다 다시 확인하며 기억하지 않는다. 이 확인에는 짧은 시간 제한을 둔다.
-  4. Windows Helper의 시작 부분은 실행 중이라고 알리기 전에 process 모듈에 같은 확인을 한 번 맡긴다(openconnect `--version` 한 번). 이때는 시간 제한 없이 openconnect가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다(F-WN-03). 새로 설치한 client의 느린 첫 실행이 여기서 끝나므로 3의 짧은 제한으로 충분하고, 앱의 첫 상태 확인은 곧바로 답을 받는다. 이 결과도 기억하지 않는다.
-  5. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 제어 문자 없음, 그 밖의 한도는 VPN client마다 정한다(openfortivpn은 버퍼 안, 비밀번호 255바이트 이하).
-  6. 비밀번호와 openconnect의 세션 cookie는 설정 파일과 argv에 쓰지 않는다. openfortivpn 설정 파일은 0600으로 만들고 실행이 끝나면 지운다. openconnect는 설정 파일 없이 argv만 쓴다.
-  7. verbosity 옵션과 자체 재접속(openfortivpn `--persistent`)을 쓰지 않는다. openconnect는 끊긴 뒤 스스로 다시 붙으려고 기다리지 않게 해서(대기 0초) 첫 재시도가 실패하면 곧바로 끝나게 한다. 재연결은 앱이 OTP와 함께 한다.
-  8. 환경 변수는 꼭 필요한 것만 넘긴다. openfortivpn은 PATH만, openconnect는 그와 route 스크립트가 도는 데 필요한 OS 시스템 변수만 넘긴다.
-  9. openconnect의 realm은 접속 URL의 경로로 넘기고, 인증서 고정 값은 두 실행 모두에 항상 하나 이상 넘긴다(F-CM-09).
-  10. openconnect는 로그인만 하는 실행과, 그 세션 cookie로 터널을 여는 실행의 명세를 함께 만든다(F-VR-02). 세션 cookie로 보낼 logout 요청의 명세도 만든다(F-VR-04).
-- **제약**: `--persistent`는 이메일 OTP 경로에서 쓴 OTP를 다시 보낸다. openfortivpn은 proxy 환경 변수를 읽고, 버퍼보다 긴 값은 조용히 자른다. openconnect의 비밀번호 미리 넣기 옵션은 쓰지 않는다. 인증서 질문이 그 줄을 답으로 읽는다. 비대화 옵션은 OTP 질문까지 막는다. 이 게이트웨이는 끊긴 세션으로 다시 붙는 것을 허용하지 않아서, openconnect가 다시 붙으려 하면 거부되고 logout한 뒤 끝난다. 다시 시도하는 동안에도 터널 어댑터는 남아 있어 앱은 끊긴 것을 알 수 없다. 연결하면서 cookie를 출력하는 openconnect 옵션은 정상 종료할 때까지 출력이 나오지 않아 쓰지 않는다.
+- 설명: 실행할 VPN client 확인, 실행 요청 검증, 실행 명세 생성
+- 담당: backend adapter, process 모듈(Windows Helper 시작 시의 확인 실행 포함)
+- 입력: 실행 요청
+- 출력: client 경로와 버전, 실행 명세, 또는 오류
+- 세부 기능
+  1. 관리자만 쓸 수 있는 위치의 실행 파일 한정, 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부
+     - openfortivpn: Homebrew 설치본의 실제 파일 한정
+     - openconnect(Windows): 앱과 함께 설치된 OpenConnect 한정, 따로 설치된 OpenConnect는 사용·변경 없음
+     - logout 요청 도구: OS 내장 도구 한정, 그 도구의 사용자 설정 파일과 proxy 설정 미사용
+     - 문제 전달: 종류와 경로, 문장과 번역은 UI 담당
+  2. 검증된 버전이 아니면 고급 pane에 "검증되지 않은 버전" 경고
+  3. openconnect 버전: 실행해서 확인, 상태 확인·연결 때마다 재확인, 결과 미보관, 짧은 시간 제한
+  4. Windows Helper 시작: 실행 중 알림 전 process 모듈의 같은 확인 1회
+     - 시간 제한 없이 openconnect 종료까지 대기, 그동안 Windows에 시작 중 알림(F-WN-03)
+     - 결과 미보관
+  5. Helper의 모든 값 재검증(앱 불신)
+     - host: IPv4 또는 host 이름 한정, 제어 문자 금지
+     - 그 밖의 한도: VPN client별 기준
+  6. 비밀번호와 openconnect 세션 cookie: 설정 파일·argv 기록 금지
+     - openfortivpn 설정 파일: 0600 권한 생성, 실행 종료 후 삭제
+     - openconnect: 설정 파일 없이 argv만 사용
+  7. verbosity 옵션과 VPN client 자체 재접속 미사용
+     - openconnect: 끊긴 뒤 재접속 대기 0초, 첫 재시도 실패 시 즉시 종료
+     - 재연결: 앱이 OTP와 함께 수행
+  8. 환경 변수: 필수 항목 한정
+     - openfortivpn: PATH 한정
+     - openconnect: PATH와 route 스크립트 실행에 필요한 OS 시스템 변수 한정
+  9. openconnect 인증서 고정 값: 두 실행 모두에 항상 하나 이상 전달(F-CM-09)
+  10. openconnect 명세: 로그인 전용 실행, 그 세션 cookie로 터널을 여는 실행(F-VR-02), 세션 cookie 기반 logout 요청(F-VR-04)
 
 ### F-VR-02 실행과 stdin 입력
-- **설명**: VPN client를 정해진 조건으로 띄우고, prompt가 나오면 비밀번호와 OTP를 stdin으로 한 번씩 넣는다.
-- **담당**: process 모듈, backend adapter
-- **입력 / 출력**: 실행 명세, 비밀번호, OTP / 진행 단계, 입력 결과
-- **세부 기능**
-  1. shell 없이 실행한다. 자식은 pipe 세 개만 물려받는다. Unix에서는 빈 signal mask와 기본 signal 동작으로 자기 process group에서 시작한다. Windows에서는 창 없이 시작한다.
-  2. prompt는 줄 끝을 기다리지 않고 찾는다. 비밀번호는 backend adapter가 정한 단계의 첫 prompt에만 쓴다(openfortivpn은 게이트웨이 연결 전, openconnect는 OTP prompt 전). openconnect는 게이트웨이 인증서를 확인한 뒤에만 묻는다. 연결 줄은 stdout, prompt는 stderr로 따로 읽혀 순서가 바뀔 수 있으므로 연결 줄을 기다리지 않는다.
-  3. OTP는 OTP prompt 단계에서 한 번만 받고, 쓴 뒤 stdin을 닫는다.
-  4. 비밀번호나 OTP를 다시 물으면 답하지 않고 바로 끝낸다. 비밀번호를 다시 물으면 로그인 거부, OTP를 다시 물으면 OTP 거부다. 시간 제한까지 기다리지 않기 위해서다.
-  5. 쓴 비밀값은 바로 메모리에서 지운다. client가 먼저 끝나도 Helper는 죽지 않는다.
-  6. openconnect는 두 번 실행한다. 첫 실행은 비밀번호와 OTP로 로그인만 하고 세션 cookie를 출력한 뒤 끝난다. 그 cookie를 stdin으로 받는 둘째 실행이 터널을 연다. 앱에는 한 번의 시도로 보이고, 진행 단계는 두 실행에 걸쳐 이어서 보고한다. 첫 실행이 cookie 없이 끝나면 둘째 실행 없이 그 종료를 보고한다.
-  7. 세션 cookie는 Helper 메모리에만 두고, 실행이 끝나면 지운다. 로그에는 값 대신 받았다는 사실만 남긴다.
-- **제약**: prompt에는 줄바꿈이 없다. signal mask를 비워야 openfortivpn이 터널 전 SIGTERM에 즉시 끝난다. openconnect는 로그인이 거부되면 끝나지 않고 다시 묻는다.
+- 설명: 정해진 조건의 VPN client 실행, prompt 시 비밀번호와 OTP의 stdin 1회 입력
+- 담당: process 모듈, backend adapter
+- 입력: 실행 명세, 비밀번호, OTP
+- 출력: 진행 단계, 입력 결과
+- 세부 기능
+  1. shell 없이 실행, 표준 입출력 pipe만 상속, Windows는 창 없이 실행
+  2. prompt: 줄 끝 대기 없이 감지
+     - 비밀번호: backend adapter가 정한 단계의 첫 prompt 한정(openfortivpn은 게이트웨이 연결 전, openconnect는 OTP prompt 전)
+     - 연결 줄 도착 대기 없음
+  3. OTP: OTP prompt 단계에서 1회만 수신, 입력 후 stdin 닫기
+  4. 비밀번호·OTP 재질문 시 응답 없이 즉시 종료
+     - 비밀번호 재질문: 로그인 거부
+     - OTP 재질문: OTP 거부
+  5. 입력한 비밀값의 즉시 메모리 삭제, client가 먼저 끝나도 Helper 유지
+  6. openconnect의 두 번 실행
+     - 첫 실행: 비밀번호와 OTP로 로그인만 수행, 세션 cookie 출력 후 종료
+     - 둘째 실행: 그 cookie를 stdin으로 받아 터널 열기
+     - 앱에는 한 번의 시도로 표시, 진행 단계는 두 실행에 걸쳐 연속 보고
+     - 첫 실행이 cookie 없이 끝나면 둘째 실행 없이 그 종료 보고
+  7. 세션 cookie: Helper 메모리 한정, 실행 종료 후 삭제, 로그에는 수신 사실만 기록
 
 ### F-VR-03 출력 해석
-- **설명**: client 출력을 로그 pane의 줄로 만들고 진행 단계, 인증서 값, 실패 단서, 터널 IP를 읽는다. 출력 문구는 backend adapter만 안다.
-- **담당**: backend adapter, process 모듈
-- **입력 / 출력**: stdout·stderr / 출력 줄, 진행 단계, 인증서 값, 실패 단서, 터널 IP
-- **세부 기능**
-  1. 줄바꿈 없는 출력(prompt)은 잠시 뒤 따로 보이고, 제어 문자는 보이는 표기로 바꾼다. UTF-8이 아닌 바이트도 줄을 버리지 않고 보이는 표기로 바꾼다.
-  2. openfortivpn은 로그 머리가 붙은 stdout 줄만 해석한다. `Connected to gateway.`, `Authenticated.`, `Tunnel is up and running.`, `trusted-cert = …`, tunnel mode 거부 줄이 대상이다.
-  3. openconnect는 stdout과 stderr를 모두 해석한다. 대상은 다음과 같다.
-     - 게이트웨이 연결: `Connected to HTTPS on …`
-     - OTP prompt: `Code:`
-     - 인증됨: 첫 실행의 세션 cookie 줄(`COOKIE='…'`), 둘째 실행의 `Got Legacy IP address …`
-     - 터널 IP: `Configured as …`
-     - 터널 올라옴: 터널 어댑터를 만들었다는 줄(Windows는 `Using Wintun device …`. 다른 OS는 지원할 때 정한다)
-     - 인증서 값: `None of the … fingerprint(s) … match server's certificate: …`
-  4. 단계는 한 번씩, 커지는 순서로만 보고한다.
-  5. openfortivpn이 route 복원을 끝내지 못하고 끝났는지 추적한다.
-- **제약**: openfortivpn의 stderr에는 pppd 메시지가 나오며 오류를 뜻하지 않는다. openconnect는 prompt와 오류를 stderr에 쓴다. `Configured as` 줄은 터널 어댑터가 생기기 전에 나오므로 터널 올라옴으로 보지 않는다. 그 뒤 route 스크립트가 route를 다 넣기까지 몇 초가 더 걸리지만 기다리지 않는다(macOS에서도 route를 확인하지 않는다). route 스크립트가 openconnect의 10초 제한을 넘기면 나오는 "스크립트 실패" 줄은 실패로 보지 않는다. openconnect도 무시하고 터널을 유지한다. 날짜와 Windows 오류 문장 같은 일부 문구는 Windows 언어 설정에 따라 번역되고 UTF-8이 아니다. VPN client를 올리면 문구가 바뀔 수 있다.
+- 설명: client 출력의 로그 줄 변환, 진행 단계·인증서 값·실패 단서·터널 IP 읽기, 출력 문구는 backend adapter 한정 지식
+- 담당: backend adapter, process 모듈
+- 입력: stdout·stderr
+- 출력: 출력 줄, 진행 단계, 인증서 값, 실패 단서, 터널 IP
+- 세부 기능
+  1. 줄바꿈 없는 출력(prompt)은 잠시 뒤 별도 표시, 제어 문자와 UTF-8이 아닌 바이트는 보이는 표기로 변환(줄 폐기 없음)
+  2. openfortivpn: 로그 머리가 붙은 stdout 줄만 해석
+     - 대상: 게이트웨이 연결, 인증됨, 터널 올라옴, 인증서 값, tunnel mode 거부
+  3. openconnect: stdout·stderr 모두 해석
+     - 게이트웨이 연결, OTP prompt
+     - 인증됨: 첫 실행의 세션 cookie 줄, 둘째 실행의 IP 할당 줄
+     - 터널 IP
+     - 터널 올라옴: 터널 어댑터 생성 줄 기준(Windows, 다른 OS는 지원 시 결정)
+     - 인증서 값: 맞지 않는 고정 값에 대한 거부 줄
+  4. 단계 보고: 단계별 1회, 증가 순서 한정
+  5. openfortivpn의 route 복원 미완료 종료 추적
+  6. route 스크립트: 완료 대기 없음, 시간 제한 초과로 나오는 "스크립트 실패" 줄은 실패 미처리
 
 ### F-VR-04 시간 제한과 종료
-- **설명**: 단계마다 시간 제한을 두어 진행하지 못하는 client를 끝내고, 요청이 오면 정해진 순서로 종료시킨다.
-- **담당**: process 모듈, backend adapter
-- **입력 / 출력**: 진행 단계, 종료 요청 / 정상 종료 요청과 강제 종료, 종료한 주체
-- **세부 기능**
-  1. 터널이 올라오기 전까지 단계마다 시간 제한을 둔다. 넘으면 늦은 구간을 로그에 남기고 종료한다.
-  2. 먼저 정상 종료를 요청하고, 유예 뒤에도 살아 있으면 강제로 끝낸다.
-     - Unix: SIGTERM은 본 프로세스에만 보낸다. 자식 `/sbin/route`가 route 복원을 끝내야 하기 때문이다. 유예 뒤에는 SIGKILL을 본 프로세스, 그다음 process group에 보낸다.
-     - Windows: 정상 종료를 요청할 수단이 없어 곧바로 강제로 끝낸다. client와 그것이 띄운 프로세스(route 스크립트)를 함께 끝낸다.
-  3. Helper가 openconnect의 세션 cookie를 가진 채 openconnect를 강제로 끝냈으면, 게이트웨이에 그 cookie로 logout 요청을 보낸다. 정상 종료 요청으로 끝났거나 스스로 끝났으면 openconnect가 logout했으므로 보내지 않는다. 응답으로는 성공 여부를 알 수 없어 보낸 사실과 응답 코드만 로그에 남긴다. 기다리는 시간에는 상한을 둔다.
-  4. 첫 종료 이유만 기록하고 이후 요청은 무시한다.
-- **제약**: openfortivpn의 SIGTERM handler는 터널이 올라온 뒤에만 설치된다. Windows에는 signal이 없고, openconnect가 logout하는 console 이벤트는 그 이벤트를 보내는 실행 파일을 회사 보안 프로그램이 막아 쓸 수 없다. 강제로 끝내면 openconnect가 logout하지 못해 세션이 idle timeout까지 서버에 남지만, 따로 보낸 logout 요청으로 끝난다. Helper가 죽어 cookie를 잃으면 세션이 남는다. 이 게이트웨이는 같은 계정의 동시 세션을 허용하므로 다음 연결은 막히지 않는다.
+- 설명: 단계별 시간 제한으로 진행하지 못하는 client 종료, 요청 시 정해진 순서의 종료
+- 담당: process 모듈, backend adapter
+- 입력: 진행 단계, 종료 요청
+- 출력: 정상 종료 요청과 강제 종료, 종료 주체
+- 세부 기능
+  1. 터널이 올라오기 전까지 단계별 시간 제한, 초과 시 늦은 구간 로그 후 종료
+  2. 종료 순서
+     - 정상 종료 요청, 유예 뒤에도 살아 있으면 강제 종료
+     - Windows: 즉시 강제 종료, client와 그 하위 프로세스(route 스크립트) 함께 종료
+  3. logout 요청: Helper가 세션 cookie를 가진 채 openconnect를 강제 종료한 경우 한정
+     - 정상 종료 요청으로 끝났거나 스스로 끝난 경우 미전송
+     - 로그: 전송 사실과 응답 코드 한정
+     - 대기 시간 상한
+  4. 첫 종료 이유만 기록, 이후 요청 무시
 
 ### F-VR-05 종료 사실과 보고
-- **설명**: client가 끝나면 무슨 일이 있었는지를 종료 사실로 앱에 한 번 보고한다. 앱은 이것으로 원인을 분류한다(F-CM-03).
-- **담당**: process 모듈, entry 모듈
-- **입력 / 출력**: 프로세스 종료 / 종료 사실
-- **세부 기능**
-  1. 가장 멀리 간 단계, 종료한 주체와 이유, 학습한 인증서 값, 실패 단서, 터널 유지 시간, 종료 상태를 담는다.
-  2. logout 요청(F-VR-04)을 보낸 뒤, route가 정리되지 않았으면 정리하고 보고한다. openfortivpn은 default route를, openconnect는 게이트웨이로 가는 host route를 본다(강제로 끝나면 남는다).
-  3. 보고는 실행마다 정확히 한 번이고 마지막 메시지다.
+- 설명: client 종료 시 경과를 종료 사실로 앱에 1회 보고, 앱의 원인 분류(F-CM-03) 기준
+- 담당: process 모듈, entry 모듈
+- 입력: 프로세스 종료
+- 출력: 종료 사실
+- 세부 기능
+  1. 담는 내용: 가장 멀리 간 단계, 종료 주체와 이유, 학습한 인증서 값, 실패 단서, 터널 유지 시간, 종료 상태
+  2. logout 요청(F-VR-04) 후 route 미정리 시 정리 후 보고
+     - openfortivpn: default route 확인
+     - openconnect: 게이트웨이로 가는 host route 확인
+  3. 보고: 실행마다 정확히 1회, 마지막 메시지
 
 ### F-VR-06 남은 프로세스 정리와 route 복구
-- **설명**: 비정상 종료 뒤 남은 VPN client 프로세스와 깨진 route, 이전 Helper가 넣은 예외 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지고, openconnect가 강제로 끝나면 게이트웨이 host route가 남기 때문이다.
-- **담당**: recovery 모듈, entry 모듈, Helper OS 영역
-- **입력 / 출력**: pidfile의 프로세스 신원과 게이트웨이 IP, 예외 route 기록 / 정리 결과, route 복구 결과
-- **세부 기능**
-  1. 실행 중에는 client(openfortivpn은 pppd도)의 신원과 게이트웨이 IPv4를 pidfile에 기록한다.
-  2. Helper가 시작하면 연결을 받기 전에, 기록과 같은 관리자 권한 프로세스인 VPN client만 종료한다. 다른 프로세스는 건드리지 않는다. Windows에서는 Helper 서비스가 죽어도 openconnect가 혼자 남으므로 이 정리가 필요하다.
-  3. macOS: default route가 없거나 ppp를 가리키면 주 네트워크의 router로 되돌리고, routing table을 다시 조회해 확인한다.
-  4. Windows: 남은 openconnect가 없는데 router를 거쳐 게이트웨이로 가는 host route가 남아 있으면 지우고 다시 조회해 확인한다. 강제로 끝난 터널 어댑터는 다음 openconnect 실행이 스스로 지우므로 건드리지 않는다.
-  5. 이전 Helper가 기록해 둔 예외 route를 연결을 받기 전에 지운다. 지우지 못한 route는 기록에 남기고 이 Helper가 넣은 것으로 다뤄, 어느 앱도 원하지 않으면 다음 변경 때 다시 지운다(F-BR-02).
-- **제약**: `/sbin/route`는 실패해도 exit code 0이다. pid는 재사용될 수 있어 시작 시각과 경로로 같은 프로세스인지 확인한다.
+- 설명: 비정상 종료 뒤 남은 VPN client 프로세스, 깨진 route, 이전 Helper가 넣은 예외 route의 정리
+- 담당: recovery 모듈, entry 모듈, Helper OS 영역
+- 입력: 실행 기록의 프로세스 신원과 게이트웨이 IP, 예외 route 기록
+- 출력: 정리 결과, route 복구 결과
+- 세부 기능
+  1. 실행 중 client(openfortivpn은 pppd 포함)의 신원과 게이트웨이 IPv4 기록
+  2. Helper 시작 시 연결 수락 전, 기록과 같은 관리자 권한 VPN client 프로세스만 종료, 다른 프로세스 미변경
+     - 같은 프로세스 판단: pid, 시작 시각, 경로
+  3. macOS: default route가 없거나 ppp를 가리키면 주 네트워크 router로 복원, routing table 재조회로 확인
+  4. Windows: 남은 openconnect가 없고 router 경유 게이트웨이 host route가 남아 있으면 삭제, 재조회로 확인, 터널 어댑터 미변경
+  5. 이전 Helper의 예외 route 기록: 연결 수락 전 삭제
+     - 삭제 실패 route: 기록 유지, 이 Helper가 넣은 것으로 취급, 어느 앱도 원하지 않으면 다음 변경 때 재삭제(F-BR-02)
 
 ### F-VR-07 Helper 요청 처리
-- **설명**: 앱의 요청으로 실행을 시작·중지하고 Helper 자신의 수명을 관리한다. 실행은 한 번에 하나다.
-- **담당**: entry 모듈과 Helper OS 영역
-- **입력 / 출력**: 앱 요청, 앱 연결 끊김, 재설치, SIGTERM·서비스 정지 / 응답, 이벤트와 출력
-- **세부 기능**
-  1. 실행이 있으면 새 실행 요청은 같은 사용자에게 "사용 중", 다른 사용자에게 "권한 없음"이다. Windows는 Windows 세션으로 구분하고, 이 PC의 어느 계정이든 연결할 수 있다.
-  2. OTP와 연결 해제는 현재 실행의 시도이고 같은 사용자일 때만 받는다.
-  3. 앱 연결이 끊기면 그 앱의 실행을 끝내고, 그 앱만 원하던 예외 route를 지운다(F-BR-02). 정상 종료, 강제 종료, 크래시가 같은 경로다.
-  4. macOS: 유휴 시 종료 요청에는 실행이 없을 때만 응하고 종료한다. 버전 확인과 이 요청의 모양은 빌드가 바뀌어도 바꾸지 않는다.
-  5. macOS: 재설치로 실행 파일이 바뀌면 실행이 없을 때 종료하고, launchd가 다음 요청 때 새 Helper를 띄운다.
-  6. SIGTERM이나 서비스 정지 요청을 받으면 실행을 끝내고 보고한 뒤 종료한다. Windows의 업그레이드와 제거는 앱을 닫고 서비스를 멈춘 뒤 파일을 바꾸거나 지운다. 업그레이드 뒤 새 Helper는 앱이 시작한다(F-WN-05).
-- **제약**: 실행 중인 옛 Helper는 재설치 뒤 앱의 서명 확인을 통과하지 못한다. 이 자가 종료 덕분에 `make install`에 sudo가 필요 없다. Windows에서는 실행 중인 실행 파일을 바꿀 수 없어 설치 패키지가 서비스를 먼저 멈춘다.
+- 설명: 앱 요청에 따른 실행 시작·중지, Helper 자신의 수명 관리, 실행은 동시에 하나
+- 담당: entry 모듈과 Helper OS 영역
+- 입력: 앱 요청, 앱 연결 끊김, 재설치, 종료 신호·서비스 정지
+- 출력: 응답, 이벤트와 출력
+- 세부 기능
+  1. 실행 중의 새 실행 요청: 같은 사용자는 "사용 중", 다른 사용자는 "권한 없음"
+     - Windows: Windows 세션 기준 구분, 이 PC의 모든 계정 연결 가능
+  2. OTP와 연결 해제: 현재 실행의 시도이고 같은 사용자일 때 한정
+  3. 앱 연결 끊김: 그 앱의 실행 종료, 그 앱만 원하던 예외 route 삭제(F-BR-02), 정상 종료·강제 종료·크래시 동일 처리
+  4. macOS 유휴 시 종료 요청: 실행이 없을 때만 응답 후 종료, 버전 확인과 이 요청의 형식은 빌드가 바뀌어도 유지
+  5. macOS 재설치로 실행 파일 변경 시: 실행이 없을 때 종료, 다음 요청 시 새 Helper 실행
+  6. 종료 신호·서비스 정지 요청: 실행 종료와 보고 후 종료
+     - Windows 업그레이드·제거: 앱 종료와 서비스 정지 후 파일 교체·삭제, 업그레이드 뒤 새 Helper는 앱이 시작(F-WN-05)
 
 ## 3.9 macOS 부분 (F-SW)
 
