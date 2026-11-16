@@ -390,132 +390,148 @@
 ## 3.2 설정 (F-CF)
 
 ### F-CF-01 config.yaml 읽기와 검증
-- **설명**: 사람이 편집하는 config.yaml을 엄격하게 읽는다. 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다.
-- **담당**: 판단 코어, 런타임
-- **입력 / 출력**: `~/.config/FortiVPNManager/config.yaml`(Windows는 `%USERPROFILE%\.config\FortiVPNManager\config.yaml`) / 설정 값과 경고, 또는 줄·열이 붙은 오류 하나
-- **세부 기능**
-  1. 적지 않은 키와 null은 기본값이다. 다음은 오류다.
-     - 텍스트: 크기 초과, 깨진 UTF-8, 읽을 수 없는 제어 문자, raw NEL·LS·PS
-     - 구조: 문법 오류, 여러 문서, 깊은 중첩, 중복 키, anchor·alias, merge 키, tag, 복합 키
-     - 값: YAML 1.1식 숫자·불리언(`0443`, `yes` 등), 따옴표 숫자, 타입·범위·형식 위반, 교차 규칙 위반, 서로 겹치는 예외 규칙 항목
-  2. 알 수 없는 키, 형식이 틀리거나 중복된 인증서 값, 최대 개수를 넘는 인증서 값은 경고하고 무시한다.
-  3. 더 새로운 `schema_version`은 먼저 거부하고, 그 파일은 절대 덮어쓰지 않는다.
-  4. 파일이 없으면 기본값이다. symlink는 따라가고, macOS에서 권한이 0600이 아니면 경고한다. Windows는 사용자 profile의 기본 권한을 따른다.
-  5. 같은 파일을 두 OS에서 그대로 쓸 수 있다. 앱이 쓰는 설명 주석은 그 OS에 맞춘다(비밀값 저장소, 네트워크와 router를 부르는 이름).
-- **제약**: 의도한 차이는 raw NEL·LS·PS 거부 하나다(YAML 1.1과 1.2가 다르게 읽는 유일한 경우). 그 밖에 YAML parser가 바뀌어 일부 오류의 줄·열 위치와 드문 문법(콜론 뒤 TAB, 매우 깊은 중첩, 따옴표 값의 tag)의 처리가 조금 다르다. 값을 다르게 읽는 경우는 없다.
+- 설명: 사람이 편집하는 config.yaml의 엄격한 읽기, 오류 시 마지막 정상 설정 유지와 연결 차단
+- 담당: 판단 코어, 런타임
+- 입력: config.yaml
+- 출력: 설정 값과 경고, 또는 줄·열이 붙은 오류 하나
+- 세부 기능
+  1. 적지 않은 키와 null: 기본값
+     - 텍스트 오류: 크기 초과, 깨진 UTF-8, 읽을 수 없는 제어 문자, raw NEL·LS·PS
+     - 구조 오류: 문법 오류, 여러 문서, 깊은 중첩, 중복 키, anchor·alias, merge 키, tag, 복합 키
+     - 값 오류: YAML 1.1식 숫자·불리언(`0443`, `yes` 등), 따옴표 숫자, 타입·범위·형식 위반, 교차 규칙 위반, 서로 겹치는 예외 규칙 항목
+  2. 경고 후 무시: 알 수 없는 키, 형식이 틀리거나 중복된 인증서 값, 최대 개수 초과 인증서 값
+  3. 더 새로운 `schema_version`: 가장 먼저 거부, 그 파일의 덮어쓰기 금지
+  4. 파일 없음: 기본값, symlink는 따라감
+     - macOS: 권한이 0600이 아니면 경고
+     - Windows: 사용자 profile의 기본 권한 사용
+  5. 같은 파일의 두 OS 공용, 앱이 쓰는 설명 주석은 해당 OS 기준(비밀값 저장소, 네트워크와 router 명칭)
 
 ### F-CF-02 설정 저장
-- **설명**: 설정창 변경과 앱이 학습한 값을 config.yaml과 Keychain에 저장한다.
-- **담당**: 런타임, 판단 코어, OS 연동(Keychain)
-- **입력 / 출력**: 저장할 변경 / config.yaml, Keychain 항목
-- **세부 기능**
-  1. 앱은 설정창 저장, 새 인증서 값, 가져온 route, OAuth client 변경, 설정 가져오기 때만 config.yaml을 쓴다.
-  2. 쓸 때마다 최신 파일 위에 변경만 적용한다. 손 편집과 겹치면 다시 하고, 내용이 같으면 쓰지 않는다.
-  3. 파일에 오류가 있으면 쓰지 않는다. 정해진 템플릿으로 쓰므로 직접 단 주석은 사라진다.
-  4. 0600으로 원자적으로 쓰고 symlink는 유지한다.
-  5. 계정 저장은 바뀐 칸만 쓰고, 저장된 host·username·주소를 키로 비밀번호를 Keychain에 쓴다. 빈 비밀번호 칸은 기존 값 유지다.
-  6. VPN client가 받지 않는 값(예: 255바이트가 넘는 비밀번호)은 저장 전에 거부한다.
-- **제약**: host나 username이 바뀌면 Keychain 항목도 새로 필요하다. 예전 비밀번호로 다른 계정에 로그인해 잠기는 일을 막는다.
+- 설명: 설정창 변경과 앱이 학습한 값의 config.yaml·Keychain 저장
+- 담당: 런타임, 판단 코어, OS 연동(Keychain)
+- 입력: 저장할 변경
+- 출력: config.yaml, Keychain 항목
+- 세부 기능
+  1. config.yaml 쓰기 시점: 설정창 저장, 새 인증서 값, 가져온 route, OAuth client 변경, 설정 가져오기 한정
+  2. 매번 최신 파일 위에 변경만 적용, 손 편집과 겹치면 재시도, 내용이 같으면 쓰기 생략
+  3. 파일 오류 시 쓰기 금지, 정해진 템플릿으로 쓰므로 직접 단 주석 소멸
+  4. 0600 권한의 원자적 쓰기, symlink 유지
+  5. 계정 저장: 바뀐 칸만 쓰기, 저장된 host·username·주소를 키로 비밀번호의 Keychain 쓰기, 빈 비밀번호 칸은 기존 값 유지
+  6. VPN client가 받지 않는 값(비밀번호 길이 초과 등): 저장 전 거부
 
 ### F-CF-03 변경 감지
-- **설명**: 사용자가 config.yaml을 고치면 앱을 다시 시작하지 않아도 반영한다.
-- **담당**: 런타임
-- **입력 / 출력**: 파일 상태와 내용 / 바뀐 설정
-- **세부 기능**
-  1. 짧은 주기와 앱 활성화 때 확인한다.
-  2. 내용이 바뀌었을 때만 반영한다. 앱이 쓴 내용과 수정 시각만 바뀐 것은 제외하되, 앱이 쓰기 직전의 손 편집은 놓치지 않는다.
-  3. 바뀌면 Connection Manager, 준비 상태, 예외 규칙에 전한다.
+- 설명: 사용자의 config.yaml 수정을 앱 재시작 없이 반영
+- 담당: 런타임
+- 입력: 파일 상태와 내용
+- 출력: 바뀐 설정
+- 세부 기능
+  1. 확인 시점: 짧은 주기, 앱 활성화
+  2. 내용 변경 시에만 반영, 앱이 쓴 내용과 수정 시각만 바뀐 경우 제외, 앱이 쓰기 직전의 손 편집 누락 금지
+  3. 변경 전달 대상: Connection Manager, 준비 상태, 예외 규칙
 
 ### F-CF-04 기존 설정 가져오기
-- **설명**: macOS는 openfortivpn 설정, Windows는 공식 FortiClient의 연결에서 계정 값을 가져와 처음 설정을 덜어 준다. 원본은 고치지 않는다.
-- **담당**: 런타임, backend adapter, OS 연동(Windows), UI
-- **입력 / 출력**: `~/.config/openfortivpn/config` 또는 고른 파일, Windows는 FortiClient의 SSL VPN 연결 / config.yaml 계정 값, Keychain 비밀번호, 가져오기 보고
-- **세부 기능**
-  1. config.yaml이 없는 첫 실행에서 자동으로, 또는 일반 pane(파일 메뉴)에서 직접 가져온다.
-  2. host, port, username, password, realm, trusted-cert를 가져온다. host가 없으면 실패이고, port가 없으면 443이다.
-  3. 비밀번호는 Keychain에 저장하고, 원본에 평문 비밀번호가 있다고 경고한다.
-  4. 알 수 없는 키와 쓸 수 없는 줄을 보고한다.
-  5. openconnect에는 가져올 설정 파일이 없어서, Windows는 공식 FortiClient의 SSL VPN 연결에서 가져온다(2026-11-13).
-     - FortiClient가 연결마다 남긴 `Server` 값(`host:port`, 포트가 없으면 443)을 host와 port로 가져온다. 주소에 scheme이나 경로가 붙었으면 실패다.
-     - FortiClient가 보여 주는 username은 FortiClient가 암호화해 두어 가져오지 않는다. username, realm, 비밀번호는 그대로 둔다.
-     - gateway가 바뀌면 이전 gateway의 인증서 값을 지운다.
-     - FortiClient의 첫 연결에서 가져온다. 여러 연결 중 고르기는 아직 다루지 않는다(사용자 결정). 연결이 없으면 그렇다고 보고하고, 첫 실행에서는 아무것도 하지 않는다.
-     - FortiClient 설정은 읽기만 한다. IPsec 연결은 openconnect 대상이 아니라 읽지 않는다.
+- 설명: 기존 VPN 설정에서 계정 값 가져오기, 원본 수정 금지
+  - macOS: openfortivpn 설정
+  - Windows: 공식 FortiClient의 SSL VPN 연결
+- 담당: 런타임, backend adapter, OS 연동(Windows), UI
+- 입력: `~/.config/openfortivpn/config` 또는 고른 파일, Windows는 FortiClient의 SSL VPN 연결
+- 출력: config.yaml 계정 값, Keychain 비밀번호, 가져오기 보고
+- 세부 기능
+  1. 시점: config.yaml이 없는 첫 실행의 자동 가져오기, 일반 pane(파일 메뉴)의 직접 가져오기
+  2. 가져오는 값: host, port, username, password, realm, trusted-cert, host 없으면 실패, port 없으면 443
+  3. 비밀번호의 Keychain 저장, 원본의 평문 비밀번호 경고
+  4. 알 수 없는 키와 쓸 수 없는 줄 보고
+  5. Windows(FortiClient)
+     - 연결의 `Server` 값(`host:port`, 포트 없으면 443)을 host와 port로 사용, scheme·경로가 붙은 주소는 실패
+     - username·realm·비밀번호: 가져오지 않음, 기존 값 유지
+     - gateway 변경 시 이전 gateway의 인증서 값 삭제
+     - 첫 연결만 사용, 연결이 없으면 보고(첫 실행에서는 동작 없음)
+     - FortiClient 설정은 읽기 전용, IPsec 연결 미대상
 
 ## 3.3 OTP (F-OT)
 
 ### F-OT-01 OTP 세션
-- **설명**: 한 시도 동안 Gmail을 지켜보며 그 시도의 OTP 코드를 찾는다.
-- **담당**: 런타임, 판단 코어
-- **입력 / 출력**: Gmail 주소와 인증, OTP prompt 시각 / 준비, 코드, 실패(인증·네트워크)
-- **세부 기능**
-  1. openfortivpn 실행 전에 메일함의 기준점을 잡고, 그 뒤 도착한 메일만 후보로 본다.
-  2. OTP prompt 뒤에 찾고, prompt 시각(시계 차이 여유 포함) 이후 도착한 메일만 쓴다.
-  3. 제목의 `AuthCode:` 뒤 6~8자리 숫자를 코드로 본다. 발신자는 보지 않는다.
-  4. 여럿이면 가장 늦게 도착한 것을 고르고, 코드는 시도마다 한 번만 알린다. 다른 시도의 결과는 버린다.
-- **제약**: FortiGate OTP 메일은 제목이 `AuthCode: NNNNNN`이고 발신자가 일정하지 않으며 유효시간이 짧다.
+- 설명: 한 시도 동안 Gmail 감시, 그 시도의 OTP 코드 찾기
+- 담당: 런타임, 판단 코어
+- 입력: Gmail 주소와 인증, OTP prompt 시각
+- 출력: 준비, 코드, 실패(인증·네트워크)
+- 세부 기능
+  1. VPN client 실행 전 메일함 기준점 설정, 그 뒤 도착 메일만 후보
+  2. OTP prompt 뒤 찾기 시작, prompt 시각(시계 차이 여유 포함) 이후 도착 메일만 사용
+  3. 코드: 제목의 `AuthCode:` 뒤 6~8자리 숫자, 발신자 미확인
+  4. 여럿이면 가장 늦게 도착한 메일 선택, 코드는 시도마다 1회 전달, 다른 시도의 결과 폐기
 
 ### F-OT-02 Gmail API 방식
-- **설명**: Google 계정 연결로 Gmail API를 써서 OTP 메일을 IMAP보다 빨리 찾는다. 기본 경로다.
-- **담당**: 런타임, 판단 코어
-- **입력 / 출력**: access token, Gmail 주소 / F-OT-01의 세션 결과
-- **세부 기능**
-  1. 연결된 Google 계정의 주소가 설정과 다르면 인증 실패다.
-  2. prompt 뒤에는 짧은 주기로 기준점 이후 추가된 메일만 본다. 기준점이 오래돼 쓸 수 없으면 제목 검색으로 바꾼다.
-  3. 스팸, 휴지통, 임시보관 메일은 뺀다.
-  4. 인증 오류는 바로 인증 실패, 일시적 오류는 몇 번 참은 뒤 네트워크 실패다.
+- 설명: Google 계정 연결 기반 Gmail API의 OTP 메일 찾기, 기본 경로
+- 담당: 런타임, 판단 코어
+- 입력: access token, Gmail 주소
+- 출력: F-OT-01의 세션 결과
+- 세부 기능
+  1. 연결된 Google 계정 주소가 설정과 다르면 인증 실패
+  2. prompt 뒤 짧은 주기로 기준점 이후 추가 메일만 확인, 기준점이 오래돼 쓸 수 없으면 제목 검색으로 전환
+  3. 제외: 스팸, 휴지통, 임시보관 메일
+  4. 인증 오류는 즉시 인증 실패, 일시적 오류는 몇 차례 허용 후 네트워크 실패
 
 ### F-OT-03 IMAP 방식과 대체 경로
-- **설명**: 앱 비밀번호로 IMAP에서 OTP를 찾는다. Gmail API를 쓸 수 없을 때 같은 시도 안에서 이 방식으로 넘어간다.
-- **담당**: 런타임, 판단 코어
-- **입력 / 출력**: Gmail 주소, 앱 비밀번호, `otp.method` / F-OT-01의 세션 결과
-- **세부 기능**
-  1. 전체보관함(`\All`)의 UIDVALIDITY·UIDNEXT를 기준점으로 잡고, IDLE 알림과 짧은 주기로 그 뒤의 메일을 찾는다.
-  2. 자격증명 거부는 인증 실패, 그 밖의 오류와 UIDVALIDITY 변경은 네트워크 실패다.
-  3. Gmail API 방식인데 Google 계정이 없거나 API가 준비 전에 인증 실패하면, 앱 비밀번호가 있을 때 IMAP으로 넘어간다. 이 전환은 로그에만 남는다.
-- **제약**: IMAP은 Gmail 도착 뒤 보이기까지 약 7초 늦다. 그래서 Gmail API가 기본이다.
+- 설명: 앱 비밀번호 기반 IMAP의 OTP 찾기, Gmail API 사용 불가 시 같은 시도 안의 전환
+- 담당: 런타임, 판단 코어
+- 입력: Gmail 주소, 앱 비밀번호, `otp.method`
+- 출력: F-OT-01의 세션 결과
+- 세부 기능
+  1. 전체보관함(`\All`)의 UIDVALIDITY·UIDNEXT를 기준점으로 설정, IDLE 알림과 짧은 주기로 그 뒤 메일 찾기
+  2. 자격증명 거부는 인증 실패, 그 밖의 오류와 UIDVALIDITY 변경은 네트워크 실패
+  3. IMAP 전환 조건: Gmail API 방식에서 Google 계정이 없거나 API 준비 전 인증 실패, 앱 비밀번호 보유
+  4. 전환 기록: 로그 한정
 
 ### F-OT-04 사용한 메일 정리와 스팸함 확인
-- **설명**: 사용한 OTP 메일을 휴지통으로 옮기고, OTP를 받지 못하면 스팸함을 확인해 원인을 알린다.
-- **담당**: 런타임
-- **입력 / 출력**: OTP 제출, OTP를 쓰지 않고 끝난 시도의 정리 요청, OTP 시간 초과 / 휴지통 이동, 정리 완료 알림, 실패 이유 갱신
-- **세부 기능**
-  1. OTP를 제출하면 이번 세션에서 찾은 OTP 메일을 모두 휴지통으로 옮긴다. 다음 시도에서 옛 코드를 고르지 않고 메일이 쌓이지 않게 한다.
-  2. 판단 코어가 정리를 요청하면(F-CM-02의 5) 세션은 닫지 않고 그 시도의 코드를 같은 규칙으로 계속 찾는다. 기준 시각은 OTP prompt이고, prompt가 없었으면 비밀번호를 보낸 시각이다. 찾으면 1처럼 휴지통으로 옮기고 판단 코어에 알린 뒤 닫는다. 옮기지 못하면 이유를 로그에 남기고 알리지 않으므로 다음 시도는 대기 시간까지 기다린다. 세션이 실패하면 판단 코어가 그 실패로 대기를 끝내고, 대기 시간이 지나면 판단 코어가 세션을 닫는다.
-  3. OTP 시간이 지나면 스팸함을 확인하고(전체보관함에는 스팸함이 없다), 코드가 있으면 실패 이유를 "OTP가 스팸함에 있음"으로 바꾼다.
-  4. 이 정리가 실패해도 로그만 남긴다.
+- 설명: 사용한 OTP 메일의 휴지통 이동, OTP 미수신 시 스팸함 확인과 원인 안내
+- 담당: 런타임
+- 입력: OTP 제출, OTP를 쓰지 않고 끝난 시도의 정리 요청, OTP 시간 초과
+- 출력: 휴지통 이동, 정리 완료 알림, 실패 이유 갱신
+- 세부 기능
+  1. OTP 제출 시 이번 세션에서 찾은 OTP 메일 모두 휴지통 이동
+  2. 판단 코어의 정리 요청(F-CM-02의 5)
+     - 세션 유지, 그 시도의 코드를 같은 규칙으로 계속 찾기
+     - 기준 시각: OTP prompt, prompt가 없었으면 비밀번호 전송 시각
+     - 찾으면 1과 같은 휴지통 이동, 판단 코어에 알린 뒤 세션 종료
+     - 이동 실패 시 이유 로그, 알림 없음(다음 시도는 대기 시간까지 대기)
+     - 세션 실패 시 판단 코어의 대기 종료, 대기 시간 경과 시 판단 코어의 세션 종료
+  3. OTP 시간 초과 시 스팸함 확인, 코드가 있으면 실패 이유를 "OTP가 스팸함에 있음"으로 변경
+  4. 정리 실패: 로그 한정
 
 ### F-OT-05 Gmail 연결 테스트
-- **설명**: 계정 pane에서 입력한 Gmail 설정이 동작하는지 바로 확인한다.
-- **담당**: 런타임, UI
-- **입력 / 출력**: 선택한 방식, 입력한 주소와 앱 비밀번호 / 성공, 인증 실패, 메일함 없음, 네트워크 오류
-- **세부 기능**
-  1. 선택된 방식으로만 시험하고, 연결 상태와 실패 기록에는 영향이 없다.
-  2. IMAP은 로그인 뒤 필요한 메일함이 보이는지 확인한다.
-  3. Gmail API는 client와 Google 계정 연결을 확인하고 계정 주소를 비교한다.
+- 설명: 계정 pane에서 입력한 Gmail 설정의 즉시 동작 확인
+- 담당: 런타임, UI
+- 입력: 선택한 방식, 입력한 주소와 앱 비밀번호
+- 출력: 성공, 인증 실패, 메일함 없음, 네트워크 오류
+- 세부 기능
+  1. 선택된 방식만 시험, 연결 상태와 실패 기록에 영향 없음
+  2. IMAP: 로그인 후 필요한 메일함 확인
+  3. Gmail API: client와 Google 계정 연결 확인, 계정 주소 비교
 
 ## 3.4 Google 계정 (F-GA)
 
 ### F-GA-01 Google 계정 연결과 해제
-- **설명**: 브라우저에서 Google에 로그인해 Gmail API 사용을 허락받는다. OAuth와 PKCE를 쓰고 결과는 loopback 주소로 받는다.
-- **담당**: 런타임, 판단 코어, OS 연동
-- **입력 / 출력**: 저장된 Gmail 주소, OAuth client / refresh token, access token, 연결 상태
-- **세부 기능**
-  1. `127.0.0.1`의 임의 port에 일회용 listener를 열고 기본 브라우저로 인증 페이지를 연다. state가 맞는 응답만 받는다.
-  2. refresh token, `gmail.modify` 권한, 저장된 Gmail 주소와 같은 계정인지 확인한다. 하나라도 어긋나면 받은 token을 철회하고 이유를 알린다.
-  3. refresh token은 Keychain에, access token은 메모리에만 둔다. Google이 refresh token을 거부하면 지우고 "Google 계정 연결 필요"로 바뀐다.
-  4. [연결 해제]는 token을 지운 뒤 Google에 철회를 요청한다. 철회가 실패해도 해제는 유지한다.
-- **제약**: Desktop client의 secret은 비밀로 취급되지 않고 PKCE로 보호된다.
+- 설명: 브라우저의 Google 로그인과 Gmail API 사용 허락, OAuth(PKCE)와 loopback 주소 수신
+- 담당: 런타임, 판단 코어, OS 연동
+- 입력: 저장된 Gmail 주소, OAuth client
+- 출력: refresh token, access token, 연결 상태
+- 세부 기능
+  1. `127.0.0.1`의 임의 port 일회용 listener, 기본 브라우저의 인증 페이지 열기, state가 맞는 응답만 수신
+  2. 확인 항목: refresh token, `gmail.modify` 권한, 저장된 Gmail 주소와 같은 계정, 하나라도 어긋나면 받은 token 철회와 이유 안내
+  3. refresh token은 Keychain, access token은 메모리 한정, Google의 refresh token 거부 시 삭제와 "Google 계정 연결 필요" 표시
+  4. [연결 해제]: token 삭제 후 Google에 철회 요청, 철회 실패 시에도 해제 유지
 
 ### F-GA-02 OAuth client
-- **설명**: 앱을 식별하는 OAuth Desktop client를 빌드 때 넣어 두고, 원하면 다른 client를 가져와 쓰게 한다.
-- **담당**: 런타임, 판단 코어, UI
-- **입력 / 출력**: 내장 client, 고른 client JSON / 쓰는 client와 그 상태
-- **세부 기능**
-  1. 가져온 client가 내장 client보다 우선한다. ID는 `otp.google_client_id`에, secret은 Keychain에 둔다.
-  2. Google Cloud "데스크톱 앱" 형식만 받는다.
-  3. client가 바뀌면 이전 client로 받은 token을 지운다. 새 client에서는 쓸 수 없기 때문이다.
-  4. [내장 client 사용]은 가져온 client를 지운다.
+- 설명: 앱 식별용 OAuth Desktop client의 빌드 시 내장, 다른 client 가져오기 지원
+- 담당: 런타임, 판단 코어, UI
+- 입력: 내장 client, 고른 client JSON
+- 출력: 사용 중인 client와 그 상태
+- 세부 기능
+  1. 가져온 client가 내장 client보다 우선, ID는 `otp.google_client_id`, secret은 Keychain
+  2. 허용 형식: Google Cloud "데스크톱 앱" 한정
+  3. client 변경 시 이전 client로 받은 token 삭제
+  4. [내장 client 사용]: 가져온 client 삭제
 
 ## 3.5 예외 규칙 (F-BR)
 
