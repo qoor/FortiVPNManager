@@ -12,7 +12,7 @@ $loginKeys = @(
     'Software\Microsoft\Windows\CurrentVersion\Run',
     'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
 )
-# components/helper-entry/windows/src/service.rs
+# components/helper/windows/src/service.rs
 $helperFolder = 'C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager'
 
 # The prefix length of a subnet mask, such as 24 for 255.255.255.0.
@@ -26,7 +26,7 @@ function Get-PrefixLength([string] $mask) {
 
 # The routes state.json lists as last written, by interface GUID (components/runtime/src/state_file.rs),
 # removed from the persistent and the active store as the Helper removes them
-# (components/helper-entry/windows/src/routes.rs), each only while still there.
+# (components/helper/windows/src/routes.rs), each only while still there.
 function Remove-Routes([string] $sid, [string] $state) {
     if (-not (Test-Path -LiteralPath $state -PathType Leaf)) { return }
     $applied = ([IO.File]::ReadAllText($state) | ConvertFrom-Json).appliedExceptionRoutes

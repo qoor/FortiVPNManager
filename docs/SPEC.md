@@ -28,7 +28,7 @@
 
 ![전체 구성](images/system-overview.svg)
 
-앱과 Helper는 별도 프로세스다. 화살표는 서로 주고받는 것을 나타낸다. 판단 코어는 런타임만 쓴다. Helper 안에서 VPN client에 관한 일은 watchdog이 맡고, watchdog은 Helper가 OS마다 정한 backend adapter로 client를 확인하고 실행하고 출력을 해석한다. 공통 계약은 양쪽이 함께 쓰는 약속이라 그림에서 뺐다.
+앱과 Helper는 별도 프로세스다. 화살표는 서로 주고받는 것을 나타낸다. 판단 코어는 런타임만 쓴다. Helper 안에서 VPN client에 관한 일은 process 모듈과 recovery 모듈이 맡고, process 모듈은 Helper가 OS마다 정한 backend adapter로 client를 확인하고 실행하고 출력을 해석한다. 공통 계약은 양쪽이 함께 쓰는 약속이라 그림에서 뺐다.
 
 | 구성 요소 | 위치 | 역할 |
 |---|---|---|
@@ -38,12 +38,13 @@
 | 판단 코어 | 앱 | Connection Manager 규칙과 데이터 형식 해석. 바깥과 직접 통신하지 않음 |
 | 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지켜야 할 약속 |
 | backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(openfortivpn, openconnect) |
-| watchdog | Helper | VPN client 확인과 실행, 입력, 시간 제한, 종료, 실행 기록과 남은 프로세스 정리 |
-| Helper entry | Helper | 앱 요청 처리, 실행의 주인 판단, Helper 수명 |
-| OS 연동 Helper (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 쓰기 |
+| process 모듈 | Helper | VPN client 확인과 실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout |
+| recovery 모듈 | Helper | 실행 기록, 이전 Helper가 남긴 프로세스 정리, route 복구 요청 |
+| entry 모듈 | Helper | 앱 요청 처리, 실행의 주인 판단, Helper 수명 |
+| Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 쓰기 |
 | UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
-| Helper 서비스 (Windows) | Helper | Helper entry를 쓰고 OS 연동 Helper의 일을 함: 앱 연결 확인, route 정리, 예외 route 쓰기 |
+| Helper OS 영역 (Windows) | Helper | Windows 서비스(Helper 서비스)로 실행되며 세 모듈을 씀. 서비스 수명, 앱 연결 확인, route 정리, 예외 route 쓰기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | openfortivpn | Helper가 실행 | macOS의 VPN client와 그 pppd |
 | openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트. Windows는 앱과 함께 설치한 것 |
@@ -51,13 +52,13 @@
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
 
-Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스다. macOS에서는 launchd daemon, Windows에서는 Windows 서비스로 실행된다. (macOS)·(Windows)가 붙은 구성 요소는 그 OS에만 있고, 나머지는 모든 OS에 공통이다. 본문에서는 OS 표기를 뺀다. 그림은 macOS 구성이다. Windows에서도 앱 쪽 구성은 같고, Helper 쪽은 Helper 서비스 하나가 Helper entry를 쓰면서 OS 연동 Helper의 자리를 맡는다.
+Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스다. macOS에서는 launchd daemon, Windows에서는 Windows 서비스로 실행된다. (macOS)·(Windows)가 붙은 구성 요소는 그 OS에만 있고, 나머지는 모든 OS에 공통이다. entry, process, recovery 모듈은 두 OS가 함께 쓰는 Helper 공통 부분이고, Helper는 OS마다 이 공통 부분과 그 OS의 Helper OS 영역을 합친 구성 요소 하나다. 본문에서는 OS 표기를 뺀다. 그림은 macOS 구성이다. Windows에서도 앱 쪽 구성은 같고, Helper 쪽은 세 모듈과 Helper OS 영역 (Windows)이 Helper 서비스 하나로 실행된다.
 
 ## 1.2 구성 요소 사이의 연결
 
 - **앱 안**: UI는 사용자 조작을 명령으로 보내고, 바뀐 상태와 새 로그를 받는다. 런타임은 OS 기능이 필요하면 OS 연동에 요청하고, OS 연동은 결과와 시스템 이벤트를 알린다.
 - **앱 ↔ Helper**: 서로를 확인한 연결로 실행 요청, OTP, 연결 해제를 보내고 진행 단계, 출력, 종료 보고를 받는다. 주고받는 내용은 공통 계약이 정한다.
-- **Helper 안**: OS 연동 Helper가 받은 요청을 Helper entry에 넘긴다. Helper entry는 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 모두 watchdog에 맡긴다. backend adapter를 쓰는 것은 watchdog뿐이다. 어떤 backend adapter를 쓸지와 실행 기록 폴더는 Helper의 OS별 시작 부분이 정한다. 이벤트와 출력은 순서대로 앱에 간다.
+- **Helper 안**: Helper OS 영역이 받은 요청을 entry 모듈에 넘긴다. entry 모듈은 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 모두 process 모듈과 recovery 모듈에 맡긴다. backend adapter를 쓰는 것은 이 둘뿐이고, entry 모듈은 backend adapter에 직접 접근할 수 없다. 어떤 backend adapter를 쓸지와 실행 기록 폴더는 Helper의 OS별 시작 부분이 정한다. 이벤트와 출력은 순서대로 앱에 간다.
 - **바깥**: 런타임이 Gmail·Google과 통신하고 파일을 다룬다. 판단 코어는 런타임을 통해서만 쓰인다.
 
 # 2. 구성 요소별 설명
@@ -95,27 +96,35 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 프로세스 생성과 종료 수단, 앱과의 통신 수단, 재시도 판단.
 - **제공 기능**: F-VR-01 client 준비, F-VR-03 출력 해석
 
-## 2.5 watchdog
-- **설명**: Helper 안에서 VPN client를 맡는다. client를 확인하고, 시도 하나의 실행을 준비해 끝날 때까지 지키고, Helper가 죽어도 다음 Helper가 정리할 수 있게 실행을 기록한다. 로그인과 터널을 나눠 실행하는 client는 두 프로세스를 차례로 실행하고, 강제로 끝낸 뒤에는 logout 요청을 보낸다. VPN client마다 다른 것은 backend adapter에 묻고, OS마다 다른 것(프로세스 실행·확인·종료, 실행 기록 폴더 권한)만 OS별(Unix, Windows)로 둔다.
+## 2.5 process 모듈
+- **설명**: Helper 안에서 VPN client를 맡는다. client를 확인하고, 시도 하나의 실행을 준비해 끝날 때까지 지킨다. 로그인과 터널을 나눠 실행하는 client는 두 프로세스를 차례로 실행하고, 강제로 끝낸 뒤에는 logout 요청을 보낸다. VPN client마다 다른 것은 backend adapter에 묻고, OS마다 다른 것(프로세스 실행·확인·종료, 실행 기록 폴더 권한)만 OS별(Unix, Windows)로 둔다.
 - **역할**
   - client 확인, 실행 명세와 설정 파일 준비, OTP 형식 확인
   - 프로세스 실행, stdin 입력, 출력 줄 조립
-  - 단계별 시간 제한, 종료, 종료 사실 기록
-  - 실행 기록, 이전 Helper가 남긴 프로세스 정리
+  - 단계별 시간 제한, 종료, logout, 종료 사실 기록
   - Windows Helper가 시작할 때 client 확인을 한 번, 시간 제한 없이 하기
 - **모르는 것**: VPN client 이름과 출력 문구(backend adapter가 안다), route 복구 방법, 앱과의 통신, 실행을 요청한 사용자.
-- **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고, F-VR-06 남은 프로세스 정리와 route 복구. F-WN-03의 시작 때 client 확인을 맡는다.
+- **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고. F-WN-03의 시작 때 client 확인을 맡는다.
 
-## 2.6 Helper entry
-- **설명**: Helper에서 OS에 의존하지 않는 앞단이다. 앱 요청을 받아 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 watchdog에 맡긴다. 상태 같은 응답은 watchdog이 알려 준 것으로 만든다. Helper의 OS별 시작 부분이 backend adapter(macOS는 openfortivpn)와 실행 기록 폴더를 골라 만든 watchdog을 넘겨준다. Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
+## 2.6 recovery 모듈
+- **설명**: Helper가 실행 중에 죽어도 다음 Helper가 정리할 수 있게 실행을 기록하고, 다음 Helper가 시작할 때 그 기록으로 정리한다. 실행 기록의 형식은 이 모듈이 정한다. VPN client에 관한 것은 process 모듈이 넘겨준 backend adapter에 묻는다.
+- **역할**
+  - 실행 기록(실행 중인 client와 그것이 띄운 프로세스, 게이트웨이)
+  - 이전 Helper가 남긴 프로세스 정리와 남은 파일 지우기
+  - route 복구 요청: 이전 Helper가 남긴 실행과, route를 되돌리지 않고 끝난 실행
+- **모르는 것**: route 복구 방법, 앱과의 통신, 실행을 요청한 사용자.
+- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구
+
+## 2.7 entry 모듈
+- **설명**: Helper에서 OS에 의존하지 않는 앞단이다. 앱 요청을 받아 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 process 모듈과 recovery 모듈에 맡긴다. 상태 같은 응답은 process 모듈이 알려 준 것으로 만든다. Helper의 OS별 시작 부분이 backend adapter(macOS는 openfortivpn)와 실행 기록 폴더를 골라 process 모듈에 주고 entry 모듈을 시작한다. Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
 - **역할**
   - 앱 연결, 실행 하나와 그 주인 관리, 응답 만들기
   - 이전 Helper가 남긴 것의 정리와 route 복구가 끝날 때까지 앱 연결 막기, 실행이 요청한 route 복구를 OS 쪽에 넘기기
   - Helper가 끝날 때 판단, Helper 로그
-- **모르는 것**: 앱과의 통신 수단, 연결 확인, route 복구 방법, VPN client(backend adapter를 쓰지 않는다), OS가 프로세스와 파일 권한을 다루는 방법.
+- **모르는 것**: 앱과의 통신 수단, 연결 확인, route 복구 방법, VPN client(backend adapter에 직접 접근할 수 없다), OS가 프로세스와 파일 권한을 다루는 방법.
 - **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리
 
-## 2.7 UI (macOS)
+## 2.8 UI (macOS)
 - **설명**: 도메인 구역을 화면으로 그리고 사용자 조작을 명령으로 보낸다. 사용자에게 보이는 모든 문장과 번역을 만든다.
 - **역할**
   - 메뉴바 아이콘, 메뉴, 설정창 pane
@@ -123,7 +132,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
 - **제공 기능**: F-SW-01 UI 표시와 문장
 
-## 2.8 OS 연동 (macOS)
+## 2.9 OS 연동 (macOS)
 - **설명**: 런타임이 요청하는 OS 기능을 macOS에서 제공하고 시스템 이벤트를 알린다.
 - **역할**
   - 비밀값 저장, Helper 등록과 통신, 알림, 브라우저 열기, 앱 수명
@@ -131,15 +140,15 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 이벤트의 의미. 자리 비움 같은 조합과 판단은 런타임이 한다.
 - **제공 기능**: F-SW-02 OS port
 
-## 2.9 OS 연동 Helper (macOS)
-- **설명**: Helper 프로세스에서 OS에 의존하는 부분으로, 앱의 OS 연동에 대응한다. 나머지는 Helper entry에 넘긴다.
+## 2.10 Helper OS 영역 (macOS)
+- **설명**: Helper 프로세스에서 OS에 의존하는 부분으로, 앱의 OS 연동에 대응한다. 나머지는 entry 모듈에 넘긴다.
 - **역할**
   - 앱 연결 받기와 서명 확인, Helper 실행 관리와 자가 업데이트
   - route 복구와 예외 route 쓰기
 - **모르는 것**: 앱이 보낸 요청의 내용(버전 확인 제외), VPN client 실행.
-- **제공 기능**: F-SW-03 OS 연동 Helper (macOS)
+- **제공 기능**: F-SW-03 Helper OS 영역 (macOS)
 
-## 2.10 UI (Windows)
+## 2.11 UI (Windows)
 - **설명**: UI (macOS)와 같은 일을 Windows에서 한다. 사용자에게 보이는 구성(창, 메뉴, pane과 그 순서, pane 고르는 방식, pane 안 항목의 묶음과 순서)은 macOS와 같고, 컨트롤은 Windows 기본 컨트롤로 그린다.
 - **역할**
   - 알림 영역 아이콘과 메뉴, 설정창 pane
@@ -147,7 +156,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
 - **제공 기능**: F-WN-01 UI 표시와 문장 (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)의 오류 창
 
-## 2.11 OS 연동 (Windows)
+## 2.12 OS 연동 (Windows)
 - **설명**: 런타임이 요청하는 OS 기능을 Windows에서 제공하고 시스템 이벤트를 알린다. 런타임과 주고받는 메시지는 macOS와 같다.
 - **역할**
   - 앱 시작 때 Helper 서비스 시작과 기다리기
@@ -156,16 +165,16 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **모르는 것**: 이벤트의 의미, 앱이 Helper와 주고받는 내용(버전 확인 제외).
 - **제공 기능**: F-WN-02 OS port (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)
 
-## 2.12 Helper 서비스 (Windows)
-- **설명**: Windows의 Helper다. Helper entry를 그대로 쓰고, macOS에서 OS 연동 Helper가 하는 일을 직접 한다.
+## 2.13 Helper OS 영역 (Windows)
+- **설명**: Windows의 Helper OS 영역이다. Windows 서비스(Helper 서비스)로 실행되며, entry, process, recovery 모듈을 그대로 쓰고 macOS의 Helper OS 영역이 하는 일을 직접 한다.
 - **역할**
-  - 서비스 수명(실행 중이라고 알리기 전에 watchdog에 맡기는 VPN client 확인 포함), 앱 연결 받기와 확인
-  - Helper entry에 넘길 watchdog 만들기: backend adapter(openconnect)와 실행 기록 폴더 고르기
+  - 서비스 수명(실행 중이라고 알리기 전에 process 모듈에 맡기는 VPN client 확인 포함), 앱 연결 받기와 확인
+  - process 모듈에 줄 backend adapter(openconnect)와 실행 기록 폴더 고르기
   - 게이트웨이 host route 정리, 예외 route 읽기·쓰기
 - **모르는 것**: VPN client 출력 문구, 재시도 판단.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper 서비스 (Windows)
+- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper OS 영역 (Windows)
 
-## 2.13 설치 패키지 (Windows)
+## 2.14 설치 패키지 (Windows)
 - **설명**: Windows에 앱을 설치, 업그레이드, 제거하는 MSI 하나다. 관리자 권한으로 실행된다.
 - **역할**
   - 앱, Helper, OpenConnect 설치와 업그레이드
@@ -452,7 +461,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-BR-02 동기화
 - **설명**: 계산한 route를 OS가 저장해 두는 route 목록에 쓰고, 실패하면 다시 시도하고 알린다. macOS는 주 네트워크 서비스의 additional routes, Windows는 주 interface의 persistent route다.
-- **담당**: 런타임, OS 연동 Helper(networksetup) 또는 Helper 서비스(persistent route), OS 연동(알림), 설치 패키지(Windows 제거 때)
+- **담당**: 런타임, Helper OS 영역(macOS는 networksetup, Windows는 persistent route), OS 연동(알림), 설치 패키지(Windows 제거 때)
 - **입력 / 출력**: config.yaml, 네트워크 설정 변경 / route 쓰기, state.json 기록, OS 알림
 - **세부 기능**
   1. 앱 시작, Helper 준비, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다. Windows는 밖에서 바뀐 persistent route를 알려 주는 알림이 없어 짧은 주기로도 확인한다.
@@ -522,7 +531,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-01 client 준비
 - **설명**: 실행할 VPN client를 확인하고, 실행 요청을 검증해 실행 명세를 만든다.
-- **담당**: backend adapter, watchdog(Windows Helper가 시작할 때의 확인 실행도)
+- **담당**: backend adapter, process 모듈(Windows Helper가 시작할 때의 확인 실행도)
 - **입력 / 출력**: 실행 요청 / client 경로와 버전, 실행 명세, 또는 오류
 - **세부 기능**
   1. 관리자만 쓸 수 있는 곳의 실행 파일만 쓴다. 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부한다. 문제는 종류와 경로로 알리고, 문장과 번역은 UI가 만든다.
@@ -531,7 +540,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
      - logout 요청 도구: OS에 들어 있는 것만 쓰고(Windows는 시스템 폴더), 그 도구의 사용자 설정 파일과 proxy 설정은 읽지 않게 한다.
   2. 검증된 버전(openfortivpn 1.24.x, openconnect 9.21)이 아니면 고급 pane에 "검증되지 않은 버전" 경고를 띄운다.
   3. openconnect의 버전은 실행해 물어서 알고, 상태 확인과 연결 때마다 다시 확인하며 기억하지 않는다. 이 확인에는 짧은 시간 제한을 둔다.
-  4. Windows Helper의 시작 부분은 실행 중이라고 알리기 전에 watchdog에 같은 확인을 한 번 맡긴다(openconnect `--version` 한 번). 이때는 시간 제한 없이 openconnect가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다(F-WN-03). 새로 설치한 client의 느린 첫 실행이 여기서 끝나므로 3의 짧은 제한으로 충분하고, 앱의 첫 상태 확인은 곧바로 답을 받는다. 이 결과도 기억하지 않는다.
+  4. Windows Helper의 시작 부분은 실행 중이라고 알리기 전에 process 모듈에 같은 확인을 한 번 맡긴다(openconnect `--version` 한 번). 이때는 시간 제한 없이 openconnect가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다(F-WN-03). 새로 설치한 client의 느린 첫 실행이 여기서 끝나므로 3의 짧은 제한으로 충분하고, 앱의 첫 상태 확인은 곧바로 답을 받는다. 이 결과도 기억하지 않는다.
   5. Helper는 앱을 믿지 않고 모든 값을 다시 검증한다. host는 IPv4나 host 이름만, 제어 문자 없음, 그 밖의 한도는 VPN client마다 정한다(openfortivpn은 버퍼 안, 비밀번호 255바이트 이하).
   6. 비밀번호와 openconnect의 세션 cookie는 설정 파일과 argv에 쓰지 않는다. openfortivpn 설정 파일은 0600으로 만들고 실행이 끝나면 지운다. openconnect는 설정 파일 없이 argv만 쓴다.
   7. verbosity 옵션과 자체 재접속(openfortivpn `--persistent`)을 쓰지 않는다. openconnect는 끊긴 뒤 스스로 다시 붙으려고 기다리지 않게 해서(대기 0초) 첫 재시도가 실패하면 곧바로 끝나게 한다. 재연결은 앱이 OTP와 함께 한다.
@@ -542,7 +551,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-02 실행과 stdin 입력
 - **설명**: VPN client를 정해진 조건으로 띄우고, prompt가 나오면 비밀번호와 OTP를 stdin으로 한 번씩 넣는다.
-- **담당**: watchdog, backend adapter
+- **담당**: process 모듈, backend adapter
 - **입력 / 출력**: 실행 명세, 비밀번호, OTP / 진행 단계, 입력 결과
 - **세부 기능**
   1. shell 없이 실행한다. 자식은 pipe 세 개만 물려받는다. Unix에서는 빈 signal mask와 기본 signal 동작으로 자기 process group에서 시작한다. Windows에서는 창 없이 시작한다.
@@ -556,7 +565,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-03 출력 해석
 - **설명**: client 출력을 로그 pane의 줄로 만들고 진행 단계, 인증서 값, 실패 단서, 터널 IP를 읽는다. 출력 문구는 backend adapter만 안다.
-- **담당**: backend adapter, watchdog
+- **담당**: backend adapter, process 모듈
 - **입력 / 출력**: stdout·stderr / 출력 줄, 진행 단계, 인증서 값, 실패 단서, 터널 IP
 - **세부 기능**
   1. 줄바꿈 없는 출력(prompt)은 잠시 뒤 따로 보이고, 제어 문자는 보이는 표기로 바꾼다. UTF-8이 아닌 바이트도 줄을 버리지 않고 보이는 표기로 바꾼다.
@@ -574,7 +583,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-04 시간 제한과 종료
 - **설명**: 단계마다 시간 제한을 두어 진행하지 못하는 client를 끝내고, 요청이 오면 정해진 순서로 종료시킨다.
-- **담당**: watchdog, backend adapter
+- **담당**: process 모듈, backend adapter
 - **입력 / 출력**: 진행 단계, 종료 요청 / 정상 종료 요청과 강제 종료, 종료한 주체
 - **세부 기능**
   1. 터널이 올라오기 전까지 단계마다 시간 제한을 둔다. 넘으면 늦은 구간을 로그에 남기고 종료한다.
@@ -587,7 +596,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-05 종료 사실과 보고
 - **설명**: client가 끝나면 무슨 일이 있었는지를 종료 사실로 앱에 한 번 보고한다. 앱은 이것으로 원인을 분류한다(F-CM-03).
-- **담당**: watchdog, Helper entry
+- **담당**: process 모듈, entry 모듈
 - **입력 / 출력**: 프로세스 종료 / 종료 사실
 - **세부 기능**
   1. 가장 멀리 간 단계, 종료한 주체와 이유, 학습한 인증서 값, 실패 단서, 터널 유지 시간, 종료 상태를 담는다.
@@ -596,7 +605,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-06 남은 프로세스 정리와 route 복구
 - **설명**: 비정상 종료 뒤 남은 VPN client 프로세스와 깨진 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지고, openconnect가 강제로 끝나면 게이트웨이 host route가 남기 때문이다.
-- **담당**: watchdog, Helper entry, OS 연동 Helper(Windows는 Helper 서비스)
+- **담당**: recovery 모듈, entry 모듈, Helper OS 영역
 - **입력 / 출력**: pidfile의 프로세스 신원과 게이트웨이 IP / 정리 결과, route 복구 결과
 - **세부 기능**
   1. 실행 중에는 client(openfortivpn은 pppd도)의 신원과 게이트웨이 IPv4를 pidfile에 기록한다.
@@ -607,7 +616,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 
 ### F-VR-07 Helper 요청 처리
 - **설명**: 앱의 요청으로 실행을 시작·중지하고 Helper 자신의 수명을 관리한다. 실행은 한 번에 하나다.
-- **담당**: Helper entry와 OS 연동 Helper, 또는 Helper 서비스
+- **담당**: entry 모듈과 Helper OS 영역
 - **입력 / 출력**: 앱 요청, 앱 연결 끊김, 재설치, SIGTERM·서비스 정지 / 응답, 이벤트와 출력
 - **세부 기능**
   1. 실행이 있으면 새 실행 요청은 같은 사용자에게 "사용 중", 다른 사용자에게 "권한 없음"이다. Windows는 Windows 세션으로 구분하고, 이 PC의 어느 계정이든 연결할 수 있다.
@@ -655,9 +664,9 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 사실만 알리고, 자리 비움 같은 판단은 Rust가 한다.
 - **제약**: XPC callback과 Rust 메시지 읽기 callback은 `@Sendable`로 선언한다. 앱의 기본 격리가 MainActor라서 아니면 크래시한다.
 
-### F-SW-03 OS 연동 Helper (macOS)
-- **설명**: Helper 프로세스에서 OS에 의존하는 부분이다. 나머지는 Helper entry에 넘긴다.
-- **담당**: OS 연동 Helper
+### F-SW-03 Helper OS 영역 (macOS)
+- **설명**: Helper 프로세스에서 OS에 의존하는 부분이다. 나머지는 entry 모듈에 넘긴다.
+- **담당**: Helper OS 영역 (macOS)
 - **입력 / 출력**: XPC 연결과 요청, SIGTERM / entry로 전달, XPC 응답과 이벤트
 - **세부 기능**
   1. 남은 프로세스와 route의 정리(F-VR-06)가 끝났다고 entry가 알린 뒤에 XPC 연결을 받는다.
@@ -710,17 +719,17 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   7. persistent route가 바뀌었다는 알림이 없으므로, 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알린다(F-BR-02).
   8. Windows에서 로그아웃하거나 끌 때는 메뉴의 [종료]와 같이 종료를 요청한다. 설치 패키지가 업그레이드나 제거 때 앱을 닫으려고 보내는 요청도 같다(F-WN-04).
 
-### F-WN-03 Helper 서비스 (Windows)
-- **설명**: Windows의 Helper다. 서비스로 실행되며 Helper entry와 OS 연동 Helper의 일을 함께 한다.
-- **담당**: Helper 서비스
+### F-WN-03 Helper OS 영역 (Windows)
+- **설명**: Windows의 Helper OS 영역이다. 서비스(Helper 서비스)로 실행되며 entry, process, recovery 모듈을 쓰고, macOS의 Helper OS 영역이 하는 일을 함께 한다.
+- **담당**: Helper OS 영역 (Windows)
 - **입력 / 출력**: 서비스 시작·정지, 앱 연결과 요청 / 응답, 이벤트와 출력, route 변경
 - **세부 기능**
   1. 설치 패키지가 등록하고(F-WN-04), 부팅 때 자동으로 시작하고, 비정상 종료하거나 시작에 실패하면 Windows가 다시 시작한다. 설치 직후와 업그레이드 뒤처럼 실행 중이 아니면 앱이 시작한다(F-WN-05). Windows가 꺼질 때는 다른 서비스와 네트워크가 내려가기 전에 오는 종료 준비 알림에서 실행을 끝낸다. 그 뒤의 종료 알림은 몇 초만 기다려 주어 logout이 잘리기 때문이다.
   2. 남은 프로세스와 route를 정리한 뒤에(F-VR-06) 앱 연결을 받는다.
-  3. Windows에 실행 중이라고 알리기 전에, 시작 부분이 watchdog에 client 확인을 한 번 맡겨 VPN client를 실행해 본다(F-VR-01의 4). 시간 제한 없이 client가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다. 새로 설치한 client의 느린 첫 실행이 서비스가 시작하는 동안에 끝나므로, 앱의 첫 상태 확인은 곧바로 답을 받는다. 결과는 기억하지 않는다. 상태 확인과 연결은 여전히 매번 짧은 제한으로 확인한다.
+  3. Windows에 실행 중이라고 알리기 전에, 시작 부분이 process 모듈에 client 확인을 한 번 맡겨 VPN client를 실행해 본다(F-VR-01의 4). 시간 제한 없이 client가 끝날 때까지 기다리고, 그동안 Windows에는 시작 중이라고 알린다. 새로 설치한 client의 느린 첫 실행이 서비스가 시작하는 동안에 끝나므로, 앱의 첫 상태 확인은 곧바로 답을 받는다. 결과는 기억하지 않는다. 상태 확인과 연결은 여전히 매번 짧은 제한으로 확인한다.
   4. 연결 통로는 이 PC의 계정과 시스템이 열 수 있고(다른 컴퓨터의 연결은 받지 않는다), 시스템 계정이 소유한다. 버전 확인에 직접 답하고, 앱이 함께 보낸 빌드가 같은 연결에서만 연결·OTP·예외 route 요청을 처리한다.
   5. 유휴 시 종료 요청에는 끝나지 않는다고 답한다. Windows는 끝난 서비스를 다시 띄우지 않고, 업그레이드는 앱과 Helper를 함께 바꾼 뒤 다시 연 앱이 새 Helper를 시작하기 때문이다.
-  6. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06). 둘 다 watchdog의 Windows 부분이 한다.
+  6. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06). 둘 다 process 모듈의 Windows 부분이 한다.
   7. 예외 route 읽기·쓰기와 게이트웨이 host route 정리를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다. 쓰기 직전에, 쓰기와 한 번에, 앱이 읽은 interface와 route가 그대로인지 확인하고, 그 interface의 gateway로 가는 올바른 대상이나 이미 있던 route만 쓴다.
   8. 시스템 명령은 고정 argv, 필요한 환경 변수만, shell 없이, 시간 제한을 두고 실행한다. 번역되는 출력은 해석하지 않는다.
   9. 실행 기록은 시스템과 관리자만 접근할 수 있는 곳에 둔다.
@@ -772,6 +781,6 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **fail fast**: Rust panic은 그 자리에서 중단하고 crash report를 남긴다. 있을 수 없는 상태를 위한 복구 경로를 만들지 않는다.
 - **unsafe 없음**: Rust에 `unsafe` 블록을 두지 않는다(시작 함수 표시 crate마다 하나만).
 - **OS 앱 쪽과 Rust**: 메시지만 주고받고 서로에게 포인터를 넘기지 않는다. OS 앱 쪽 코드(Swift, C#)가 OS API를 직접 부를 때는 그 API에 필요한 포인터 API나 호출 선언을 쓸 수 있다.
-- **다른 OS 빌드**: 공통 crate는 한 OS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 watchdog의 OS 부분(프로세스 실행·확인·종료, 실행 기록 폴더의 접근 권한), Helper의 OS 부분(시작 부분 포함), port 구현뿐이다.
+- **다른 OS 빌드**: 공통 crate는 한 OS 전용 API 없이 다른 OS에서도 빌드된다. OS마다 다른 것은 process 모듈의 OS 부분(프로세스 실행·확인·종료, 실행 기록 폴더의 접근 권한), Helper OS 영역(시작 부분 포함), port 구현뿐이다.
 - **영어**: 코드, 주석, 앱과 Helper의 로그는 영어로 쓴다.
 - **화면 문장은 UI에만**: Rust는 종류와 값만 넘기고, 문장과 번역은 UI (macOS)와 UI (Windows)가 만든다.

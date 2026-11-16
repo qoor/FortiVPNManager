@@ -395,38 +395,40 @@ dependencies = [
 ]
 
 [[package]]
-name = "fvm-helper-entry"
-version = "0.0.0"
-dependencies = [
- "fvm-contract",
- "fvm-watchdog",
- "serde",
- "serde_json",
- "zeroize",
-]
-
-[[package]]
-name = "fvm-helper-entry-macos"
+name = "fvm-helper-core"
 version = "0.0.0"
 dependencies = [
  "fvm-backend-adapter",
  "fvm-contract",
- "fvm-helper-entry",
- "fvm-watchdog",
+ "libproc",
+ "nix",
+ "rustix",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "zeroize",
+]
+
+[[package]]
+name = "fvm-helper-macos"
+version = "0.0.0"
+dependencies = [
+ "fvm-backend-adapter",
+ "fvm-contract",
+ "fvm-helper-core",
  "serde_json",
  "socket2",
 ]
 
 [[package]]
-name = "fvm-helper-entry-windows"
+name = "fvm-helper-windows"
 version = "0.0.0"
 dependencies = [
  "eventlog",
  "fvm-backend-adapter",
  "fvm-contract",
  "fvm-core",
- "fvm-helper-entry",
- "fvm-watchdog",
+ "fvm-helper-core",
  "interprocess",
  "log",
  "serde",
@@ -454,21 +456,6 @@ dependencies = [
  "socket2",
  "tokio",
  "tokio-rustls",
-]
-
-[[package]]
-name = "fvm-watchdog"
-version = "0.0.0"
-dependencies = [
- "fvm-backend-adapter",
- "fvm-contract",
- "libproc",
- "nix",
- "rustix",
- "serde",
- "serde_json",
- "sysinfo",
- "zeroize",
 ]
 
 [[package]]

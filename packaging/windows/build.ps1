@@ -9,7 +9,7 @@
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1 -Build <build> -RustOutput <folder>
 # <build> is yyyyMMddHHmmss, which the app takes and the Helper was built with (FVM_BUILD); <folder>
 # holds fvm-helper.exe and fvm_runtime.dll from release builds for x86_64-pc-windows-msvc:
-#   cargo build --release --package fvm-helper-entry-windows
+#   cargo build --release --package fvm-helper-windows
 #   cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
 param(
     [Parameter(Mandatory)] [string] $Build,

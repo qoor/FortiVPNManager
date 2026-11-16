@@ -46,7 +46,7 @@ swap() {
         mv "$installed" "$previous" || { echo failed >"$done_file"; return; }
     fi
     start=$(date +%Y-%m-%dT%H:%M:%S)
-    # The old helper exits by itself once its binary is replaced (components/os-integration-helper/macos/SelfUpdateWatcher.swift).
+    # The old helper exits by itself once its binary is replaced (components/helper/macos/swift/SelfUpdateWatcher.swift).
     if ! ditto "$built" "$installed" || ! open "$installed"; then
         rm -rf "$installed"
         [ -e "$previous" ] && mv "$previous" "$installed" && open "$installed"

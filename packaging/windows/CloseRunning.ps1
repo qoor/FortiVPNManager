@@ -7,7 +7,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $folder = (Join-Path $env:ProgramFiles 'FortiVPNManager') + '\'
-# components/helper-entry/windows/src/service.rs
+# components/helper/windows/src/service.rs
 $service = 'FortiVPNManagerHelper'
 $deadline = (Get-Date).AddSeconds(60)
 

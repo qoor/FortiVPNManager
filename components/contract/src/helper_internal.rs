@@ -1,5 +1,5 @@
-//! Messages between the Helper's OS side and the Helper entry in the Helper process: Swift's OS
-//! integration Helper on macOS, the service's own part on Windows. The OS side accepts and checks
+//! Messages between the Helper's OS side and the Helper entry in the Helper process: the Helper's
+//! Swift side on macOS, the service's own part on Windows. The OS side accepts and checks
 //! app connections, answers the version check, repairs routes and reads and writes the bypass
 //! routes itself; every other app request goes to the entry unread. The JSON follows Swift's enum
 //! coding (see `app_helper`), so the Swift side, `components/contract/macos/HelperInternal.swift`,

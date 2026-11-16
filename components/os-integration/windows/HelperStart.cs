@@ -201,7 +201,7 @@ public static class HelperStart
 /// </summary>
 internal sealed class WindowsHelperService : IHelperService, IDisposable
 {
-    /// <summary>The Helper's executable without ".exe" (components/helper-entry/windows/Cargo.toml).</summary>
+    /// <summary>The Helper's executable without ".exe" (components/helper/windows/Cargo.toml).</summary>
     private const string HelperProcess = "fvm-helper";
 
     private const uint ManagerConnect = 0x0001;

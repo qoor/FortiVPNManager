@@ -56,19 +56,19 @@
 | Windows에서는 openconnect를 늘 강제로 끝내고, 그것이 띄운 route 스크립트도 함께 끝낸다 | Windows에는 signal이 없다. openconnect가 logout하는 정상 종료 수단은 console 이벤트뿐인데, 다른 프로세스의 console에 붙어 이벤트를 보내는 시험 실행 파일을 회사 PC의 보안 프로그램(AhnLab MDS)이 악성으로 막았다(2026-11-12). 그래서 늘 강제로 끝내고 Helper가 logout한다. 터널 직후에 끝내면 route 스크립트가 아직 돌고 있어, 함께 끝내지 않으면 정리한 게이트웨이 host route를 스크립트가 다시 넣을 수 있다 |
 | Windows는 터널이 올라온 뒤 요청 없이 끝난 openconnect를 모두 강제 종료로 본다 | 사용자 결정이다(2026-11-11). signal이 없어서 밖에서 끝낸 것을 구분할 수 없다. 로그인은 이미 성공했으므로 FortiGate 차단과 무관하다. 접속 직후 끊기는 일이 반복돼도 곧바로 재연결은 한 번뿐이고, 그 뒤 backoff하다 시도 상한에서 멈춘다 |
 | Windows 예외 규칙은 주 interface의 persistent route로 둔다 | OS가 저장해 두고 다시 넣으므로 macOS의 additional routes와 성질이 같다. persistent 목록에는 VPN 스크립트가 넣는 실행 중 route가 없어서 "앱이 넣은 것"과 "밖에서 넣은 것"의 구분이 그대로 성립한다. VPN이 받은 대역보다 좁은 예외 route가 먼저 선택되는 것을 실제 PC에서 확인했다 |
-| Windows Helper는 실행 중이라고 알리기 전에 openconnect 버전 확인을 한 번, 시간 제한 없이 해 둔다. 상태 확인과 연결 때의 확인은 5초 제한 그대로이고, 결과는 기억하지 않는다 | 사용자 결정이다(2026-11-13·14). 회사 PC에서는 새로 설치한 client의 첫 실행이 늦게 시작될 수 있다. 그렇게 붙잡힌 프로세스는 끝낼 수도 없어서, 5초 제한을 둔 Helper가 실제로는 그만큼 기다린 뒤 client를 쓸 수 없다고 잘못 알렸다(§6). 그래서 Helper의 시작 부분이 watchdog에 client 확인을 한 번 맡기고(openconnect `--version` 한 번), watchdog은 이때만 openconnect가 끝날 때까지 기다린다. 그동안 Windows에는 시작 중이라고 알린다. 느린 첫 실행이 Helper가 시작하는 동안에 끝나므로, 그 뒤의 확인은 원래의 5초 제한으로 충분하고 앱의 첫 상태 확인은 곧바로 답을 받는다. 확인 결과를 기억해 두는 장치는 두지 않는다. 특정 PC 환경에 맞춘 기능을 더하는 것은 사용자가 거절했다 |
+| Windows Helper는 실행 중이라고 알리기 전에 openconnect 버전 확인을 한 번, 시간 제한 없이 해 둔다. 상태 확인과 연결 때의 확인은 5초 제한 그대로이고, 결과는 기억하지 않는다 | 사용자 결정이다(2026-11-13·14). 회사 PC에서는 새로 설치한 client의 첫 실행이 늦게 시작될 수 있다. 그렇게 붙잡힌 프로세스는 끝낼 수도 없어서, 5초 제한을 둔 Helper가 실제로는 그만큼 기다린 뒤 client를 쓸 수 없다고 잘못 알렸다(§6). 그래서 Helper의 시작 부분이 process 모듈에 client 확인을 한 번 맡기고(openconnect `--version` 한 번), process 모듈은 이때만 openconnect가 끝날 때까지 기다린다. 그동안 Windows에는 시작 중이라고 알린다. 느린 첫 실행이 Helper가 시작하는 동안에 끝나므로, 그 뒤의 확인은 원래의 5초 제한으로 충분하고 앱의 첫 상태 확인은 곧바로 답을 받는다. 확인 결과를 기억해 두는 장치는 두지 않는다. 특정 PC 환경에 맞춘 기능을 더하는 것은 사용자가 거절했다 |
 | Windows 앱은 시작하자마자, 무엇을 보이거나 시작하기 전에 Helper 서비스부터 실행 중이게 한다. 실행 중이 아니면 시작하고 기다리며, 실행하지 못하면 오류 창을 띄운 뒤 끝난다 | 사용자 결정이다(2026-11-13·14, Windows만). Helper 없이는 앱이 쓸모가 없다. 다른 사람은 느린 첫 시작과 앱의 고장을 구분할 수 없으므로 보이지 않게 기다리는 편이 낫고, 진짜 실패는 분명한 문구로 알린다. 기다리는 것은 서비스가 실행 중이 되는 것뿐이고 시간 제한은 없다. Helper의 답을 따로 기다리지 않고, 앱의 평소 응답 시간 제한은 그대로다. 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다(§5.7). macOS와 다른 것은 OS의 차이 때문이다. macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 한다. Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다 |
 | 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명은 라이브러리 원문(영어)을 그대로 보인다(§7.2) |
 
 ### 3.2 구조와 기술
 | 결정 | 이유 |
 |---|---|
-| 공통 로직은 Rust로, macOS의 UI·OS 연동·OS 연동 Helper는 Swift로 만든다 | 다른 OS와 VPN client를 붙일 때 공통 부분을 그대로 쓰기 위해서다. **macOS UI는 앞으로도 Swift로 만든다.** OS 기본 UI가 가장 단순하고 반응이 빠르며, OS에 의존하는 영역을 다른 언어로 옮기면 복잡도만 는다 |
-| Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 Helper entry)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
+| 공통 로직은 Rust로, macOS의 UI·OS 연동·Helper OS 영역은 Swift로 만든다 | 다른 OS와 VPN client를 붙일 때 공통 부분을 그대로 쓰기 위해서다. **macOS UI는 앞으로도 Swift로 만든다.** OS 기본 UI가 가장 단순하고 반응이 빠르며, OS에 의존하는 영역을 다른 언어로 옮기면 복잡도만 는다 |
+| Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 macOS 시작 crate)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
 | 메시지 타입은 Rust가 기준이다 | Swift 쪽 Codable 정의는 Rust가 만든 예시 JSON(fixture)으로 맞는지 테스트한다. gRPC, MessagePack, protobuf는 쓰지 않는다 |
 | UI 상태는 도메인 구역 단위로 보낸다 | 화면 모양의 전체 상태는 비효율적이고 공통 부분을 화면 변경에 묶는다. 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 구역 중 바뀐 것만 통째로 보내고, 로그는 추가분만 보낸다. 판단(버튼 상태, "다음 연결부터 적용" 등)은 공통 부분이 하고, 문장은 모두 UI가 만들어 번역한다 |
 | Rust에 unsafe 블록을 두지 않는다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시만 허용한다 |
-| SIGPIPE: Rust가 socketpair 양쪽에 SIGPIPE 금지를 켜고, Helper 프로세스는 SIGPIPE 전체를 무시한다 | main이 Swift라 Rust의 SIGPIPE 무시가 적용되지 않는다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없어서, Helper 전체의 무시를 watchdog의 전제 조건으로 둔다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
+| SIGPIPE: Rust가 socketpair 양쪽에 SIGPIPE 금지를 켜고, Helper 프로세스는 SIGPIPE 전체를 무시한다 | main이 Swift라 Rust의 SIGPIPE 무시가 적용되지 않는다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없어서, Helper 전체의 무시를 process 모듈의 전제 조건으로 둔다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
 | 내부 오류는 곧바로 중단한다 | 억지 예외 처리 대신 panic은 abort하고 crash report를 남긴다. Release 빌드에도 줄 번호를 남긴다 |
 | config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
 | TLS는 rustls에 ring provider 하나와 platform verifier를 쓴다 | OS의 신뢰 저장소를 따른다. aws-lc-rs는 넣지 않는다. HTTPS는 OS의 proxy 설정을 따른다 |
@@ -82,7 +82,7 @@
 | Windows Helper는 유휴 시 종료 요청에 끝나지 않는다고 답한다 | Windows는 스스로 끝난 서비스를 다음 요청 때 다시 띄우지 않는다. 업그레이드는 앱을 닫고 Helper를 멈춘 뒤 둘을 함께 바꾸고, 다시 연 앱이 새 Helper를 시작한다. 그래서 빌드가 다르면 설치가 끝나지 않은 것이다. 그때 앱은 버전 불일치를 보인다 |
 | 통로는 시스템 계정이 소유하고, 사용자에게는 통로를 새로 만드는 권한을 주지 않는다 | 그 권한이 있으면 같은 이름의 통로를 하나 더 열어 앱의 연결을 가로챌 수 있고, 소유자 확인으로도 구분되지 않는다 |
 | Windows Helper의 실행 기록은 시스템 계정의 프로필 폴더(`C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager`)에 둔다 | 시스템과 관리자만 접근할 수 있는 곳이라 권한을 물려받는다. 폴더 권한을 직접 다루면 unsafe가 필요하다. ProgramData는 일반 사용자도 그 안에 폴더를 먼저 만들 수 있어서 쓰지 않는다 |
-| Windows Helper의 watchdog은 프로세스를 sysinfo로 확인한다 | 실행 파일 경로, 시작 시각, 사용자를 unsafe 없이 읽는다. 시작 시각은 초 단위다. pid, 시작 시각, 경로가 모두 같고 Helper와 같은 사용자(시스템 계정)인 프로세스만 기록한 그 프로세스로 본다 |
+| Windows Helper의 process 모듈은 프로세스를 sysinfo로 확인한다 | 실행 파일 경로, 시작 시각, 사용자를 unsafe 없이 읽는다. 시작 시각은 초 단위다. pid, 시작 시각, 경로가 모두 같고 Helper와 같은 사용자(시스템 계정)인 프로세스만 기록한 그 프로세스로 본다 |
 | Windows Helper의 로그는 Windows 이벤트 로그에 쓴다 | macOS 통합 로그의 자리다. 앱과 Helper의 로그 출처는 설치 패키지가 등록하고, 제거할 때 함께 지운다. 전에는 Helper가 시작할 때 스스로 등록했다 |
 | Windows Helper는 예외 route 요청의 대상을 판단 코어의 규칙으로 확인한다 | 앱이 계획할 때 쓰는 규칙과 같아야 하기 때문이다. macOS에서는 Swift가 같은 규칙을 따로 갖고 있다. 판단 코어는 바깥과 통신하지 않으므로 Helper에 넣어도 하는 일이 늘지 않는다 |
 | Windows 설치 패키지는 WiX Toolset v7로 만든 MSI 하나다 | 사용자 결정이다(2026-11-13). quiet 설치와 GPO 소프트웨어 배포가 되고, 설치가 실패하면 transaction 전체가 되돌아간다. 버린 대안은 다음과 같다. **MSIX**: SYSTEM 서비스에는 restricted capability가 필요한데 App Installer가 이를 거부한다고 알려져 있어 더블클릭 설치가 되지 않는다. 서비스 설정이 이름, 시작 유형, 계정, 인자뿐이라 recovery 동작, preshutdown 대기, 권한을 줄 수 없다. 설치·제거 때의 처리가 없어 앱이 넣은 route를 지울 수 없다. AppData와 HKCU 쓰기가 가상화되고, 신뢰된 서명이 필수다. **Inno Setup 같은 EXE 설치 프로그램**: transaction rollback과 GPO 소프트웨어 배포가 없다. **언어 선택용 WiX Burn setup.exe**: 층이 하나 늘고, 빌드마다 새로 생기는 setup.exe가 회사 PC에서 첫 실행 때 시작 전에 붙잡힌다 |
@@ -106,10 +106,10 @@
   - Swift의 UI와 OS 연동이 Rust 런타임을 같은 프로세스에서 시작한다. 판단과 공통 I/O는 런타임이, 화면과 macOS 기능(Keychain, XPC, 시스템 이벤트, 알림, 로그인 항목)은 Swift가 맡는다.
 - **Helper** (root LaunchDaemon, 요청이 있을 때 launchd가 실행)
   - 실행하고 감시하는 일만 한다. openfortivpn 실행, stdin으로 비밀번호·OTP 주입, prompt 감지, 단계별 watchdog, 프로세스 종료, 비정상 종료 뒤 routing table 복구, 남은 프로세스 정리, 네트워크 서비스의 additional routes 읽기·쓰기가 여기에 속한다.
-  - Swift의 OS 연동 Helper(XPC, launchd, 서명 확인, route 복구, networksetup)가 Rust Helper entry를 같은 프로세스에서 시작한다. Helper entry는 앱 요청을 판단하고, VPN client에 관한 일은 backend adapter를 쓰는 watchdog에 맡긴다.
+  - Swift로 만든 Helper OS 영역(XPC, launchd, 서명 확인, route 복구, networksetup)이 Rust로 만든 Helper 공통 부분을 같은 프로세스에서 시작한다. 공통 부분의 entry 모듈은 앱 요청을 판단하고, VPN client에 관한 일은 backend adapter를 쓰는 process 모듈과 recovery 모듈에 맡긴다.
   - 상태를 저장하지 않고 config.yaml도 읽지 않는다. 앱이 보낸 값 중 검증을 통과한 것만 쓴다. 환경 변수는 PATH만 넘긴다(openfortivpn이 proxy 환경 변수를 읽기 때문, §6).
 - **둘을 나눈 이유**: root로 실행되는 코드를 최소로 줄이기 위해서다. 앱은 root 권한 없이 자유롭게 재시작하거나 재설치할 수 있다.
-- **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, macOS Helper의 Swift 부분이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다. 설치 패키지는 서비스를 등록만 하고, 실행 중이 아니면 앱이 시작한다(§5.7).
+- **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, Helper OS 영역 (macOS)이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다. 설치 패키지는 서비스를 등록만 하고, 실행 중이 아니면 앱이 시작한다(§5.7).
 
 ### 4.2 앱과 Helper 사이의 규칙
 - XPC 연결은 양쪽이 서로의 code signing requirement(Team ID + signing identifier)를 확인한다. 비밀번호는 Helper의 버전을 확인한 뒤에만 보낸다.
@@ -133,26 +133,30 @@ components/
   backend-adapter/openfortivpn/ backend adapter: 실행 인자와 설정, 출력 해석, 종료 유예 시간, 검증된 버전, 기존 설정 가져오기
   backend-adapter/openconnect/  backend adapter: 두 번의 실행 인자, 출력 해석, 세션 cookie, logout 요청, 검증된 버전
                                 (OS마다 다른 것: 실행 파일 위치, 환경 변수, 터널 어댑터 줄. 지금은 Windows만)
-  watchdog/                     watchdog: VPN client 확인, 실행 준비와 설정 파일, 프로세스 실행, stdin, 출력, 단계별 시간 제한,
-                                종료, 종료 사실, 실행 기록, 이전 Helper가 남긴 프로세스 정리
-                                (unix/, windows/: 프로세스 실행·확인·종료, 실행 기록 폴더 권한)
-  helper-entry/                 Helper entry: 두 OS가 함께 쓰는 앱 요청 처리, 실행의 주인 판단, Helper 수명. OS 전용 API 없음
-                                (macos/: Helper의 시작 함수. backend adapter와 실행 기록 폴더를 골라 만든 watchdog을
-                                 Helper entry에 넘긴다. windows/: Helper 서비스 실행 파일)
+  helper/                       Helper. 두 OS가 함께 쓰는 공통 부분(src/, fvm-helper-core)은 역할별 모듈 셋이다
+                                entry: 앱 요청 받기, 실행을 누가 쓸지 판단, 응답, Helper 종료 시점 결정. OS 전용 API 없음
+                                process: VPN client 확인·실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout
+                                  (OS별 부분: 프로세스 실행·확인·종료, 실행 기록 폴더 권한)
+                                recovery: 실행 기록(형식은 이 모듈이 정한다), 이전 Helper가 남긴 프로세스 정리, route 복구 요청
+  helper/macos/                 Helper OS 영역 (macOS)
+                                (swift/: XPC, launchd, 서명 확인, route 복구, networksetup. tests/: 그 Swift 시험.
+                                 rust/: 시작 함수(fvm-helper-macos). backend adapter와 실행 기록 폴더를 골라 process 모듈에
+                                 주고 entry를 시작한다)
+  helper/windows/               Helper OS 영역 (Windows): Helper 서비스 실행 파일(fvm-helper-windows). 서비스 진입, 앱 연결
+                                통로, route 정리, 예외 route
   ui/macos/                     UI: 메뉴바와 설정창, 모든 문장과 번역
   ui/windows/                   UI: 알림 영역 아이콘과 설정창, 모든 문장과 번역
   os-integration/macos/         OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달
   os-integration/windows/       OS 연동: port 구현, 앱 진입점, 런타임 메시지 전달, Helper 통로
-  os-integration-helper/macos/  OS 연동 Helper: XPC, launchd, 서명 확인, route 복구, networksetup
 packaging/macos/                Xcode 프로젝트 정의, 빌드 설정, LaunchDaemon 정보, 빌드·설치 스크립트
 packaging/windows/              C# solution, 빌드 스크립트, 설치 패키지(MSI) 정의
 ```
 
-- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. watchdog → 공통 계약. Helper entry → watchdog, 공통 계약. Helper의 시작 함수 → Helper entry, watchdog, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 watchdog뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. Windows Helper 서비스는 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
-- Windows의 Helper 서비스는 macOS의 OS 연동 Helper 자리를 따로 두지 않는다. 서비스 진입, 통로, route 정리를 Rust로 할 수 있어서다.
-- 판단 코어와 watchdog은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
+- **의존 방향**: 판단 코어 → 공통 계약. 런타임 → 판단 코어, backend adapter, 공통 계약. backend adapter → 공통 계약. Helper 공통 부분 → 공통 계약. Helper OS 영역의 Rust 부분(macOS 시작 함수, Windows Helper 서비스) → Helper 공통 부분, backend adapter, 공통 계약. Helper 안에서 backend adapter를 쓰는 것은 process 모듈과 recovery 모듈뿐이고, 시작 함수는 어느 것을 쓸지 고르기만 한다. entry 모듈이 backend adapter에 직접 접근하지 못하는 것은 compiler가 막는다. backend adapter는 process 모듈의 VPN client 처리가 비공개로 갖고 있기 때문이다. 반면 process 모듈의 OS별 프로세스 처리와 실행 기록 폴더를 다루는 코드는 recovery 모듈이 쓰므로 crate 안 어디서나 쓸 수 있고, entry 모듈이 이것을 쓰지 않는 것은 약속으로 지킨다. 한 crate 안의 형제 모듈에는 "process와 recovery에만 공개"를 표시할 방법이 없다. Helper OS 영역 (Windows)은 여기에 더해 판단 코어(예외 route 값 확인)를 쓴다.
+- Helper OS 영역 (Windows)은 Helper 서비스 crate 하나가 맡고, macOS처럼 다른 언어로 된 부분을 따로 두지 않는다. 서비스 진입, 통로, route 정리를 Rust로 할 수 있어서다.
+- 판단 코어와 Helper 공통 부분은 VPN client 이름을 모른다. 런타임이 backend adapter를 쓰는 곳은 기존 설정 가져오기, 인증서 값 형식 확인, 계정 값 확인 세 가지뿐이다.
 - **앱 안의 흐름**: UI는 명령을 보내고, OS 연동은 시스템 이벤트와 Helper 메시지를 보낸다. 런타임은 바뀐 도메인 구역, 로그 추가분, port 요청(Keychain, Helper 호출, 네트워크 조회, 브라우저 열기, 로그인 항목)과 port 동작(시스템 로그, 알림, 활동 유지, 종료 승인)을 돌려보낸다. 전체 그림은 SPEC §1.1에 있다.
-- **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점, watchdog의 OS 부분만 새로 만든다. Linux와 Windows의 서비스는 Helper entry와 watchdog을 그대로 쓰고, backend adapter와 실행 기록 폴더를 골라 시작하는 부분만 맡는다.
+- **다른 OS를 붙일 때**: UI, OS 연동(port 구현), 서비스 진입점, process 모듈의 OS 부분만 새로 만든다. Linux와 Windows의 서비스는 Helper 공통 부분을 그대로 쓰고, backend adapter와 실행 기록 폴더를 골라 시작하는 부분만 맡는다.
 
 ### 4.4 빌드와 설치
 - Rust는 2024 edition이고 Apple Silicon 전용으로 빌드한다. XcodeGen의 pre-build script가 cargo로 정적 라이브러리를 만들고, module map이 링크할 라이브러리를 지정한다. libproc crate가 bindgen을 쓰므로 빌드에 libclang(Xcode에 포함)이 필요하다.
@@ -509,6 +513,14 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 이제 CD가 저장소 비밀값의 인증서로 서명해 만든다. 대가로 서명 키가 GitHub에도 있게 됐고, 사용자가 그 위험을 받아들였다(§8의 2번).
   - CI는 매 commit마다 돌고, 서명과 Release는 버전 tag push와 수동 실행 때만 한다(사용자). CI는 MSI를 매 commit 만들어 보는 것처럼 pkg도 키 없이 만들어 본다.
   - 첫 수동 실행의 초안 Release에서, CD가 만든 pkg 안의 앱과 Helper가 Mac 빌드와 같은 Team ID와 식별자로 서명된 것을 확인했다.
+- **2026-11-16 Helper 통합**: 사용자 결정이다(§4.3). 동작, 앱과 Helper 사이의 메시지, 실행 기록과 상태 파일의 형식, 로그 문구, 설치되는 파일의 이름은 그대로다.
+  - 전에는 Helper가 구성 요소 셋으로 나뉘어 있었다. 두 OS가 함께 쓰는 Helper entry, VPN client를 맡는 watchdog, macOS의 Swift OS 연동 Helper다. Windows는 서비스 crate 하나가 Helper의 OS 쪽 일을 이미 맡고 있었다.
+  - 이제 두 OS 모두 Helper가 구성 요소 하나(`components/helper`)다. 공통 부분은 crate 하나(`fvm-helper-core`)에 역할별 모듈 셋(entry, process, recovery)으로 나눴다. crate 이름에 `-core`를 붙인 것은 Windows 서비스 실행 파일 `fvm-helper`와 이름이 겹치지 않게 하려는 것이다(사용자 결정). OS별 시작 부분은 결과물 종류(Swift가 링크하는 정적 라이브러리, 서비스 실행 파일)와 OS 전용 의존성이 달라 모듈로 합치지 않고 helper 아래의 별도 crate로 두었다. Swift OS 연동 Helper도 macOS Helper 안으로 옮겨, 앱 쪽 "OS 연동"과 이름이 헷갈리지 않게 했다.
+  - 공통 부분의 앞단은 검토에서 제안된 "service" 대신 "entry"라고 부른다. Windows 서비스와 헷갈리기 때문이다.
+  - 문서에서는 Helper가 OS마다 따로 하는 부분을 두 OS 모두 "Helper OS 영역"이라고 부른다(사용자 결정). macOS는 Swift 부분과 Rust 시작 함수, Windows는 Helper 서비스 crate다.
+  - 설치되는 파일(앱, Helper, Windows 서비스 실행 파일, pkg와 MSI의 내용)은 이름이 그대로다. Swift가 링크하는 정적 라이브러리는 crate 이름을 따라 `libfvm_helper_macos.a`가 됐다.
+  - Helper의 Rust thread 이름과, thread를 시작하지 못했을 때 중단하며 남기는 메시지는 새 구조에 맞춰 바꿨다(`fvm-entry`, `fvm-entry-read`, `fvm-process`, `fvm-process-exit`, `-output`, `-gateway`, `-logout`). 로그 문구는 그대로다.
+  - 2026-11-14의 "VPN client는 watchdog만 다룸" 결정은 이렇게 지킨다. backend adapter는 process와 recovery만 쓰고, entry는 VPN client 처리를 넘겨받아도 그 안의 backend adapter에 접근할 수 없다. 이것은 compiler가 막는다. process의 OS별 프로세스 처리와 실행 기록 폴더 코드는 recovery가 쓰므로 crate 안에 공개돼 있어, entry가 이것을 쓰지 않는 것은 약속으로 지킨다(§4.3).
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**

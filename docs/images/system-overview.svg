@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="전체 구성: 앱 프로세스에는 UI, OS 연동, 런타임, 판단 코어가 있고, Helper 프로세스에는 OS 연동 Helper, Helper entry, watchdog, backend adapter가 있다. 앱과 Helper는 요청과 보고를 주고받고, 런타임은 Gmail·Google과 파일을, watchdog은 backend adapter를 써서 openfortivpn을 다룬다.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" role="img" aria-label="전체 구성: 앱 프로세스에는 UI, OS 연동, 런타임, 판단 코어가 있고, Helper 프로세스에는 Helper OS 영역, entry 모듈과 시작 부분, process·recovery 모듈, backend adapter가 있다. 앱과 Helper는 요청과 보고를 주고받고, 런타임은 Gmail·Google과 파일을, process 모듈은 backend adapter를 써서 openfortivpn을 다룬다.">
 <style>
 text { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; }
 .bg { fill: #ffffff; }
@@ -61,14 +61,14 @@ text { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto
 <rect class="b-proc" x="600" y="90" width="340" height="330" rx="14"/>
 <text class="tc" x="618" y="114">Helper · 관리자 권한</text>
 <rect class="b-mac" x="620" y="128" width="300" height="76" rx="8"/>
-<text class="tt" x="770" y="152" text-anchor="middle">OS 연동 Helper (macOS)</text>
+<text class="tt" x="770" y="152" text-anchor="middle">Helper OS 영역 (macOS)</text>
 <text class="ts" x="770" y="173" text-anchor="middle">앱 연결 확인 · 자가 업데이트</text>
 <text class="ts" x="770" y="191" text-anchor="middle">route 복구 · 예외 route 쓰기</text>
 <rect class="b-mac" x="620" y="244" width="300" height="46" rx="8"/>
-<text class="tt" x="770" y="264" text-anchor="middle">Helper entry (macOS)</text>
+<text class="tt" x="770" y="264" text-anchor="middle">entry 모듈 · 시작 부분</text>
 <text class="ts" x="770" y="282" text-anchor="middle">요청 처리 · 실행의 주인 · adapter 선택</text>
 <rect class="b-common" x="620" y="312" width="140" height="88" rx="8"/>
-<text class="tt" x="690" y="332" text-anchor="middle">watchdog</text>
+<text class="tt" x="690" y="332" text-anchor="middle">process · recovery</text>
 <text class="ts" x="690" y="352" text-anchor="middle">확인 · 실행 · 입력</text>
 <text class="ts" x="690" y="369" text-anchor="middle">시간 제한 · 종료</text>
 <text class="ts" x="690" y="386" text-anchor="middle">남은 프로세스 정리</text>

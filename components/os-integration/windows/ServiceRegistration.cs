@@ -12,7 +12,7 @@ namespace FortiVPNManager.OsIntegration;
 /// </summary>
 internal static class ServiceRegistration
 {
-    /// <summary>The service's name (components/helper-entry/windows/src/service.rs).</summary>
+    /// <summary>The service's name (components/helper/windows/src/service.rs).</summary>
     public const string HelperService = "FortiVPNManagerHelper";
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";

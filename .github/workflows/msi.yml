@@ -38,7 +38,7 @@ jobs:
         run: |
           if (-not $env:CLIENT) { throw 'the repository secret GOOGLE_OAUTH_CLIENT_JSON is not set' }
           [IO.File]::WriteAllText((Join-Path $PWD 'packaging\GoogleOAuthClient.json'), $env:CLIENT)
-      - run: cargo build --release --package fvm-helper-entry-windows
+      - run: cargo build --release --package fvm-helper-windows
         env:
           FVM_BUILD: ${{ steps.build.outputs.number }}
       - run: cargo rustc --release --package fvm-runtime --lib --crate-type cdylib

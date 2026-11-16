@@ -116,7 +116,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## Architecture
 
 - **Shared logic**: Rust
-- **macOS**: UI, OS integration, OS integration Helper (Swift)
-- **Windows**: UI, OS integration (C#, WinUI 3), Helper service (Rust)
+- **macOS**: UI, OS integration, Helper OS area (Swift)
+- **Windows**: UI, OS integration (C#, WinUI 3), Helper OS area (Rust, a Windows service)
 
 For the components and their roles, see [Design §4](docs/DESIGN.md#4-구성과-역할) (Korean).

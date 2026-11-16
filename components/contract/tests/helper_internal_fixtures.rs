@@ -1,5 +1,5 @@
-//! `fixtures/helper-internal/` pins the JSON of every message between the OS integration Helper
-//! (Swift) and the Helper entry (Rust). Rust decodes what Swift sends and encodes what Swift
+//! `fixtures/helper-internal/` pins the JSON of every message between the Helper's Swift side
+//! and the Helper entry (Rust). Rust decodes what Swift sends and encodes what Swift
 //! receives; `tests/macos/HelperInternalTests.swift` checks the Swift types the opposite way against
 //! the same files.
 

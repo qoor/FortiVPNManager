@@ -17,7 +17,7 @@ export PATH="$(brew --prefix)/opt/llvm/bin:$(brew --prefix)/opt/lld/bin:$PATH" X
 build=$(date +%Y%m%d%H%M%S)
 
 scripts/sync-windows.sh "$folder"
-FVM_BUILD=$build cargo xwin build --release --target "$target" --package fvm-helper-entry-windows
+FVM_BUILD=$build cargo xwin build --release --target "$target" --package fvm-helper-windows
 cargo xwin rustc --release --target "$target" --package fvm-runtime --lib --crate-type cdylib
 remote="%USERPROFILE%\\src\\$folder"
 ssh "$host" "if not exist $remote\\.build\\windows\\rust mkdir $remote\\.build\\windows\\rust"

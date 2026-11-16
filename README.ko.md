@@ -116,7 +116,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## 구조
 
 - **공통 로직**: Rust
-- **macOS**: UI, OS 연동, OS 연동 Helper (Swift)
-- **Windows**: UI, OS 연동 (C#, WinUI 3), Helper 서비스 (Rust)
+- **macOS**: UI, OS 연동, Helper OS 영역 (Swift)
+- **Windows**: UI, OS 연동 (C#, WinUI 3), Helper OS 영역 (Rust, Windows 서비스)
 
 구성 요소와 역할은 [설계 §4](docs/DESIGN.md#4-구성과-역할)를 보세요.

@@ -63,7 +63,7 @@
 
     <Component Directory="AppFolder">
       <File Source="$(var.AppFolder)\fvm-helper.exe" />
-      <!-- components/helper-entry/windows/src/service.rs -->
+      <!-- components/helper/windows/src/service.rs -->
       <ServiceInstall Name="FortiVPNManagerHelper" DisplayName="FortiVPNManager Helper" Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem">
         <!-- When Windows shuts down it waits this long for the Helper to end the run and log out
              while the network still runs; the Helper asks as long for a stop (STOP_WAIT). A failed

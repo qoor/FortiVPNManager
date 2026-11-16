@@ -1,5 +1,5 @@
 //! What the app and the Helper exchange. Every message uses Swift's standard Codable coding
-//! (`XPCCoding`), since the OS integration Helper (Swift) answers the bypass-route payloads itself,
+//! (`XPCCoding`), since the Helper's Swift side answers the bypass-route payloads itself,
 //! reading and writing networksetup: an enum value with data is an object keyed by its case name,
 //! data without a label uses the key `_0`, a case without data is `{}`, dates are seconds since
 //! 1970, and absent optional values are left out. Each type derives only the directions its two

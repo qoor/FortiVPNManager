@@ -7,7 +7,7 @@
 # as a file too: sent on the ssh command line, a whole-workspace run passed the Windows limit on its
 # length. A run counts only if it reports every program; until then the new ones stay unrecorded, so
 # the next run starts them ahead again.
-# Usage: scripts/test-windows.sh <folder> [cargo test options, such as --package fvm-watchdog]
+# Usage: scripts/test-windows.sh <folder> [cargo test options, such as --package fvm-helper-core]
 # <folder> is the PC's copy of this tree under %USERPROFILE%\src, kept current by sync-windows.sh,
 # which this runs first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm and lld.
 set -euo pipefail
