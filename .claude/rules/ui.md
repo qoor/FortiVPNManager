@@ -1,6 +1,10 @@
 ---
 paths:
   - "components/ui/**"
+  - "packaging/macos/pkg/Distribution.xml"
+  - "packaging/macos/pkg/Resources/**"
+  - "packaging/windows/InstallerUi.wxs"
+  - "packaging/windows/*.wxl"
 ---
 
 # 원칙
