@@ -21,7 +21,7 @@ An app that keeps a FortiGate SSL VPN connected by reconnecting automatically.
 - **Settings**: A YAML settings file
 - **Account management**: Credentials kept safely in the OS credential store (macOS Keychain / Windows Credential Manager)
 
-Documents (Korean): [Design](docs/DESIGN.md) · [Specification](docs/SPEC.md)
+Documents (Korean): [Refactoring design](docs/DESIGN.md) · [Specification](docs/SPEC.md)
 
 ## Google OAuth client (optional)
 
@@ -119,4 +119,4 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 - **macOS**: UI, OS integration, Helper OS area (Swift)
 - **Windows**: UI, OS integration (C#, WinUI 3), Helper OS area (Rust, a Windows service)
 
-For the components and their roles, see [Design §4](docs/DESIGN.md#4-구성과-역할) (Korean).
+For the components and their roles, see [Specification §1](docs/SPEC.md#1-시스템-구성) (Korean).
