@@ -1,26 +1,28 @@
 # FortiVPNManager 기능 명세
 
-시스템이 하는 일을 구성 요소와 기능 단위로 정한다. 왜 이렇게 만들었는지는 [DESIGN.md](DESIGN.md)를 본다.
-
 # 0. 문서 정보
-
-- **목적**: 구현과 검증의 기준이 되는 기능 명세다. 기능이 바뀌면 이 문서를 먼저 고친다.
-- **범위**: macOS + openfortivpn, Windows + openconnect. openconnect 처리는 나중에 macOS와 Linux에서도 쓸 수 있게 OS와 무관하게 정한다. Linux는 들어갈 자리만 둔다.
-- **숫자**: 사용자에게 보이는 규칙일 때만 적는다. 그 밖의 시간 값과 횟수는 코드가 기준이다.
-- **기술**: 어떤 기술로 만드는지는 이 문서에 적지 않는다. 지켜야 할 외부 제약일 때만 적는다. 구조와 기술 결정은 DESIGN.md를 본다.
-- **OS 표기**: 본문의 Keychain은 그 OS의 비밀값 저장소(Windows는 Credential Manager)를, "이 Mac"은 이 기기를 뜻한다. openfortivpn이라고 적은 규칙 중 VPN client와 무관한 것은 openconnect에도 똑같이 적용된다. OS나 VPN client에 따라 다른 것만 따로 적는다.
+- 목적: 구현과 검증의 기준이 되는 기능 명세
+- 범위
+  - macOS + openfortivpn, Windows + openconnect
+  - openconnect 처리: OS와 무관한 규칙(macOS·Linux 확장 대비)
+  - Linux: 자리만 확보
+- OS 표기
+  - Keychain: 각 OS의 비밀값 저장소(Windows는 Credential Manager)
+  - "이 Mac": 이 기기
+  - openfortivpn 규칙 중 VPN client와 무관한 것은 openconnect에도 동일 적용
+  - OS·VPN client별 차이만 별도 기재
 
 | 용어 | 뜻 |
 |---|---|
-| Connection Manager | 연결 state machine과 그것을 돌리는 부분(규칙은 판단 코어, 실행은 런타임) |
-| 시도 | 연결됨이나 실패로 끝나는 연결 시도 한 번. 시도 ID로 구분한다 |
-| 실행 | Helper에서 VPN client 프로세스 하나가 살아 있는 기간. 한 번에 하나다 |
+| Connection Manager | 연결 state machine과 그 실행 부분(규칙은 판단 코어, 실행은 런타임) |
+| 시도 | 연결됨 또는 실패로 끝나는 연결 시도 한 번, 시도 ID로 구분 |
+| 실행 | Helper에서 VPN client 프로세스 하나가 살아 있는 기간, 동시에 하나 |
 | 진행 단계 (milestone) | 실행됨 → 게이트웨이 연결 → OTP prompt → OTP 제출 → 인증됨 → 터널 올라옴 |
-| 종료 사실 | 실행이 끝날 때 Helper가 남기는 기록(가장 멀리 간 단계, 종료한 주체, 터널 유지 시간 등) |
+| 종료 사실 | 실행 종료 시 Helper의 기록(가장 멀리 간 단계, 종료 주체, 터널 유지 시간 등) |
 | 안정 세션 | 정해진 시간 이상 유지된 터널 |
-| 멈춤 | 자동 재시도 없이 사용자의 [연결]이나 [지금 재연결]을 기다리는 상태 |
+| 멈춤 | 자동 재시도 없이 사용자의 [연결]·[지금 재연결]을 기다리는 상태 |
 | 도메인 구역 | UI로 보내는 상태 단위: 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 |
-| port | 공통 부분이 OS 기능을 요청하는 인터페이스. 구현은 OS마다 따로 한다 |
+| port | 공통 부분이 OS 기능을 요청하는 인터페이스, OS별 구현 |
 
 # 1. 시스템 구성
 
@@ -28,38 +30,61 @@
 
 ![전체 구성](images/system-overview.svg)
 
-앱과 Helper는 별도 프로세스다. 화살표는 서로 주고받는 것을 나타낸다. 판단 코어는 런타임만 쓴다. Helper 안에서 VPN client에 관한 일은 process 모듈과 recovery 모듈이 맡고, process 모듈은 Helper가 OS마다 정한 backend adapter로 client를 확인하고 실행하고 출력을 해석한다. 공통 계약은 양쪽이 함께 쓰는 약속이라 그림에서 뺐다.
+- 그림
+  - 앱과 Helper: 별도 프로세스
+  - 화살표: 서로 주고받는 내용
+  - 공통 계약: 양쪽 공통 약속이라 그림에서 제외
+  - 기준: macOS 구성
+  - Windows: 앱 쪽 동일, Helper 쪽은 세 모듈과 Helper OS 영역 (Windows)이 Helper 서비스 하나로 실행
 
 | 구성 요소 | 위치 | 역할 |
 |---|---|---|
 | UI (macOS) | 앱 | 메뉴바와 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (macOS) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
 | 런타임 | 앱 | 조율, 타이머, OTP 세션, Google 계정, 설정·상태·로그 파일, 예외 규칙 동기화 |
-| 판단 코어 | 앱 | Connection Manager 규칙과 데이터 형식 해석. 바깥과 직접 통신하지 않음 |
-| 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지켜야 할 약속 |
-| backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(openfortivpn, openconnect) |
+| 판단 코어 | 앱 | Connection Manager 규칙과 데이터 형식 해석, 바깥과 직접 통신 없음 |
+| 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지킬 약속 |
+| backend adapter | Helper(일부는 앱) | VPN client별 처리(openfortivpn, openconnect) |
 | process 모듈 | Helper | VPN client 확인과 실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout |
 | recovery 모듈 | Helper | 실행 기록과 예외 route 기록, 이전 Helper가 남긴 프로세스와 예외 route 정리, route 복구 요청 |
 | entry 모듈 | Helper | 앱 요청 처리, 실행과 예외 route의 주인 판단, Helper 수명 |
 | Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 넣기·지우기 |
 | UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
-| Helper OS 영역 (Windows) | Helper | Windows 서비스(Helper 서비스)로 실행되며 세 모듈을 씀. 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
+| Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 세 모듈 사용, 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
-| openfortivpn | Helper가 실행 | macOS의 VPN client와 그 pppd |
-| openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트. Windows는 앱과 함께 설치한 것 |
+| openfortivpn | Helper가 실행 | macOS의 VPN client와 pppd |
+| openconnect | Helper가 실행 | Windows의 VPN client와 route 설정 스크립트(앱과 함께 설치) |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
 
-Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스다. macOS에서는 launchd daemon, Windows에서는 Windows 서비스로 실행된다. (macOS)·(Windows)가 붙은 구성 요소는 그 OS에만 있고, 나머지는 모든 OS에 공통이다. entry, process, recovery 모듈은 두 OS가 함께 쓰는 Helper 공통 부분이고, Helper는 OS마다 이 공통 부분과 그 OS의 Helper OS 영역을 합친 구성 요소 하나다. 본문에서는 OS 표기를 뺀다. 그림은 macOS 구성이다. Windows에서도 앱 쪽 구성은 같고, Helper 쪽은 세 모듈과 Helper OS 영역 (Windows)이 Helper 서비스 하나로 실행된다.
+- Helper: 관리자 권한으로 VPN client를 실행하는 별도 프로세스
+  - 구성: entry·process·recovery 모듈(두 OS 공통) + 해당 OS의 Helper OS 영역
+- (macOS)·(Windows) 표기: 해당 OS 전용 구성 요소, 표기 없는 것은 모든 OS 공통
+- 본문: OS 표기 생략
 
 ## 1.2 구성 요소 사이의 연결
-
-- **앱 안**: UI는 사용자 조작을 명령으로 보내고, 바뀐 상태와 새 로그를 받는다. 런타임은 OS 기능이 필요하면 OS 연동에 요청하고, OS 연동은 결과와 시스템 이벤트를 알린다.
-- **앱 ↔ Helper**: 서로를 확인한 연결로 실행 요청, OTP, 연결 해제를 보내고 진행 단계, 출력, 종료 보고를 받는다. 주고받는 내용은 공통 계약이 정한다.
-- **Helper 안**: Helper OS 영역이 받은 요청을 entry 모듈에 넘긴다. entry 모듈은 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 모두 process 모듈과 recovery 모듈에 맡긴다. backend adapter를 쓰는 것은 이 둘뿐이고, entry 모듈은 backend adapter에 직접 접근할 수 없다. 어떤 backend adapter를 쓸지와 실행 기록 폴더는 Helper의 OS별 시작 부분이 정한다. 이벤트와 출력은 순서대로 앱에 간다.
-- **바깥**: 런타임이 Gmail·Google과 통신하고 파일을 다룬다. 판단 코어는 런타임을 통해서만 쓰인다.
+- 앱 안
+  - UI → 런타임: 사용자 조작 명령
+  - 런타임 → UI: 바뀐 상태, 새 로그
+  - 런타임 → OS 연동: OS 기능 요청
+  - OS 연동 → 런타임: 결과, 시스템 이벤트
+- 앱 ↔ Helper
+  - 서로 확인한 연결 사용
+  - 앱 → Helper: 실행 요청, OTP, 연결 해제
+  - Helper → 앱: 진행 단계, 출력, 종료 보고
+  - 주고받는 내용: 공통 계약 기준
+- Helper 안
+  - Helper OS 영역 → entry 모듈: 받은 요청 전달
+  - entry 모듈: 요청별 허용 여부 판단
+  - VPN client 관련 처리: process·recovery 모듈에 위임
+  - backend adapter 사용: process·recovery 모듈 한정, entry 모듈의 직접 접근 금지
+  - backend adapter와 실행 기록 폴더 선택: Helper의 OS별 시작 부분
+  - 이벤트·출력: 순서대로 앱에 전달
+- 바깥
+  - Gmail·Google 통신과 파일 처리: 런타임
+  - 판단 코어 사용: 런타임 경유 한정
 
 # 2. 구성 요소별 설명
 
