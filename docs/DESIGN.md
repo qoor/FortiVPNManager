@@ -508,6 +508,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 전에는 Release workflow가 MSI를 올린 뒤 Mac에서 스크립트로 pkg를 만들어 같은 Release에 더했다(26.0.0이 그렇게 나갔다). 앱 서명 인증서가 이 Mac의 Keychain에만 있었기 때문이다. 그 스크립트는 지웠다.
   - 이제 CD가 저장소 비밀값의 인증서로 서명해 만든다. 대가로 서명 키가 GitHub에도 있게 됐고, 사용자가 그 위험을 받아들였다(§8의 2번).
   - CI는 매 commit마다 돌고, 서명과 Release는 버전 tag push와 수동 실행 때만 한다(사용자). CI는 MSI를 매 commit 만들어 보는 것처럼 pkg도 키 없이 만들어 본다.
+  - 첫 수동 실행의 초안 Release에서, CD가 만든 pkg 안의 앱과 Helper가 Mac 빌드와 같은 Team ID와 식별자로 서명된 것을 확인했다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -580,6 +581,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 예외 route와 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
 - 아직 확인하지 않은 macOS 설치 패키지 동작(§5.8)
   - 업그레이드 때 앱 닫기, 낮은 버전 거부, 같은 버전 재설치, 명령줄 설치. 다른 Mac에서의 설치, 실행, VPN 연결은 사용자가 확인했다(2026-11-15).
+  - CD가 서명한 pkg로 설치했을 때 Helper 등록과 VPN 연결. 서명과 식별자는 확인했다(2026-11-16).
   - Personal Team 인증서가 만료된 뒤에도 이미 설치된 앱과 Helper가 계속 동작하는지.
 - 추후 과제
   - Linux 앱(Rust + QML)과 서비스
