@@ -65,6 +65,8 @@ extension AppInternal.UntestedVersion {
 extension AppInternal.ClientProblem {
     func message(installing client: AppInternal.VpnClient) -> String {
         switch kind {
+        case .notFound where client == .openconnect:
+            String(localized: "OpenConnect is not at \(path). Reinstall FortiVPNManager.")
         case .notFound:
             String(localized: "Not found at \(path). Install with: brew install \(client.rawValue)")
         case .outsideAllowedLocation:

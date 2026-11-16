@@ -150,7 +150,7 @@ fn wording(client: &ClientRules<'_>) -> Wording {
                 "Filled in on first launch from an existing {} config, if any (e.g. 8443). 443 is the default when the file has no value.",
                 client.name
             ),
-            client: r#"VPN client: "openfortivpn" or "openconnect", each installed with Homebrew (brew install <name>). The app on Windows always uses the openconnect that comes with it."#,
+            client: r#"VPN client: "openconnect", which comes with the app (the app on Windows always uses openconnect), or "openfortivpn", installed with Homebrew (brew install openfortivpn)."#,
         },
         Platform::Windows => Wording {
             secret_store: "Credential Manager",

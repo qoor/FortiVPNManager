@@ -18,7 +18,7 @@ use fvm_contract::backend::{
 };
 use fvm_helper_core::process::{Report, Timing, Watchdog};
 
-const ROUTE_SCRIPT: &str = "/opt/homebrew/etc/vpnc/vpnc-script";
+const ROUTE_SCRIPT: &str = "/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script";
 const MARKER: &str = "FortiVPNManager: route script finished connecting";
 
 struct Scripted(LaunchSpec);
@@ -84,7 +84,7 @@ fn request() -> RunRequest {
 
 fn script_command(script: &Path) -> String {
     let client = ClientExecutable {
-        path: PathBuf::from("/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect"),
+        path: PathBuf::from("/Applications/FortiVPNManager.app/Contents/MacOS/openconnect"),
         version: "9.21".to_owned(),
     };
     let launch = OpenConnect

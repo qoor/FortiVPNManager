@@ -351,7 +351,8 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "an existing openfortivpn config",
         "the Mac asleep",
         "router of the active network service",
-        "brew install <name>",
+        "\"openconnect\", which comes with the app (the app on Windows always uses openconnect)",
+        "\"openfortivpn\", installed with Homebrew (brew install openfortivpn)",
         "pin-sha256:...), used by openconnect",
     ] {
         assert!(macos.contains(wording), "{wording}");

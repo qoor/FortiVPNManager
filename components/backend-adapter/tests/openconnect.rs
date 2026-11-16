@@ -57,7 +57,7 @@ mod launching {
 
     #[cfg(target_os = "macos")]
     const ROUTE_SCRIPT: &[&str] = &[
-        "--script=/opt/homebrew/etc/vpnc/vpnc-script; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo 'FortiVPNManager: route script finished connecting'; fi; exit $code",
+        "--script=/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo 'FortiVPNManager: route script finished connecting'; fi; exit $code",
     ];
     #[cfg(not(target_os = "macos"))]
     const ROUTE_SCRIPT: &[&str] = &[];
@@ -347,16 +347,17 @@ mod values {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn only_homebrews_client_is_ours() {
+    fn only_the_installed_client_is_ours() {
         assert_eq!(OpenConnect.client_name(), "openconnect");
         assert!(OpenConnect.is_own_executable(Path::new(
-            "/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect"
+            "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect"
         )));
         for path in [
+            "/Applications/FortiVPNManager.app/Contents/MacOS/FortiVPNManager",
+            "/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script",
+            "/Users/alice/Downloads/FortiVPNManager.app/Contents/MacOS/openconnect",
+            "/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect",
             "/opt/homebrew/bin/openconnect",
-            "/opt/homebrew/Cellar/openconnect",
-            "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn",
-            "/usr/local/bin/openconnect",
             CLIENT_PATH,
         ] {
             assert!(!OpenConnect.is_own_executable(Path::new(path)), "{path}");

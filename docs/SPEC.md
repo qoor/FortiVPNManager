@@ -54,7 +54,7 @@
 | Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 세 모듈 사용, 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | openfortivpn | Helper가 실행 | macOS에서 고를 수 있는 VPN client와 pppd |
-| openconnect | Helper가 실행 | Windows와 macOS(기본)의 VPN client, route 설정 스크립트 |
+| openconnect | Helper가 실행 | Windows와 macOS(기본)의 VPN client, route 설정 스크립트, 앱과 함께 설치 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
@@ -672,7 +672,7 @@
 - 세부 기능
   1. 관리자만 쓸 수 있는 위치의 실행 파일 한정, 다른 사용자가 쓸 수 있거나 실행할 수 없으면 거부
      - openfortivpn: Homebrew 설치본의 실제 파일 한정
-     - openconnect(Windows): 앱과 함께 설치된 OpenConnect 한정, 따로 설치된 OpenConnect는 사용·변경 없음
+     - openconnect: 앱과 함께 설치된 OpenConnect 한정, 따로 설치된 OpenConnect는 사용·변경 없음
      - logout 요청 도구: OS 내장 도구 한정, 그 도구의 사용자 설정 파일과 proxy 설정 미사용
      - 문제 전달: 종류와 경로, 문장과 번역은 UI 담당
   2. 검증된 버전이 아니면 고급 pane에 "검증되지 않은 버전" 경고
@@ -812,7 +812,7 @@
   3. UI 결정 범위: 문장 조립, 설정 필요 항목별 동작 버튼과 실패 안내 버튼이 여는 pane
   4. 문장: 판단 코어가 보낸 종류와 값으로 생성과 번역, "헬퍼" 대신 "Helper" 표기
   5. 로그 pane 색: 출처가 아닌 `ERROR:`·`WARN:` 머리 기준
-  6. VPN client를 찾을 수 없을 때: 고른 client의 설치 안내
+  6. VPN client를 찾을 수 없을 때: openfortivpn은 설치 안내, openconnect는 FortiVPNManager 재설치 안내
 
 ### F-SW-02 OS port
 - 설명: 판단 코어·런타임이 요청한 OS 기능의 macOS 제공, 시스템 이벤트 전달

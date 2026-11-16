@@ -2,6 +2,9 @@
 //! route script need, and the curl that sends the logout request. Everything else about openconnect
 //! is the same on every OS.
 
+#[cfg(any(windows, target_os = "macos"))]
+pub(super) const INSTALL_HINT: &str = "it comes with FortiVPNManager, so reinstall FortiVPNManager";
+
 #[cfg(windows)]
 mod values {
     use std::fs;
@@ -11,8 +14,6 @@ mod values {
 
     /// The copy that ships in the app's folder; only administrators can change it.
     const CLIENT: &str = r"C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe";
-    pub(in super::super) const INSTALL_HINT: &str =
-        "it comes with FortiVPNManager, so reinstall FortiVPNManager";
     pub(in super::super) const ROUTE_SCRIPT: Option<&str> = None;
     /// Windows' own curl, in System32, which only administrators can change.
     pub(in super::super) const CURL: &str = r"C:\Windows\System32\curl.exe";
@@ -60,25 +61,23 @@ mod values {
 
     use crate::homebrew;
 
-    const HOMEBREW_LINK: &str = "/opt/homebrew/bin/openconnect";
-    const CELLAR: &str = "/opt/homebrew/Cellar/openconnect/";
-    pub(in super::super) const INSTALL_HINT: &str = "install it with: brew install openconnect";
+    const CLIENT: &str = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
     pub(in super::super) const ROUTE_SCRIPT: Option<&str> =
-        Some("/opt/homebrew/etc/vpnc/vpnc-script");
+        Some("/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script");
     pub(in super::super) const CURL: &str = "/usr/bin/curl";
     pub(in super::super) const NULL_DEVICE: &str = "/dev/null";
     pub(in super::super) const SYSTEM_VARIABLES: &[&str] = &["PATH"];
 
     pub(in super::super) fn executable() -> Result<PathBuf, ClientProblem> {
-        let path = homebrew::resolve(HOMEBREW_LINK, CELLAR)?;
+        homebrew::check_file(Path::new(CLIENT))?;
         if let Some(script) = ROUTE_SCRIPT {
             homebrew::check_file(Path::new(script))?;
         }
-        Ok(path)
+        Ok(PathBuf::from(CLIENT))
     }
 
     pub(in super::super) fn is_own_executable(path: &Path) -> bool {
-        homebrew::inside_cellar(path, CELLAR).is_some()
+        path == Path::new(CLIENT)
     }
 }
 
@@ -108,6 +107,8 @@ mod values {
     }
 }
 
+#[cfg(not(any(windows, target_os = "macos")))]
+pub(super) use values::INSTALL_HINT;
 pub(super) use values::{
-    CURL, INSTALL_HINT, NULL_DEVICE, ROUTE_SCRIPT, SYSTEM_VARIABLES, executable, is_own_executable,
+    CURL, NULL_DEVICE, ROUTE_SCRIPT, SYSTEM_VARIABLES, executable, is_own_executable,
 };

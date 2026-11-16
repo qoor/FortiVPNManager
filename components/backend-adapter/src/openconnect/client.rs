@@ -1,7 +1,3 @@
-//! Which openconnect executable the Helper may run, and which leftover processes are ours. Only the
-//! copy at the OS's place is run, which only administrators, or on macOS Homebrew's owner, can
-//! change (`platform`).
-
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};

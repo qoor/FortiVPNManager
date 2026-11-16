@@ -2667,6 +2667,16 @@
         }
       }
     },
+    "OpenConnect is not at %@. Reinstall FortiVPNManager.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenConnect가 %@ 경로에 없습니다. FortiVPNManager를 다시 설치하세요."
+          }
+        }
+      }
+    },
     "Opening tunnel": {
       "localizations": {
         "ko": {

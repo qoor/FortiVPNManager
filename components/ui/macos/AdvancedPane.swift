@@ -56,7 +56,6 @@ struct AdvancedPane: View {
             if let found {
                 LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
                     .searchAnchor("Version", navigation)
-                // The Homebrew path runs long and would wrap; the button shows it in Finder, the help tag as text.
                 LabeledContent("Path") {
                     if let path = found.path {
                         Button("Show in Finder") { revealInFinder(path) }
