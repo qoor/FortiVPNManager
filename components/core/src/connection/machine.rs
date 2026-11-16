@@ -257,8 +257,10 @@ struct TimerSlot {
     fired: bool,
 }
 
-/// What the schedule notes compare before and after an input.
+/// What the attempt announcement and the schedule notes compare before and after an input.
 struct NoteMarks {
+    /// The attempt under way.
+    attempt: Option<AttemptId>,
     scheduled_attempt: Option<AttemptId>,
     holding: bool,
     suspended: bool,
@@ -412,13 +414,23 @@ impl ConnectionManager {
         if self.terminated {
             self.effects.push(Effect::ApproveQuit);
         }
-        let mut effects = self.notes(marks);
+        let mut effects = match &self.phase {
+            Phase::Connecting(attempt) if marks.attempt.as_ref() != Some(&attempt.id) => {
+                vec![Effect::AttemptBegun(attempt.id.clone())]
+            }
+            _ => Vec::new(),
+        };
+        effects.append(&mut self.notes(marks));
         effects.append(&mut self.effects);
         effects
     }
 
     fn note_marks(&self) -> NoteMarks {
         NoteMarks {
+            attempt: match &self.phase {
+                Phase::Connecting(attempt) => Some(attempt.id.clone()),
+                _ => None,
+            },
             scheduled_attempt: match &self.phase {
                 Phase::Connecting(attempt) if attempt.reason == AttemptReason::Scheduled => {
                     Some(attempt.id.clone())
@@ -1029,6 +1041,17 @@ impl ConnectionManager {
     pub fn wants_run(&self, id: &AttemptId) -> bool {
         matches!(&self.phase, Phase::Connecting(attempt)
             if attempt.id == *id && attempt.stage == Stage::Run && attempt.stop_requested.is_none())
+    }
+
+    /// The attempt the connection is about now: the one connecting, connected or being stopped.
+    /// Each attempt begun has a new one.
+    pub fn current_attempt(&self) -> Option<&AttemptId> {
+        match &self.phase {
+            Phase::Connecting(attempt) => Some(&attempt.id),
+            Phase::Connected(session) => Some(&session.attempt),
+            Phase::Disconnecting(stop) => Some(&stop.attempt),
+            _ => None,
+        }
     }
 
     /// Whether attempt `id`'s OTP session is still to be opened: it was not closed while the

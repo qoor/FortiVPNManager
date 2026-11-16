@@ -50,7 +50,9 @@ final class LogLines {
 
     /// "Copy All": the lines in the log file's format, times in `timeZone`.
     func copyAllText(timeZone: TimeZone) -> String {
-        entries.map { LogLineFormat.fileLine($0.line, timeZone: timeZone) }.joined(separator: "\n")
+        entries.enumerated()
+            .map { index, entry in LogLineFormat.fileLine(entry.line, timeZone: timeZone, afterAnother: index > 0) }
+            .joined(separator: "\n")
     }
 
     private func trim() {
@@ -70,8 +72,15 @@ final class LogLines {
 /// `<ISO 8601 local time with milliseconds> [out|err|▸] <text>`, the line format of the log file
 /// (`openfortivpn.log`), such as `2026-10-15T14:03:22.123+09:00 [out] INFO:   Connected to gateway.`
 enum LogLineFormat {
-    static func fileLine(_ line: AppInternal.LogLine, timeZone: TimeZone) -> String {
-        "\(timestamp(line.time, timeZone: timeZone)) [\(tag(line.source))] \(line.text)"
+    static func fileLine(_ line: AppInternal.LogLine, timeZone: TimeZone, afterAnother: Bool) -> String {
+        gap(before: line, afterAnother: afterAnother)
+            + "\(timestamp(line.time, timeZone: timeZone)) [\(tag(line.source))] \(line.text)"
+    }
+
+    /// The two empty lines before the first line of an attempt, unless no line comes before it. The
+    /// Log pane puts the same before its own line.
+    static func gap(before line: AppInternal.LogLine, afterAnother: Bool) -> String {
+        line.startsAttempt && afterAnother ? "\n\n" : ""
     }
 
     static func tag(_ source: AppInternal.LogSource) -> String {

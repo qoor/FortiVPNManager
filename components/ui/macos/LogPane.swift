@@ -123,7 +123,9 @@ struct LogTextView: NSViewRepresentable {
         var scrollView: NSScrollView?
         weak var textView: NSTextView?
 
-        /// Entries currently shown, oldest first, with their length in UTF-16 units.
+        /// Entries currently shown, oldest first, with their length in UTF-16 units. The gap before an
+        /// attempt's first line counts as the previous entry's, so trimming that entry takes the gap
+        /// with it and the line left at the top has none.
         private var shown: [(id: UInt64, length: Int)] = []
         private var clearCount: Int?
         private var autoScroll = false
@@ -175,6 +177,11 @@ struct LogTextView: NSViewRepresentable {
                     shown.removeFirst(staleCount)
                 }
                 for entry in added {
+                    let gap = LogLineFormat.gap(before: entry.line, afterAnother: !shown.isEmpty)
+                    if !gap.isEmpty {
+                        storage.append(NSAttributedString(string: gap, attributes: [.font: Self.font]))
+                        shown[shown.count - 1].length += (gap as NSString).length
+                    }
                     let text = Self.render(entry.line)
                     storage.append(text)
                     shown.append((entry.id, text.length))
@@ -191,7 +198,8 @@ struct LogTextView: NSViewRepresentable {
             }
         }
 
-        /// Height of the first `count` shown lines, measured before they are deleted.
+        /// Height of the first `count` shown lines, gaps after them included, measured before they are
+        /// deleted.
         private func height(ofFirst count: Int) -> CGFloat {
             guard let textView, let layoutManager = textView.layoutManager else { return 0 }
             let length = shown.prefix(count).reduce(0) { $0 + $1.length }

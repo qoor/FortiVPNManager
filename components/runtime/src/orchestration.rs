@@ -7,7 +7,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::SystemTime;
 
-use fvm_contract::app_helper::{HelperError, HelperEvent, OutputLine, OutputSource, RunRequest};
+use fvm_contract::app_helper::{
+    AttemptId, HelperError, HelperEvent, OutputLine, OutputSource, RunRequest,
+};
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
     HelperCall, LogCategory, LogLevel, PortAction, PortRequest, PortResponse, SecretItem,
@@ -109,6 +111,10 @@ pub(crate) struct Runtime {
     helper_busy: bool,
     helper_queue: VecDeque<(HelperCall, PortReply)>,
     pending_lines: Vec<LogLine>,
+    /// An attempt the core began whose first log line is still to come. That line starts the
+    /// attempt's block in the log, so a note that started the attempt or the Helper's refusal of it
+    /// belongs to the block; the Helper knows of neither.
+    unmarked_attempt: Option<AttemptId>,
     sent: HashMap<&'static str, Section>,
     open_settings: bool,
     pub(crate) forms: crate::account_form::Forms,
@@ -184,6 +190,7 @@ impl Runtime {
             helper_busy: false,
             helper_queue: VecDeque::new(),
             pending_lines: Vec::new(),
+            unmarked_attempt: None,
             sent: HashMap::new(),
             open_settings: false,
             forms: crate::account_form::Forms::default(),
@@ -272,7 +279,11 @@ impl Runtime {
     }
 
     /// A line for the Log pane and the log file, sent after the current input.
-    pub(crate) fn log_line(&mut self, line: LogLine) {
+    pub(crate) fn log_line(&mut self, mut line: LogLine) {
+        if let Some(attempt) = self.unmarked_attempt.take() {
+            // An attempt that ended without a line has no block.
+            line.starts_attempt = self.cm.current_attempt() == Some(&attempt);
+        }
         self.pending_lines.push(line);
     }
 
@@ -329,6 +340,7 @@ impl Runtime {
 
     fn carry_out(&mut self, effect: Effect) {
         match effect {
+            Effect::AttemptBegun(attempt) => self.unmarked_attempt = Some(attempt),
             Effect::CheckReadiness => self.check_readiness(),
             Effect::OpenOtpSession { attempt } => self.open_otp_session(attempt),
             Effect::SearchOtp {
@@ -559,6 +571,7 @@ impl Runtime {
                         time: line.date,
                         source,
                         text: line.text,
+                        starts_attempt: false,
                     });
                 }
                 return;

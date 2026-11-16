@@ -5,10 +5,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
-use fvm_contract::app_helper::{AdditionalRoute, BypassRoutesSnapshot, HelperStatus};
+use fvm_contract::app_helper::{
+    AdditionalRoute, BypassRoutesSnapshot, HelperStatus, OutputLine, OutputSource,
+};
 use fvm_contract::app_internal::command::{AccountForm, Command};
+use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, HelperCall, PortRequest, PortResponse, RegistrationStatus, SecretItem,
 };
@@ -16,7 +19,9 @@ use fvm_contract::app_internal::section::{
     AccountFeedback, BypassStatus, ClientSettingsImport, ConfigSection, ConnectionStatus,
     HelperState, ImportError, ImportedPassword, Section,
 };
-use fvm_contract::app_internal::{AppFacts, FromRuntime, SecretText, SignInPages, ToRuntime};
+use fvm_contract::app_internal::{
+    AppFacts, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
+};
 use serde_json::json;
 
 use crate::orchestration::{self, ClientSettings, Input, Paths};
@@ -52,6 +57,7 @@ struct App {
     service: Option<BypassRoutesSnapshot>,
     requests: Vec<PortRequest>,
     sections: Vec<Section>,
+    log: Vec<LogLine>,
     open_settings: u32,
     /// FortiClient's SSL VPN connections, which make the runtime import from FortiClient as on
     /// Windows; `None` imports openfortivpn's settings file as on macOS.
@@ -95,6 +101,7 @@ impl App {
             service: None,
             requests: Vec::new(),
             sections: Vec::new(),
+            log: Vec::new(),
             open_settings: 0,
             forticlient: None,
         }
@@ -154,6 +161,20 @@ impl App {
         self.send(ToRuntime::Command { command });
     }
 
+    /// A line the Helper writes itself.
+    fn helper_line(&self, text: &str) {
+        let lines = [OutputLine {
+            date: SystemTime::now(),
+            source: OutputSource::Helper,
+            text: text.into(),
+        }];
+        self.send(ToRuntime::Event {
+            event: SystemEvent::HelperOutput {
+                json: serde_json::to_string(&lines).unwrap(),
+            },
+        });
+    }
+
     /// Takes the runtime's messages, answering its requests, until it has been quiet for a while.
     fn settle(&mut self) {
         loop {
@@ -194,7 +215,8 @@ impl App {
                 self.send(ToRuntime::PortResponse { id, response });
             }
             FromRuntime::OpenSettings {} => self.open_settings += 1,
-            FromRuntime::LogLines { .. } | FromRuntime::PortAction { .. } => {}
+            FromRuntime::LogLines { lines } => self.log.extend(lines),
+            FromRuntime::PortAction { .. } => {}
         }
     }
 
@@ -358,6 +380,74 @@ fn a_launch_with_everything_in_place_shows_the_helper_running_and_waits_for_conn
         Some(&ConnectionStatus::NotConnected {})
     );
     assert_eq!(app.open_settings, 0);
+}
+
+const NO_GMAIL_CREDENTIAL: &str =
+    "‹Gmail API selected but not signed in with Google, and no IMAP app password is stored›";
+
+/// Stored, so setup is complete, but empty: an attempt ends before the VPN client starts, as the
+/// OTP session has nothing to sign in with.
+fn app_without_a_usable_gmail_credential(method: &str) -> App {
+    let mut app = App::new();
+    app.write_config(&ACCOUNT.replace("method: \"imap\"", &format!("method: \"{method}\"")));
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText(String::new())));
+    app.launch();
+    app.settle();
+    app
+}
+
+fn log_marks(app: &App) -> Vec<(&str, bool)> {
+    app.log
+        .iter()
+        .map(|line| (line.text.as_str(), line.starts_attempt))
+        .collect()
+}
+
+/// Each attempt the core begins starts its block in the log with its first line, here the note
+/// that ends it; a line of no attempt starts none.
+#[test]
+fn each_attempt_starts_its_block_with_its_first_log_line() {
+    let mut app = app_without_a_usable_gmail_credential("gmail_api");
+    app.helper_line("‹before›");
+    for attempts in 1..=2 {
+        app.command(Command::Connect {});
+        app.settle_until("the attempt's note", |app| {
+            app.log
+                .iter()
+                .filter(|line| line.text == NO_GMAIL_CREDENTIAL)
+                .count()
+                == attempts
+        });
+    }
+    app.helper_line("‹after›");
+    app.settle();
+    assert_eq!(
+        log_marks(&app),
+        [
+            ("‹before›", false),
+            (NO_GMAIL_CREDENTIAL, true),
+            (NO_GMAIL_CREDENTIAL, true),
+            ("‹after›", false)
+        ]
+    );
+}
+
+#[test]
+fn an_attempt_that_ended_without_a_log_line_leaves_the_next_line_unmarked() {
+    let mut app = app_without_a_usable_gmail_credential("imap");
+    app.command(Command::Connect {});
+    app.settle_until("the failure", |app| {
+        matches!(
+            app.connection_status(),
+            Some(ConnectionStatus::Failed { .. })
+        )
+    });
+    app.helper_line("‹after›");
+    app.settle();
+    assert_eq!(log_marks(&app), [("‹after›", false)]);
 }
 
 #[test]

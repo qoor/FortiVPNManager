@@ -2,8 +2,9 @@ import Foundation
 import Testing
 
 /// The Log pane's lines: what it keeps, and Copy All against the shared fixture
-/// `contract/tests/fixtures/app-internal/log_copy_all.json`, whose `copyAll` lines are also the log
-/// file's lines (each followed by a line break there; joined by line breaks in Copy All).
+/// `contract/tests/fixtures/app-internal/log_copy_all.json`, whose `copyAll` entries are the log
+/// file's lines, each with the gap before an attempt's first line (each followed by a line break
+/// there; joined by line breaks in Copy All).
 @MainActor
 struct LogLinesTests {
     private struct CopyAllFixture: Decodable {
@@ -62,12 +63,14 @@ struct LogLinesTests {
     }
 
     @Test func universalTimeEndsWithZ() {
-        let line = AppInternal.LogLine(time: Date(timeIntervalSince1970: 1_762_412_345.25), source: .note, text: "x")
-        #expect(LogLineFormat.fileLine(line, timeZone: .gmt) == "2025-11-06T06:59:05.250Z [▸] x")
+        let line = AppInternal.LogLine(
+            time: Date(timeIntervalSince1970: 1_762_412_345.25), source: .note, text: "x", startsAttempt: false
+        )
+        #expect(LogLineFormat.fileLine(line, timeZone: .gmt, afterAnother: false) == "2025-11-06T06:59:05.250Z [▸] x")
     }
 
     private func line(_ text: String) -> AppInternal.LogLine {
-        AppInternal.LogLine(time: Date(timeIntervalSince1970: 1_762_412_345), source: .stdout, text: text)
+        AppInternal.LogLine(time: Date(timeIntervalSince1970: 1_762_412_345), source: .stdout, text: text, startsAttempt: false)
     }
 }
 

@@ -10,7 +10,7 @@ namespace FortiVPNManager.Ui.Tests;
 /// <summary>
 /// The Log pane's lines (components/ui/tests/macos/LogLinesTests.swift): what it keeps, and Copy All
 /// against the shared fixture contract/tests/fixtures/app-internal/log_copy_all.json, whose copyAll
-/// lines are also the log file's lines.
+/// entries are the log file's lines, each with the gap before an attempt's first line.
 /// </summary>
 public class LogLinesTests
 {
@@ -72,11 +72,11 @@ public class LogLinesTests
     [Fact]
     public void UniversalTimeEndsWithZ()
     {
-        var line = new LogLine(DateTimeOffset.FromUnixTimeMilliseconds(1_762_412_345_250), LogSource.Note, "x");
-        Assert.Equal("2025-11-06T06:59:05.250Z [▸] x", LogLines.FileLine(line, TimeZoneInfo.Utc));
+        var line = new LogLine(DateTimeOffset.FromUnixTimeMilliseconds(1_762_412_345_250), LogSource.Note, "x", StartsAttempt: false);
+        Assert.Equal("2025-11-06T06:59:05.250Z [▸] x", LogLines.FileLine(line, TimeZoneInfo.Utc, afterAnother: false));
     }
 
-    private static LogLine Line(string text) => new(DateTimeOffset.FromUnixTimeSeconds(1_762_412_345), LogSource.Stdout, text);
+    private static LogLine Line(string text) => new(DateTimeOffset.FromUnixTimeSeconds(1_762_412_345), LogSource.Stdout, text, StartsAttempt: false);
 
     private static string FixturePath(string name, [CallerFilePath] string here = "") =>
         Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "contract", "tests", "fixtures", "app-internal", name);

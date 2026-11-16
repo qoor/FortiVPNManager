@@ -1,6 +1,6 @@
 //! One attempt from start to tunnel.
 
-use fvm_contract::app_helper::{Milestone, StopReason};
+use fvm_contract::app_helper::{AttemptId, Milestone, StopReason};
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::section::ConnectionIcon;
 
@@ -21,6 +21,7 @@ fn launch_runs_the_whole_sequence_in_order() {
     assert_eq!(
         effects,
         [
+            Effect::AttemptBegun(id1.clone()),
             Effect::CheckReadiness,
             h.set(TimerKind::AttemptDeadline, t0 + secs(150.0)),
             Effect::HoldActivity(true)
@@ -145,7 +146,10 @@ fn connecting_from_idle_needs_a_user_action() {
     );
     assert_eq!(h.cm.phase, Phase::Idle);
     let effects = connection_effects(&h.send(Input::Connect));
-    assert_eq!(effects.first(), Some(&Effect::CheckReadiness));
+    assert_eq!(
+        effects[..2],
+        [Effect::AttemptBegun(id(1)), Effect::CheckReadiness]
+    );
     assert!(effects.contains(&Effect::HoldActivity(true)));
     assert_eq!(h.attempt().unwrap().reason, AttemptReason::User);
     h.run_to_connected();
@@ -378,4 +382,54 @@ fn attempt_ids_are_deterministic_and_fresh() {
     h.fire(TimerKind::Retry);
     assert_eq!(h.attempt().unwrap().id, id(2));
     assert_ne!(id(1), id(2));
+}
+
+/// Each attempt begun is announced first in the input that began it and stays the current one
+/// until it ends; the runtime marks the attempt's first log line while it is.
+#[test]
+fn every_attempt_begun_is_announced_and_current_until_it_ends() {
+    let announced = |h: &Harness| -> Vec<AttemptId> {
+        h.effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::AttemptBegun(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut h = Harness::new();
+    assert_eq!(h.cm.current_attempt(), None);
+    h.launch();
+    assert_eq!(h.effects[0], Effect::AttemptBegun(id(1)));
+    assert_eq!(h.cm.current_attempt(), Some(&id(1)));
+    // A certificate retry is an attempt of its own.
+    h.start_tunnel();
+    assert_eq!(announced(&h), []);
+    h.exit(ended(Milestone::Spawned).certs(&[digest('a')], Some(Milestone::Spawned)));
+    assert_eq!(h.attempt().unwrap().reason, AttemptReason::CertificateRetry);
+    assert_eq!(h.effects[0], Effect::AttemptBegun(id(2)));
+    assert_eq!(h.cm.current_attempt(), Some(&id(2)));
+    h.run_to_connected();
+    assert_eq!(announced(&h), []);
+    assert_eq!(h.cm.current_attempt(), Some(&id(2)));
+    // So is the immediate reconnect after a forced end.
+    h.forcibly_end(ForcedEnd::ClientKilled, 30.0);
+    assert_eq!(
+        h.attempt().unwrap().reason,
+        AttemptReason::Retry(RetryReason::ForcedTermination)
+    );
+    assert_eq!(h.effects[0], Effect::AttemptBegun(id(3)));
+    assert_eq!(h.cm.current_attempt(), Some(&id(3)));
+    h.run_to_connected();
+    // A stop keeps its attempt until the run's exit.
+    h.send(Input::Disconnect);
+    assert_eq!(announced(&h), []);
+    assert_eq!(h.cm.current_attempt(), Some(&id(3)));
+    h.exit(
+        ended(Milestone::TunnelUp)
+            .by_helper(StopReason::UserDisconnect)
+            .up(30.0),
+    );
+    assert_eq!(announced(&h), []);
+    assert_eq!(h.cm.current_attempt(), None);
 }

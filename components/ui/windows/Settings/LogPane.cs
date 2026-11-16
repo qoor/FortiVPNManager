@@ -44,7 +44,11 @@ internal sealed class LogPane : IPane, IDisposable
     private readonly TextBlock noMatch = new() { Text = L("No results"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Visibility = Visibility.Collapsed };
     private readonly AppBarButton showFile;
 
-    /// <summary>The entries shown, oldest first, with their length in the view (each ends with a line break).</summary>
+    /// <summary>
+    /// The entries shown, oldest first, with their length in the view (each ends with a line break). The gap
+    /// before an attempt's first line counts as the previous entry's, so trimming that entry takes the gap
+    /// with it and the line left at the top has none.
+    /// </summary>
     private readonly List<(ulong Id, int Length)> shown = [];
     private int length;
     private ScrollViewer? scroller;
@@ -178,8 +182,9 @@ internal sealed class LogPane : IPane, IDisposable
     }
 
     /// <summary>
-    /// <c>HH:mm:ss [err|▸] text</c>. stderr carries openconnect's ordinary progress too, so it only gets
-    /// a small "err" marker. openconnect has no ERROR:/WARN: prefixes, which macOS colours for openfortivpn.
+    /// <c>HH:mm:ss [err|▸] text</c> after the log file's gap before an attempt's first line. stderr carries
+    /// openconnect's ordinary progress too, so it only gets a small "err" marker. openconnect has no
+    /// ERROR:/WARN: prefixes, which macOS colours for openfortivpn.
     /// </summary>
     private void Append(IEnumerable<LogEntry> entries)
     {
@@ -188,8 +193,15 @@ internal sealed class LogPane : IPane, IDisposable
         {
             foreach (var entry in entries)
             {
-                var start = length;
                 var line = entry.Line;
+                // The view's line break is \r.
+                var gap = LogLines.Gap(line, afterAnother: shown.Count > 0).ReplaceLineEndings("\r");
+                if (gap.Length > 0)
+                {
+                    Run(gap, colors.Tertiary);
+                    shown[^1] = (shown[^1].Id, shown[^1].Length + gap.Length);
+                }
+                var start = length;
                 Run(line.Time.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " ", colors.Tertiary);
                 var text = colors.Primary;
                 switch (line.Source)

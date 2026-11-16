@@ -44,6 +44,7 @@ fn a_rejection_learns_the_value_and_retries_at_once_without_counting() {
     assert_eq!(
         effects,
         [
+            Effect::AttemptBegun(second.clone()),
             Effect::SaveTrustedCerts(vec![digest('a'), pin_old()]),
             Effect::CloseOtpSession {
                 attempt: first,

@@ -7,7 +7,7 @@ use jiff::tz::TimeZone;
 
 use super::super::machine::{AttemptReason, Phase, RetryReason};
 use super::super::schedule::{Boundary, Edge};
-use super::super::{Effect, Failure, Input, Schedule, TimerKind};
+use super::super::{Effect, Failure, Input, Note, Schedule, TimerKind};
 use super::harness::*;
 
 fn reason(h: &Harness) -> Option<AttemptReason> {
@@ -170,7 +170,15 @@ fn a_launch_outside_the_hours_waits_for_the_start() {
         timer_set(&effects, TimerKind::Schedule),
         Some(at(18, 9, 0, 0))
     );
-    h.fire(TimerKind::Schedule);
+    let effects = h.fire(TimerKind::Schedule);
+    // The note that started the attempt comes after the announcement, in the attempt's block.
+    assert_eq!(
+        effects[..2],
+        [
+            Effect::AttemptBegun(id(1)),
+            Effect::Note(Note::ScheduledHoursStarted)
+        ]
+    );
     assert!(h.cm.wants_connection);
     assert_eq!(reason(&h), Some(AttemptReason::Scheduled));
     h.run_to_connected();

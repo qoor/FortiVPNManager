@@ -180,18 +180,27 @@
       "lines": [
         {
           "source": "stdout",
+          "startsAttempt": false,
           "text": "INFO:   Connected to gateway.",
           "time": 1762412345250
         },
         {
           "source": "stderr",
+          "startsAttempt": false,
           "text": "Using interface ppp0",
           "time": 1762412346000
         },
         {
           "source": "note",
+          "startsAttempt": true,
           "text": "‹schedule: scheduled hours started, connecting›",
           "time": 1762412346250
+        },
+        {
+          "source": "note",
+          "startsAttempt": false,
+          "text": "‹VPN client: openfortivpn 1.24.1›",
+          "time": 1762412346500
         }
       ]
     }

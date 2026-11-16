@@ -110,11 +110,16 @@ pub struct SignInPages {
 /// One line for the Log pane. The UI keeps the lines it shows and makes "Copy All" from them, in the
 /// log file's format.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LogLine {
     #[serde(serialize_with = "millis::time")]
     pub time: SystemTime,
     pub source: LogSource,
     pub text: String,
+    /// The first line of a connection attempt the core began. The log file, Copy All and the Log
+    /// pane put two empty lines before it, unless no line comes before it there, so each attempt
+    /// reads as its own block.
+    pub starts_attempt: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]

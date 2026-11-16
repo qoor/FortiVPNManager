@@ -49,21 +49,28 @@ public sealed class LogLines
     }
 
     /// <summary>"Copy All": the lines in the log file's format, times in <paramref name="zone"/>.</summary>
-    public string CopyAllText(TimeZoneInfo zone) => string.Join("\n", entries.Select(entry => FileLine(entry.Line, zone)));
+    public string CopyAllText(TimeZoneInfo zone) =>
+        string.Join("\n", entries.Select((entry, index) => FileLine(entry.Line, zone, afterAnother: index > 0)));
 
     /// <summary>
     /// <c>&lt;ISO 8601 local time with milliseconds&gt; [out|err|▸] &lt;text&gt;</c>, the line format of the
     /// log file, such as <c>2026-10-15T14:03:22.123+09:00 [out] Connected to gateway.</c> Universal
     /// time ends with Z, as the file writes it.
     /// </summary>
-    public static string FileLine(LogLine line, TimeZoneInfo zone)
+    public static string FileLine(LogLine line, TimeZoneInfo zone, bool afterAnother)
     {
         var local = TimeZoneInfo.ConvertTime(line.Time, zone);
         var offset = local.Offset == TimeSpan.Zero
             ? "Z"
             : (local.Offset < TimeSpan.Zero ? "-" : "+") + local.Offset.ToString("hh\\:mm", CultureInfo.InvariantCulture);
-        return $"{local.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture)}{offset} [{Tag(line.Source)}] {line.Text}";
+        return $"{Gap(line, afterAnother)}{local.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture)}{offset} [{Tag(line.Source)}] {line.Text}";
     }
+
+    /// <summary>
+    /// The two empty lines before the first line of an attempt, unless no line comes before it. The Log
+    /// pane puts the same before its own line.
+    /// </summary>
+    public static string Gap(LogLine line, bool afterAnother) => line.StartsAttempt && afterAnother ? "\n\n" : "";
 
     public static string Tag(LogSource source) => source switch
     {

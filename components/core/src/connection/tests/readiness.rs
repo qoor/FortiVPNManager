@@ -83,6 +83,7 @@ fn completing_the_setup_while_a_connection_is_wanted_connects() {
     assert_eq!(
         effects,
         [
+            Effect::AttemptBegun(id(2)),
             Effect::OpenOtpSession { attempt: id(2) },
             h.set(TimerKind::AttemptDeadline, h.now + secs(150.0)),
             Effect::HoldActivity(true),

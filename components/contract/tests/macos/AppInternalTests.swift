@@ -267,9 +267,13 @@ private extension AppInternal {
             .section(.bypassRules(bypassSection(.checking, notice: nil))),
             .section(.config(configSection(accountForm(0)))),
             .logLines(lines: [
-                LogLine(time: at(t0), source: .stdout, text: "INFO:   Connected to gateway."),
-                LogLine(time: at(t0 + 750), source: .stderr, text: "Using interface ppp0"),
-                LogLine(time: at(t0 + 1_000), source: .note, text: "‹schedule: scheduled hours started, connecting›"),
+                LogLine(time: at(t0), source: .stdout, text: "INFO:   Connected to gateway.", startsAttempt: false),
+                LogLine(time: at(t0 + 750), source: .stderr, text: "Using interface ppp0", startsAttempt: false),
+                LogLine(
+                    time: at(t0 + 1_000), source: .note, text: "‹schedule: scheduled hours started, connecting›",
+                    startsAttempt: true
+                ),
+                LogLine(time: at(t0 + 1_250), source: .note, text: "‹VPN client: openfortivpn 1.24.1›", startsAttempt: false),
             ]),
             .portRequest(id: 7, request: .screenState),
             .portAction(.approveQuit),

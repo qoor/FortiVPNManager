@@ -732,11 +732,14 @@ fn losing_the_helper_connection_ends_the_run() {
     let id = connecting.start_tunnel();
     let effects = connection_effects(&connecting.send(Input::HelperConnectionLost));
     assert_eq!(
-        effects.first(),
-        Some(&Effect::CloseOtpSession {
-            attempt: id,
-            check_spam: false
-        })
+        effects[..2],
+        [
+            Effect::AttemptBegun(super::harness::id(2)),
+            Effect::CloseOtpSession {
+                attempt: id,
+                check_spam: false
+            }
+        ]
     );
     assert_eq!(
         reason(&connecting),

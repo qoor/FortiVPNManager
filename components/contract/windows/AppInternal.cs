@@ -71,8 +71,11 @@ public static partial class AppInternal
     /// <summary>The pages the Google sign-in listener shows in the browser, in the UI's language.</summary>
     public sealed record SignInPages(string Completed, string NotCompleted, string Invalid);
 
-    /// <summary>One line for the Log pane.</summary>
-    public sealed record LogLine(DateTimeOffset Time, LogSource Source, string Text);
+    /// <summary>
+    /// One line for the Log pane. The first line of a connection attempt comes after two empty lines
+    /// unless no line comes before it.
+    /// </summary>
+    public sealed record LogLine(DateTimeOffset Time, LogSource Source, string Text, bool StartsAttempt);
 
     [JsonConverter(typeof(EnumNameConverter<LogSource>))]
     public enum LogSource

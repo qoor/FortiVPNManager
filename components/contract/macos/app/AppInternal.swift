@@ -55,6 +55,9 @@ nonisolated enum AppInternal {
         var time: Date
         var source: LogSource
         var text: String
+        /// The first line of a connection attempt, which comes after two empty lines unless no line
+        /// comes before it.
+        var startsAttempt: Bool
     }
 
     enum LogSource: String, Decodable, Sendable {

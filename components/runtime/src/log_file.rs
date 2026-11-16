@@ -15,8 +15,9 @@ const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 /// The current file and the rotated `.1` to `.4`.
 const KEPT_FILES: u32 = 5;
 
-/// `2026-11-09T09:00:38.543+09:00 [out] text`, in the local time zone with milliseconds.
-pub(crate) fn line(line: &LogLine, time_zone: &TimeZone) -> String {
+/// `2026-11-09T09:00:38.543+09:00 [out] text`, in the local time zone with milliseconds. The first
+/// line of an attempt comes after two empty lines, unless no line comes before it.
+pub(crate) fn line(line: &LogLine, time_zone: &TimeZone, after_another: bool) -> String {
     let since_1970 = line.time.duration_since(UNIX_EPOCH).unwrap_or_default();
     let timestamp = jiff::Timestamp::from_millisecond(
         i64::try_from(since_1970.as_millis()).expect("a time within the calendar"),
@@ -28,8 +29,13 @@ pub(crate) fn line(line: &LogLine, time_zone: &TimeZone) -> String {
         LogSource::Stderr => "err",
         LogSource::Note => "▸",
     };
+    let gap = if line.starts_attempt && after_another {
+        "\n\n"
+    } else {
+        ""
+    };
     format!(
-        "{} [{tag}] {}",
+        "{gap}{} [{tag}] {}",
         zoned.strftime("%Y-%m-%dT%H:%M:%S%.3f%:z"),
         line.text
     )
@@ -61,11 +67,7 @@ impl LogFile {
         if lines.is_empty() {
             return None;
         }
-        let text: String = lines
-            .iter()
-            .map(|entry| line(entry, time_zone) + "\n")
-            .collect();
-        match self.write(text.as_bytes()) {
+        match self.write(lines, time_zone) {
             Ok(()) => {
                 self.failure_reported = false;
                 None
@@ -85,15 +87,27 @@ impl LogFile {
         }
     }
 
-    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+    fn write(&mut self, lines: &[LogLine], time_zone: &TimeZone) -> io::Result<()> {
         if self.file.is_none() {
             self.open()?;
         }
-        if self.size > 0 && self.size + bytes.len() as u64 > MAX_FILE_BYTES {
+        let mut text: String = lines
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| line(entry, time_zone, self.size > 0 || index > 0) + "\n")
+            .collect();
+        if self.size > 0 && self.size + text.len() as u64 > MAX_FILE_BYTES {
             self.rotate()?;
+            // The new file starts with the first line, which has nothing before it there.
+            if text.starts_with("\n\n") {
+                text.drain(..2);
+            }
         }
-        self.file.as_mut().expect("opened above").write_all(bytes)?;
-        self.size += bytes.len() as u64;
+        self.file
+            .as_mut()
+            .expect("opened above")
+            .write_all(text.as_bytes())?;
+        self.size += text.len() as u64;
         Ok(())
     }
 
@@ -140,6 +154,7 @@ pub(crate) fn note(text: impl Into<String>) -> LogLine {
         time: SystemTime::now(),
         source: LogSource::Note,
         text: text.into(),
+        starts_attempt: false,
     }
 }
 
@@ -171,13 +186,16 @@ mod tests {
     }
 
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct FixtureLine {
         time: u64,
         source: String,
         text: String,
+        starts_attempt: bool,
     }
 
-    /// The fixture the Swift UI's Copy All is tested against.
+    /// The fixture the UIs' Copy All is tested against: one `copyAll` entry per line, with the gap
+    /// before an attempt's first line, as the file writes it.
     #[test]
     fn lines_match_the_shared_copy_all_fixture() {
         let fixture: Fixture = serde_json::from_str(include_str!(
@@ -190,7 +208,8 @@ mod tests {
             .log_lines
             .lines
             .iter()
-            .map(|entry| {
+            .enumerate()
+            .map(|(index, entry)| {
                 let source = match entry.source.as_str() {
                     "stdout" => LogSource::Stdout,
                     "stderr" => LogSource::Stderr,
@@ -200,11 +219,45 @@ mod tests {
                     time: UNIX_EPOCH + Duration::from_millis(entry.time),
                     source,
                     text: entry.text.clone(),
+                    starts_attempt: entry.starts_attempt,
                 };
-                line(&entry, &time_zone)
+                line(&entry, &time_zone, index > 0)
             })
             .collect();
         assert_eq!(written, fixture.copy_all);
+    }
+
+    #[test]
+    fn an_attempt_is_set_apart_only_after_a_line_of_the_same_file() {
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).unwrap();
+        let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
+        let path = directory.join("openfortivpn.log");
+        let note = |text: String, starts_attempt: bool| LogLine {
+            time: UNIX_EPOCH,
+            source: LogSource::Note,
+            text,
+            starts_attempt,
+        };
+        let mut log = LogFile::new(path.clone());
+        let batch = [note("a".into(), true), note("b".into(), false)];
+        assert_eq!(log.append(&batch, &TimeZone::UTC), None);
+        assert_eq!(log.append(&[note("c".into(), true)], &TimeZone::UTC), None);
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "1970-01-01T00:00:00.000+00:00 [▸] a\n\
+             1970-01-01T00:00:00.000+00:00 [▸] b\n\
+             \n\
+             \n\
+             1970-01-01T00:00:00.000+00:00 [▸] c\n"
+        );
+        // The line that fills the file starts the next one.
+        let big = note("x".repeat(MAX_FILE_BYTES as usize), true);
+        assert_eq!(log.append(&[big], &TimeZone::UTC), None);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("1970-01-01T00:00:00.000+00:00 [▸] xxx"));
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -219,6 +272,7 @@ mod tests {
             time: UNIX_EPOCH,
             source: LogSource::Stdout,
             text: "x".repeat(1024 * 1024),
+            starts_attempt: false,
         };
         for _ in 0..14 {
             assert_eq!(log.append(std::slice::from_ref(&big), &TimeZone::UTC), None);

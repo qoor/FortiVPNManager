@@ -312,6 +312,9 @@ pub enum Effect {
     ProbeNetwork(NetworkProbe),
     /// Answer with [`Input::ScreenState`].
     ReadScreenState,
+    /// Attempt `id` began: the next log line starts its block in the log. It comes first among its
+    /// input's effects, so a note that started the attempt is in the block.
+    AttemptBegun(AttemptId),
     /// A line for the Log pane.
     Note(Note),
     /// Show the settings window (`FromRuntime::OpenSettings`), after the sections of this input.
