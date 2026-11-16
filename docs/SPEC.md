@@ -89,126 +89,135 @@
 # 2. 구성 요소별 설명
 
 ## 2.1 공통 계약
-- **설명**: 앱 쪽, Helper 쪽, backend adapter가 함께 쓰는 약속이다. 앱과 Helper는 양쪽 모두 이 정의로 메시지를 만들고 읽는다.
-- **역할**
+- 설명: 앱 쪽·Helper 쪽·backend adapter의 공통 약속, 앱과 Helper 양쪽 메시지 작성·해석 기준
+- 역할
   - 실행 요청, 진행 단계, prompt 종류, 종료 사실, Helper 오류의 정의
-  - VPN client 처리가 제공해야 할 기능 목록, 메시지를 주고받는 규칙, IPv4 값 규칙
-- **모르는 것**: 통신 수단, 프로세스, 파일, 특정 VPN client.
-- **제공 기능**: 직접 맡는 기능은 없다. F-RT-02, F-VR-05가 쓰는 정의를 제공한다.
+  - VPN client 처리의 필수 기능 목록, 메시지 송수신 규칙, IPv4 값 규칙
+- 모르는 것: 통신 수단, 프로세스, 파일, 특정 VPN client
+- 제공 기능: 없음(F-RT-02, F-VR-05가 쓰는 정의 제공)
 
 ## 2.2 판단 코어
-- **설명**: 앱의 모든 판단과 데이터 형식 해석을 맡는다. 바깥과 직접 통신하지 않아서 같은 입력을 같은 순서로 넣으면 늘 같은 결과가 나온다.
-- **역할**
+- 설명: 앱의 모든 판단과 데이터 형식 해석, 바깥과 직접 통신 없음
+  - 같은 입력·순서에 항상 같은 결과
+- 역할
   - Connection Manager 규칙, 표시 값, 준비 상태 판정
   - 예외 규칙 계산, config.yaml·IMAP·Gmail API·OAuth·OTP 메일 형식
-- **모르는 것**: 파일, 네트워크, 타이머 실행, VPN client 이름, 화면 문장.
-- **제공 기능**: F-CM-01 사용자 요청 처리, F-CM-02 시도 진행, F-CM-03 종료 원인 분류, F-CM-04 재시도와 실패 제한, F-CM-05 사전 재연결, F-CM-06 잠자기와 깨어남, F-CM-07 네트워크 변화, F-CM-08 스케줄과 자리 비움, F-CM-09 서버 인증서 자동 신뢰, F-CM-10 표시 결정, F-CM-11 준비 상태 판정, F-CF-01 config.yaml 읽기와 검증, F-BR-01 적용 여부와 route 계산, F-BR-03 목록 편집 초안
+- 모르는 것: 파일, 네트워크, 타이머 실행, VPN client 이름, 화면 문장
+- 제공 기능: F-CM-01~11, F-CF-01, F-BR-01, F-BR-03
 
 ## 2.3 런타임
-- **설명**: 앱 안의 조율과, OS와 무관한 바깥 일을 맡는다. 판단 코어가 정한 할 일을 실행한다.
-- **역할**
+- 설명: 앱 안의 조율과 OS 무관 외부 작업, 판단 코어가 정한 작업 실행
+- 역할
   - 이벤트 처리, 타이머, Helper 요청 순서, 도메인 구역 전송
   - OTP 세션, Google 계정, config.yaml·state.json·로그 파일, 예외 규칙 동기화
-- **모르는 것**: 화면 문장, OS별 기능 구현, VPN client 프로세스. backend adapter는 설정 가져오기, 인증서 값 형식, 계정 값 확인에만 쓴다.
-- **제공 기능**: F-CF-02 설정 저장, F-CF-03 변경 감지, F-CF-04 기존 openfortivpn 설정 가져오기, F-OT-01 OTP 세션, F-OT-02 Gmail API 방식, F-OT-03 IMAP 방식과 대체 경로, F-OT-04 사용한 메일 정리와 스팸함 확인, F-OT-05 Gmail 연결 테스트, F-GA-01 Google 계정 연결과 해제, F-GA-02 OAuth client, F-BR-02 동기화, F-SR-01 state.json, F-SR-02 로그, F-RT-01 이벤트 처리와 타이머, F-RT-02 UI 메시지
+- 모르는 것: 화면 문장, OS별 기능 구현, VPN client 프로세스
+- backend adapter 사용 범위: 설정 가져오기, 인증서 값 형식, 계정 값 확인 한정
+- 제공 기능: F-CF-02~04, F-OT-01~05, F-GA-01~02, F-BR-02, F-SR-01~02, F-RT-01~02
 
 ## 2.4 backend adapter
-- **설명**: 특정 VPN client에만 해당하는 처리를 모은다. openfortivpn과 openconnect가 같은 인터페이스로 붙는다.
-- **역할**
-  - 실행 파일과 버전 확인, 실행 요청 검증, 설정 파일과 argv 만들기
-  - 출력 해석, 종료 유예 시간, 세션 cookie와 logout 요청, 기존 설정 읽기, 인증서 값 형식
-  - VPN client가 여러 OS에서 돌면 OS마다 다른 것(실행 파일 위치, 환경 변수, 일부 출력 문구)
-- **모르는 것**: 프로세스 생성과 종료 수단, 앱과의 통신 수단, 재시도 판단.
-- **제공 기능**: F-VR-01 client 준비, F-VR-03 출력 해석
+- 설명: 특정 VPN client 전용 처리 모음, openfortivpn·openconnect의 같은 인터페이스 사용
+- 역할
+  - 실행 파일·버전 확인, 실행 요청 검증, 설정 파일·argv 생성
+  - 출력 해석, 종료 유예 시간, 세션 cookie·logout 요청, 기존 설정 읽기, 인증서 값 형식
+  - 여러 OS용 VPN client의 OS별 차이(실행 파일 위치, 환경 변수, 일부 출력 문구)
+- 모르는 것: 프로세스 생성·종료 수단, 앱과의 통신 수단, 재시도 판단
+- 제공 기능: F-VR-01, F-VR-03
 
 ## 2.5 process 모듈
-- **설명**: Helper 안에서 VPN client를 맡는다. client를 확인하고, 시도 하나의 실행을 준비해 끝날 때까지 지킨다. 로그인과 터널을 나눠 실행하는 client는 두 프로세스를 차례로 실행하고, 강제로 끝낸 뒤에는 logout 요청을 보낸다. VPN client마다 다른 것은 backend adapter에 묻고, OS마다 다른 것(프로세스 실행·확인·종료, 실행 기록 폴더 권한)만 OS별(Unix, Windows)로 둔다.
-- **역할**
-  - client 확인, 실행 명세와 설정 파일 준비, OTP 형식 확인
+- 설명: Helper 안의 VPN client 담당, client 확인과 시도 하나의 실행 준비부터 종료까지 관리
+  - 로그인·터널 분리 client: 두 프로세스 순차 실행, 강제 종료 후 logout 요청
+  - VPN client별 차이: backend adapter에 위임
+- 역할
+  - client 확인, 실행 명세·설정 파일 준비, OTP 형식 확인
   - 프로세스 실행, stdin 입력, 출력 줄 조립
   - 단계별 시간 제한, 종료, logout, 종료 사실 기록
-  - Windows Helper가 시작할 때 client 확인을 한 번, 시간 제한 없이 하기
-- **모르는 것**: VPN client 이름과 출력 문구(backend adapter가 안다), route 복구 방법, 앱과의 통신, 실행을 요청한 사용자.
-- **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고. F-WN-03의 시작 때 client 확인을 맡는다.
+  - Windows Helper 시작 시 시간 제한 없는 client 확인 1회
+- 모르는 것: VPN client 이름·출력 문구, route 복구 방법, 앱과의 통신, 실행 요청 사용자
+- 제공 기능: F-VR-01, F-VR-02, F-VR-04, F-VR-05, F-WN-03의 시작 시 client 확인
 
 ## 2.6 recovery 모듈
-- **설명**: Helper가 죽어도 다음 Helper가 정리할 수 있게 실행과 예외 route를 기록하고, 다음 Helper가 시작할 때 그 기록으로 정리한다. 기록의 형식은 이 모듈이 정한다. VPN client에 관한 것은 process 모듈이 넘겨준 backend adapter에 묻는다.
-- **역할**
-  - 실행 기록(실행 중인 client와 그것이 띄운 프로세스, 게이트웨이)과 예외 route 기록(Helper가 넣고 아직 지우지 않은 예외 route)
-  - 이전 Helper가 남긴 프로세스 정리와 남은 파일 지우기
-  - route 복구 요청: 이전 Helper가 남긴 실행과, route를 되돌리지 않고 끝난 실행
-  - 이전 Helper가 남긴 예외 route 지우기 요청
-- **모르는 것**: route를 고치고 넣고 지우는 방법, 앱과의 통신, 실행을 요청한 사용자.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-BR-02 동기화의 예외 route 기록
+- 설명: Helper 비정상 종료 대비 실행·예외 route 기록, 다음 Helper 시작 시 그 기록으로 정리
+  - VPN client 관련 처리: process 모듈이 넘긴 backend adapter에 위임
+- 역할
+  - 실행 기록(실행 중 client와 그 하위 프로세스, 게이트웨이), 예외 route 기록(Helper가 넣고 아직 지우지 않은 route)
+  - 이전 Helper가 남긴 프로세스 정리, 남은 파일 삭제
+  - route 복구 요청: 이전 Helper의 실행, route를 되돌리지 않고 끝난 실행
+  - 이전 Helper가 남긴 예외 route 삭제 요청
+- 모르는 것: route 수정·추가·삭제 방법, 앱과의 통신, 실행 요청 사용자
+- 제공 기능: F-VR-06, F-BR-02의 예외 route 기록
 
 ## 2.7 entry 모듈
-- **설명**: Helper에서 OS에 의존하지 않는 앞단이다. 앱 요청을 받아 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 process 모듈과 recovery 모듈에 맡긴다. 상태 같은 응답은 process 모듈이 알려 준 것으로 만든다. Helper의 OS별 시작 부분이 backend adapter(macOS는 openfortivpn)와 실행 기록 폴더를 골라 process 모듈에 주고 entry 모듈을 시작한다. Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
-- **역할**
-  - 앱 연결, 실행 하나와 그 주인 관리, 응답 만들기
-  - 앱 연결마다 원하는 예외 route와 Helper가 넣은 예외 route 관리, 넣고 지울 route를 OS 쪽에 하나씩 넘기기
-  - 이전 Helper가 남긴 것의 정리와 route 복구가 끝날 때까지 앱 연결 막기, 실행이 요청한 route 복구를 OS 쪽에 넘기기
-  - Helper가 끝날 때 판단, Helper 로그
-- **모르는 것**: 앱과의 통신 수단, 연결 확인, route를 고치고 넣고 지우는 방법, VPN client(backend adapter에 직접 접근할 수 없다), OS가 프로세스와 파일 권한을 다루는 방법.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-BR-02 동기화의 Helper 쪽
+- 설명: Helper의 OS 무관 앞단, 앱 요청 접수와 허용 판단
+  - VPN client 관련 처리: process·recovery 모듈에 위임
+  - 상태 응답: process 모듈 제공 정보 기반
+- 역할
+  - 앱 연결, 실행 하나와 그 주인 관리, 응답 생성
+  - 앱 연결별 원하는 예외 route와 Helper가 넣은 예외 route 관리, 넣고 지울 route의 OS 쪽 전달
+  - 이전 Helper 잔여물 정리·route 복구 완료 전 앱 연결 차단, 실행이 요청한 route 복구의 OS 쪽 전달
+  - Helper 종료 판단, Helper 로그
+- 모르는 것: 앱과의 통신 수단, 연결 확인, route 수정·추가·삭제 방법, VPN client(backend adapter 직접 접근 불가), OS의 프로세스·파일 권한 처리
+- 제공 기능: F-VR-06, F-VR-07, F-BR-02의 Helper 쪽
 
 ## 2.8 UI (macOS)
-- **설명**: 도메인 구역을 화면으로 그리고 사용자 조작을 명령으로 보낸다. 사용자에게 보이는 모든 문장과 번역을 만든다.
-- **역할**
+- 설명: 도메인 구역의 화면 표시, 사용자 조작의 명령 전송, 사용자에게 보이는 모든 문장과 번역 생성
+- 역할
   - 메뉴바 아이콘, 메뉴, 설정창 pane
-  - 종류와 값으로 문장 만들기와 번역, 상대 시간 표시
-- **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
-- **제공 기능**: F-SW-01 UI 표시와 문장
+  - 종류·값 기반 문장 생성과 번역, 상대 시간 표시
+- 모르는 것: 연결 규칙(보일 값과 버튼 상태는 구역 값 그대로)
+- 제공 기능: F-SW-01
 
 ## 2.9 OS 연동 (macOS)
-- **설명**: 런타임이 요청하는 OS 기능을 macOS에서 제공하고 시스템 이벤트를 알린다.
-- **역할**
-  - 비밀값 저장, Helper 등록과 통신, 알림, 브라우저 열기, 앱 수명
-  - 시스템 이벤트와 네트워크 정보
-- **모르는 것**: 이벤트의 의미. 자리 비움 같은 조합과 판단은 런타임이 한다.
-- **제공 기능**: F-SW-02 OS port
+- 설명: 런타임이 요청한 OS 기능의 macOS 제공, 시스템 이벤트 전달
+- 역할
+  - 비밀값 저장, Helper 등록·통신, 알림, 브라우저 열기, 앱 수명
+  - 시스템 이벤트, 네트워크 정보
+- 모르는 것: 이벤트의 의미(자리 비움 같은 조합·판단은 런타임)
+- 제공 기능: F-SW-02
 
 ## 2.10 Helper OS 영역 (macOS)
-- **설명**: Helper 프로세스에서 OS에 의존하는 부분으로, 앱의 OS 연동에 대응한다. 나머지는 entry 모듈에 넘긴다.
-- **역할**
-  - 앱 연결 받기와 서명 확인, Helper 실행 관리와 자가 업데이트
-  - route 복구, entry가 요청한 예외 route 넣기·지우기와 주 네트워크 조회
-- **모르는 것**: 앱이 보낸 요청의 내용(버전 확인 제외), VPN client 실행, 어느 예외 route가 누구의 것인지.
-- **제공 기능**: F-SW-03 Helper OS 영역 (macOS)
+- 설명: Helper 프로세스의 OS 의존 부분, 앱 쪽 OS 연동에 대응, 나머지는 entry 모듈에 전달
+- 역할
+  - 앱 연결 접수와 서명 확인, Helper 실행 관리와 자가 업데이트
+  - route 복구, entry 요청에 따른 예외 route 추가·삭제와 주 네트워크 조회
+- 모르는 것: 앱 요청 내용(버전 확인 제외), VPN client 실행, 예외 route의 주인
+- 제공 기능: F-SW-03
 
 ## 2.11 UI (Windows)
-- **설명**: UI (macOS)와 같은 일을 Windows에서 한다. 사용자에게 보이는 구성(창, 메뉴, pane과 그 순서, pane 고르는 방식, pane 안 항목의 묶음과 순서)은 macOS와 같고, 컨트롤은 Windows 기본 컨트롤로 그린다.
-- **역할**
+- 설명: UI (macOS)와 같은 역할의 Windows 구현
+  - 사용자에게 보이는 구성(창, 메뉴, pane과 순서, pane 선택 방식, pane 안 항목의 섹션과 순서): macOS와 동일
+  - 컨트롤: Windows 기본 컨트롤
+- 역할
   - 알림 영역 아이콘과 메뉴, 설정창 pane
-  - 종류와 값으로 문장 만들기와 번역, 상대 시간 표시
-- **모르는 것**: 연결 규칙. 보일 값과 버튼 상태는 구역 값 그대로다.
-- **제공 기능**: F-WN-01 UI 표시와 문장 (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)의 오류 창
+  - 종류·값 기반 문장 생성과 번역, 상대 시간 표시
+- 모르는 것: 연결 규칙(보일 값과 버튼 상태는 구역 값 그대로)
+- 제공 기능: F-WN-01, F-WN-05의 오류 창
 
 ## 2.12 OS 연동 (Windows)
-- **설명**: 런타임이 요청하는 OS 기능을 Windows에서 제공하고 시스템 이벤트를 알린다. 런타임과 주고받는 메시지는 macOS와 같다.
-- **역할**
-  - 앱 시작 때 Helper 서비스 시작과 기다리기
+- 설명: 런타임이 요청한 OS 기능의 Windows 제공, 시스템 이벤트 전달, 런타임과의 메시지는 macOS와 동일
+- 역할
+  - 앱 시작 시 Helper 서비스 시작과 대기
   - 비밀값 저장, Helper 서비스와의 통신, 알림, 브라우저 열기, 앱 수명
-  - 시스템 이벤트와 네트워크 정보
-- **모르는 것**: 이벤트의 의미, 앱이 Helper와 주고받는 내용(버전 확인 제외).
-- **제공 기능**: F-WN-02 OS port (Windows), F-WN-05 앱 시작과 Helper 실행 (Windows)
+  - 시스템 이벤트, 네트워크 정보
+- 모르는 것: 이벤트의 의미, 앱과 Helper가 주고받는 내용(버전 확인 제외)
+- 제공 기능: F-WN-02, F-WN-05
 
 ## 2.13 Helper OS 영역 (Windows)
-- **설명**: Windows의 Helper OS 영역이다. Windows 서비스(Helper 서비스)로 실행되며, entry, process, recovery 모듈을 그대로 쓰고 macOS의 Helper OS 영역이 하는 일을 직접 한다.
-- **역할**
-  - 서비스 수명(실행 중이라고 알리기 전에 process 모듈에 맡기는 VPN client 확인 포함), 앱 연결 받기와 확인
-  - process 모듈에 줄 backend adapter(openconnect)와 실행 기록 폴더 고르기
-  - 게이트웨이 host route 정리, entry가 요청한 예외 route 넣기·지우기와 주 interface 조회
-- **모르는 것**: VPN client 출력 문구, 재시도 판단, 어느 예외 route가 누구의 것인지.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper OS 영역 (Windows)
+- 설명: Windows의 Helper OS 영역, Helper 서비스로 실행, entry·process·recovery 모듈 사용, macOS Helper OS 영역의 일을 직접 수행
+- 역할
+  - 서비스 수명(실행 중 알림 전 process 모듈의 VPN client 확인 포함), 앱 연결 접수·확인
+  - process 모듈용 backend adapter(openconnect)와 실행 기록 폴더 선택
+  - 게이트웨이 host route 정리, entry 요청에 따른 예외 route 추가·삭제와 주 interface 조회
+- 모르는 것: VPN client 출력 문구, 재시도 판단, 예외 route의 주인
+- 제공 기능: F-VR-06, F-VR-07, F-WN-03
 
 ## 2.14 설치 패키지 (Windows)
-- **설명**: Windows에 앱을 설치, 업그레이드, 제거하는 MSI 하나다. 관리자 권한으로 실행된다.
-- **역할**
+- 설명: Windows 앱의 설치·업그레이드·제거용 MSI 설치 패키지, 관리자 권한 실행
+- 역할
   - 앱, Helper, OpenConnect 설치와 업그레이드
   - Helper 서비스, 이벤트 로그 출처, 시작 메뉴 바로 가기 등록
-  - 제거 때 앱이 PC에 넣은 것(로그인 시 열기, Helper와 그 실행 기록) 정리
-- **모르는 것**: 연결과 VPN client 실행, config.yaml과 상태 파일 내용.
-- **제공 기능**: F-WN-04 설치, 업그레이드, 제거 (Windows)
+  - 제거 시 앱이 PC에 넣은 것(로그인 시 열기, Helper와 실행 기록) 정리
+- 모르는 것: 연결과 VPN client 실행, config.yaml·상태 파일 내용
+- 제공 기능: F-WN-04
 
 # 3. 기능 명세
 
