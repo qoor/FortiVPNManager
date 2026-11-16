@@ -11,7 +11,7 @@ using static FortiVPNManager.Ui.Text.Strings;
 namespace FortiVPNManager.Ui;
 
 /// <summary>
-/// The notification-area icon, the menu bar item's place on Windows (docs/SPEC.md F-WN-01): the app's
+/// The notification-area icon, the menu bar item's place on Windows: the app's
 /// icon, whose tooltip tells the connection's state; a click opens the menu the macOS menu bar item
 /// has, drawn from the latest sections (components/ui/macos/MenuBar.swift), and a double-click Settings.
 /// </summary>

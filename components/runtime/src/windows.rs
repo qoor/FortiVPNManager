@@ -55,7 +55,7 @@ fn pipe() -> (PipeReader, PipeWriter) {
     io::pipe().expect("creating a pipe to the app")
 }
 
-/// Where SPEC puts the app's files on Windows: config.yaml under the user's folder as on macOS,
+/// Where the app's files go on Windows: config.yaml under the user's folder as on macOS,
 /// the rest under the local application data.
 fn paths() -> Paths {
     let home = env::home_dir().expect("a home folder");
