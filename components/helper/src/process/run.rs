@@ -22,8 +22,8 @@ use fvm_contract::app_helper::{
     OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
-    Backend, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs,
-    SessionLaunch,
+    Backend, ClientExecutable, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome,
+    SessionInputs, SessionLaunch,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use zeroize::Zeroizing;
@@ -48,16 +48,18 @@ impl<B> Run<B>
 where
     B: Backend + Send + Sync + 'static,
 {
-    /// Starts the client as `launch` says, for one run of `request`, and calls `on_report` in order
+    /// Starts `client` as `launch` says, for one run of `request`, and calls `on_report` in order
     /// on the run's own thread until the `Exited` event, which is also how a failed start is
-    /// reported. `on_report` must never wait for anything that may be held while `submit_otp` runs,
-    /// since `submit_otp` waits for that thread; calling `submit_otp` or `stop` on it panics.
+    /// reported. The run's first line names the client and its version. `on_report` must never
+    /// wait for anything that may be held while `submit_otp` runs, since `submit_otp` waits for
+    /// that thread; calling `submit_otp` or `stop` on it panics.
     ///
     /// The request's password goes to stdin at the client's first password prompt, if the
     /// interpreter expects one there, and is then zeroed. The process must ignore SIGPIPE (see the
     /// `process` documentation).
     pub(crate) fn start(
         backend: Arc<B>,
+        client: &ClientExecutable,
         launch: &LaunchSpec,
         request: &mut RunRequest,
         files: RunFiles,
@@ -71,6 +73,14 @@ where
         password_line.extend_from_slice(password.as_bytes());
         password_line.push(b'\n');
 
+        let client_line = OutputLine {
+            date: SystemTime::now(),
+            source: OutputSource::Helper,
+            text: match client.version.as_str() {
+                "" => format!("‹VPN client: {}›", backend.client_name()),
+                version => format!("‹VPN client: {} {version}›", backend.client_name()),
+            },
+        };
         let (inputs, received) = mpsc::channel();
         let spawned = match os::spawn(launch) {
             Ok(spawned) => spawned,
@@ -82,7 +92,9 @@ where
                 );
                 let reporter = thread::Builder::new()
                     .name("fvm-process".to_owned())
-                    .spawn(move || report_spawn_failure(text, errno, &files, on_report))
+                    .spawn(move || {
+                        report_spawn_failure(client_line, text, errno, &files, on_report);
+                    })
                     .expect("starting the process thread");
                 return Run {
                     backend,
@@ -133,7 +145,7 @@ where
         };
         let watcher = thread::Builder::new()
             .name("fvm-process".to_owned())
-            .spawn(move || watch.run(command, &received))
+            .spawn(move || watch.run(client_line, command, &received))
             .expect("starting the process thread");
         Run {
             backend,
@@ -277,16 +289,20 @@ pub(crate) enum Input {
 }
 
 fn report_spawn_failure(
+    client_line: OutputLine,
     text: String,
     errno: i32,
     files: &RunFiles,
     mut on_report: impl FnMut(Report),
 ) {
-    on_report(Report::Output(vec![OutputLine {
-        date: SystemTime::now(),
-        source: OutputSource::Helper,
-        text,
-    }]));
+    on_report(Report::Output(vec![
+        client_line,
+        OutputLine {
+            date: SystemTime::now(),
+            source: OutputSource::Helper,
+            text,
+        },
+    ]));
     for line in files.remove() {
         on_report(Report::Log(LogLevel::Error, LogCategory::Helper, line));
     }
@@ -395,11 +411,12 @@ impl Stream {
 }
 
 impl<B: Backend, R: FnMut(Report)> Watch<B, R> {
-    fn run(mut self, command: String, inputs: &Receiver<Input>) {
+    fn run(mut self, client_line: OutputLine, command: String, inputs: &Receiver<Input>) {
         let Phase::Running(child) = &self.phase else {
             unreachable!("a run starts with the client running")
         };
         let pid = child.id();
+        self.batch.push(client_line);
         self.meta(format!("‹attempt started: pid {pid}, {command}›"));
         self.record_client(pid);
         self.reach(Milestone::Spawned);

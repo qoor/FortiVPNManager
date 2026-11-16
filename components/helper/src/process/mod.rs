@@ -112,6 +112,7 @@ where
         self.runs_started = number;
         let run = Run::start(
             Arc::clone(&self.backend),
+            &client,
             &launch,
             request,
             files,

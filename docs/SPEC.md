@@ -502,6 +502,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 앱 종료 전에 파일 쓰기를 마친다. [지우기]는 화면만 비운다.
   4. [모두 복사]는 UI가 화면에 가진 줄로 로그 파일과 같은 형식의 텍스트를 만든다.
   5. 설명 줄은 영어이고 비밀값과 config.yaml 내용을 남기지 않는다.
+  6. Helper는 실행할 때마다 그 실행의 첫 줄에 VPN client 이름과 버전을 적는다(`‹VPN client: openfortivpn 1.24.1›`, `‹VPN client: openconnect 9.21›`). 버전을 모르면 이름만 적는다. 시작하기 전에 확인한 client 정보를 쓰고, 이 줄 때문에 client를 따로 실행하지 않는다(사용자 결정, 2026-11-16).
 - **제약**: openfortivpn은 verbosity를 올릴 때만 비밀값을 출력하므로 기본 verbosity로 고정한다. openconnect도 기본 verbosity로 고정한다. 올리면 HTTP 요청과 응답 내용이 나올 수 있다. 기본 verbosity에서는 비밀값이 나오지 않음을 Windows 시험 로그로 확인했다.
 
 ## 3.7 조율 (F-RT)

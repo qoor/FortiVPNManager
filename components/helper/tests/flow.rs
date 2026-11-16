@@ -76,12 +76,13 @@ fn success_then_user_disconnect() {
         fixture_path("success").display(),
         session.record.path.display()
     );
+    assert_eq!(texts[0], "‹VPN client: openfortivpn 1.24.1›");
     assert!(
-        texts[0].starts_with("‹attempt started: pid "),
+        texts[1].starts_with("‹attempt started: pid "),
         "{}",
-        texts[0]
+        texts[1]
     );
-    assert!(texts[0].ends_with(&started), "{}", texts[0]);
+    assert!(texts[1].ends_with(&started), "{}", texts[1]);
     let order = [
         "‹password sent›",
         "INFO:   Connected to gateway.",
@@ -308,7 +309,10 @@ fn spawn_failure_is_reported_as_the_exit() {
     assert!(session.milestones().is_empty());
     assert_eq!(
         session.texts(),
-        ["‹spawn failed: /nonexistent/openfortivpn: No such file or directory (errno 2)›"]
+        [
+            "‹VPN client: openfortivpn 1.24.1›",
+            "‹spawn failed: /nonexistent/openfortivpn: No such file or directory (errno 2)›"
+        ]
     );
     assert_eq!(session.lines()[0].source, OutputSource::Helper);
     assert_eq!(session.run.process_id(), None);
@@ -329,7 +333,10 @@ fn spawn_failure_of_a_file_that_is_not_executable() {
     );
     assert_eq!(
         session.texts(),
-        ["‹spawn failed: /dev/null: Permission denied (errno 13)›"]
+        [
+            "‹VPN client: openfortivpn 1.24.1›",
+            "‹spawn failed: /dev/null: Permission denied (errno 13)›"
+        ]
     );
 }
 

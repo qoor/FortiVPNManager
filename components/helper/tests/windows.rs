@@ -279,6 +279,15 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         ]
     );
     assert_eq!(session.client_starts(), 2);
+    // One attempt: the client is named once, before the login run.
+    let named: Vec<&str> = session
+        .lines
+        .iter()
+        .map(|(_, text)| text.as_str())
+        .filter(|text| text.starts_with("‹VPN client: "))
+        .collect();
+    assert_eq!(named, ["‹VPN client: openconnect 9.21›"]);
+    assert_eq!(session.lines[0].1, named[0]);
     let values = scratch.values();
     assert_eq!(values["password"], PASSWORD);
     assert_eq!(values["otp"], OTP);
