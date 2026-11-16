@@ -81,6 +81,7 @@ jobs:
         with:
           name: pkg
           path: .build/FortiVPNManager-*.pkg
+          include-hidden-files: true
           if-no-files-found: error
       - if: always() && inputs.sign
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
