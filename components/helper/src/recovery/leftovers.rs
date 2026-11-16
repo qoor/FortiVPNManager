@@ -1,5 +1,6 @@
-//! Cleaning up after a Helper that died during a run: the client and the processes it started may
-//! still run, and a client that died without restoring the routes left them broken.
+//! Cleaning up after an earlier Helper: if it died during a run, the client and the processes it
+//! started may still run, and a client that died without restoring the routes left them broken; and
+//! the exception routes it added may still be in the routing table.
 
 use std::net::Ipv4Addr;
 use std::path::Path;
@@ -7,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::backend::Backend;
-use fvm_contract::helper_internal::{LogCategory, LogLevel};
+use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel};
 
 use crate::process::os;
 use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
@@ -16,24 +17,27 @@ use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
 const KILL_LIMIT: Duration = Duration::from_secs(2);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Cleans up after a Helper that died during a run of `backend`'s client in `directory`: stops the
-/// client processes its pidfile names that still run, calls `repair_routes` with the run's gateway,
-/// if it is known, and removes the files it left once that returns. The routes are repaired
-/// whenever a pidfile is left, even an unreadable one, since a run did not finish. `log` takes lines
-/// for the Helper's log.
+/// Cleans up after an earlier Helper in `directory`. If it died during a run of `backend`'s client,
+/// stops the client processes its pidfile names that still run, calls `repair_routes` with the
+/// run's gateway, if it is known, and removes the files it left once that returns. The routes are
+/// repaired whenever a pidfile is left, even an unreadable one, since a run did not finish. Then
+/// `remove_bypass_routes` gets the exception routes it recorded and answers those still in the
+/// routing table, which stay recorded and are returned as this Helper's. `log` takes lines for the
+/// Helper's log.
 pub(crate) fn clean_up<B: Backend>(
     backend: &B,
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
     repair_routes: impl FnOnce(Option<Ipv4Addr>),
-) {
+    remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
+) -> Vec<AddedRoute> {
     if let Err(failure) = os::prepare_run_directory(directory) {
         log(
             LogLevel::Error,
             LogCategory::Helper,
             format!("cannot prepare the run directory: {failure}"),
         );
-        return;
+        return Vec::new();
     }
     if let Some(record) = run_directory::read_record(directory) {
         // An unreadable pidfile still means a run did not finish, so the routes are checked.
@@ -74,6 +78,34 @@ pub(crate) fn clean_up<B: Backend>(
             log(LogLevel::Error, LogCategory::Helper, line);
         }
     }
+    let recorded = match run_directory::read_bypass_record(directory) {
+        None => return Vec::new(),
+        Some(Ok(routes)) => routes,
+        Some(Err(_)) => {
+            log(
+                LogLevel::Error,
+                LogCategory::Helper,
+                format!(
+                    "ignoring unreadable exception route record {}",
+                    run_directory::bypass_record_path(directory).display()
+                ),
+            );
+            Vec::new()
+        }
+    };
+    let left = if recorded.is_empty() {
+        Vec::new()
+    } else {
+        remove_bypass_routes(recorded)
+    };
+    if let Err(failure) = run_directory::write_bypass_record(directory, &left) {
+        log(
+            LogLevel::Error,
+            LogCategory::Helper,
+            format!("cannot record the exception routes: {failure}"),
+        );
+    }
+    left
 }
 
 /// The OS's stop request first, so the client can restore the routes, and its forced stop after

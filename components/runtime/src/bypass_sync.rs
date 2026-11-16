@@ -1,14 +1,16 @@
-//! Keeping the primary network service's additional routes in line with the exception rules
-//!, and the Exception Rules pane's list drafts. Routes added elsewhere
-//! through the router join the list before anything is recorded as applied, so a failed save leaves
-//! them looking added elsewhere rather than removed from the list. A failed write is retried a few
-//! times, then reported once as a notification.
+//! Keeping the app's exception routes in line with the exception rules on the primary network, and
+//! the Exception Rules pane's list drafts. The routes are in the routing table only while the app
+//! wants the VPN up, so a change of that is synced at once: an attempt's routes are in place
+//! before the tunnel's. The Helper removes them when the app quits or its connection goes away,
+//! so the app writes them again on a new connection. A failed write, or a failed read after the
+//! connection was lost, is retried a few times, then reported once as a notification.
 
 use std::collections::HashSet;
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use fvm_contract::app_helper::{
-    AdditionalRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperErrorCode,
+    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperErrorCode,
 };
 use fvm_contract::app_internal::command::BypassList;
 use fvm_contract::app_internal::port::{
@@ -24,6 +26,9 @@ use crate::orchestration::Runtime;
 const SETTLE_DELAY: Duration = Duration::from_secs(1);
 const WRITE_RETRY_DELAY: Duration = Duration::from_secs(10);
 const MAX_WRITE_RETRIES: u32 = 3;
+/// How long a quit waits for the Helper to remove the routes. One that does not answer removes
+/// them anyway when the app's connection goes away, or a later Helper does.
+const QUIT_REMOVAL_LIMIT: Duration = Duration::from_secs(5);
 
 pub(crate) struct Bypass {
     drafts: Option<RuleDrafts>,
@@ -37,6 +42,10 @@ pub(crate) struct Bypass {
     settle_generation: u64,
     /// The Helper answered with this build; a Helper that becomes ready later starts a sync.
     pub(crate) helper_ready: bool,
+    /// The app quits: nothing is synced any more, and the quit waits for the routes' removal.
+    quitting: bool,
+    /// The Helper connection was lost and no sync has succeeded since.
+    connection_lost: bool,
 }
 
 impl Default for Bypass {
@@ -52,6 +61,8 @@ impl Default for Bypass {
             retry_generation: 0,
             settle_generation: 0,
             helper_ready: false,
+            quitting: false,
+            connection_lost: false,
         }
     }
 }
@@ -63,21 +74,33 @@ struct SyncFailure {
 }
 
 impl Runtime {
-    fn drafts(&mut self) -> &mut RuleDrafts {
+    /// The VPN server's address, when the settings name it by one.
+    fn vpn_server_address(&self) -> Option<Ipv4Addr> {
+        self.config.settings().vpn.host.parse().ok()
+    }
+
+    fn saved_drafts(&self) -> RuleDrafts {
         let routes = &self.config.settings().routes;
-        let (networks, targets) = (routes.networks.clone(), routes.bypass_vpn.clone());
-        self.bypass
-            .drafts
-            .get_or_insert_with(|| RuleDrafts::new(networks, targets))
+        RuleDrafts::new(
+            routes.networks.clone(),
+            routes.bypass_vpn.clone(),
+            self.vpn_server_address(),
+        )
+    }
+
+    fn drafts(&mut self) -> &mut RuleDrafts {
+        if self.bypass.drafts.is_none() {
+            self.bypass.drafts = Some(self.saved_drafts());
+        }
+        self.bypass.drafts.as_mut().expect("just set")
     }
 
     pub(crate) fn bypass_section(&self) -> BypassRulesSection {
-        let routes = &self.config.settings().routes;
         let fresh;
         let drafts = match &self.bypass.drafts {
             Some(drafts) => drafts,
             None => {
-                fresh = RuleDrafts::new(routes.networks.clone(), routes.bypass_vpn.clone());
+                fresh = self.saved_drafts();
                 &fresh
             }
         };
@@ -126,7 +149,9 @@ impl Runtime {
     /// synced again.
     pub(crate) fn sync_bypass_routes(&mut self) {
         let routes = self.config.settings().routes.clone();
+        let vpn_server = self.vpn_server_address();
         if let Some(drafts) = &mut self.bypass.drafts {
+            drafts.set_vpn_server(vpn_server);
             if drafts.networks.saved() != routes.networks.as_slice() {
                 drafts.networks.merge_saved(routes.networks.clone());
             }
@@ -135,6 +160,24 @@ impl Runtime {
             }
         }
         self.sync_routes();
+    }
+
+    /// The Helper connection is gone, and the routes with it: the next one gets them again, and a
+    /// failed read is retried until it does.
+    pub(crate) fn bypass_connection_lost(&mut self) {
+        self.bypass.connection_lost = true;
+        self.sync_bypass_routes_soon();
+    }
+
+    /// The last sync failed and no retry is planned.
+    pub(crate) fn bypass_sync_gave_up(&self) -> bool {
+        matches!(
+            self.bypass.status,
+            BypassStatus::Failed {
+                retry_in_seconds: None,
+                ..
+            }
+        )
     }
 
     /// Syncs once the network settings stopped changing.
@@ -153,6 +196,9 @@ impl Runtime {
     }
 
     fn sync_routes(&mut self) {
+        if self.bypass.quitting {
+            return;
+        }
         if self.bypass.syncing {
             self.bypass.sync_requested = true;
             return;
@@ -176,7 +222,7 @@ impl Runtime {
         self.call_helper(
             HelperCall::ReadBypassRoutes {},
             |runtime, response| match runtime.routes_reply(response) {
-                Ok(snapshot) => runtime.plan_and_write(snapshot),
+                Ok((snapshot, routes)) => runtime.plan_and_write(snapshot, &routes),
                 Err(error) => runtime.sync_failed(SyncFailure {
                     failure: error,
                     writing: false,
@@ -185,16 +231,16 @@ impl Runtime {
         );
     }
 
-    /// The snapshot in a route call's answer, or why there is none. A Helper without a primary
-    /// network service answers with the wrong-phase code.
+    /// The primary network and the app's routes in place, in a route call's answer, or why there
+    /// are none. A Helper without a primary network answers with the wrong-phase code.
     fn routes_reply(
         &mut self,
         response: PortResponse,
-    ) -> Result<BypassRoutesSnapshot, BypassFailure> {
+    ) -> Result<(BypassRoutesSnapshot, Vec<BypassRoute>), BypassFailure> {
         match response {
             PortResponse::HelperReply { json: Some(json) } => {
                 match serde_json::from_str::<BypassRoutesReply>(&json) {
-                    Ok(BypassRoutesReply::Success { snapshot }) => Ok(snapshot),
+                    Ok(BypassRoutesReply::Success { snapshot, routes }) => Ok((snapshot, routes)),
                     Ok(BypassRoutesReply::Failure { error })
                         if error.code == HelperErrorCode::WrongPhase =>
                     {
@@ -217,6 +263,9 @@ impl Runtime {
                             message: error.message,
                         })
                     }
+                    Ok(BypassRoutesReply::Removed {}) => {
+                        panic!("a read or write of the routes answered as a removal")
+                    }
                     Err(error) => Err(BypassFailure::SettingsNotChanged {
                         message: error.to_string(),
                     }),
@@ -238,48 +287,25 @@ impl Runtime {
         }
     }
 
-    fn plan_and_write(&mut self, snapshot: BypassRoutesSnapshot) {
+    /// Writes the planned routes unless they are the ones in place already, or the app quits.
+    fn plan_and_write(&mut self, snapshot: BypassRoutesSnapshot, in_place: &[BypassRoute]) {
+        if self.bypass.quitting {
+            return self.sync_done();
+        }
         self.bypass.current = Some(snapshot.clone());
         // The latest file, after the round trip.
         let routes = self.config.settings().routes.clone();
-        let applied = self
-            .state
-            .state()
-            .applied_routes
-            .get(&snapshot.service_id)
-            .cloned()
-            .unwrap_or_default();
-        let plan = plan_routes(&routes.networks, &routes.bypass_vpn, &applied, &snapshot);
-        if !plan.imported.is_empty() {
-            let imported = plan.imported.clone();
-            let saved = self.config.update(|settings| {
-                for network in &imported {
-                    if !settings.routes.bypass_vpn.contains(network) {
-                        settings.routes.bypass_vpn.push(*network);
-                    }
-                }
-            });
-            if let Err(error) = saved {
-                return self.sync_failed(SyncFailure {
-                    failure: BypassFailure::ImportNotSaved { error },
-                    writing: true,
-                });
-            }
-            self.system_log(
-                LogLevel::Notice,
-                LogCategory::BypassRoutes,
-                format!(
-                    "added {} route(s) found on {} to routes.bypass_vpn",
-                    plan.imported.len(),
-                    snapshot.service_name
-                ),
-            );
-            self.config_reloaded();
+        let plan = plan_routes(
+            &routes.networks,
+            &routes.bypass_vpn,
+            &snapshot,
+            self.cm.wants_vpn(),
+        );
+        if same_routes(in_place, &plan.routes) {
+            let status = plan.status(&snapshot);
+            return self.sync_succeeded(&snapshot, status);
         }
-        if !plan.needs_write {
-            return self.sync_succeeded(&snapshot, &plan.applied, plan.status(&snapshot));
-        }
-        let request = BypassRoutesRequest {
+        let request = BypassRoutesRequest::Write {
             expected: snapshot.clone(),
             routes: plan.routes.clone(),
         };
@@ -287,8 +313,8 @@ impl Runtime {
         self.call_helper(
             HelperCall::WriteBypassRoutes { json },
             move |runtime, response| {
-                let current = match runtime.routes_reply(response) {
-                    Ok(current) => current,
+                let (current, found) = match runtime.routes_reply(response) {
+                    Ok(answer) => answer,
                     Err(failure) => {
                         return runtime.sync_failed(SyncFailure {
                             failure,
@@ -296,15 +322,15 @@ impl Runtime {
                         });
                     }
                 };
-                let kept: HashSet<&AdditionalRoute> = current.routes.iter().collect();
-                let wanted: HashSet<&AdditionalRoute> = plan.routes.iter().collect();
-                if current.routes.len() != plan.routes.len() || kept != wanted {
+                if !same_routes(&found, &plan.routes) {
                     runtime.system_log(
                         LogLevel::Error,
                         LogCategory::BypassRoutes,
                         format!(
-                            "{} did not keep the routes that were written",
-                            snapshot.service_name
+                            "{} of {} exception route(s) through {} are not in the routing table",
+                            plan.routes.len() - found.len(),
+                            plan.routes.len(),
+                            current.service_name
                         ),
                     );
                     return runtime.sync_failed(SyncFailure {
@@ -316,55 +342,42 @@ impl Runtime {
                     LogLevel::Notice,
                     LogCategory::BypassRoutes,
                     format!(
-                        "wrote {} exception route(s) to {}",
-                        plan.applied.len(),
-                        snapshot.service_name
+                        "wrote {} exception route(s) through {}",
+                        plan.routes.len(),
+                        current.service_name
                     ),
                 );
                 let status = plan.status(&current);
-                runtime.sync_succeeded(&current, &plan.applied, status);
+                runtime.sync_succeeded(&current, status);
             },
         );
     }
 
-    fn sync_succeeded(
-        &mut self,
-        current: &BypassRoutesSnapshot,
-        applied: &[AdditionalRoute],
-        status: BypassStatus,
-    ) {
-        let service = current.service_id.clone();
-        let applied = applied.to_vec();
-        if let Err(problem) = self.state.update(|state| {
-            if applied.is_empty() {
-                state.applied_routes.remove(&service);
-            } else {
-                state.applied_routes.insert(service, applied);
-            }
-        }) {
-            self.system_log(LogLevel::Error, LogCategory::State, problem);
-        }
+    fn sync_succeeded(&mut self, current: &BypassRoutesSnapshot, status: BypassStatus) {
         self.bypass.current = Some(current.clone());
         self.bypass.write_failures = 0;
         self.bypass.retry_generation += 1;
+        self.bypass.connection_lost = false;
         self.bypass.status = status;
         self.sync_done();
     }
 
     fn sync_failed(&mut self, failure: SyncFailure) {
-        if !failure.writing {
-            // Reading failed: the network may be gone; nothing is retried.
-            if matches!(failure.failure, BypassFailure::NetworkChanged {}) {
-                self.bypass.current = None;
-                self.bypass.status = BypassStatus::NoNetwork {};
+        let no_network =
+            !failure.writing && matches!(failure.failure, BypassFailure::NetworkChanged {});
+        // A read that failed is retried only after the Helper connection was lost, which took the
+        // routes with it; otherwise the Helper may simply not be set up yet.
+        if no_network || (!failure.writing && !self.bypass.connection_lost) {
+            self.bypass.current = None;
+            self.bypass.status = if no_network {
+                BypassStatus::NoNetwork {}
             } else {
-                self.bypass.current = None;
-                self.bypass.status = BypassStatus::Failed {
+                BypassStatus::Failed {
                     failure: failure.failure,
                     retry_in_seconds: None,
                     stopped_after_retries: None,
-                };
-            }
+                }
+            };
             return self.sync_done();
         }
         self.bypass.write_failures += 1;
@@ -404,8 +417,58 @@ impl Runtime {
 
     fn sync_done(&mut self) {
         self.bypass.syncing = false;
-        if std::mem::take(&mut self.bypass.sync_requested) {
+        if self.bypass.quitting {
+            self.remove_routes_for_quit();
+        } else if std::mem::take(&mut self.bypass.sync_requested) {
             self.sync_routes();
         }
     }
+
+    /// The core approved the quit: the Helper removes the app's routes first, unless it is not the
+    /// app's build, which never got any. A sync under way finishes first, since the Helper takes
+    /// one route request of a connection at a time.
+    pub(crate) fn quit_after_removing_bypass_routes(&mut self) {
+        self.bypass.quitting = true;
+        if !self.bypass.helper_ready {
+            return self.approve_quit();
+        }
+        let queue = self.queue();
+        self.tasks.spawn(async move {
+            tokio::time::sleep(QUIT_REMOVAL_LIMIT).await;
+            queue.run(Runtime::approve_quit);
+        });
+        if !self.bypass.syncing {
+            self.remove_routes_for_quit();
+        }
+    }
+
+    fn remove_routes_for_quit(&mut self) {
+        let json = serde_json::to_string(&BypassRoutesRequest::Remove {})
+            .expect("a route request encodes");
+        self.call_helper(
+            HelperCall::WriteBypassRoutes { json },
+            |runtime, response| {
+                let removed = matches!(
+                    &response,
+                    PortResponse::HelperReply { json: Some(json) }
+                        if serde_json::from_str::<BypassRoutesReply>(json)
+                            .is_ok_and(|reply| reply == BypassRoutesReply::Removed {})
+                );
+                if !removed {
+                    runtime.system_log(
+                        LogLevel::Error,
+                        LogCategory::BypassRoutes,
+                        format!("removing the exception routes on quit failed: {response:?}"),
+                    );
+                }
+                runtime.approve_quit();
+            },
+        );
+    }
+}
+
+/// The same routes, whatever their order.
+fn same_routes(found: &[BypassRoute], planned: &[BypassRoute]) -> bool {
+    found.len() == planned.len()
+        && found.iter().collect::<HashSet<_>>() == planned.iter().collect::<HashSet<_>>()
 }

@@ -5,8 +5,8 @@ enum HelperBuild {
     static let id = BuildID(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown")
 }
 
-/// XPC endpoint exported on one app connection. Answers the version check and the exception-route
-/// methods itself and passes every other request, unread, to the Helper entry.
+/// XPC endpoint exported on one app connection. Answers the version check itself and passes every
+/// other request, unread, to the Helper entry.
 final class HelperService: NSObject, HelperXPCProtocol {
     private let client: ClientLink
 
@@ -44,26 +44,17 @@ final class HelperService: NSObject, HelperXPCProtocol {
     }
 
     func bypassRoutes(reply: @escaping @Sendable (Data) -> Void) {
-        BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.read())) }
+        EntryRelay.forward(.readBypassRoutes, from: client, reply: .data(reply))
     }
 
+    /// Bytes that are not UTF-8 reach the entry replaced, and it refuses what it cannot read.
     func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
-        let decoded: BypassRoutesRequest
-        do {
-            decoded = try XPCCoding.decode(BypassRoutesRequest.self, from: request)
-        } catch {
-            reply(Self.encode(.failure(HelperError(.invalidRequest, "could not decode the route list"))))
-            return
-        }
-        BypassRoutes.queue.async { reply(Self.encode(BypassRoutes.write(decoded))) }
+        let json = String(decoding: request, as: UTF8.self)
+        EntryRelay.forward(.writeBypassRoutes(json: json), from: client, reply: .data(reply))
     }
 
     /// Never `nil`: a `nil` reply means success.
     private static func encode(_ error: HelperError) -> Data {
         (try? XPCCoding.encode(error)) ?? Data(#"{"code":"internalError","message":""}"#.utf8)
-    }
-
-    private static func encode(_ reply: BypassRoutesReply) -> Data {
-        (try? XPCCoding.encode(reply)) ?? Data(#"{"failure":{"_0":{"code":"internalError","message":""}}}"#.utf8)
     }
 }

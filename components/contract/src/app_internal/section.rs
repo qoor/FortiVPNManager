@@ -614,6 +614,8 @@ pub enum RowProblem {
     Overlap {
         other: String,
     },
+    /// A target that is the VPN server's address, which always goes out directly.
+    VpnServer {},
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -628,17 +630,13 @@ pub enum BypassStatus {
         router: String,
         /// Targets on this network itself, which need no route.
         on_link_targets: u32,
-        /// Routes added elsewhere that did not fit in the full list.
-        not_imported: u32,
-        kept_through_other_gateways: u32,
     },
+    /// On a listed network, but the app does not want the VPN up: disconnected, paused, or
+    /// holding a reconnect for an away user outside the scheduled hours.
+    VpnOff {},
     /// This Mac is outside the listed networks.
-    OutsideNetworks {
-        kept_through_other_gateways: u32,
-    },
-    NoNetworksListed {
-        kept_through_other_gateways: u32,
-    },
+    OutsideNetworks {},
+    NoNetworksListed {},
     /// The settings file has an error, so the routes are left as they are.
     ConfigInvalid {},
     /// No active network with an IPv4 router.
@@ -657,9 +655,9 @@ pub enum BypassStatus {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum BypassFailure {
-    /// The network settings did not keep the routes that were written.
+    /// The routing table does not have every route that was written.
     RoutesNotKept {},
-    /// The network or its routes changed while the routes were being written.
+    /// The network changed while the routes were being written.
     NetworkChanged {},
     /// The Helper refused the route list, with its message.
     HelperRefused {
@@ -668,10 +666,6 @@ pub enum BypassFailure {
     /// Changing the network settings failed, with the Helper's message.
     SettingsNotChanged {
         message: String,
-    },
-    /// Routes found on the network could not be saved to the settings file.
-    ImportNotSaved {
-        error: ConfigFileError,
     },
     HelperUnreachable {
         failure: HelperChannelFailure,

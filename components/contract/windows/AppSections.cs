@@ -427,6 +427,8 @@ public static partial class AppInternal
         public sealed record Invalid(AddressProblem Problem) : RowProblem;
         public sealed record Duplicate(string Entry) : RowProblem;
         public sealed record Overlap(string Other) : RowProblem;
+        /// <summary>A target that is the VPN server's address, which always goes out directly.</summary>
+        public sealed record VpnServer : RowProblem;
     }
 
     [JsonConverter(typeof(CasesConverter<BypassStatus>))]
@@ -437,15 +439,12 @@ public static partial class AppInternal
         public sealed record Checking : BypassStatus;
         public sealed record NoConfigFile : BypassStatus;
 
-        public sealed record Applied(
-            string ServiceName,
-            string Router,
-            uint OnLinkTargets,
-            uint NotImported,
-            uint KeptThroughOtherGateways) : BypassStatus;
+        public sealed record Applied(string ServiceName, string Router, uint OnLinkTargets) : BypassStatus;
 
-        public sealed record OutsideNetworks(uint KeptThroughOtherGateways) : BypassStatus;
-        public sealed record NoNetworksListed(uint KeptThroughOtherGateways) : BypassStatus;
+        /// <summary>On a listed network, but the app does not want the VPN up.</summary>
+        public sealed record VpnOff : BypassStatus;
+        public sealed record OutsideNetworks : BypassStatus;
+        public sealed record NoNetworksListed : BypassStatus;
         public sealed record ConfigInvalid : BypassStatus;
         public sealed record NoNetwork : BypassStatus;
 
@@ -464,7 +463,6 @@ public static partial class AppInternal
         public sealed record NetworkChanged : BypassFailure;
         public sealed record HelperRefused(string Message) : BypassFailure;
         public sealed record SettingsNotChanged(string Message) : BypassFailure;
-        public sealed record ImportNotSaved(ConfigFileError Error) : BypassFailure;
         public sealed record HelperUnreachable(HelperChannelFailure Failure) : BypassFailure;
         public sealed record HelperBuildMismatch(string HelperBuild, string AppBuild) : BypassFailure;
     }

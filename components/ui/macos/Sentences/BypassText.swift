@@ -30,6 +30,7 @@ extension AppInternal.RowProblem {
         case let .invalid(problem): problem.message(for: row)
         case let .duplicate(entry): String(localized: "\(entry) is already in the list.")
         case let .overlap(other): String(localized: "'\(preview(row))' overlaps \(other), which is already in the list.")
+        case .vpnServer: String(localized: "Can't add the VPN server's address '\(preview(row))'.")
         }
     }
 
@@ -39,6 +40,7 @@ extension AppInternal.RowProblem {
         case let .invalid(problem): problem.rowMessage
         case .duplicate: String(localized: "This address is already in the list.")
         case let .overlap(other): String(localized: "Overlaps \(other).")
+        case .vpnServer: String(localized: "The VPN server's address can't be registered as an exception target.")
         }
     }
 }
@@ -63,21 +65,18 @@ extension AppInternal.BypassStatus {
             return (String(localized: "Checking the routes…"), .info)
         case .noConfigFile:
             return (String(localized: "The settings file doesn't exist yet. Apply creates it."), .info)
-        case let .applied(serviceName, router, onLinkTargets, notImported, kept):
+        case let .applied(serviceName, router, onLinkTargets):
             var parts = [String(localized: "Applied to \(serviceName) (router \(router)).")]
             if onLinkTargets > 0 {
                 parts.append(String(localized: "\(onLinkTargets) target(s) are on this network and need no route."))
             }
-            if notImported > 0 {
-                parts.append(String(localized: "List full: \(notImported) route(s) added elsewhere weren't imported."))
-            }
-            return (Self.adding(kept: kept, to: parts), .success)
-        case let .outsideNetworks(kept):
-            let parts = [String(localized: "Not applied: outside the networks above. Everything goes through the VPN.")]
-            return (Self.adding(kept: kept, to: parts), .info)
-        case let .noNetworksListed(kept):
-            let parts = [String(localized: "No networks listed, so the rules apply nowhere.")]
-            return (Self.adding(kept: kept, to: parts), .info)
+            return (parts.joined(separator: " "), .success)
+        case .vpnOff:
+            return (String(localized: "Not applied while the VPN is off."), .info)
+        case .outsideNetworks:
+            return (String(localized: "Not applied: outside the networks above. Everything goes through the VPN."), .info)
+        case .noNetworksListed:
+            return (String(localized: "No networks listed, so the rules apply nowhere."), .info)
         case .configInvalid:
             return (String(localized: "The settings file has an error, so the routes are left as they are."), .warning)
         case .noNetwork:
@@ -87,12 +86,6 @@ extension AppInternal.BypassStatus {
             let retry = String(localized: "Trying again in \(time.spelledOut(seconds: retryInSeconds)).")
             return (failure.message + " " + retry, .error)
         }
-    }
-
-    private static func adding(kept: Int, to parts: [String]) -> String {
-        guard kept > 0 else { return parts.joined(separator: " ") }
-        return (parts + [String(localized: "\(kept) route(s) through other gateways are left as they are.")])
-            .joined(separator: " ")
     }
 }
 
@@ -107,8 +100,6 @@ extension AppInternal.BypassFailure {
             String(localized: "The Helper refused the route list (\(message)).")
         case let .settingsNotChanged(message):
             Self.settingsNotChanged(detail: message)
-        case let .importNotSaved(error):
-            String(localized: "Couldn't save the imported routes to the settings file: \(error.message)")
         case let .helperUnreachable(failure):
             String(localized: "Couldn't apply the routes: \(failure.message)")
         case let .helperBuildMismatch(helperBuild, appBuild):

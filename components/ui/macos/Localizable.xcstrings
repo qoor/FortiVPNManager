@@ -211,16 +211,6 @@
         }
       }
     },
-    "%lld route(s) through other gateways are left as they are.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "다른 게이트웨이를 거치는 라우트 %lld개는 그대로 두었습니다."
-          }
-        }
-      }
-    },
     "%lld target(s) are on this network and need no route.": {
       "localizations": {
         "ko": {
@@ -577,6 +567,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "앱에 내장됨"
+          }
+        }
+      }
+    },
+    "Can't add the VPN server's address '%@'.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 서버 주소 '%@'은(는) 추가할 수 없습니다."
           }
         }
       }
@@ -1121,22 +1121,22 @@
         }
       }
     },
-    "Couldn't save the imported routes to the settings file: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "가져온 라우트를 설정 파일에 저장하지 못했습니다: %@"
-          }
-        }
-      }
-    },
     "Couldn't save the password to Keychain: %@": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "Keychain에 비밀번호를 저장하지 못했습니다: %@"
+          }
+        }
+      }
+    },
+    "Couldn't save: %@": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "저장 실패: %@"
           }
         }
       }
@@ -2151,16 +2151,6 @@
         }
       }
     },
-    "List full: %lld route(s) added elsewhere weren't imported.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "목록이 가득 차 외부 라우트 %lld개를 가져오지 않았습니다."
-          }
-        }
-      }
-    },
     "Log": {
       "localizations": {
         "ko": {
@@ -2437,6 +2427,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "IPv4 주소나 CIDR 형식이 아닙니다."
+          }
+        }
+      }
+    },
+    "Not applied while the VPN is off.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN이 꺼져 있어 적용하지 않았습니다."
           }
         }
       }
@@ -3501,6 +3501,16 @@
         }
       }
     },
+    "The VPN server's address can't be registered as an exception target.": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 서버 주소는 예외 대상으로 등록할 수 없습니다."
+          }
+        }
+      }
+    },
     "The YAML structure is nested too deeply.": {
       "localizations": {
         "ko": {
@@ -3817,16 +3827,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "설정 파일에 오류가 있어 라우트를 바꾸지 않았습니다."
-          }
-        }
-      }
-    },
-    "The settings to save are invalid. %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "저장할 설정이 올바르지 않습니다. %@"
           }
         }
       }

@@ -1,13 +1,15 @@
 //! The Helper entry: the Helper's front, the same on every OS. It admits the app connections the OS
-//! side passes on, decides who may do what with the one run, answers the app's requests from what the
-//! watchdog tells it, and decides when the Helper exits. Everything about the VPN client, from
-//! checking it to stopping what an earlier Helper left, is `process`'s and `recovery`'s, which the
-//! OS's start hands over as a `Watchdog` with the backend adapter and the run directory it chose.
-//! The entry uses no OS-specific API.
+//! side passes on, decides who may do what with the one run and with the exception routes, answers
+//! the app's requests from what the watchdog and the OS side tell it, and decides when the Helper
+//! exits. Everything about the VPN client, from checking it to stopping what an earlier Helper left,
+//! is `process`'s and `recovery`'s, which the OS's start hands over as a `Watchdog` with the backend
+//! adapter and the run directory it chose. The entry uses no OS-specific API.
 //!
 //! The OS side's messages and the current run's reports arrive on one channel and are handled one at
 //! a time on one thread. So what reaches an app keeps the order in which it happened, and the run
 //! thread, which only forwards, never waits for this one.
+
+mod bypass_routes;
 
 use std::collections::HashMap;
 use std::env;
@@ -21,12 +23,16 @@ use fvm_contract::app_helper::{
     Milestone, RunRequest, StopReason,
 };
 use fvm_contract::backend::{Backend, ClientCheckWait, ClientProblemKind};
-use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
+use fvm_contract::helper_internal::{
+    AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, ToEntry,
+};
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::process::{Report, Run, StartFailure, Watchdog};
 use crate::recovery::RouteRepair;
+
+use bypass_routes::BypassRoutes;
 
 /// How long exiting after the OS's termination request waits for the run to report its exit.
 /// Longer than the client's grace period, so a client that ignores the stop request is killed and
@@ -92,7 +98,7 @@ fn serve<B>(watchdog: Watchdog<B>, os: OsSide, sender: Sender<Event>, events: Re
 where
     B: Backend + Send + Sync + 'static,
 {
-    clean_up(&watchdog, &os, &events);
+    let left = clean_up(&watchdog, &os, &events);
     os.send(&FromEntry::Ready {});
     Entry {
         watchdog,
@@ -104,15 +110,17 @@ where
         executable_replaced: false,
         lifecycle: Lifecycle::Serving,
         route_repair: None,
+        bypass_routes: BypassRoutes::new(left),
     }
     .run()
 }
 
-/// Has the watchdog clean up after a Helper that died during a run, and the OS side repair the
-/// routes that run may have left broken, before any app connection is accepted. Until "ready", the
-/// OS side accepts no app connection and passes on no stop request, so the route repair's answer is
-/// the only message it sends.
-fn clean_up<B>(watchdog: &Watchdog<B>, os: &OsSide, events: &Receiver<Event>)
+/// Has the watchdog clean up after an earlier Helper, and the OS side repair the routes a run that
+/// did not finish may have left broken and remove the exception routes the earlier Helper added,
+/// before any app connection is accepted. Returns the exception routes that could not be removed.
+/// Until "ready", the OS side accepts no app connection and passes on no stop request, so the
+/// answers to these requests are the only messages it sends.
+fn clean_up<B>(watchdog: &Watchdog<B>, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute>
 where
     B: Backend + Send + Sync + 'static,
 {
@@ -133,7 +141,35 @@ where
                 format!("cleaned up after an unfinished run (route repair: {outcome:?})"),
             );
         },
-    );
+        |recorded| {
+            let change = bypass_routes::removal(&recorded);
+            os.send(&FromEntry::ChangeBypassRoutes { change });
+            let Event::FromOs(ToEntry::BypassRoutesChanged { outcome }) =
+                events.recv().expect("the entry holds a sender")
+            else {
+                panic!(
+                    "the OS side sent something other than the exception routes' answer before ready"
+                );
+            };
+            let left = bypass_routes::left_after_removal(&recorded, outcome).unwrap_or_else(
+                |(left, error)| {
+                    let message = format!("removing exception routes failed: {}", error.message);
+                    os.log(LogLevel::Error, LogCategory::Routes, message);
+                    left
+                },
+            );
+            os.log(
+                LogLevel::Notice,
+                LogCategory::Routes,
+                format!(
+                    "removed {} of the {} exception route(s) an earlier helper added",
+                    recorded.len() - left.len(),
+                    recorded.len()
+                ),
+            );
+            left
+        },
+    )
 }
 
 struct Entry<B> {
@@ -149,6 +185,7 @@ struct Entry<B> {
     lifecycle: Lifecycle,
     /// The current run's route repair while the OS side carries it out.
     route_repair: Option<RouteRepair>,
+    bypass_routes: BypassRoutes,
 }
 
 /// The one run at a time and who owns it.
@@ -226,6 +263,9 @@ where
                 .take()
                 .expect("the OS side answers only the route repair it was asked for")
                 .finish(outcome),
+            Event::FromOs(ToEntry::BypassRoutesChanged { outcome }) => {
+                self.bypass_routes_changed(outcome);
+            }
             Event::Run(report) => self.run_report(report),
         }
     }
@@ -240,6 +280,7 @@ where
 
     fn app_disconnected(&mut self, app: u64) {
         self.apps.remove(&app);
+        self.app_gone_with_its_bypass_routes(app);
         if let Some(current) = self.run.as_ref().filter(|run| run.owner_app == app) {
             self.os.log(
                 LogLevel::Notice,
@@ -326,6 +367,10 @@ where
                 let value = self.exit_when_idle();
                 self.os.send(&FromEntry::ReplyFlag { id, value });
                 return;
+            }
+            AppRequest::ReadBypassRoutes {} => return self.read_bypass_routes(app, id),
+            AppRequest::WriteBypassRoutes { json } => {
+                return self.write_bypass_routes(app, id, &json);
             }
         };
         let json = result.err().map(|error| to_json(&error));

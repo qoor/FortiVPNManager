@@ -6,7 +6,7 @@ mod common;
 use std::net::Ipv4Addr;
 
 use common::*;
-use fvm_contract::app_helper::AdditionalRoute;
+use fvm_contract::app_helper::BypassRoute;
 use fvm_contract::app_internal::Weekday;
 use fvm_contract::app_internal::problem::{
     AddressProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind, ValueKind,
@@ -25,8 +25,8 @@ fn out_of_range(length: u32) -> AddressProblem {
     }
 }
 
-fn route(destination: &str, mask: &str) -> AdditionalRoute {
-    AdditionalRoute {
+fn route(destination: &str, mask: &str) -> BypassRoute {
+    BypassRoute {
         destination: destination.into(),
         subnet_mask: mask.into(),
         gateway: "10.20.161.254".into(),
@@ -130,7 +130,7 @@ fn host_bits_after_the_prefix_suggest_the_network() {
 }
 
 #[test]
-fn networksetup_masks() {
+fn route_destinations_with_subnet_masks() {
     assert_eq!(
         Ipv4Network::from_route(&route("10.30.161.16", "255.255.255.255"))
             .unwrap()
@@ -386,6 +386,40 @@ fn overlapping_entries_fail_the_file() {
         s.routes.networks = vec![net("10.30.161.0/24")];
     });
     assert_eq!(validation_error(&settings), None);
+}
+
+/// The VPN server always goes out directly, so its own address can't be an exception target; a
+/// network that holds it can, and a server named by a host name is not checked here.
+#[test]
+fn the_vpn_servers_address_is_no_exception_target() {
+    let error = load_error(
+        "vpn:\n  host: \"10.30.161.16\"\nroutes:\n  bypass_vpn:\n    - 10.30.170.0/24\n    - 10.30.170.0/24\n    - 10.30.161.16\n",
+    )
+    .unwrap();
+    assert_eq!(
+        error.kind,
+        ConfigProblemKind::VpnServerAsRouteTarget {
+            path: "routes.bypass_vpn".into(),
+        }
+    );
+    assert_eq!(error.location, loc(7, 7));
+    let named =
+        decode("vpn:\n  host: \"vpn.example.com\"\nroutes:\n  bypass_vpn: [10.30.161.16]\n");
+    assert_eq!(named.settings.routes.bypass_vpn, [bypass_host()]);
+    let inside =
+        decode("vpn:\n  host: \"10.30.161.16\"\nroutes:\n  bypass_vpn: [10.30.161.0/24]\n");
+    assert_eq!(inside.settings.routes.bypass_vpn, [net("10.30.161.0/24")]);
+
+    let settings = changed(|s| {
+        s.vpn.host = "10.30.161.16".into();
+        s.routes.bypass_vpn = vec![bypass_network(), bypass_host()];
+    });
+    assert_eq!(
+        validation_error(&settings),
+        Some(ConfigProblemKind::VpnServerAsRouteTarget {
+            path: "routes.bypass_vpn".into(),
+        })
+    );
 }
 
 // MARK: Schedule

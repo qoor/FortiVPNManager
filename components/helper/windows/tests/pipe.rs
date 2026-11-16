@@ -138,12 +138,13 @@ fn the_bypass_routes_are_read_after_the_build_check() {
 
     build_check(&connection, BUILD);
     let answer = ask(&connection, json!({ "readBypassRoutes": { "id": 3 } }));
-    // The test PC has a wired network.
-    let BypassRoutesReply::Success { snapshot } = reply(&answer, 3) else {
+    // The test PC has a wired network; the new connection has no exception routes.
+    let BypassRoutesReply::Success { snapshot, routes } = reply(&answer, 3) else {
         panic!("{answer}");
     };
     assert!(snapshot.service_id.starts_with('{'), "{snapshot:?}");
     assert!(snapshot.router.parse::<std::net::Ipv4Addr>().is_ok());
+    assert!(routes.is_empty(), "{routes:?}");
 }
 
 #[test]
@@ -158,7 +159,8 @@ fn a_connection_has_one_route_request_at_a_time() {
         )
         .unwrap();
     }
-    // The second is refused at once; the first is answered once PowerShell is done.
+    // The second is refused at once; the first is answered once the entry and the routing table
+    // are done with it.
     let refused: Value = stream::receive(&mut &connection).unwrap();
     let BypassRoutesReply::Failure { error } = reply(&refused, 3) else {
         panic!("{refused}");

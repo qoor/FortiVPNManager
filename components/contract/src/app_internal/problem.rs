@@ -155,6 +155,11 @@ pub enum ConfigProblemKind {
         index: u32,
         other: String,
     },
+    /// The exception target is the VPN server's address (`vpn.host`), which always goes out
+    /// directly.
+    VpnServerAsRouteTarget {
+        path: String,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]

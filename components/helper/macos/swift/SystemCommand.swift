@@ -2,8 +2,8 @@ import Darwin
 import Dispatch
 import Foundation
 
-/// Runs a system tool (`/sbin/route`, `/usr/sbin/networksetup`) synchronously with a fixed argv and
-/// `PATH` as its only environment variable. No shell is involved.
+/// Runs a system tool (`/sbin/route`) synchronously with a fixed argv and `PATH` as its only
+/// environment variable. No shell is involved.
 enum SystemCommand {
     struct Result: Sendable {
         /// `.spawnFailed` when the tool could not be started; `errorOutput` then says why.

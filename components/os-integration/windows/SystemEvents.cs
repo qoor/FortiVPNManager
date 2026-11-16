@@ -13,8 +13,9 @@ namespace FortiVPNManager.OsIntegration;
 internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetime)
 {
     /// <summary>
-    /// Windows announces no change of persistent routes, so the runtime is told the network settings
-    /// may have changed this often, and it checks the exception routes again.
+    /// Windows announces no change of routes, and another program, such as the VPN's route script,
+    /// may remove an exception route, so the runtime is told the network settings may have changed
+    /// this often, and it checks the exception routes again.
     /// </summary>
     private static readonly TimeSpan RouteCheck = TimeSpan.FromMinutes(5);
 

@@ -31,8 +31,6 @@
     },
     "status": {
       "applied": {
-        "keptThroughOtherGateways": 3,
-        "notImported": 2,
         "onLinkTargets": 1,
         "router": "10.20.161.1",
         "serviceName": "Ethernet"
@@ -76,9 +74,7 @@
       }
     },
     "status": {
-      "outsideNetworks": {
-        "keptThroughOtherGateways": 0
-      }
+      "outsideNetworks": {}
     },
     "targets": {
       "addRow": "enabled",
@@ -107,9 +103,34 @@
       }
     },
     "status": {
-      "noNetworksListed": {
-        "keptThroughOtherGateways": 1
+      "noNetworksListed": {}
+    },
+    "targets": {
+      "addRow": "enabled",
+      "problemRows": [],
+      "rows": []
+    }
+  },
+  {
+    "addCurrentNetwork": "disabled",
+    "apply": "disabled",
+    "discard": "disabled",
+    "hasChanges": false,
+    "networks": {
+      "addRow": "enabled",
+      "problemRows": [],
+      "rows": []
+    },
+    "notice": {
+      "rowProblem": {
+        "problem": {
+          "vpnServer": {}
+        },
+        "row": "203.0.113.10"
       }
+    },
+    "status": {
+      "vpnOff": {}
     },
     "targets": {
       "addRow": "enabled",
@@ -282,46 +303,6 @@
         "failure": {
           "settingsNotChanged": {
             "message": "** Error: The parameters were not valid."
-          }
-        }
-      }
-    },
-    "targets": {
-      "addRow": "enabled",
-      "problemRows": [],
-      "rows": []
-    }
-  },
-  {
-    "addCurrentNetwork": "disabled",
-    "apply": "disabled",
-    "discard": "disabled",
-    "hasChanges": false,
-    "networks": {
-      "addRow": "enabled",
-      "problemRows": [],
-      "rows": []
-    },
-    "status": {
-      "failed": {
-        "failure": {
-          "importNotSaved": {
-            "error": {
-              "unreadableFile": {
-                "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-                "problem": {
-                  "kind": {
-                    "duplicateKey": {
-                      "key": "vpn"
-                    }
-                  },
-                  "location": {
-                    "column": 1,
-                    "line": 7
-                  }
-                }
-              }
-            }
           }
         }
       }

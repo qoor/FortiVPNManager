@@ -1,16 +1,15 @@
-//! Exception rules: whether they apply on the current network, the routes it should have, routes to
-//! import, and the edit drafts of both lists.
+//! Exception rules: whether they apply on the current network, the routes it should have, and the
+//! edit drafts of both lists.
 //!
 //! Both lists, the networks where the rules apply (`routes.networks`) and the targets that skip the
 //! VPN there (`routes.bypass_vpn`), hold IPv4 hosts and networks written `10.30.161.16` or
 //! `10.30.170.0/24`.
 
-use std::collections::HashSet;
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
-use fvm_contract::app_helper::{AdditionalRoute, BypassRoutesSnapshot};
+use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::command::BypassList;
 use fvm_contract::app_internal::problem::{AddressProblem, ConfigFileError};
@@ -34,8 +33,8 @@ pub struct Ipv4Network {
 }
 
 impl Ipv4Network {
-    /// A route destination as the network settings report it: an address and a subnet mask.
-    pub fn from_route(route: &AdditionalRoute) -> Result<Self, AddressProblem> {
+    /// A route's destination: an address and a subnet mask.
+    pub fn from_route(route: &BypassRoute) -> Result<Self, AddressProblem> {
         let (address, prefix_length) = address_and_mask(&route.destination, &route.subnet_mask)?;
         Self::new(address, prefix_length)
     }
@@ -45,6 +44,11 @@ impl Ipv4Network {
     pub fn enclosing(address: &str, subnet_mask: &str) -> Result<Self, AddressProblem> {
         let (address, prefix_length) = address_and_mask(address, subnet_mask)?;
         Self::new(address & mask(prefix_length), prefix_length)
+    }
+
+    /// The single host `address`, if it can be an exception target.
+    pub fn host(address: Ipv4Addr) -> Option<Self> {
+        Self::new(u32::from(address), MAX_PREFIX_LENGTH).ok()
     }
 
     fn new(address: u32, prefix_length: u32) -> Result<Self, AddressProblem> {
@@ -99,9 +103,9 @@ impl Ipv4Network {
         self.contains(other) || other.contains(self)
     }
 
-    /// The additional route that sends this network through `gateway`.
-    pub fn route_through(&self, gateway: &str) -> AdditionalRoute {
-        AdditionalRoute {
+    /// The exception route that sends this network through `gateway`.
+    pub fn route_through(&self, gateway: &str) -> BypassRoute {
+        BypassRoute {
             destination: self.address().to_string(),
             subnet_mask: Ipv4Addr::from(mask(self.prefix_length)).to_string(),
             gateway: gateway.to_owned(),
@@ -195,6 +199,14 @@ pub fn current_network(
     }
 }
 
+/// The position of the target that is the VPN server's address, when `host` is an address: the
+/// server always goes out directly, so it can't be an exception target (user decision,
+/// 2026-11-16). A network that holds it is fine.
+pub fn vpn_server_target(targets: &[Ipv4Network], host: &str) -> Option<usize> {
+    let server = Ipv4Network::host(host.parse().ok()?)?;
+    targets.iter().position(|target| *target == server)
+}
+
 // MARK: Routes
 
 /// Whether the rules apply on the primary network.
@@ -204,49 +216,29 @@ pub enum Applicability {
     Applies {
         network: Ipv4Network,
     },
+    /// On a listed network, but the app does not want the VPN up.
+    VpnOff,
     OutsideNetworks,
     NoNetworksListed,
 }
 
-/// What the primary network service's additional routes become.
-///
-/// A route on the service is the app's own when the app wrote it last time (`previously_applied`,
-/// compared whole) or, while the rules apply, when it is a listed target through the current
-/// router outside this Mac's own network. The app's own routes are rewritten from the list, or
-/// removed where the rules do not apply. While they apply, other routes through the router were
-/// added elsewhere and join the list, unless they overlap a listed target or a wider route joining
-/// with them, lie inside this Mac's own network, or the list is full. Every other route is kept
-/// exactly as it is: other gateways, routes on this Mac's network the app never wrote, and anything
-/// on a network where the rules do not apply.
+/// The exception routes the primary network should have.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RoutePlan {
     pub applicability: Applicability,
-    /// Targets to append to the list; save them before writing the routes, so that a failed save
-    /// leaves them looking added elsewhere rather than removed from the list.
-    pub imported: Vec<Ipv4Network>,
-    /// Routes added elsewhere that did not fit in the full list; they are kept.
-    pub not_imported: usize,
     /// Listed targets on this Mac's own network: reached directly, so no route is written.
     pub on_link: Vec<Ipv4Network>,
-    /// How many kept routes go through another gateway than the router.
-    pub kept_through_other_gateways: usize,
-    /// The app's own routes after the write, to record as applied.
-    pub applied: Vec<AdditionalRoute>,
-    /// The complete list the service should have: `applied`, then the kept routes.
-    pub routes: Vec<AdditionalRoute>,
-    /// `routes` differs from what the service has.
-    pub needs_write: bool,
+    /// Where the rules apply, a route through the router for every other listed target, in list
+    /// order; none elsewhere.
+    pub routes: Vec<BypassRoute>,
 }
 
-/// Plans the service's routes from the saved `networks` and `targets`, the routes the app last
-/// wrote on this service, and the service as read now.
 pub fn plan_routes(
     networks: &[Ipv4Network],
     targets: &[Ipv4Network],
-    previously_applied: &[AdditionalRoute],
     snapshot: &BypassRoutesSnapshot,
+    vpn_wanted: bool,
 ) -> RoutePlan {
-    let router = snapshot.router.as_str();
     let matched = snapshot
         .address
         .parse::<Ipv4Addr>()
@@ -257,111 +249,45 @@ pub fn plan_routes(
                 .find(|network| network.contains_address(address))
         });
     let applicability = match matched {
+        Some(_) if !vpn_wanted => Applicability::VpnOff,
         Some(network) => Applicability::Applies { network: *network },
         None if networks.is_empty() => Applicability::NoNetworksListed,
         None => Applicability::OutsideNetworks,
     };
-    let active = matched.is_some();
     let local = local_network(snapshot);
-    let on_local = |network: &Ipv4Network| local.is_some_and(|local| local.contains(network));
-
-    // A route through the router the rules may own: a valid target outside this Mac's network.
-    let candidate = |route: &AdditionalRoute| -> Option<Ipv4Network> {
-        if !active || route.gateway != router || previously_applied.contains(route) {
-            return None;
-        }
-        let network = Ipv4Network::from_route(route).ok()?;
-        (!on_local(&network)).then_some(network)
-    };
-
-    let mut imported: Vec<Ipv4Network> = Vec::new();
-    let mut not_imported = 0;
-    let room = MAX_ENTRIES.saturating_sub(targets.len());
-    let mut candidates: Vec<Ipv4Network> = snapshot.routes.iter().filter_map(candidate).collect();
-    // Widest first (the sort is stable), so of two overlapping routes the wider one joins the list
-    // whatever their order on the service.
-    candidates.sort_by_key(|network| network.prefix_length);
-    for network in candidates {
-        if targets
-            .iter()
-            .chain(&imported)
-            .any(|listed| listed.overlaps(&network))
-        {
-            continue;
-        }
-        if imported.len() < room {
-            imported.push(network);
-        } else {
-            not_imported += 1;
-        }
-    }
-
-    let mut kept: Vec<AdditionalRoute> = Vec::new();
-    for route in &snapshot.routes {
-        if previously_applied.contains(route) {
-            continue;
-        }
-        if candidate(route)
-            .is_some_and(|network| targets.contains(&network) || imported.contains(&network))
-        {
-            continue;
-        }
-        if !kept.contains(route) {
-            kept.push(route.clone());
-        }
-    }
-
     let mut on_link = Vec::new();
-    let mut applied = Vec::new();
-    if active {
-        for target in targets.iter().chain(&imported) {
-            if on_local(target) {
+    let mut routes = Vec::new();
+    if matches!(applicability, Applicability::Applies { .. }) {
+        for target in targets {
+            if local.is_some_and(|local| local.contains(target)) {
                 on_link.push(*target);
             } else {
-                applied.push(target.route_through(router));
+                routes.push(target.route_through(&snapshot.router));
             }
         }
     }
-    let kept_through_other_gateways = kept.iter().filter(|route| route.gateway != router).count();
-    let routes: Vec<AdditionalRoute> = applied.iter().cloned().chain(kept).collect();
-    let needs_write = routes.len() != snapshot.routes.len()
-        || routes.iter().collect::<HashSet<_>>() != snapshot.routes.iter().collect::<HashSet<_>>();
     RoutePlan {
         applicability,
-        imported,
-        not_imported,
         on_link,
-        kept_through_other_gateways,
-        applied,
         routes,
-        needs_write,
     }
 }
 
 impl RoutePlan {
-    /// The status line once the service has `routes`, as read back in `snapshot`.
+    /// The status line once the routes are in place.
     pub fn status(&self, snapshot: &BypassRoutesSnapshot) -> BypassStatus {
-        let kept_through_other_gateways = count(self.kept_through_other_gateways);
         match self.applicability {
             Applicability::Applies { .. } => BypassStatus::Applied {
                 service_name: snapshot.service_name.clone(),
                 router: snapshot.router.clone(),
-                on_link_targets: count(self.on_link.len()),
-                not_imported: count(self.not_imported),
-                kept_through_other_gateways,
+                on_link_targets: u32::try_from(self.on_link.len())
+                    .expect("a list holds at most MAX_ENTRIES"),
             },
-            Applicability::OutsideNetworks => BypassStatus::OutsideNetworks {
-                kept_through_other_gateways,
-            },
-            Applicability::NoNetworksListed => BypassStatus::NoNetworksListed {
-                kept_through_other_gateways,
-            },
+            Applicability::VpnOff => BypassStatus::VpnOff {},
+            Applicability::OutsideNetworks => BypassStatus::OutsideNetworks {},
+            Applicability::NoNetworksListed => BypassStatus::NoNetworksListed {},
         }
     }
-}
-
-fn count(value: usize) -> u32 {
-    u32::try_from(value).expect("route counts fit in u32")
 }
 
 // MARK: Edit drafts
@@ -373,6 +299,8 @@ pub struct ListDraft {
     /// Trimmed, never blank.
     rows: Vec<String>,
     saved: Vec<Ipv4Network>,
+    /// The VPN server's address, which no row of the targets may name.
+    vpn_server: Option<Ipv4Network>,
 }
 
 impl ListDraft {
@@ -380,6 +308,7 @@ impl ListDraft {
         Self {
             rows: saved.iter().map(ToString::to_string).collect(),
             saved,
+            vpn_server: None,
         }
     }
 
@@ -428,6 +357,9 @@ impl ListDraft {
         for (index, row) in self.rows.iter().enumerate() {
             match row.parse::<Ipv4Network>() {
                 Err(problem) => problems.push((index, RowProblem::Invalid { problem })),
+                Ok(entry) if Some(entry) == self.vpn_server => {
+                    problems.push((index, RowProblem::VpnServer {}));
+                }
                 Ok(entry) if seen.contains(&entry) => problems.push((
                     index,
                     RowProblem::Duplicate {
@@ -453,7 +385,9 @@ impl ListDraft {
         let mut entries: Vec<Ipv4Network> = Vec::new();
         for row in &self.rows {
             let entry = row.parse::<Ipv4Network>().ok()?;
-            if entries.iter().any(|earlier| earlier.overlaps(&entry)) {
+            if Some(entry) == self.vpn_server
+                || entries.iter().any(|earlier| earlier.overlaps(&entry))
+            {
                 return None;
             }
             entries.push(entry);
@@ -467,7 +401,7 @@ impl ListDraft {
         self.entries().as_deref() != Some(self.saved.as_slice())
     }
 
-    /// The saved list is now `saved`, after a settings file edit or imported routes. Without edits
+    /// The saved list is now `saved`, after a settings file edit. Without edits
     /// the rows follow it; with edits, rows of entries removed there go away, entries added there
     /// are appended, and every other row stays as typed.
     pub fn merge_saved(&mut self, saved: Vec<Ipv4Network>) {
@@ -533,11 +467,23 @@ pub struct RuleDrafts {
 
 impl RuleDrafts {
     /// Drafts without changes, on load and after Apply saved `networks` and `targets`.
-    pub fn new(networks: Vec<Ipv4Network>, targets: Vec<Ipv4Network>) -> Self {
-        Self {
+    /// `vpn_server` is the VPN server's address, when `vpn.host` is one.
+    pub fn new(
+        networks: Vec<Ipv4Network>,
+        targets: Vec<Ipv4Network>,
+        vpn_server: Option<Ipv4Addr>,
+    ) -> Self {
+        let mut drafts = Self {
             networks: ListDraft::new(networks),
             targets: ListDraft::new(targets),
-        }
+        };
+        drafts.set_vpn_server(vpn_server);
+        drafts
+    }
+
+    /// The VPN server's address changed in the settings.
+    pub fn set_vpn_server(&mut self, vpn_server: Option<Ipv4Addr>) {
+        self.targets.vpn_server = vpn_server.and_then(Ipv4Network::host);
     }
 
     pub fn list_mut(&mut self, list: BypassList) -> &mut ListDraft {

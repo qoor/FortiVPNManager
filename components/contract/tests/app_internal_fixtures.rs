@@ -808,8 +808,6 @@ fn bypass_rules_sections() {
                     service_name: "Ethernet".into(),
                     router: "10.20.161.1".into(),
                     on_link_targets: 1,
-                    not_imported: 2,
-                    kept_through_other_gateways: 3,
                 },
                 has_changes: true,
                 add_current_network: ButtonState::Disabled,
@@ -824,9 +822,7 @@ fn bypass_rules_sections() {
                     within: None,
                 }),
                 ..bypass_section(
-                    BypassStatus::OutsideNetworks {
-                        kept_through_other_gateways: 0,
-                    },
+                    BypassStatus::OutsideNetworks {},
                     Some(BypassNotice::RowProblem {
                         row: "10.30.161.16/32".into(),
                         problem: RowProblem::Duplicate {
@@ -836,14 +832,19 @@ fn bypass_rules_sections() {
                 )
             },
             bypass_section(
-                BypassStatus::NoNetworksListed {
-                    kept_through_other_gateways: 1,
-                },
+                BypassStatus::NoNetworksListed {},
                 Some(BypassNotice::RowProblem {
                     row: "10.30.170.9".into(),
                     problem: RowProblem::Overlap {
                         other: "10.30.170.0/24".into(),
                     },
+                }),
+            ),
+            bypass_section(
+                BypassStatus::VpnOff {},
+                Some(BypassNotice::RowProblem {
+                    row: "203.0.113.10".into(),
+                    problem: RowProblem::VpnServer {},
                 }),
             ),
             bypass_section(
@@ -873,16 +874,6 @@ fn bypass_rules_sections() {
                 failed(
                     BypassFailure::SettingsNotChanged {
                         message: "** Error: The parameters were not valid.".into(),
-                    },
-                    None,
-                    None,
-                ),
-                None,
-            ),
-            bypass_section(
-                failed(
-                    BypassFailure::ImportNotSaved {
-                        error: unreadable_file(),
                     },
                     None,
                     None,
@@ -1328,6 +1319,9 @@ fn settings_file_problems() {
                 path: path("routes.networks"),
                 index: 1,
                 other: "10.20.0.0/16".into(),
+            }),
+            problem(VpnServerAsRouteTarget {
+                path: path("routes.bypass_vpn"),
             }),
         ],
     );

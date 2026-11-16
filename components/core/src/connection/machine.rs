@@ -1169,6 +1169,25 @@ impl ConnectionManager {
         }
     }
 
+    /// Whether the app wants the VPN up: connecting, connected, stopping to connect again, or
+    /// waiting to try again. Not while it waits for an away user outside the scheduled hours, nor
+    /// once it stopped for good: disconnected, paused after failures, or quitting. The exception
+    /// routes are in place exactly then (user decision, 2026-11-16).
+    pub fn wants_vpn(&self) -> bool {
+        if self.terminated {
+            return false;
+        }
+        match &self.phase {
+            Phase::Connecting(_) | Phase::Connected(_) | Phase::WaitingNetwork { .. } => true,
+            Phase::WaitingRetry { reason, .. } => *reason != RetryReason::UserAway,
+            Phase::Disconnecting(stop) => matches!(
+                stop.after,
+                AfterStop::Reconnect(_) | AfterStop::ResumeAfterSleep
+            ),
+            Phase::Idle | Phase::SetupRequired(_) | Phase::Failed(_) => false,
+        }
+    }
+
     /// Whether attempt `id`'s OTP session is still to be opened: it was not closed while the
     /// session's secrets were read.
     pub fn wants_otp_session(&self, id: &AttemptId) -> bool {

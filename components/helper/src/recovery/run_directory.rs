@@ -1,5 +1,6 @@
-//! The Helper's root-only run directory: the config file of the current run, deleted after it, and
-//! the pidfile, which tells a restarted Helper what an earlier one left running.
+//! The Helper's root-only run directory: the config file of the current run, deleted after it, the
+//! pidfile, which tells a restarted Helper what an earlier one left running, and the record of the
+//! exception routes the Helper added, which tells it what an earlier one left in the routing table.
 
 use std::fmt;
 use std::fs;
@@ -7,6 +8,7 @@ use std::io::{self, Write};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 
+use fvm_contract::helper_internal::AddedRoute;
 use serde::{Deserialize, Serialize};
 
 use crate::process::os;
@@ -15,6 +17,9 @@ const RECORD: &str = "run.json";
 /// Written in full, then renamed over the pidfile.
 const RECORD_DRAFT: &str = "run.json.tmp";
 const CONFIG_PREFIX: &str = "config.";
+/// Apart from the pidfile, whose name earlier Helpers clean up as their own.
+const BYPASS_RECORD: &str = "exception-routes.json";
+const BYPASS_RECORD_DRAFT: &str = "exception-routes.json.tmp";
 
 /// What a restarted Helper cleans up if this one dies during a run. A Helper of another build may
 /// read it, so its keys stay as they are.
@@ -95,27 +100,8 @@ impl RunFiles {
 
     /// Replaces the pidfile at once, so a Helper that dies meanwhile leaves the old or the new one.
     pub fn write_record(&self, record: &RunRecord) -> Result<(), Failure> {
-        let draft = self.directory.join(RECORD_DRAFT);
         let json = serde_json::to_vec(record).expect("a run record serializes");
-        // A draft left by a Helper that died while writing is replaced, never followed if a symlink.
-        match fs::remove_file(&draft) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(Failure::new(format!("unlink {}", draft.display()), error)),
-        }
-        let mut file = os::create_private_file(&draft)
-            .map_err(|error| Failure::new(format!("open {}", draft.display()), error))?;
-        let written = file
-            .write_all(&json)
-            .map_err(|error| Failure::new(format!("write {}", draft.display()), error))
-            .and_then(|()| {
-                fs::rename(&draft, record_path(&self.directory))
-                    .map_err(|error| Failure::new(format!("rename {}", draft.display()), error))
-            });
-        if written.is_err() {
-            let _ = fs::remove_file(&draft);
-        }
-        written
+        replace(&self.directory, RECORD, RECORD_DRAFT, &json)
     }
 
     /// Deletes both once the run is over. The errors are lines for the Helper's log.
@@ -127,8 +113,70 @@ impl RunFiles {
     }
 }
 
+/// Writes `bytes` as `name` in `directory` at once, through `draft`, so a Helper that dies meanwhile
+/// leaves the old or the new file.
+fn replace(directory: &Path, name: &str, draft: &str, bytes: &[u8]) -> Result<(), Failure> {
+    let draft = directory.join(draft);
+    // A draft left by a Helper that died while writing is replaced, never followed if a symlink.
+    match fs::remove_file(&draft) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(Failure::new(format!("unlink {}", draft.display()), error)),
+    }
+    let mut file = os::create_private_file(&draft)
+        .map_err(|error| Failure::new(format!("open {}", draft.display()), error))?;
+    let written = file
+        .write_all(bytes)
+        .map_err(|error| Failure::new(format!("write {}", draft.display()), error))
+        .and_then(|()| {
+            fs::rename(&draft, directory.join(name))
+                .map_err(|error| Failure::new(format!("rename {}", draft.display()), error))
+        });
+    if written.is_err() {
+        let _ = fs::remove_file(&draft);
+    }
+    written
+}
+
 pub(crate) fn record_path(directory: &Path) -> PathBuf {
     directory.join(RECORD)
+}
+
+/// The exception routes the Helper added, or is about to add, and has not removed. A Helper of
+/// another build may read it, so its keys stay as they are.
+#[derive(Default, Serialize, Deserialize)]
+struct BypassRecord {
+    routes: Vec<AddedRoute>,
+}
+
+/// Records `routes` as the exception routes the Helper added; none removes the record.
+pub(crate) fn write_bypass_record(directory: &Path, routes: &[AddedRoute]) -> Result<(), Failure> {
+    if routes.is_empty() {
+        let path = directory.join(BYPASS_RECORD);
+        return match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(Failure::new(format!("unlink {}", path.display()), error)),
+        };
+    }
+    let record = BypassRecord {
+        routes: routes.to_vec(),
+    };
+    let json = serde_json::to_vec(&record).expect("an exception route record serializes");
+    replace(directory, BYPASS_RECORD, BYPASS_RECORD_DRAFT, &json)
+}
+
+/// The exception routes an earlier Helper recorded; `None` without a record, an error if it cannot
+/// be read or decoded.
+pub(crate) fn read_bypass_record(
+    directory: &Path,
+) -> Option<Result<Vec<AddedRoute>, serde_json::Error>> {
+    let bytes = fs::read(directory.join(BYPASS_RECORD)).ok()?;
+    Some(serde_json::from_slice::<BypassRecord>(&bytes).map(|record| record.routes))
+}
+
+pub(crate) fn bypass_record_path(directory: &Path) -> PathBuf {
+    directory.join(BYPASS_RECORD)
 }
 
 /// `None` without a pidfile; an error if it cannot be decoded.
@@ -137,7 +185,8 @@ pub(crate) fn read_record(directory: &Path) -> Option<Result<RunRecord, serde_js
     Some(serde_json::from_slice(&bytes))
 }
 
-/// Config files and pidfiles, finished or not, that an earlier Helper left.
+/// Config files and pidfiles, finished or not, and unfinished exception route records that an
+/// earlier Helper left.
 pub(crate) fn leftovers(directory: &Path) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(directory) else {
         return Vec::new();
@@ -146,7 +195,9 @@ pub(crate) fn leftovers(directory: &Path) -> Vec<PathBuf> {
         .filter_map(|entry| {
             let name = entry.ok()?.file_name();
             let name = name.to_str()?;
-            (name.starts_with(CONFIG_PREFIX) || name.starts_with(RECORD))
+            (name.starts_with(CONFIG_PREFIX)
+                || name.starts_with(RECORD)
+                || name == BYPASS_RECORD_DRAFT)
                 .then(|| directory.join(name))
         })
         .collect()

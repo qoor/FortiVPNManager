@@ -1,8 +1,6 @@
 //! The files in `fixtures/app-helper/` are the wire format between the app and the Helper; they
 //! change with the contract. The Helper and the app's runtime each write what the other reads, so
-//! every message is checked in both directions, except the bypass-route request and replies: the
-//! runtime only writes or reads them, and the Helper's Swift side, which handles the other end,
-//! is checked against the same files by the Swift contract tests.
+//! every message is checked in both directions.
 
 use std::fmt::Debug;
 use std::net::Ipv4Addr;
@@ -385,8 +383,8 @@ fn a_position_past_the_last_milestone_is_unreadable() {
     assert!(serde_json::from_str::<Milestone>("6").is_err());
 }
 
-fn route(destination: &str, subnet_mask: &str, gateway: &str) -> AdditionalRoute {
-    AdditionalRoute {
+fn route(destination: &str, subnet_mask: &str, gateway: &str) -> BypassRoute {
+    BypassRoute {
         destination: destination.into(),
         subnet_mask: subnet_mask.into(),
         gateway: gateway.into(),
@@ -400,53 +398,47 @@ fn ethernet_snapshot() -> BypassRoutesSnapshot {
         router: "10.20.161.1".into(),
         address: "10.20.161.20".into(),
         subnet_mask: "255.255.255.0".into(),
-        routes: vec![
-            route("10.30.161.16", "255.255.255.255", "10.20.161.1"),
-            route("192.168.50.0", "255.255.255.0", "10.20.161.254"),
-        ],
     }
 }
 
 #[test]
-fn bypass_routes_request() {
-    let request = BypassRoutesRequest {
-        expected: ethernet_snapshot(),
-        routes: vec![
-            route("10.30.170.0", "255.255.255.0", "10.20.161.1"),
-            route("192.168.50.0", "255.255.255.0", "10.20.161.254"),
-        ],
-    };
-    assert_eq!(
-        to_value(request).unwrap(),
-        fixture(include_str!(
-            "fixtures/app-helper/bypass_routes_request.json"
-        ))
+fn bypass_routes_requests() {
+    both_ways(
+        BypassRoutesRequest::Write {
+            expected: ethernet_snapshot(),
+            routes: vec![
+                route("10.30.161.16", "255.255.255.255", "10.20.161.1"),
+                route("10.30.170.0", "255.255.255.0", "10.20.161.1"),
+            ],
+        },
+        include_str!("fixtures/app-helper/bypass_routes_request_write.json"),
+    );
+    both_ways(
+        BypassRoutesRequest::Remove {},
+        include_str!("fixtures/app-helper/bypass_routes_request_remove.json"),
     );
 }
 
 #[test]
 fn bypass_routes_replies() {
-    let success: BypassRoutesReply = serde_json::from_str(include_str!(
-        "fixtures/app-helper/bypass_routes_reply_success.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        success,
+    both_ways(
         BypassRoutesReply::Success {
-            snapshot: ethernet_snapshot()
-        }
+            snapshot: ethernet_snapshot(),
+            routes: vec![route("10.30.161.16", "255.255.255.255", "10.20.161.1")],
+        },
+        include_str!("fixtures/app-helper/bypass_routes_reply_success.json"),
     );
-    let failure: BypassRoutesReply = serde_json::from_str(include_str!(
-        "fixtures/app-helper/bypass_routes_reply_failure.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        failure,
+    both_ways(
+        BypassRoutesReply::Removed {},
+        include_str!("fixtures/app-helper/bypass_routes_reply_removed.json"),
+    );
+    both_ways(
         BypassRoutesReply::Failure {
             error: HelperError {
                 code: HelperErrorCode::WrongPhase,
-                message: "the routes changed since they were read; read them again".into(),
-            }
-        }
+                message: "the network changed since it was read; read it again".into(),
+            },
+        },
+        include_str!("fixtures/app-helper/bypass_routes_reply_failure.json"),
     );
 }

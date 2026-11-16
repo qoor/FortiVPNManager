@@ -11,7 +11,7 @@ enum EntryRelay {
     enum Reply: Sendable {
         /// connect, submitOTP and disconnect; `nil` is the empty (success) reply.
         case optionalData(@Sendable (Data?) -> Void)
-        /// status.
+        /// status and the exception-route requests.
         case data(@Sendable (Data) -> Void)
         /// exitWhenIdle.
         case flag(@Sendable (Bool) -> Void)
@@ -137,6 +137,10 @@ enum EntryRelay {
         case .repairRoutes(let gateway):
             routeRepairQueue.async {
                 stream.send(.routesRepaired(outcome: RouteRepair.repair(gatewayIP: gateway)))
+            }
+        case .changeBypassRoutes(let change):
+            BypassRoutes.queue.async {
+                stream.send(.bypassRoutesChanged(outcome: BypassRoutes.change(change)))
             }
         case .exitAfterDraining:
             exitAfterDraining()

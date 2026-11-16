@@ -1,6 +1,7 @@
-//! What a run leaves for a later Helper: the run directory with the run record, whose format this
-//! module alone decides; cleaning up after a Helper that died during a run; and the route repair a
-//! run asks for. The backend adapter it needs for the cleanup comes from `process`.
+//! What a Helper leaves for a later one: the run directory with the run record and the record of the
+//! exception routes it added, whose formats this module alone decides; cleaning up after an earlier
+//! Helper; and the route repair a run asks for. The backend adapter it needs for the cleanup comes
+//! from `process`.
 
 mod leftovers;
 pub(crate) mod run_directory;
@@ -13,6 +14,7 @@ use fvm_contract::backend::RouteRepairOutcome;
 pub use run_directory::Failure;
 
 pub(crate) use leftovers::clean_up;
+pub(crate) use run_directory::write_bypass_record;
 
 /// Finishes the route repair a run asked for. The run waits for it, so dropping it unfinished
 /// panics.

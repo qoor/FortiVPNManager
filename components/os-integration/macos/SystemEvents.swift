@@ -54,10 +54,10 @@ final class SystemEvents {
         observers.append((center, observer))
     }
 
-    /// The saved IPv4 settings of any network service (networksetup, System Settings) and the primary
-    /// IPv4 state, from SCDynamicStore on the main run loop. configd publishes the `Setup:` keys
-    /// whenever network settings are applied, so routes changed outside the app show up at once. The
-    /// store holds `self` unretained; this object lives as long as the app.
+    /// The saved IPv4 settings of any network service (System Settings) and the primary IPv4 state,
+    /// from SCDynamicStore on the main run loop: the exception routes follow the primary network, its
+    /// router and this Mac's address on it. The store holds `self` unretained; this object lives as
+    /// long as the app.
     private func watchNetworkSettings() {
         var context = SCDynamicStoreContext(
             version: 0, info: Unmanaged.passUnretained(self).toOpaque(),

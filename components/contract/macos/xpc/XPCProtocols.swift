@@ -22,10 +22,11 @@ import Foundation
     /// Reply: `true` if it will exit. Sent to a helper of another build, like `getVersion`, so the
     /// signatures of these two must never change.
     func exitWhenIdle(reply: @escaping @Sendable (Bool) -> Void)
-    /// Reads the additional routes of the primary network service. Reply: encoded `BypassRoutesReply`.
+    /// Reads the primary network and the app's exception routes in the routing table.
+    /// Reply: encoded `BypassRoutesReply`.
     func bypassRoutes(reply: @escaping @Sendable (Data) -> Void)
-    /// Request: encoded `BypassRoutesRequest`. Replaces the additional routes of the primary network
-    /// service. Reply: encoded `BypassRoutesReply` with the routes read back afterwards.
+    /// Request: encoded `BypassRoutesRequest`, which sets or removes the app's exception routes.
+    /// Reply: encoded `BypassRoutesReply` with the routes looked up afterwards.
     func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void)
 }
 

@@ -213,7 +213,8 @@ pub enum HelperCall {
     ExitWhenIdle {},
     /// Replied to with a `BypassRoutesReply`.
     ReadBypassRoutes {},
-    /// `json` is a `BypassRoutesRequest`. Replied to with a `BypassRoutesReply`.
+    /// `json` is a `BypassRoutesRequest`, which also removes the app's exception routes when it
+    /// quits. Replied to with a `BypassRoutesReply`.
     WriteBypassRoutes { json: String },
 }
 

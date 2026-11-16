@@ -37,15 +37,13 @@ public static class BypassText
                 {
                     parts.Add(L("%lld target(s) are on this network and need no route.", applied.OnLinkTargets));
                 }
-                if (applied.NotImported > 0)
-                {
-                    parts.Add(L("List full: %lld route(s) added elsewhere weren't imported.", applied.NotImported));
-                }
-                return (Adding(applied.KeptThroughOtherGateways, parts), NoticeStyle.Success);
-            case BypassStatus.OutsideNetworks outside:
-                return (Adding(outside.KeptThroughOtherGateways, [L("Not applied: outside the networks above. Everything goes through the VPN.")]), NoticeStyle.Info);
-            case BypassStatus.NoNetworksListed none:
-                return (Adding(none.KeptThroughOtherGateways, [L("No networks listed, so the rules apply nowhere.")]), NoticeStyle.Info);
+                return (string.Join(" ", parts), NoticeStyle.Success);
+            case BypassStatus.VpnOff:
+                return (L("Not applied while the VPN is off."), NoticeStyle.Info);
+            case BypassStatus.OutsideNetworks:
+                return (L("Not applied: outside the networks above. Everything goes through the VPN."), NoticeStyle.Info);
+            case BypassStatus.NoNetworksListed:
+                return (L("No networks listed, so the rules apply nowhere."), NoticeStyle.Info);
             case BypassStatus.ConfigInvalid:
                 return (L("The settings file has an error, so the routes are left as they are."), NoticeStyle.Warning);
             case BypassStatus.NoNetwork:
@@ -60,20 +58,12 @@ public static class BypassText
         }
     }
 
-    private static string Adding(uint kept, List<string> parts)
-    {
-        if (kept > 0)
-        {
-            parts.Add(L("%lld route(s) through other gateways are left as they are.", kept));
-        }
-        return string.Join(" ", parts);
-    }
-
     public static string Message(this RowProblem problem, string row) => problem switch
     {
         RowProblem.Invalid invalid => invalid.Problem.Message(row),
         RowProblem.Duplicate duplicate => L("%@ is already in the list.", duplicate.Entry),
         RowProblem.Overlap overlap => L("'%@' overlaps %@, which is already in the list.", SettingsFileText.Preview(row), overlap.Other),
+        RowProblem.VpnServer => L("Can't add the VPN server's address '%@'.", SettingsFileText.Preview(row)),
         _ => throw new InvalidOperationException($"unknown row problem {problem}"),
     };
 
@@ -83,6 +73,7 @@ public static class BypassText
         RowProblem.Invalid invalid => invalid.Problem.RowMessage(),
         RowProblem.Duplicate => L("This address is already in the list."),
         RowProblem.Overlap overlap => L("Overlaps %@.", overlap.Other),
+        RowProblem.VpnServer => L("The VPN server's address can't be registered as an exception target."),
         _ => throw new InvalidOperationException($"unknown row problem {problem}"),
     };
 
@@ -103,7 +94,6 @@ public static class BypassText
         BypassFailure.NetworkChanged => L("The network or its routes changed while the routes were being written."),
         BypassFailure.HelperRefused refused => L("The Helper refused the route list (%@).", refused.Message),
         BypassFailure.SettingsNotChanged notChanged => SettingsNotChanged(notChanged.Message),
-        BypassFailure.ImportNotSaved notSaved => L("Couldn't save the imported routes to the settings file: %@", notSaved.Error.Message()),
         BypassFailure.HelperUnreachable unreachable => L("Couldn't apply the routes: %@", unreachable.Failure.Message()),
         // A build mismatch has no sentence of its own, only the app's English detail.
         BypassFailure.HelperBuildMismatch mismatch => SettingsNotChanged($"Helper build {mismatch.HelperBuild} differs from app build {mismatch.AppBuild}"),

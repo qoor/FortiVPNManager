@@ -5,11 +5,46 @@
 
 use std::net::Ipv4Addr;
 
+use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
 use fvm_contract::backend::RouteRepairOutcome;
 use fvm_contract::helper_internal::*;
 use serde_json::Value;
 
 const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
+
+fn ethernet() -> BypassRoutesSnapshot {
+    BypassRoutesSnapshot {
+        service_id: "8A3F1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B".into(),
+        service_name: "Ethernet".into(),
+        router: "10.20.161.1".into(),
+        address: "10.20.161.20".into(),
+        subnet_mask: "255.255.255.0".into(),
+    }
+}
+
+fn route(destination: &str, subnet_mask: &str, gateway: &str) -> BypassRoute {
+    BypassRoute {
+        destination: destination.into(),
+        subnet_mask: subnet_mask.into(),
+        gateway: gateway.into(),
+    }
+}
+
+/// A host target and a network target through the router.
+fn routes() -> [BypassRoute; 2] {
+    [
+        route("10.30.161.16", "255.255.255.255", "10.20.161.1"),
+        route("10.30.170.0", "255.255.255.0", "10.20.161.1"),
+    ]
+}
+
+/// The host as the Helper added it through a former network.
+fn stale() -> AddedRoute {
+    AddedRoute {
+        route: route("10.30.161.16", "255.255.255.255", "10.20.161.254"),
+        service_id: "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0".into(),
+    }
+}
 
 #[test]
 fn messages_to_the_entry() {
@@ -18,6 +53,7 @@ fn messages_to_the_entry() {
         app: 1,
         request,
     };
+    let host_and_network = routes();
     let messages: Vec<ToEntry> =
         serde_json::from_str(include_str!("fixtures/helper-internal/to_entry.json")).unwrap();
     assert_eq!(
@@ -46,6 +82,13 @@ fn messages_to_the_entry() {
             ),
             request(4, AppRequest::Status {}),
             request(5, AppRequest::ExitWhenIdle {}),
+            request(6, AppRequest::ReadBypassRoutes {}),
+            request(
+                7,
+                AppRequest::WriteBypassRoutes {
+                    json: r#"{"remove":{}}"#.into(),
+                },
+            ),
             ToEntry::AppDisconnected { app: 1 },
             ToEntry::ExecutableReplaced {},
             ToEntry::TerminationRequested {},
@@ -58,12 +101,37 @@ fn messages_to_the_entry() {
             ToEntry::RoutesRepaired {
                 outcome: RouteRepairOutcome::Failed
             },
+            ToEntry::BypassRoutesChanged {
+                outcome: BypassRoutesOutcome::Changed {
+                    network: Some(ethernet()),
+                    added: vec![host_and_network[1].clone()],
+                    found: host_and_network.to_vec(),
+                    left: Vec::new(),
+                },
+            },
+            ToEntry::BypassRoutesChanged {
+                outcome: BypassRoutesOutcome::Changed {
+                    network: None,
+                    added: Vec::new(),
+                    found: Vec::new(),
+                    left: vec![stale()],
+                },
+            },
+            ToEntry::BypassRoutesChanged {
+                outcome: BypassRoutesOutcome::Refused {
+                    error: HelperError {
+                        code: HelperErrorCode::WrongPhase,
+                        message: "no active network service".into(),
+                    },
+                },
+            },
         ]
     );
 }
 
 #[test]
 fn messages_from_the_entry() {
+    let [host, network] = routes();
     let log = |level, category, message: &str| FromEntry::Log {
         level,
         category,
@@ -98,6 +166,32 @@ fn messages_from_the_entry() {
             gateway: Some(Ipv4Addr::new(10, 30, 161, 16)),
         },
         FromEntry::RepairRoutes { gateway: None },
+        FromEntry::ChangeBypassRoutes {
+            change: BypassRoutesChange {
+                network: NetworkCheck::Expect {
+                    network: ethernet(),
+                },
+                remove: vec![stale()],
+                add: vec![host.clone(), network.clone()],
+                look_up: vec![host.clone(), network],
+            },
+        },
+        FromEntry::ChangeBypassRoutes {
+            change: BypassRoutesChange {
+                network: NetworkCheck::Read {},
+                remove: Vec::new(),
+                add: Vec::new(),
+                look_up: vec![host],
+            },
+        },
+        FromEntry::ChangeBypassRoutes {
+            change: BypassRoutesChange {
+                network: NetworkCheck::Skip {},
+                remove: vec![stale()],
+                add: Vec::new(),
+                look_up: Vec::new(),
+            },
+        },
         FromEntry::ExitAfterDraining {},
         FromEntry::ExitNow {},
         log(

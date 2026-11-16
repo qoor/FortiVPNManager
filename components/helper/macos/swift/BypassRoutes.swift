@@ -1,109 +1,92 @@
 import Dispatch
 import SystemConfiguration
 
-/// Reads and replaces the additional IPv4 routes of the primary network service with networksetup.
-/// macOS keeps them in the service's settings and installs them whenever the service is active, so
-/// they survive reboots and VPN reconnects. networksetup runs with a fixed argv; every address in
-/// it was checked as dotted-quad IPv4 first.
+/// Changes the exception routes in the routing table as the Helper entry asks, through `RouteTable`,
+/// and reads the primary network service they go through. The routes are static routes of the
+/// running system, which a restart forgets; only routes such as the Helper adds count as its own.
 enum BypassRoutes {
-    static let networksetupPath = "/usr/sbin/networksetup"
-
-    /// Every call runs here, one at a time and off the XPC connection's queue, so tunnel control
-    /// messages on the same connection never wait behind networksetup.
+    /// Every change runs here, one at a time and off the entry's reader thread, so tunnel control
+    /// never waits behind `/sbin/route`.
     static let queue = DispatchQueue(label: "com.qoor.FortiVPNManager.Helper.routes")
 
-    /// Call on ``queue``.
-    static func read() -> BypassRoutesReply {
+    /// Carries out `change`, as `HelperInternal.BypassRoutesChange` describes it: one read of the
+    /// table before the changes and, if there were any, one after them. Call on ``queue``.
+    static func change(_ change: HelperInternal.BypassRoutesChange) -> HelperInternal.BypassRoutesOutcome {
         dispatchPrecondition(condition: .onQueue(queue))
-        switch primaryService() {
-        case .failure(let error): return .failure(error)
-        case .success(let service): return snapshot(of: service)
-        }
-    }
-
-    /// Applies `request` (see `BypassRoutesRequest`) and replies with the routes read back. Call on ``queue``.
-    static func write(_ request: BypassRoutesRequest) -> BypassRoutesReply {
-        dispatchPrecondition(condition: .onQueue(queue))
-        let service: PrimaryService
-        switch primaryService() {
-        case .failure(let error): return .failure(error)
-        case .success(let found): service = found
-        }
-        let expected = request.expected
-        guard service.id == expected.serviceID, service.name == expected.serviceName,
-              service.router == expected.router, service.address == expected.address,
-              service.subnetMask == expected.subnetMask
-        else {
-            return .failure(HelperError(.wrongPhase, "the active network service changed; read the routes again"))
-        }
-        let current: [AdditionalRoute]
-        switch routes(of: service) {
-        case .failure(let error): return .failure(error)
-        case .success(let routes): current = routes
-        }
-        guard current.count == expected.routes.count, Set(current) == Set(expected.routes) else {
-            return .failure(HelperError(.wrongPhase, "the routes changed since they were read; read them again"))
-        }
-        let existing = Set(current)
-        guard request.routes.count <= current.count + IPv4Network.maxCount,
-              Set(request.routes).count == request.routes.count,
-              request.routes.allSatisfy({ existing.contains($0) || ($0.gateway == service.router && $0.network != nil) })
-        else {
-            return .failure(HelperError(.invalidRequest, "the route list has repeats, too many routes, or routes this helper does not write"))
-        }
-        let result = SystemCommand.run(
-            networksetupPath, NetworkSetupRoutes.setArguments(service: service.name, routes: request.routes))
-        if let message = NetworkSetupRoutes.reportedError(in: result.output + "\n" + result.errorOutput)
-            ?? (result.succeeded ? nil : "networksetup exited with \(result.status)") {
-            HelperLog.routes.error("setting \(request.routes.count) additional route(s) on \(service.name, privacy: .public) failed: \(message, privacy: .public)")
-            return .failure(HelperError(.internalError, message))
-        }
-        HelperLog.routes.notice("set \(request.routes.count) additional route(s) on \(service.name, privacy: .public)")
-        return snapshot(of: service)
-    }
-
-    private struct PrimaryService {
-        var id: String
-        var name: String
-        var router: String
-        var address: String
-        var subnetMask: String
-    }
-
-    private static func snapshot(of service: PrimaryService) -> BypassRoutesReply {
-        switch routes(of: service) {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let routes):
-            return .success(BypassRoutesSnapshot(
-                serviceID: service.id, serviceName: service.name, router: service.router,
-                address: service.address, subnetMask: service.subnetMask, routes: routes))
-        }
-    }
-
-    private static func routes(of service: PrimaryService) -> Result<[AdditionalRoute], HelperError> {
-        let result = SystemCommand.run(networksetupPath, ["-getadditionalroutes", service.name])
-        guard result.succeeded else {
-            let message = "networksetup -getadditionalroutes exited with \(result.status): \(result.errorOutput)"
-            HelperLog.routes.error("\(message, privacy: .public)")
-            return .failure(HelperError(.internalError, message))
-        }
-        do throws(NetworkSetupRoutes.ParseFailure) {
-            return .success(try NetworkSetupRoutes.parse(result.output))
-        } catch {
-            let message = switch error {
-            case .reportedError(let line): line
-            case .unexpectedLine(let line): "unexpected networksetup output: \(line)"
+        var network: BypassRoutesSnapshot?
+        switch change.network {
+        case .skip:
+            break
+        case .read:
+            switch primaryNetwork() {
+            case .failure(let error): return .refused(error: error)
+            case .success(let read): network = read
             }
-            HelperLog.routes.error("reading the additional routes of \(service.name, privacy: .public) failed: \(message, privacy: .public)")
-            return .failure(HelperError(.internalError, message))
+        case .expect(let expected):
+            switch primaryNetwork() {
+            case .failure(let error): return .refused(error: error)
+            case .success(let read) where read != expected:
+                return .refused(error: HelperError(.wrongPhase, "the network changed since it was read; read it again"))
+            case .success(let read): network = read
+            }
         }
+        if !change.add.isEmpty {
+            guard let network, change.add.count <= IPv4Network.maxCount, Set(change.add).count == change.add.count,
+                  change.add.allSatisfy({ $0.gateway == network.router && $0.network != nil })
+            else {
+                return .refused(error: HelperError(
+                    .invalidRequest, "the route list has repeats, too many routes, or routes this helper does not write"
+                ))
+            }
+        }
+        guard let before = RouteTable.read() else {
+            return .refused(error: HelperError(.internalError, "the routing table could not be read"))
+        }
+        var changed = false
+        var removed = 0
+        for added in change.remove {
+            guard let route = RouteTable.Route(added.route), before.contains(where: route.matches) else { continue }
+            changed = true
+            if RouteTable.delete(route) { removed += 1 }
+        }
+        var tried: [BypassRoute] = []
+        for wanted in change.add {
+            guard let route = RouteTable.Route(wanted), !before.contains(where: route.matches) else { continue }
+            changed = true
+            // A copy of the default route the system made for this host, for every interface, makes
+            // the add fail; the system makes another when it needs one.
+            for copy in before where copy.flags.contains("W") && !copy.flags.contains("I")
+                && copy.destination == route.destination && copy.prefixLength == route.prefixLength {
+                if let copy = RouteTable.Route(destination: copy.destination, subnetMask: route.subnetMask, gateway: copy.gateway) {
+                    RouteTable.delete(copy)
+                }
+            }
+            RouteTable.add(route)
+            tried.append(wanted)
+        }
+        let after = changed ? RouteTable.read() : before
+        // `nil` when the table could not be read again.
+        let inTable = { (route: BypassRoute) -> Bool? in
+            guard let route = RouteTable.Route(route) else { return false }
+            return after.map { $0.contains(where: route.matches) }
+        }
+        // Unread, the routes tried count as added and those to remove as left, so that the Helper
+        // removes them later rather than leaving them behind.
+        let added = tried.filter { inTable($0) ?? true }
+        if removed > 0 || !added.isEmpty {
+            HelperLog.routes.notice("removed \(removed) and added \(added.count) exception route(s)")
+        }
+        return .changed(
+            network: network,
+            added: added,
+            found: network == nil ? [] : change.lookUp.filter { inTable($0) ?? false },
+            left: change.remove.filter { inTable($0.route) ?? true }
+        )
     }
 
     /// The service of `State:/Network/Global/IPv4` with its IPv4 router, this Mac's first IPv4 address
-    /// and mask on it, and its name in the network settings (what networksetup takes). A tunnel
-    /// interface never counts as primary.
-    private static func primaryService() -> Result<PrimaryService, HelperError> {
+    /// and mask on it, and its name in the network settings. A tunnel interface never counts as primary.
+    private static func primaryNetwork() -> Result<BypassRoutesSnapshot, HelperError> {
         guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil),
               let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
               let serviceID = global[kSCDynamicStorePropNetPrimaryService as String] as? String,
@@ -125,11 +108,12 @@ enum BypassRoutes {
         }
         guard let preferences = SCPreferencesCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil),
               let service = SCNetworkServiceCopy(preferences, serviceID as CFString),
-              let name = SCNetworkServiceGetName(service) as String?,
-              !name.isEmpty, !name.hasPrefix("-"), !name.unicodeScalars.contains(where: { $0.value < 0x20 })
+              let name = SCNetworkServiceGetName(service) as String?, !name.isEmpty
         else {
-            return .failure(HelperError(.internalError, "the active network service \(serviceID) has no usable name"))
+            return .failure(HelperError(.internalError, "the active network service \(serviceID) has no name"))
         }
-        return .success(PrimaryService(id: serviceID, name: name, router: router, address: address, subnetMask: subnetMask))
+        return .success(BypassRoutesSnapshot(
+            serviceID: serviceID, serviceName: name, router: router, address: address, subnetMask: subnetMask
+        ))
     }
 }

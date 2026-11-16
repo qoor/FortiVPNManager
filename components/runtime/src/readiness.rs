@@ -90,8 +90,8 @@ impl Runtime {
     /// The secrets come after the Helper's round trip, so the facts reflect the latest file.
     fn gather_readiness(&mut self, helper: HelperFacts) {
         let answered = matches!(&helper, HelperFacts::Answered { build, .. } if *build == self.facts.app_build);
-        if answered && !self.bypass.helper_ready {
-            // A Helper registered, approved or updated since: the routes can be synced now.
+        if answered && (!self.bypass.helper_ready || self.bypass_sync_gave_up()) {
+            // A Helper registered, approved, updated or back since: the routes can be synced now.
             self.sync_bypass_routes();
         }
         self.bypass.helper_ready = answered;

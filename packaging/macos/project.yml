@@ -29,8 +29,8 @@ targets:
     type: application
     platform: macOS
     sources:
-      # The Helper's messages to its entry, and the XPC payloads only the Helper's Swift side
-      # handles, are not the app's.
+      # The Helper's messages to its entry, and the types only the Helper's Swift side uses, are
+      # not the app's.
       - path: ../../components/contract/macos
         excludes:
           - "HelperInternal.swift"
@@ -174,9 +174,11 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: ../../components/helper/macos/swift/NetworkSetupRoutes.swift
+      - path: ../../components/helper/macos/swift/RouteTable.swift
+      - path: ../../components/helper/macos/swift/SystemCommand.swift
+      - path: ../../components/helper/macos/swift/HelperLog.swift
       - path: ../../components/contract/macos/xpc/BypassRouteMessages.swift
-      - path: ../../components/contract/macos/xpc/HelperError.swift
+      - path: ../../components/contract/macos/xpc/Identifiers.swift
       - path: ../../components/helper/macos/tests
     settings:
       base:

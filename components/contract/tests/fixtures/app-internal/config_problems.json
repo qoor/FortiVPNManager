@@ -372,5 +372,16 @@
       "column": 9,
       "line": 2
     }
+  },
+  {
+    "kind": {
+      "vpnServerAsRouteTarget": {
+        "path": "routes.bypass_vpn"
+      }
+    },
+    "location": {
+      "column": 9,
+      "line": 2
+    }
   }
 ]

@@ -21,7 +21,7 @@ public static class SettingsFileText
 
     public static string Message(this ConfigFileError error) => error switch
     {
-        ConfigFileError.InvalidSettings invalid => L("The settings to save are invalid. %@", invalid.Problem.Kind.Message()),
+        ConfigFileError.InvalidSettings invalid => L("Couldn't save: %@", invalid.Problem.Kind.Message()),
         ConfigFileError.UnreadableFile unreadable => L("Can't read the config file (%@). %@", unreadable.Path, unreadable.Problem.DisplayMessage()),
         ConfigFileError.NotRegularFile notRegular => L("The config file path (%@) is not a regular file.", notRegular.Path),
         ConfigFileError.DanglingSymlink dangling => L("The config file (%@) is a symbolic link to a target that doesn't exist.", dangling.Path),
@@ -30,9 +30,18 @@ public static class SettingsFileText
         _ => throw new InvalidOperationException($"unknown config file error {error}"),
     };
 
-    /// <summary>The message, after the location when it is known: "Line 3, column 9: …".</summary>
-    public static string DisplayMessage(this ConfigProblem problem) =>
-        problem.Location is { } location ? location.Description() + ": " + problem.Kind.Message() : problem.Kind.Message();
+    public static string DisplayMessage(this ConfigProblem problem)
+    {
+        if (problem.Location is not { } location)
+        {
+            return problem.Kind.Message();
+        }
+        if (problem.Kind is ConfigProblemKind.VpnServerAsRouteTarget server)
+        {
+            return location.Description() + " (" + server.Path + "): " + problem.Kind.Message();
+        }
+        return location.Description() + ": " + problem.Kind.Message();
+    }
 
     public static string DisplayMessage(this ConfigWarning warning) =>
         warning.Location is { } location ? location.Description() + ": " + warning.Kind.Message() : warning.Kind.Message();
@@ -82,6 +91,7 @@ public static class SettingsFileText
         ConfigProblemKind.TooManyRouteEntries tooMany => L("%@ has %lld entries. It can have at most %lld.", tooMany.Path, tooMany.Count, tooMany.Limit),
         ConfigProblemKind.DuplicateRouteEntry duplicate => L("In %@, entry %lld repeats an earlier entry.", duplicate.Path, duplicate.Index + 1),
         ConfigProblemKind.OverlappingRouteEntry overlap => L("In %@, entry %lld overlaps %@, which is already listed. Entries in one list must not overlap.", overlap.Path, overlap.Index + 1, overlap.Other),
+        ConfigProblemKind.VpnServerAsRouteTarget => L("The VPN server's address can't be registered as an exception target."),
         _ => throw new InvalidOperationException($"unknown config problem {kind}"),
     };
 

@@ -19,7 +19,7 @@ use super::{
     ReconnectAfterSleep, Routes, SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn,
     WEEKDAYS, minutes, normalized_days,
 };
-use crate::bypass_rules::MAX_ENTRIES;
+use crate::bypass_rules::{MAX_ENTRIES, vpn_server_target};
 
 type Pairs = [(usize, usize)];
 
@@ -53,6 +53,7 @@ pub(super) fn read(tree: &Tree<'_>, client: &ClientRules<'_>) -> Result<Loaded, 
         margin_location: None,
         start_location: None,
         end_location: None,
+        target_locations: Vec::new(),
     };
     let settings = fields.root(pairs)?;
     Ok(Loaded {
@@ -140,6 +141,8 @@ struct Fields<'t, 'a> {
     margin_location: Option<LineColumn>,
     start_location: Option<LineColumn>,
     end_location: Option<LineColumn>,
+    /// Where each entry of `routes.bypass_vpn` kept is in the file.
+    target_locations: Vec<LineColumn>,
 }
 
 impl<'t, 'a> Fields<'t, 'a> {
@@ -173,6 +176,14 @@ impl<'t, 'a> Fields<'t, 'a> {
                     end: schedule.end,
                 },
                 location: self.end_location.or(self.start_location),
+            });
+        }
+        if let Some(position) = vpn_server_target(&settings.routes.bypass_vpn, &settings.vpn.host) {
+            return Err(ConfigProblem {
+                kind: ConfigProblemKind::VpnServerAsRouteTarget {
+                    path: "routes.bypass_vpn".to_owned(),
+                },
+                location: Some(self.target_locations[position]),
             });
         }
         Ok(settings)
@@ -365,8 +376,11 @@ impl<'t, 'a> Fields<'t, 'a> {
         for &(key, value) in pairs {
             let value = self.tree.node(value);
             match self.key(key) {
-                "networks" => routes.networks = self.route_list(value, "routes.networks")?,
-                "bypass_vpn" => routes.bypass_vpn = self.route_list(value, "routes.bypass_vpn")?,
+                "networks" => routes.networks = self.route_list(value, "routes.networks")?.0,
+                "bypass_vpn" => {
+                    (routes.bypass_vpn, self.target_locations) =
+                        self.route_list(value, "routes.bypass_vpn")?;
+                }
                 _ => self.unknown_key(Some("routes"), key),
             }
         }
@@ -428,16 +442,17 @@ impl<'t, 'a> Fields<'t, 'a> {
 
     /// Entries are read into their canonical spelling. One that is not a usable host or network,
     /// or overlaps an earlier one, fails the file, since it would change what goes around the
-    /// VPN; a repeat is dropped with a warning.
+    /// VPN; a repeat is dropped with a warning. Each entry kept comes with its location in the file.
     fn route_list(
         &mut self,
         node: &Node<'_>,
         path: &str,
-    ) -> Result<Vec<Ipv4Network>, ConfigProblem> {
+    ) -> Result<(Vec<Ipv4Network>, Vec<LineColumn>), ConfigProblem> {
         let Some(items) = sequence(node, path)? else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         };
         let mut entries: Vec<Ipv4Network> = Vec::new();
+        let mut locations = Vec::new();
         for (index, &item) in items.iter().enumerate() {
             let item = self.tree.node(item);
             let index = index as u32;
@@ -474,6 +489,7 @@ impl<'t, 'a> Fields<'t, 'a> {
                 ));
             }
             entries.push(entry);
+            locations.push(item.location);
         }
         if entries.len() > MAX_ENTRIES {
             return Err(problem(
@@ -485,7 +501,7 @@ impl<'t, 'a> Fields<'t, 'a> {
                 node,
             ));
         }
-        Ok(entries)
+        Ok((entries, locations))
     }
 
     /// Repeats are dropped and the order normalized.

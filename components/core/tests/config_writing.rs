@@ -348,7 +348,7 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "macOS login Keychain",
         "an existing openfortivpn config",
         "the Mac asleep",
-        "networksetup -setadditionalroutes",
+        "router of the active network service",
     ] {
         assert!(macos.contains(wording), "{wording}");
     }
@@ -357,12 +357,11 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "Windows Credential Manager",
         "in Credential Manager per 'username@server address'",
         "the PC asleep",
-        "persistent routes of that interface",
         "gateway of the active network interface",
     ] {
         assert!(windows.contains(wording), "{wording}");
     }
-    for wording in ["Keychain", "Mac", "networksetup", "openfortivpn"] {
+    for wording in ["Keychain", "Mac", "network service", "openfortivpn"] {
         assert!(!windows.contains(wording), "{wording}");
     }
 }

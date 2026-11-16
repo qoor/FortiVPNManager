@@ -2,7 +2,7 @@
 
 use fvm_contract::app_internal::problem::AddressProblem;
 use fvm_contract::app_internal::section::RowProblem;
-use fvm_core::bypass_rules::{Ipv4Network, ListDraft};
+use fvm_core::bypass_rules::{Ipv4Network, ListDraft, RuleDrafts};
 
 fn net(text: &str) -> Ipv4Network {
     text.parse().unwrap()
@@ -145,4 +145,25 @@ fn merge_does_not_repeat_a_row_the_user_already_typed() {
     draft.merge_saved(vec![host(), other()]);
     assert_eq!(draft.rows(), rows(&["10.30.161.16", "10.50.100.10/32"]));
     assert!(!draft.has_changes());
+}
+
+/// The VPN server always goes out directly: a target row that is its address can't be applied,
+/// while a network that holds it, or the address in the networks list, can.
+#[test]
+fn the_vpn_servers_address_is_a_problem_target_row() {
+    let server: std::net::Ipv4Addr = "10.30.161.16".parse().unwrap();
+    let mut drafts = RuleDrafts::new(Vec::new(), vec![network()], Some(server));
+    drafts
+        .targets
+        .set_rows(rows(&["10.30.170.0/24", "10.30.161.16/32"]));
+    assert_eq!(drafts.targets.problems(), [(1, RowProblem::VpnServer {})]);
+    assert_eq!(drafts.entries(), None);
+    drafts.targets.set_rows(rows(&["10.30.161.0/24"]));
+    drafts.networks.set_rows(rows(&["10.30.161.16"]));
+    assert!(drafts.targets.problems().is_empty());
+    assert!(drafts.networks.problems().is_empty());
+    // The settings name another server now.
+    drafts.set_vpn_server(None);
+    drafts.targets.set_rows(rows(&["10.30.161.16"]));
+    assert_eq!(drafts.entries(), Some((vec![host()], vec![host()])));
 }

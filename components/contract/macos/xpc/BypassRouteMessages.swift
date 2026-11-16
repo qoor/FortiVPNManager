@@ -1,6 +1,6 @@
 import Foundation
 
-/// An IPv4 host or network that can be an exception target. The Helper writes exception routes only
+/// An IPv4 host or network that can be an exception target. The Helper adds exception routes only
 /// to such destinations; the exception rules themselves are planned by the app.
 struct IPv4Network: Sendable, Hashable {
     enum ParseError: Error, Sendable, Equatable {
@@ -24,7 +24,7 @@ struct IPv4Network: Sendable, Hashable {
     let address: UInt32
     let prefixLength: Int
 
-    /// A route destination as `networksetup` reports it: dotted address and dotted subnet mask.
+    /// A route destination: dotted address and dotted subnet mask.
     init(address text: String, subnetMask: String) throws(ParseError) {
         let (address, prefixLength) = try Self.parse(address: text, subnetMask: subnetMask)
         try self.init(address: address, prefixLength: prefixLength)
@@ -87,8 +87,9 @@ struct IPv4Network: Sendable, Hashable {
     }
 }
 
-/// One additional route of a network service, as `networksetup -getadditionalroutes` prints it.
-struct AdditionalRoute: Codable, Sendable, Hashable {
+/// One exception route (`BypassRoute` in components/contract/src/app_helper.rs): a destination
+/// network, as an address and a subnet mask, through the router `gateway`.
+struct BypassRoute: Codable, Sendable, Hashable {
     var destination: String
     var subnetMask: String
     var gateway: String
@@ -105,48 +106,23 @@ struct AdditionalRoute: Codable, Sendable, Hashable {
     }
 }
 
-/// The primary network service (the one macOS sends default traffic through) and its additional routes.
+/// The primary network: the network service macOS sends default traffic through, never a tunnel,
+/// with its IPv4 router and this Mac's IPv4 address on it.
 struct BypassRoutesSnapshot: Codable, Sendable, Equatable {
     /// SCPreferences service ID; stable across renames.
     var serviceID: String
-    /// `networksetup` name of the service, e.g. `Ethernet` or `Wi-Fi`.
+    /// The name the user knows the service by, e.g. `Ethernet` or `Wi-Fi`.
     var serviceName: String
     /// IPv4 router of the service; exception routes go through it.
     var router: String
-    /// This Mac's IPv4 address on the service and its subnet mask.
     var address: String
     var subnetMask: String
-    var routes: [AdditionalRoute]
 
-    init(
-        serviceID: String, serviceName: String, router: String, address: String, subnetMask: String,
-        routes: [AdditionalRoute]
-    ) {
+    init(serviceID: String, serviceName: String, router: String, address: String, subnetMask: String) {
         self.serviceID = serviceID
         self.serviceName = serviceName
         self.router = router
         self.address = address
         self.subnetMask = subnetMask
-        self.routes = routes
     }
-}
-
-/// `setBypassRoutes`: the complete additional route list for the service in `expected`. The helper
-/// writes it only while the primary service, its router and its current routes are still exactly
-/// `expected`, and only with routes through that router or routes the service already has.
-struct BypassRoutesRequest: Codable, Sendable, Equatable {
-    /// What the app read and planned from.
-    var expected: BypassRoutesSnapshot
-    var routes: [AdditionalRoute]
-
-    init(expected: BypassRoutesSnapshot, routes: [AdditionalRoute]) {
-        self.expected = expected
-        self.routes = routes
-    }
-}
-
-/// Reply of `bypassRoutes` and `setBypassRoutes`.
-enum BypassRoutesReply: Codable, Sendable, Equatable {
-    case success(BypassRoutesSnapshot)
-    case failure(HelperError)
 }

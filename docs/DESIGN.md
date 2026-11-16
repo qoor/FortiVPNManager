@@ -44,7 +44,7 @@
 | 설정은 config.yaml, 비밀번호는 Keychain, 기기별 일시 상태는 state.json에 둔다 | config.yaml은 사람이 편집할 수 있고 dotfiles로 옮길 수 있다. 로그인 시 열기 여부는 macOS(SMAppService)가 소유하는 상태라서 YAML에 두지 않는다 |
 | 이전 빌드와 다음 빌드는 서로가 남긴 저장소를 읽을 수 있어야 한다 | 사용자 결정이다(Rust 빌드부터). config.yaml, state.json, Keychain 항목, Helper의 실행 기록이 해당한다. 앱 ↔ Helper 메시지는 같은 빌드끼리만 오가므로 해당하지 않는다(§4.2) |
 | config.yaml은 엄격하게 읽는다 | 사람이 직접 편집하는 파일이다. YAML 1.1의 8진수·60진수 해석, anchor/alias처럼 의도와 다르게 읽힐 수 있는 문법은 거부한다. 파일에 오류가 있으면 마지막 정상 설정을 유지하고 연결을 막는다 |
-| 앱이 config.yaml을 다시 쓰면 직접 단 주석과 이 버전이 모르는 키는 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장, 새 인증서 digest 기록, 예외 규칙 가져오기뿐이다 |
+| 앱이 config.yaml을 다시 쓰면 직접 단 주석과 이 버전이 모르는 키는 사라진다 | 사용자가 수락한 한계다. 앱이 파일을 쓰는 경우는 설정창 저장과 새 인증서 digest 기록뿐이다 |
 | 로그는 마스킹하지 않은 원본을 보여준다 | 기본 verbosity에서는 비밀값이 출력되지 않음을 openfortivpn 소스에서 확인했다. 문제를 추적할 때는 원본이 가장 유용하다 |
 | Windows에서는 openconnect(`--protocol=fortinet`)를 감싼다 | openfortivpn은 Windows를 공식 지원하지 않는다. 사용자 PC의 FortiClient 7.4.3에는 CLI가 없고, 회사 설치본이라 올릴 수 없다. openconnect로 같은 게이트웨이에 비밀번호와 이메일 OTP로 로그인하는 것을 실제 PC에서 확인했다(§6) |
 | openconnect의 인증서 고정 값은 config.yaml의 새 키(`vpn.trusted_cert_pins`)에 둔다 | 값의 형식이 openfortivpn과 달라(`pin-sha256:`) 같은 목록에 섞을 수 없다. 섞으면 이전 빌드가 형식 오류로 경고한다. 새 키는 이전 빌드가 모르는 키로 보고 경고만 하므로 빌드끼리의 호환을 지킨다 |
@@ -56,7 +56,8 @@
 | openconnect 연결 성공은 터널 어댑터를 만든 시점으로 본다 | `Configured as` 줄은 어댑터가 생기기 약 1초 전에 나온다. 그 뒤 route가 다 들어가기까지 몇 초가 더 걸리지만 기다리지 않는다. macOS도 route를 확인하지 않고, 그동안 생기는 일은 새로 여는 연결이 잠깐 VPN을 타지 않는 정도다. route 스크립트가 실패하는 일이 실제로 보이면 그때 확인을 더한다 |
 | Windows에서는 openconnect를 늘 강제로 끝내고, 그것이 띄운 route 스크립트도 함께 끝낸다 | Windows에는 signal이 없다. openconnect가 logout하는 정상 종료 수단은 console 이벤트뿐인데, 다른 프로세스의 console에 붙어 이벤트를 보내는 시험 실행 파일을 회사 PC의 보안 프로그램(AhnLab MDS)이 악성으로 막았다(2026-11-12). 그래서 늘 강제로 끝내고 Helper가 logout한다. 터널 직후에 끝내면 route 스크립트가 아직 돌고 있어, 함께 끝내지 않으면 정리한 게이트웨이 host route를 스크립트가 다시 넣을 수 있다 |
 | Windows는 터널이 올라온 뒤 요청 없이 끝난 openconnect를 모두 강제 종료로 본다 | 사용자 결정이다(2026-11-11). signal이 없어서 밖에서 끝낸 것을 구분할 수 없다. 로그인은 이미 성공했으므로 FortiGate 차단과 무관하다. 접속 직후 끊기는 일이 반복돼도 곧바로 재연결은 한 번뿐이고, 그 뒤 backoff하다 시도 상한에서 멈춘다 |
-| Windows 예외 규칙은 주 interface의 persistent route로 둔다 | OS가 저장해 두고 다시 넣으므로 macOS의 additional routes와 성질이 같다. persistent 목록에는 VPN 스크립트가 넣는 실행 중 route가 없어서 "앱이 넣은 것"과 "밖에서 넣은 것"의 구분이 그대로 성립한다. VPN이 받은 대역보다 좁은 예외 route가 먼저 선택되는 것을 실제 PC에서 확인했다 |
+| 예외 route는 앱이 VPN을 켜 두려 하는 동안에만 실행 중 routing table에 둔다 | 사용자 결정이다(2026-11-16). 목적은 VPN을 재연결해도 SSH 같은 세션이 끊기지 않게 하는 것이고, 재연결하는 동안 앱은 VPN을 계속 켜 두려 한다. 예외 경로는 VPN이 없으면 의미가 없다. 사용자가 끊었거나 실패로 멈췄을 때도, 앱이 꺼져 있을 때도 그렇다. OS가 저장해 두는 목록에 두어 앱 없이도 남던 것은 macOS 수단의 부수 효과였다. "앱이 넣은 것"과 "밖에서 넣은 것"은 Helper가 넣을 때 남기는 기록으로 구분한다. VPN이 받은 대역보다 좁은 예외 route가 먼저 선택되는 것을 실제 PC에서 확인했다 |
+| VPN 서버 주소는 예외 대상이 될 수 없다 | 사용자 결정이다(2026-11-16). VPN 서버로 가는 트래픽은 항상 직접 나가므로 예외 route가 필요 없다. 그래서 남은 게이트웨이 host route 정리는 게이트웨이로 가는 host route를 가리지 않고 지워도 예외 route를 건드리지 않는다 |
 | Windows Helper는 실행 중이라고 알리기 전에 openconnect 버전 확인을 한 번, 시간 제한 없이 해 둔다. 상태 확인과 연결 때의 확인은 5초 제한 그대로이고, 결과는 기억하지 않는다 | 사용자 결정이다(2026-11-13·14). 회사 PC에서는 새로 설치한 client의 첫 실행이 늦게 시작될 수 있다. 그렇게 붙잡힌 프로세스는 끝낼 수도 없어서, 5초 제한을 둔 Helper가 실제로는 그만큼 기다린 뒤 client를 쓸 수 없다고 잘못 알렸다(§6). 그래서 Helper의 시작 부분이 process 모듈에 client 확인을 한 번 맡기고(openconnect `--version` 한 번), process 모듈은 이때만 openconnect가 끝날 때까지 기다린다. 그동안 Windows에는 시작 중이라고 알린다. 느린 첫 실행이 Helper가 시작하는 동안에 끝나므로, 그 뒤의 확인은 원래의 5초 제한으로 충분하고 앱의 첫 상태 확인은 곧바로 답을 받는다. 확인 결과를 기억해 두는 장치는 두지 않는다. 특정 PC 환경에 맞춘 기능을 더하는 것은 사용자가 거절했다 |
 | Windows 앱은 시작하자마자, 무엇을 보이거나 시작하기 전에 Helper 서비스부터 실행 중이게 한다. 실행 중이 아니면 시작하고 기다리며, 실행하지 못하면 오류 창을 띄운 뒤 끝난다 | 사용자 결정이다(2026-11-13·14, Windows만). Helper 없이는 앱이 쓸모가 없다. 다른 사람은 느린 첫 시작과 앱의 고장을 구분할 수 없으므로 보이지 않게 기다리는 편이 낫고, 진짜 실패는 분명한 문구로 알린다. 기다리는 것은 서비스가 실행 중이 되는 것뿐이고 시간 제한은 없다. Helper의 답을 따로 기다리지 않고, 앱의 평소 응답 시간 제한은 그대로다. 실패한 시작은 macOS 앱의 "한 번 더 시도" 규칙처럼 한 번만 다시 한다(§5.7). macOS와 다른 것은 OS의 차이 때문이다. macOS는 사용자가 Helper의 권한을 직접 승인해야 하므로 앱이 먼저 떠서 그 과정을 안내해야 한다. Windows는 설치 패키지가 서비스를 등록하므로 Helper가 실행되기 전에는 앱이 보일 것이 없다 |
 | 언어 | 코드, 주석, 앱과 Helper가 남기는 로그는 영어로 쓴다. UI 한국어는 String Catalog로 번역한다. UI에서 "헬퍼"가 아니라 "Helper"라고 쓴다. Rust가 통신하거나 파일을 읽다 실패했을 때의 상세 설명은 라이브러리 원문(영어)을 그대로 보인다(§7.2) |
@@ -68,7 +69,7 @@
 | Swift ↔ Rust는 프로세스 안의 이름 없는 socketpair 위로 4바이트 big-endian 길이와 UTF-8 JSON을 주고받는다 | UniFFI는 설정 부담이 크고 C binding용 unsafe가 늘어난다. 별도 프로세스 IPC는 필요 없다. Rust의 시작 함수(앱은 런타임, Helper는 macOS 시작 crate)가 socketpair를 만들어 한쪽 fd를 Swift에 넘긴다. Swift는 FileHandle과 Data만 쓰고 pointer 코드가 없다. 읽는 쪽은 하나이고, 쓰기는 background serial queue에서 하며, main actor 전환은 한 곳에서 한다 |
 | 메시지 타입은 Rust가 기준이다 | Swift 쪽 Codable 정의는 Rust가 만든 예시 JSON(fixture)으로 맞는지 테스트한다. gRPC, MessagePack, protobuf는 쓰지 않는다 |
 | UI 상태는 도메인 구역 단위로 보낸다 | 화면 모양의 전체 상태는 비효율적이고 공통 부분을 화면 변경에 묶는다. 연결, 스케줄, 준비 상태·Helper, Gmail·Google 계정, 예외 규칙, 설정 구역 중 바뀐 것만 통째로 보내고, 로그는 추가분만 보낸다. 판단(버튼 상태, "다음 연결부터 적용" 등)은 공통 부분이 하고, 문장은 모두 UI가 만들어 번역한다 |
-| Rust에 unsafe 블록을 두지 않는다. 예외는 시작 함수의 이름 표시와 Windows Helper의 os_api 모듈이다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시는 허용한다. Windows Helper가 VPN 네트워크 설정을 직접 적용하려면 Windows API(IP Helper)를 불러야 해서, 그 API를 safe 함수로 감싸는 모듈 하나에만 unsafe를 허용한다(2026-11-16). 작업 공간 전체의 금지 설정은 그대로 두고 그 모듈에만 허용을 표시한다. 다른 코드는 Windows API를 직접 부르지 않고 이 모듈의 함수를 쓴다. 쓰는 곳이 Windows Helper 서비스뿐이라 서비스 crate 안에 두고, 다른 곳에서 필요해지면 crate로 나눈다 |
+| Rust에 unsafe 블록을 두지 않는다. 예외는 시작 함수의 이름 표시와 Windows Helper의 os_api 모듈이다 | 사용자 결정이다. 외부로 내보내는 시작 함수의 이름 표시는 허용한다. Windows Helper가 route와 네트워크 설정을 직접 다루려면 Windows API(IP Helper)를 불러야 해서, 그 API를 safe 함수로 감싸는 모듈 하나에만 unsafe를 허용한다(2026-11-16). 작업 공간 전체의 금지 설정은 그대로 두고 그 모듈에만 허용을 표시한다. 다른 코드는 Windows API를 직접 부르지 않고 이 모듈의 함수를 쓴다. 쓰는 곳이 Windows Helper 서비스뿐이라 서비스 crate 안에 두고, 다른 곳에서 필요해지면 crate로 나눈다 |
 | SIGPIPE: Rust가 socketpair 양쪽에 SIGPIPE 금지를 켜고, Helper 프로세스는 SIGPIPE 전체를 무시한다 | main이 Swift라 Rust의 SIGPIPE 무시가 적용되지 않는다. macOS에서 pipe 하나에만 SIGPIPE를 막는 설정은 unsafe 없이 할 수 없어서, Helper 전체의 무시를 process 모듈의 전제 조건으로 둔다. VPN client는 모든 signal을 기본값으로 되돌린 상태로 시작한다 |
 | 내부 오류는 곧바로 중단한다 | 억지 예외 처리 대신 panic은 abort하고 crash report를 남긴다. Release 빌드에도 줄 번호를 남긴다 |
 | config.yaml은 saphyr-parser의 이벤트 API로 읽고 엄격 규칙은 직접 확인한다 | pure safe Rust다. 구조를 재귀 대신 반복으로 만들어 큰 스택이 필요 없다 |
@@ -78,7 +79,9 @@
 | Windows 앱도 런타임을 같은 프로세스에서 시작하고 같은 JSON 메시지를 쓴다 | Rust 시작 함수가 익명 pipe 두 개를 만들어 handle 값만 돌려준다. C#은 이를 stream으로 감싸 읽고 쓰므로 둘 사이에 pointer가 오가지 않는다. C# 쪽 메시지 정의는 Swift처럼 Rust가 만든 fixture로 검사한다 |
 | Windows Helper는 Rust만으로 된 Windows 서비스(LocalSystem)다 | 서비스 진입, 연결 통로, 프로세스 처리를 모두 Rust 라이브러리로 할 수 있어 macOS의 Swift 껍데기 같은 OS 쪽 코드가 필요 없다. 서비스 시작 callback은 인자를 읽지 않으므로 unsafe가 필요 없다 |
 | Windows 앱 ↔ Helper는 named pipe 위의 같은 메시지다 | XPC 자리다. 통로는 이 PC의 계정과 시스템이 열 수 있고, 다른 컴퓨터의 연결은 받지 않는다. 처음에는 설치할 때 정한 사용자 한 명으로 제한했으나, 문제가 될 소지만 있고 실질적인 이득이 없어 없앴다(사용자 결정, 2026-11-13). 실행은 그것을 시작한 Windows 세션의 것이다. 앱은 통로가 시스템 계정 소유인지 확인한 뒤에 비밀번호를 보낸다. 같은 이름의 통로를 다른 프로그램이 먼저 만들어 가로채는 일을 막기 위해서다. 연결한 프로그램이 설치본인지는 unsafe 없이 확인할 방법이 없어 확인하지 않는다(§8) |
-| Windows의 route 읽기·쓰기는 PowerShell route cmdlet을 고정 argv로 실행하고 JSON으로 받는다 | macOS의 networksetup처럼 시스템 명령을 쓴다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없고, route API를 직접 부르면 unsafe가 필요하다. 바꿀 값은 stdin의 JSON으로 넘기고, 명령 문장은 고정한다 |
+| Windows의 route 읽기·쓰기와 주 interface 조회는 Windows API(IP Helper)로 한다 | os_api 모듈이 감싼 safe 함수를 쓴다(위 unsafe 행). 전에 쓴 PowerShell route cmdlet은 한 번 실행에 1~3초가 걸렸고 회사 보안 프로그램에 막힐 수 있었다. `route print`와 `route.exe`는 출력이 번역돼 해석할 수 없다 |
+| 예외 route를 바꿀 때마다 routing table 전체를 바꾸기 전과 후에 한 번씩 읽는다. macOS는 `netstat -rn -f inet`으로 읽고 그 사이에 `/sbin/route`로 하나씩 넣고 지운다 | 사용자 설계다(2026-11-16). 넣었는지와 이미 있던 것인지를 두 번의 읽기로 모두 알 수 있어 route마다 조회하지 않는다. macOS의 `route -n get`은 mask를 주면 없는 route 대신 더 넓은 route를 답해 결과를 해석하기 까다롭다. `/sbin/route`는 실패해도 exit code 0이라 바꾼 뒤 읽은 table로 결과를 안다. Windows도 같은 모양이다. table 읽기와 route 명령은 예외 규칙과 따로 둔 층이어서, 나중에 VPN의 네트워크 설정을 Helper가 직접 할 때 그대로 쓴다 |
+| 앱마다의 예외 route는 Helper 공통 부분(entry)이 관리하고, OS 영역은 table 읽기·넣기·지우기만 한다 | 두 OS의 규칙이 같아야 하고, 앱 연결이 끊기거나 Helper가 다시 시작할 때의 정리를 한곳에서 시험한다. 넣기 전의 기록은 실행 기록처럼 recovery 모듈이 형식을 정한다. 기록에는 Helper가 넣으려 한 route만 들도록, entry가 먼저 OS 영역에 table을 읽게 해 없는 route만 기록한 뒤 넣게 한다. 넣을 route가 올바른 예외 대상인지는 OS 영역이 다시 확인한다(아래 행) |
 | Windows 앱 ↔ Helper 통로의 메시지는 앱 안의 Rust ↔ Swift와 같은 틀(4바이트 길이와 UTF-8 JSON)이고, 요청마다 번호를 붙인다 | XPC의 호출과 응답 자리다. 응답은 요청 번호로 짝을 찾고, 이벤트와 출력은 생긴 순서대로 같은 통로로 간다. 빌드 확인과 유휴 시 종료 요청은 다른 빌드 사이에서 오가므로 모양을 바꾸지 않는다. 앱은 빌드 확인에 자기 빌드를 함께 보내고, Helper는 같은 빌드로 확인된 연결의 연결·OTP·예외 route 요청만 처리한다. Helper가 받는 한 메시지는 1 MiB까지고, 예외 route 요청은 연결마다 한 번에 하나만 받는다(앱도 하나씩 보낸다). 앱이 읽지 않아 보낼 메시지가 256개 넘게 쌓인 연결은 앱이 끝난 것처럼 다룬다. 이 PC의 다른 프로그램도 연결할 수 있어서, 큰 길이를 보내거나 요청만 쌓아 Helper의 메모리를 다 쓰게 하지 못하게 한다. 그 통로는 앱이 다음에 쓰거나 끝날 때 닫힌다. 막혀 있는 통로를 밖에서 끊는 안전한 방법이 없기 때문이다 |
 | Windows Helper는 유휴 시 종료 요청에 끝나지 않는다고 답한다 | Windows는 스스로 끝난 서비스를 다음 요청 때 다시 띄우지 않는다. 업그레이드는 앱을 닫고 Helper를 멈춘 뒤 둘을 함께 바꾸고, 다시 연 앱이 새 Helper를 시작한다. 그래서 빌드가 다르면 설치가 끝나지 않은 것이다. 그때 앱은 버전 불일치를 보인다 |
 | 통로는 시스템 계정이 소유하고, 사용자에게는 통로를 새로 만드는 권한을 주지 않는다 | 그 권한이 있으면 같은 이름의 통로를 하나 더 열어 앱의 연결을 가로챌 수 있고, 소유자 확인으로도 구분되지 않는다 |
@@ -106,8 +109,8 @@
   - 모든 판단을 맡는다. 연결 state machine, OTP 처리, 재연결 스케줄, config.yaml·Keychain·state.json, 서버 인증서 digest, 예외 규칙 계산, UI, 로그 보관이 여기에 속한다.
   - Swift의 UI와 OS 연동이 Rust 런타임을 같은 프로세스에서 시작한다. 판단과 공통 I/O는 런타임이, 화면과 macOS 기능(Keychain, XPC, 시스템 이벤트, 알림, 로그인 항목)은 Swift가 맡는다.
 - **Helper** (root LaunchDaemon, 요청이 있을 때 launchd가 실행)
-  - 실행하고 감시하는 일만 한다. openfortivpn 실행, stdin으로 비밀번호·OTP 주입, prompt 감지, 단계별 watchdog, 프로세스 종료, 비정상 종료 뒤 routing table 복구, 남은 프로세스 정리, 네트워크 서비스의 additional routes 읽기·쓰기가 여기에 속한다.
-  - Swift로 만든 Helper OS 영역(XPC, launchd, 서명 확인, route 복구, networksetup)이 Rust로 만든 Helper 공통 부분을 같은 프로세스에서 시작한다. 공통 부분의 entry 모듈은 앱 요청을 판단하고, VPN client에 관한 일은 backend adapter를 쓰는 process 모듈과 recovery 모듈에 맡긴다.
+  - 실행하고 감시하는 일만 한다. openfortivpn 실행, stdin으로 비밀번호·OTP 주입, prompt 감지, 단계별 watchdog, 프로세스 종료, 비정상 종료 뒤 routing table 복구, 남은 프로세스 정리, 앱이 VPN을 켜 두려 하는 동안의 예외 route 넣기·지우기가 여기에 속한다.
+  - Swift로 만든 Helper OS 영역(XPC, launchd, 서명 확인, route 명령)이 Rust로 만든 Helper 공통 부분을 같은 프로세스에서 시작한다. 공통 부분의 entry 모듈은 앱 요청을 판단하고, VPN client에 관한 일은 backend adapter를 쓰는 process 모듈과 recovery 모듈에 맡긴다.
   - 상태를 저장하지 않고 config.yaml도 읽지 않는다. 앱이 보낸 값 중 검증을 통과한 것만 쓴다. 환경 변수는 PATH만 넘긴다(openfortivpn이 proxy 환경 변수를 읽기 때문, §6).
 - **둘을 나눈 이유**: root로 실행되는 코드를 최소로 줄이기 위해서다. 앱은 root 권한 없이 자유롭게 재시작하거나 재설치할 수 있다.
 - **Windows**: 나눔과 역할이 같다. 앱은 사용자 권한의 C# 앱(UI와 OS 연동)이 Rust 런타임을 같은 프로세스에서 시작한다. Helper는 부팅 때 시작하는 Rust Windows 서비스(LocalSystem)이고, Helper OS 영역 (macOS)이 하던 일(연결 확인, route 정리, 예외 route 쓰기)도 직접 한다. 설치 패키지는 서비스를 등록만 하고, 실행 중이 아니면 앱이 시작한다(§5.7).
@@ -135,12 +138,14 @@ components/
   backend-adapter/openconnect/  backend adapter: 두 번의 실행 인자, 출력 해석, 세션 cookie, logout 요청, 검증된 버전
                                 (OS마다 다른 것: 실행 파일 위치, 환경 변수, 터널 어댑터 줄. 지금은 Windows만)
   helper/                       Helper. 두 OS가 함께 쓰는 공통 부분(src/, fvm-helper-core)은 역할별 모듈 셋이다
-                                entry: 앱 요청 받기, 실행을 누가 쓸지 판단, 응답, Helper 종료 시점 결정. OS 전용 API 없음
+                                entry: 앱 요청 받기, 실행과 예외 route를 누가 쓸지 판단, 응답, Helper 종료 시점 결정.
+                                  OS 전용 API 없음
                                 process: VPN client 확인·실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout
                                   (OS별 부분: 프로세스 실행·확인·종료, 실행 기록 폴더 권한)
-                                recovery: 실행 기록(형식은 이 모듈이 정한다), 이전 Helper가 남긴 프로세스 정리, route 복구 요청
+                                recovery: 실행 기록과 예외 route 기록(형식은 이 모듈이 정한다), 이전 Helper가 남긴 프로세스와
+                                  예외 route 정리, route 복구 요청
   helper/macos/                 Helper OS 영역 (macOS)
-                                (swift/: XPC, launchd, 서명 확인, route 복구, networksetup. tests/: 그 Swift 시험.
+                                (swift/: XPC, launchd, 서명 확인, route 복구, route 명령. tests/: 그 Swift 시험.
                                  rust/: 시작 함수(fvm-helper-macos). backend adapter와 실행 기록 폴더를 골라 process 모듈에
                                  주고 entry를 시작한다)
   helper/windows/               Helper OS 영역 (Windows): Helper 서비스 실행 파일(fvm-helper-windows). 서비스 진입, 앱 연결
@@ -237,22 +242,26 @@ packaging/windows/              C# solution, 빌드 스크립트, 설치 패키�
 
 ### 5.5 예외 규칙
 사내망에 직접 연결돼 있을 때, VPN이 가져가는 대역 중 지정한 host나 대역을 그 네트워크의 router로 바로 보낸다. VPN을 재연결해도 SSH 같은 TCP 세션이 끊기지 않게 하려는 것이다.
-- **방식**: 주 네트워크 서비스의 additional routes(`networksetup -setadditionalroutes`)를 쓴다. macOS가 서비스 설정에 저장하고 서비스가 켜질 때마다 넣으므로, 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하게 동작한다. 쓰기에는 root가 필요해서 Helper가 실행한다.
-- **Windows 방식**: 주 interface(VPN 어댑터 제외)의 persistent route를 그 gateway로 쓴다. 성질과 규칙은 macOS와 같고, 앱이 쓴 route는 interface GUID 단위로 기억한다. 밖에서 바뀐 것을 알려 주는 알림이 없어, OS 연동이 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알리고 런타임이 다시 맞춘다.
-  - 주 interface는 하드웨어 Ethernet·Wi-Fi 어댑터 가운데 default route의 metric이 가장 낮은 것이다. VPN 터널 어댑터는 이 종류가 아니어서 빠진다. FortiClient나 Hyper-V의 가상 어댑터는 Ethernet으로 보고되므로 하드웨어 여부로 뺀다. Hyper-V 외부 스위치처럼 가상 어댑터가 실제 연결을 맡은 PC에서는 주 interface가 없다.
-  - 앱에는 interface GUID를 서비스 ID로, interface 이름을 서비스 이름으로 보낸다. route 목록은 그 interface의 persistent route에서 default route를 뺀 것이다. 고정 IP로 설정한 interface는 default route도 persistent 목록에 두기 때문이다.
-  - 쓸 때는 지금 목록과 비교해 빠진 것을 지우고 새 것을 넣는다. persistent 목록과 지금 쓰는 목록 둘 다에 한다.
-  - 앱이 읽은 interface, router, 주소, route가 그대로인지는 쓰기와 같은 PowerShell 실행 안에서 확인한다. 따로 확인하면 PowerShell이 다시 뜨는 1~3초 사이에 DHCP 갱신 등으로 router가 바뀌어도 옛 router로 쓰게 된다.
-  - route 하나를 바꾸는 데 노트북에서 약 0.05초가 걸린다(2026-11-13). 쓰기의 제한 시간은 기본 20초에 바꿀 route마다 0.2초를 더해, 런타임이 한 번에 바꾸는 최대치(지울 것 100개와 넣을 것 100개)도 60초 안에 들게 한다. 앱은 route 읽기·쓰기의 답을 90초 기다린다. 앱이 먼저 포기하면 Helper가 아직 처리 중인 그 요청 때문에 다음 route 요청을 거절하기 때문이다.
-  - 앱을 제거하면 사용자마다 앱이 쓴 것으로 기록한 route만 지운다(§5.7). persistent route는 앱이 없어져도 OS에 남기 때문이다.
-- **source of truth는 config.yaml**이다. 포맷한 뒤에도 config.yaml만 복원하면 그대로 적용된다.
+- **방식**: 앱이 VPN을 켜 두려 하는 동안에만 주 네트워크의 router를 거치는 route를 실행 중 routing table에 넣고, 그렇지 않게 되거나 앱이 끝나면 지운다(사용자 결정, 2026-11-16). 예외 경로는 VPN이 없으면 의미가 없다. 넣고 지우는 데 관리자 권한이 필요해서 Helper가 한다.
+  - VPN을 켜 두려 하는 때는 연결 중, 연결됨, 재연결하려고 끊는 중, 재시도 대기, 네트워크 대기다. 사용자가 끊었을 때, 실패로 멈췄을 때, 스케줄 밖이라 연결하지 않을 때, 자리 비움으로 재연결을 미룰 때는 아니다. 판단 코어가 연결 상태로 정하고, 이것이 바뀌면 런타임이 곧바로 동기화한다. Helper는 이 판단을 모르고, 앱이 보내는 목록(비었거나 지우기 요청)을 따른다.
+  - 연결 시도를 시작할 때 동기화하므로 예외 route가 터널의 route보다 먼저 들어간다. 나중에 VPN의 route를 Helper가 직접 넣게 되면(네트워크 설정 작업), 예외 route를 VPN의 route보다 먼저 넣어야 한다.
+  - 바꿀 때마다 routing table 전체를 바꾸기 전에 한 번, 바꾼 뒤에 한 번 읽는다. 앞의 읽기로 이미 있는 route를 알고, 뒤의 읽기로 넣은 결과를 확인한다. route마다 따로 조회하지 않는다.
+  - macOS: Helper의 Swift 쪽이 `netstat -rn -f inet`으로 table을 읽고 `/sbin/route`로 하나씩 넣고 지운다. 대상·mask·gateway가 같은 static route만 같은 route로 본다. 시스템이 다른 route에서 복제한 cloned route(W)나 한 interface에 묶인 route(I)는 아니다. 같은 대상의 cloned host route는 넣기를 막으므로 먼저 지운다. 지우는 것은 Helper가 넣은 static route뿐이다. 주 네트워크는 `State:/Network/Global/IPv4`의 서비스이고, 터널 interface는 주 네트워크로 보지 않는다.
+  - Windows: Helper 서비스가 Windows API(os_api 모듈)로 table을 읽고 넣고 지운다. 대상·prefix·next hop이 같고 interface가 지금의 주 interface일 때만 같은 route로 본다. 다른 interface의 route는 이 Helper가 그 interface로 넣은 것일 때만 지운다. 주 interface는 하드웨어 Ethernet·Wi-Fi 어댑터 가운데 default route의 metric이 가장 낮은 것이다. VPN 터널 어댑터는 이 종류가 아니어서 빠진다. FortiClient나 Hyper-V의 가상 어댑터는 Ethernet으로 보고되므로 하드웨어 여부로 뺀다. Hyper-V 외부 스위치처럼 가상 어댑터가 실제 연결을 맡은 PC에서는 주 interface가 없다. 앱에는 interface GUID를 서비스 ID로, 어댑터 이름을 서비스 이름으로 보낸다. route metric은 PowerShell로 넣던 때와 같다.
+- **앱과 Helper의 분담**
+  - 앱(런타임)은 config.yaml과 주 네트워크로 그 앱이 원하는 route 목록을 계산한다(판단 코어). Helper에서 읽은 "이 앱의 route 중 지금 있는 것"과 다르면 목록을 통째로 보낸다. 받은 결과가 목록과 다르면 실패로 보고 다시 시도한다.
+  - Helper의 entry는 앱 연결마다 원하는 목록과, 자기가 넣은 route를 그 route를 넣은 네트워크 서비스와 함께 기억한다. 목록이 바뀌면 어느 앱도 원하지 않게 된 route를 지우고 새 route를 넣게 OS 쪽에 한 번에 맡긴다. 이미 있던 route는 넣지 않고 Helper의 것으로 보지 않으므로, 밖에서 넣은 route는 지우지 않는다.
+  - 넣기 전에 OS 쪽에 table을 읽게 해 아직 없는 route만 고르고, 그 route를 Helper의 실행 기록 폴더에 기록한 뒤 넣게 한다(형식은 recovery 모듈이 정한다). 그래서 기록에는 Helper가 넣으려 한 route만 있다. Helper가 비정상 종료하거나 다시 시작하면, 새 Helper가 앱 연결을 받기 전에 기록된 route를 지운다. 앱은 연결이 끊긴 것을 알고 새 연결에서 목록을 다시 보낸다.
+  - 넣을 route가 그 router로 가는 올바른 예외 대상인지는 Helper의 OS 영역이 다시 확인한다. Windows는 판단 코어의 규칙을, macOS는 Swift에 둔 같은 규칙을 쓴다.
+- **정리하는 때**: 앱의 [종료]는 터널을 끝낸 뒤 Helper에게 이 앱의 route를 지우게 하고 그 답을 몇 초까지 기다린다. 앱이 비정상 종료하면 Helper가 연결이 끊긴 것을 보고 그 앱만 원하던 route를 지운다. Helper는 스스로 끝날 때(유휴 종료, 교체, 종료 요청) route를 지우지 않고, 다음에 시작한 Helper가 기록으로 지운다. macOS에서는 앱의 다음 요청(종료 때의 지우기 요청 포함)이 Helper를 다시 띄운다. 재부팅하면 route는 OS가 지운다.
+- **다시 넣는 때**: 네트워크가 바뀌면(Wi-Fi 전환, 주소 변경, 깨어남) 다시 계산해 맞추고, 더는 맞지 않는 route는 지운다. macOS는 SCDynamicStore의 네트워크 설정 변경을, Windows는 route가 사라져도 알림이 없어 주소 변경과 5분마다의 확인을 쓴다. VPN을 켜 두려는지가 바뀌거나 Helper 연결이 끊겼을 때도 다시 맞춘다. 연결이 끊긴 뒤의 읽기 실패는 쓰기 실패처럼 다시 시도하고, 재시도를 그만둔 뒤에는 준비 상태 확인이 Helper의 답을 받을 때 다시 맞춘다.
+- **이전 버전의 저장된 route**: 이전 버전이 OS에 저장해 둔 예외 route(macOS additional routes, Windows persistent route)는 앱이 읽지도 지우지도 않는다. 설치할 때 사람이 지운다(사용자 결정, 2026-11-16). Windows MSI의 제거도 더는 route를 지우지 않는다.
+- **source of truth는 config.yaml**이다. 포맷한 뒤에도 config.yaml만 복원하면 그대로 적용된다. 밖에서 넣은 route를 목록으로 가져오지 않는다. 실행 중 routing table에는 DHCP나 다른 VPN의 route가 섞여 있어 사용자가 넣은 예외를 가려낼 수 없다(사용자 결정, 2026-11-16).
 - **적용 대역(`routes.networks`)**: 이 Mac의 IPv4 주소가 목록의 대역 안에 있을 때만 적용한다. 밖에서는 앱이 넣은 route를 지워서 모든 트래픽이 VPN을 탄다. 이 목록에는 앱이 스스로 추가하지 않는다.
-- **동기화 원칙**
-  - 앱이 마지막으로 쓴 route를 서비스별로 state.json에 기억해 두고, 이를 기준으로 "앱이 넣은 것"과 "밖에서 넣은 것"을 구분한다.
-  - 적용 대역 안에서 같은 router로 밖에서 추가된 route는 목록에 가져온다. 기존 대상과 겹치거나 같은 LAN 안이면 가져오지 않는다.
-  - 다른 gateway를 거치는 route는 건드리지 않는다.
-  - 목록에는 있는데 시스템에서 사라진 route는 다시 넣는다. 서비스가 새로 만들어지면 route가 통째로 비기 때문이다.
 - **입력 규칙**: 한 목록 안의 항목끼리는 범위가 겹칠 수 없다. 설정창에서도 config.yaml에서도 오류로 처리한다.
+- **VPN 서버 주소**: 예외 대상이 될 수 없다(사용자 결정, 2026-11-16). VPN 서버로 가는 트래픽은 항상 직접 나간다.
+  - `vpn.host`가 IP 주소이면 그 주소와 같은 host 하나를 설정창의 행과 config.yaml에서 오류로 처리한다. 그 주소를 포함하는 대역은 오류가 아니다.
+  - `vpn.host`가 이름이면 동기화할 때 그 이름의 알려진 주소와 같은 host 대상에는 route를 넣지 않는다. 알려진 주소는 이번 실행이 연결한 gateway 주소(Helper가 터널이 올라왔다고 알릴 때 함께 보낸다)나 네트워크 확인 때 찾은 주소다. 동기화 때 이름을 따로 조회하지 않는다. 그 대상은 로그에 한 번 남기고, 설정창에는 적용하지 않았다고 보인다.
 - 쓰기에 실패하면 몇 번 다시 시도하고, 그래도 실패하면 macOS 알림과 설정창의 경고로 알린다.
 - **감수하는 위험**: 외부 네트워크가 우연히 적용 대역과 같은 사설 대역을 쓰면 그곳에서도 적용된다.
 
@@ -289,12 +298,11 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - **같은 버전**: 다시 설치할 수 있다. 같은 버전의 다른 빌드는 업그레이드처럼 설치된 것을 바꾼다. 설치에 쓴 MSI를 다시 실행하면 수정 화면(Repair, Remove)이 열린다.
 - **실행 중인 앱**: 업그레이드와 제거는 실행 중인 앱을 닫는다. Windows 로그아웃 때처럼 종료를 요청하고, 몇 초 뒤에도 남아 있으면 끝낸다. "사용 중인 파일" 창이나 다시 시작 요청은 없다. 업그레이드 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다. 로그인 시 열기가 켜져 있으면 다음 로그인 때 열린다.
 - **제거**: 실제 제거일 때만 한다. 업그레이드 중 이전 버전을 지울 때는 하지 않는다.
-  - 앱을 닫고, Helper를 멈추고 서비스를 지운다.
-  - 이 PC의 사용자마다, 그 사용자의 상태 파일에 앱이 쓴 것으로 기록된 예외 route만 지운다(§5.5). 밖에서 넣은 route는 건드리지 않는다.
+  - 앱을 닫고, Helper를 멈추고 서비스를 지운다. 앱이 끝나면서 예외 route를 지운다(§5.5).
   - 모든 사용자의 로그인 시 열기 등록을 지운다.
   - Helper의 실행 기록 폴더, 설치한 파일, 시작 메뉴 바로 가기, 두 이벤트 로그 출처를 지운다.
   - 사용자마다의 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남긴다.
-  - 데이터를 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
+  - 로그인 시 열기 등록을 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
 - **앱 시작** (Windows만)
   - 앱이 맨 먼저 하는 일은 Helper 서비스가 실행 중이게 하는 것이다. 무엇을 보이거나 시작하기 전에 이 일을 끝낸다. 실행 중이 아니면 시작하고, 시작하는 동안 기다린다. 그동안은 알림 영역 아이콘도 없다(설정창은 원래 시작할 때 열지 않는다).
   - 준비란 서비스가 실행 중이라는 것뿐이다. Helper의 첫 답을 따로 기다리지 않고, 앱의 평소 응답 시간 제한도 그대로다. Helper는 실행 중이라고 알리기 전에 VPN client를 한 번 확인해 두므로(§3.1) 첫 상태 확인은 곧바로 답을 받는다.
@@ -344,7 +352,9 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - 재설치하면 실행 중인 옛 Helper는 디스크의 바이너리가 바뀌어 앱의 서명 확인을 통과하지 못한다. 그래서 Helper가 자기 실행 파일이 바뀐 것을 감지하면 유휴 상태일 때 스스로 종료한다. `make install`에 sudo가 필요 없는 이유다.
 - main actor에 격리된 Swift 코드에서 XPC 오류·무효화 callback을 `@Sendable`로 선언하지 않으면 런타임 격리 검사에서 크래시한다.
 - `/sbin/route`와 `networksetup`은 실패해도 exit code 0으로 끝난다. 결과는 출력이나 변경 후의 routing table로 판단한다.
-- networksetup이 다루는 저장된 additional routes에 macOS가 스스로 넣는 항목은 없다. macOS 자체 route(자기 IP `/32`, `169.254.0.0/16`)는 실행 상태에만 있고 networksetup에는 보이지 않는다.
+- `route -n get`에 `-netmask`(또는 `-net 주소/길이`)를 주면, 목적지와 mask가 같은 route가 있을 때는 그것을, 없으면 더 넓은 route(default 등)를 답한다. 그 주소를 덮는 더 좁은 route는 답하지 않는다. mask 없이 주면 가장 길게 맞는 route를 답한다(2026-11-16 이 Mac에서 확인).
+- VPN client가 넣는 단일 host route는 `-net 주소/32`라 HOST flag가 없고 `mask: 255.255.255.255`로 보인다. `-host`로 넣은 route는 mask 줄이 없다.
+- `netstat -rn -f inet`은 대역을 끝의 0 옥텟 없이 쓰고, prefix 길이가 주소 class의 것과 같으면 그것도 쓰지 않는다(`127`은 127.0.0.0/8, `192.168.1`은 192.168.1.0/24). host route는 H flag가 붙고 주소 전체로 쓴다. 그 밖의 flag는 S(static), W(cloned), I(한 interface에 묶임) 등이다.
 - 화면 잠금은 `com.apple.screenIsLocked`/`Unlocked` 분산 알림이 기준이다. 잠금 해제 직후 세션 정보는 잠시 잠금 상태로 남아 있을 수 있다.
 - main actor task 안에서 modal 창(`runModal`)을 열면 main queue가 멈춰 연결 처리, OTP 확인, 타이머가 모두 멈춘다. 파일 선택 창은 sheet로 연다.
 - Rust의 `main`이 아닌 프로세스(Swift 앱에 링크된 Rust 라이브러리)에서는 SIGPIPE가 무시되지 않는다. 닫힌 상대에게 쓰면 프로세스가 죽는다.
@@ -492,7 +502,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 빌드는 설치본이 아니라 그 프로그램 파일의 zip을 받는다. 설치본은 NSIS 형식이라 Windows의 tar로는 열 수 없고, 실행하면 시작 메뉴와 registry를 건드린다. 7-Zip으로는 열리지만 빌드에 도구가 하나 더 필요해진다. zip은 PowerShell이 그대로 푼다. 7-Zip은 OpenConnect 버전을 올릴 때 zip을 만드는 데만 쓴다.
   - 7-Zip으로 연 설치본에서는 NSIS 내부 파일(`$PLUGINSDIR`)과, 7-Zip이 설치본 안의 데이터로 다시 만든 제거 프로그램(`Uninstall OpenConnect.exe`)도 나온다. 둘은 zip에서 뺐다. 나머지 18개 파일은 그때까지 MSI에 넣던 수동 사본과 SHA-256이 모두 같았다.
 - **2026-11-15 CI와 Release**: 사용자 결정이다(§4.4).
-  - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 PowerShell로 route를 읽거나 쓰는 8개는 runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 CI에서 빼고 PC에서 돌린다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
+  - CI(GitHub Actions)는 push와 pull request마다 Rust(macOS, Windows), C#, Swift를 빌드하고 테스트하며 Windows MSI를 만든다. 저장소가 공개라 runner 비용이 없고, 회사 PC의 보안 프로그램 영향도 없다. Windows Helper 테스트 가운데 예외 경로를 다루며 PC의 주 네트워크를 읽고 routing table을 바꾸는 7개(직접 5개, pipe를 거쳐 2개)는 runner에서 시험해 보지 않아 CI에서 빼고 PC에서 돌린다(2026-11-16). OS API를 직접 부르는 route와 loopback interface 설정 테스트 4개는 CI에서 돌린다(2026-11-16). runner에서 실패하면 다시 뺀다. 그 전에는 PowerShell로 route를 읽거나 쓰는 8개를, runner에서 PowerShell 한 번이 Helper의 20초 제한을 넘겨 뺐다. 작업 공간이 macOS의 libproc을 써서 Linux job은 없다.
   - `v`로 시작하는 tag를 push하면 Windows MSI, pdb, SHA-256 목록을 공개 GitHub Release로 올린다. 수동 실행은 시험용 초안 Release를 만든다. 코드 서명은 하지 않아 내려받은 MSI에 SmartScreen 경고가 뜬다. macOS는 처음에 배포에 유료 Apple Developer ID가 필요하다고 보고 Release에 넣지 않았다가, 서명하지 않은 pkg를 Mac에서 올리기로 했다(아래 macOS 설치 패키지). 2026-11-16부터는 CD가 만든다(아래 macOS pkg CD). tag는 앱 버전 체계를 정할 때까지 올리지 않았다(아래 앱 버전 체계).
   - 내장 Google OAuth client: 사용자는 빌드 환경마다 파일을 준비하는 번거로움을 없애려고 client 파일을 저장소에 두려 했다. GitHub의 push protection이 Google OAuth client ID와 secret을 감지해 push를 거절했고, 사용자 결정대로 저장소 비밀값으로 바꿨다. 비밀값에는 앱이 읽는 두 값(client_id, client_secret)만 담아 회사 Google Cloud 프로젝트 정보는 넣지 않았다. 공개 Release MSI에 회사 client가 들어가는 것은 사용자가 받아들였다. 데스크톱 앱 client의 secret은 Google도 비밀로 보지 않고, 로그인은 PKCE가 보호한다.
 - **2026-11-15 Windows 앱 종료 중 다시 실행**: 사용자 결정이다(SPEC F-WN).
@@ -524,6 +534,19 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
   - 설치되는 파일(앱, Helper, Windows 서비스 실행 파일, pkg와 MSI의 내용)은 이름이 그대로다. Swift가 링크하는 정적 라이브러리는 crate 이름을 따라 `libfvm_helper_macos.a`가 됐다.
   - Helper의 Rust thread 이름과, thread를 시작하지 못했을 때 중단하며 남기는 메시지는 새 구조에 맞춰 바꿨다(`fvm-entry`, `fvm-entry-read`, `fvm-process`, `fvm-process-exit`, `-output`, `-gateway`, `-logout`). 로그 문구는 그대로다.
   - 2026-11-14의 "VPN client는 watchdog만 다룸" 결정은 이렇게 지킨다. backend adapter는 process와 recovery만 쓰고, entry는 VPN client 처리를 넘겨받아도 그 안의 backend adapter에 접근할 수 없다. 이것은 compiler가 막는다. process의 OS별 프로세스 처리와 실행 기록 폴더 코드는 recovery가 쓰므로 crate 안에 공개돼 있어, entry가 이것을 쓰지 않는 것은 약속으로 지킨다(§4.3).
+
+- **2026-11-16 예외 경로를 앱이 실행 중인 동안에만**: 사용자 결정이다(§3.1, §5.5).
+  - 전에는 예외 route를 OS가 저장해 두는 목록에 두었다. macOS는 재부팅과 VPN 재연결 뒤에도 남도록 networksetup additional routes를 택했고(2026-11-03), Windows는 같은 성질을 내려고 persistent route를 PowerShell로 다뤘다. persistent route를 해석 가능한 방식으로 다룰 수 있는 것이 PowerShell뿐이었다.
+  - 영구 적용은 macOS 수단의 부수 효과였고, 예외 규칙의 목적(VPN을 재연결해도 SSH 같은 세션 유지)에는 필요하지 않다. 앱(manager)은 재연결하는 동안 계속 실행 중이고, 앱이 꺼져 있으면 VPN도 없어 예외 route는 의미가 없다. 그래서 앱이 실행 중인 동안에만 실행 중 routing table에 넣고, 앱이 끝나면 지운다.
+  - 밖에서 넣은 route를 예외 목록으로 가져오던 기능을 없앴다. OS의 저장 목록을 더 쓰지 않고, 실행 중 routing table에는 DHCP나 다른 VPN의 route가 섞여 사용자가 넣은 예외를 가려낼 수 없기 때문이다. 예외 대상은 설정창과 config.yaml에서만 정한다.
+  - 이전 버전이 저장해 둔 예외 route는 앱이 정리하지 않는다. 이 Mac과 notebook에 설치할 때 앱의 예외 목록과 일치하는 항목만 사람이 지우고, 다른 router로 넣은 route 등 나머지는 건드리지 않는다.
+  - 수단: Windows는 os_api 모듈(Windows API), macOS는 Swift Helper의 table 읽기(`netstat`)와 route 명령(넣기, 지우기)이다. 나중에 VPN의 네트워크 설정을 Helper가 직접 할 때 같은 수단을 쓴다. 남은 게이트웨이 host route 정리도 Windows API로 바꿨다. 그 정리는 persistent route를 가려내지 못해, router를 거치는 게이트웨이 host route를 모두 지운다.
+  - 앱마다의 route와 Helper가 넣은 route의 기록은 Helper 공통 부분이 맡는다(§3.2). 앱 연결이 끊기거나 Helper가 다시 시작할 때의 정리를 두 OS가 같게 하고, 한곳에서 시험하려는 것이다.
+  - 없어진 것: PowerShell route 처리와 Windows Helper의 시스템 명령 실행 코드, MSI 제거 때의 route 정리, networksetup additional routes, 밖에서 넣은 route 가져오기, state.json의 예외 route 기록(`appliedExceptionRoutes`). 이 버전은 그 항목을 읽을 때 무시하고 쓸 때 빼며, 이전 버전은 그 항목이 없는 파일을 읽는다. 앱과 Windows Helper 사이의 route 요청에 PowerShell 때문에 두던 90초 대기도 다른 요청과 같은 20초로 돌아왔다.
+- **2026-11-16 예외 경로는 VPN을 켜 두려 할 때만, VPN 서버 주소는 예외 대상에서 제외**: 사용자 결정이다(§3.1, §5.5). "예외 경로는 VPN이 없으면 의미가 없고, VPN 서버 주소는 항상 직접 나가므로 예외 대상이 될 수 없다."
+  - 같은 날 정한 "앱이 실행 중인 동안"을 "앱이 VPN을 켜 두려 하는 동안"으로 좁혔다. 사용자가 끊었거나 실패로 멈췄을 때도 예외 route를 지운다. 판단 코어가 연결 상태로 정하고, Helper는 바뀌지 않는다.
+  - 전에는 예외 대상이 VPN 게이트웨이 자체이면 게이트웨이 host route 정리가 그 route도 지우고 다음 동기화가 다시 넣는 것을 감수했다. 이제 그런 대상이 없으므로 그 정리는 게이트웨이로 가는 host route를 가리지 않고 지운다.
+  - `vpn.host`가 이름이면 입력 때 주소를 알 수 없어, 동기화 때 알려진 gateway 주소와 같은 대상을 건너뛴다. 동기화 때마다 이름을 조회하지 않고 Helper가 알려 준 gateway 주소를 쓴다.
 
 ### 7.2 Rust 전환 (2026-11-05 ~ 11-09)
 - **방향**
@@ -581,11 +604,10 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - openfortivpn을 업그레이드하면 출력 문자열이 바뀔 수 있다. 검증된 버전이 아니면 고급 pane에 경고를 띄운다.
 - Windows에서 openconnect를 쓸 때의 경고(§6)는 알려진 문제로 두고 써 보면서 개선한다. driver는 Wintun을 기본으로 하고, 불안정하면 TAP을 검토한다.
 - Windows는 터널 뒤 요청 없는 종료를 모두 강제 종료로 보므로, 접속 직후 스스로 끊기는 일이 반복되면 두 번째에 멈추지 않고 시도 상한(한 시간 12번)까지 로그인과 OTP 메일이 반복된다.
-- 회사 보안 프로그램이 서비스가 실행하는 PowerShell을 막으면 Windows 예외 규칙과 게이트웨이 host route 정리가 동작하지 않는다.
 - Windows에서 openconnect를 늘 강제로 끝내므로, Helper가 죽어 세션 cookie를 잃으면 그 세션은 idle timeout(50분)까지 서버에 남는다. 지금은 같은 계정의 동시 세션이 허용돼 다음 연결에 지장이 없다. 회사가 동시 접속을 막으면 다시 봐야 한다.
 - logout 요청의 응답은 세션이 있든 없든 같아서, Helper는 logout이 됐는지 확인하지 못한다.
 - 다른 프로그램이 Helper 서비스보다 먼저 같은 이름의 통로를 만들면 Helper는 통로를 열지 못하고 서비스가 시작에 실패한다. 앱은 그 통로의 소유자가 시스템 계정이 아니어서 비밀번호를 보내지 않는다.
-- 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, PowerShell, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
+- 회사 보안 프로그램(AhnLab MDS)은 처음 보는 실행 파일을 분석해 막는다. Helper 서비스도 다른 프로그램(openconnect, curl, taskkill)을 띄우므로 막힐 수 있다. 그러면 보안 담당 부서의 예외 등록이 필요하다.
 - Windows 앱은 .NET runtime과 Windows App SDK를 함께 담으므로 그 보안 수정은 앱의 새 빌드로만 들어온다. OpenConnect도 새 MSI로만 바뀐다.
 - Windows App SDK 2.0 계열의 수정은 2027-04-29까지 나온다. 그 전에 다음 major 버전을 검토한다.
 - Windows 설치 화면의 언어는 문서화되지 않은 Windows Installer 동작(MSI에 넣은 language transform을 표시 언어에 맞춰 적용)에 기댄다. 동작하지 않게 되면 화면이 영어로 나오고 설치는 그대로 된다.
@@ -593,7 +615,7 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 - 빠진 파일을 Repair로 되살리려면 처음 설치한 .msi가 Windows가 기억하는 자리에 있어야 한다.
 - 아직 확인하지 않은 Windows 동작
   - route 스크립트가 openconnect의 10초 제한을 넘긴 뒤에도 route가 다 들어가는지. 소스상으로는 스크립트가 끝까지 돈다. 2026-11-13 확인에서는 5초 안에 끝나 제한을 넘기지 않았다.
-  - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 예외 route와 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
+  - MSI 설치 전체(2026-11-13 결정, §5.7): quiet 설치와 화면 설치의 결과, 한국어·영어 화면, 업그레이드 때 앱 닫기와 실패 시 되돌리기, 제거 때 다른 사용자의 로그인 시 열기 지우기, 앱이 시작하는 Helper의 첫 시작과 그 안의 VPN client 확인.
 - 아직 확인하지 않은 macOS 설치 패키지 동작(§5.8)
   - 업그레이드 때 앱 닫기, 낮은 버전 거부, 같은 버전 재설치, 명령줄 설치. 다른 Mac에서의 설치, 실행, VPN 연결은 사용자가 확인했다(2026-11-15).
   - CD가 서명한 pkg로 설치했을 때 Helper 등록과 VPN 연결. 서명과 식별자는 확인했다(2026-11-16).
@@ -613,23 +635,24 @@ macOS의 Apple Human Interface Guidelines를 따른다. 다른 OS의 UI는 플�
 5. 짧은 잠자기, 긴 잠자기, 연결 중 잠자기, Wi-Fi 변경
 6. 잘못된 VPN 비밀번호, 잘못된 Gmail 인증, OTP 메일 차단: 각각 정해진 대로 멈춘다.
 7. config.yaml 직접 편집: 옵션 변경 반영, 잘못된 값 거부, 깨진 YAML에서 마지막 정상 설정 유지, symlink 유지
-8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다.
+8. 앱 강제 종료와 정상 종료: 프로세스가 정리되고 route가 복원된다. 예외 route도 둘 다에서 사라진다.
 9. 보안: `ps`와 로그에 비밀값이 없고, 렌더링된 openfortivpn 설정 파일은 0600이며 종료 후 삭제된다. config.yaml과 state.json은 0600이다. `make verify`가 통과한다.
 10. Helper가 터널 연결 중 죽었을 때: 터널이 올라온 상태에서 `sudo kill -9`로 Helper를 끝낸다. 앱이 곧바로 재연결을 시작하고, 새 Helper가 이전 Helper가 남긴 프로세스를 멈추고 끝나지 않은 실행을 정리했다는 로그를 남긴다. 남아 있던 openfortivpn과 pppd가 사라지고 새 터널이 올라온다.
 11. pkg 설치: 내려받은 pkg를 열면 막히고, "그래도 열기"로 열린다. 한국어 macOS에서는 한국어, 그 밖에는 영어 화면이 나온다. 앱이 `/Applications`에 들어가고, 빌드 폴더에 같은 앱이 있어도 그쪽은 바뀌지 않는다. 설치된 앱에는 quarantine 표시가 없다.
-12. pkg 업그레이드: 연결된 상태에서 새 pkg를 설치하면 앱을 닫으라는 안내가 나오고, 동의하면 앱이 닫혀 VPN이 끊긴 뒤 설치된다. 설치 뒤 앱을 열면 새 Helper로 연결된다. 같은 버전은 다시 설치되고, 더 낮은 버전은 이유를 보이고 멈춘다. 명령줄 설치(`sudo installer -pkg … -target /`)에서도 실행 중인 앱이 끝난 뒤 설치된다.
+12. 예외 규칙: 대상이 직접 경로로 가고 VPN 재연결 뒤에도 유지된다. [연결 해제]하면 사라지고 [연결]하면 다시 들어간다. Wi-Fi를 바꾸면 새 router로 바뀌고, 앱을 종료하거나 강제 종료하면 사라진다. Helper를 `sudo kill -9`로 끝내면 다시 뜬 Helper가 남은 것을 지우고 앱이 다시 넣는다.
+13. pkg 업그레이드: 연결된 상태에서 새 pkg를 설치하면 앱을 닫으라는 안내가 나오고, 동의하면 앱이 닫혀 VPN이 끊긴 뒤 설치된다. 설치 뒤 앱을 열면 새 Helper로 연결된다. 같은 버전은 다시 설치되고, 더 낮은 버전은 이유를 보이고 멈춘다. 명령줄 설치(`sudo installer -pkg … -target /`)에서도 실행 중인 앱이 끝난 뒤 설치된다.
 
 **Windows** (위 시나리오 중 OS와 무관한 4·6·7·9는 그대로 하고, 다음을 더한다)
 1. Mac의 config.yaml을 복사한 첫 실행: 비밀번호와 Gmail 인증만 넣으면 연결된다. `vpn.trusted_cert_pins`가 비어 있으면 거부 1회 뒤 즉시 재실행으로 연결되고 값이 저장된다.
 2. [연결 해제]와 사전 재연결: 로그에 강제 종료와 logout 요청(응답 코드)이 남고, 게이트웨이 host route가 사라지고, 남은 openconnect·route 스크립트 프로세스가 없다.
 3. openconnect를 작업 관리자로 끝냄: 게이트웨이 host route가 정리되고 곧바로 재연결된다.
 4. Helper 서비스를 작업 관리자로 끝냄: Windows가 서비스를 다시 시작하고, 새 서비스가 남은 openconnect를 정리한 뒤 앱이 다시 연결한다.
-5. 예외 규칙: 유선과 Wi-Fi 각각에서 대상이 직접 경로로 가고, VPN 재연결 뒤에도 유지된다.
+5. 예외 규칙: 유선과 Wi-Fi 각각에서 대상이 직접 경로로 가고, VPN 재연결 뒤에도 유지된다. [연결 해제]하면 사라지고 [연결]하면 다시 들어간다. 유선과 Wi-Fi를 오가면 새 router로 바뀌고, 앱을 종료하거나 작업 관리자로 끝내면 사라진다. Helper 서비스를 작업 관리자로 끝내면 다시 시작한 Helper가 남은 것을 지우고 앱이 다시 넣는다.
 6. 네트워크를 잠깐 끊었다가 되돌림: openconnect가 곧바로 끝나고, 네트워크가 돌아오면 다시 연결된다. 절전과 재개
 7. 보안: 작업 관리자의 명령줄과 로그에 비밀값이 없다.
 8. 일반 사용자 계정: 관리자 계정 정보를 넣어 MSI를 설치한 뒤, 일반 사용자가 앱을 열면 Helper 서비스를 시작하고 연결된다.
 9. 설치: 화면 설치와 quiet 설치(`msiexec /qn`)의 결과가 같다. 한국어 Windows에서는 한국어, 영어 Windows에서는 영어 화면이 나온다. 설치 직후 Helper 서비스는 멈춰 있고, 앱을 열면 서비스가 실행 중이 된 뒤에 알림 영역 아이콘이 나온다. 새로 설치한 PC에서도 첫 상태 확인에 OpenConnect를 쓸 수 없다는 경고가 없다.
 10. 업그레이드: 연결된 상태에서 새 MSI를 설치하면 앱이 닫히고, "사용 중인 파일" 창이나 다시 시작 요청이 없다. 설치를 실패시키면 이전 버전이 그대로 돌아온다. 더 낮은 버전은 설치되지 않는다. 같은 버전의 다른 빌드는 설치된 것을 바꾸고, 설정 > 앱에는 하나만 남는다.
-11. 제거: 두 사용자가 예외 규칙을 쓴 PC에서 제거하면 각자 앱이 쓴 예외 route와 로그인 시 열기가 사라지고, 밖에서 넣은 route와 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남는다. Helper 서비스, 실행 기록 폴더, 시작 메뉴 바로 가기, 두 이벤트 로그 출처가 사라진다.
+11. 제거: 두 사용자가 예외 규칙을 쓰는 PC에서 제거하면 앱이 닫히며 예외 route가 사라지고, 각자의 로그인 시 열기가 사라진다. 밖에서 넣은 route와 config.yaml, 상태 파일, 로그, 저장된 비밀값은 남는다. Helper 서비스, 실행 기록 폴더, 시작 메뉴 바로 가기, 두 이벤트 로그 출처가 사라진다.
 12. Helper를 쓸 수 없는 앱 시작: 서비스를 사용 안 함으로 바꾼 뒤 앱을 열면 아이콘 없이 "Helper 실행을 실패하여…" 오류 창이 곧바로 뜨고, 닫으면 앱이 끝난다. 시작이 두 번 실패하면 "(시도 2/2회)" 오류 창이 뜨고, 첫 실패는 로그에만 남는다.
 13. Repair: 앱 폴더의 파일을 지운 뒤 설정 > 앱의 수정에서 Repair하면 되살아난다.

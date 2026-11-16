@@ -1,9 +1,9 @@
 //! The app side of the Helper: the named pipe the apps connect to, and the relay between those
 //! connections and the Helper entry. It does what Swift's `EntryRelay` and XPC listener do on
 //! macOS: it announces each connection to the entry and keeps it only if the entry admits it,
-//! answers the build check and the bypass-route requests itself, passes the run requests on with
-//! numbers of its own, and sends each answer, event and output batch to the connection it belongs
-//! to, in the order the entry sent them.
+//! answers the build check itself, passes the other requests on with numbers of its own, sends
+//! each answer, event and output batch to the connection it belongs to, in the order the entry
+//! sent them, and changes the routing table as the entry asks.
 //!
 //! Every connection has a reader thread and a writer thread, so an app that stops reading holds up
 //! only its own messages, never the entry; one that lets too many of them pile up is closed.
@@ -16,10 +16,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{
-    BypassRoutesReply, BypassRoutesRequest, HelperError, HelperErrorCode,
+use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode};
+use fvm_contract::helper_internal::{
+    AppRequest, BypassRoutesChange, FromEntry, LogCategory, LogLevel, ToEntry,
 };
-use fvm_contract::helper_internal::{AppRequest, FromEntry, LogCategory, LogLevel, ToEntry};
 use fvm_contract::helper_pipe::{MAX_MESSAGE_BYTES, PipeMessage, PipeRequest};
 use fvm_contract::stream;
 use fvm_helper_core::entry::Inbox;
@@ -79,13 +79,13 @@ impl Helper {
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "SDDL holds a NUL"))?;
         let security = SecurityDescriptor::deserialize(&security)?;
         let (exit_sender, exits) = mpsc::channel();
-        let (route_jobs, route_queue) = mpsc::channel();
+        let (route_changes, route_queue) = mpsc::channel();
         let relay = Arc::new(Relay {
             inbox: OnceLock::new(),
             log,
             state: Mutex::new(State::default()),
             exits: exit_sender,
-            route_jobs,
+            route_changes,
         });
         let (ready_sender, ready) = mpsc::channel();
         let entry_side = Arc::clone(&relay);
@@ -164,8 +164,8 @@ struct Relay {
     log: Log,
     state: Mutex<State>,
     exits: Sender<Exit>,
-    /// Each job with the connection and the app's request number it answers.
-    route_jobs: Sender<(u64, u64, RouteJob)>,
+    /// The entry's exception-route changes, carried out one at a time.
+    route_changes: Sender<BypassRoutesChange>,
 }
 
 #[derive(Default)]
@@ -173,8 +173,8 @@ struct State {
     connections: HashMap<u64, Connection>,
     /// Announced connections waiting for the entry's answer.
     admissions: HashMap<u64, Sender<bool>>,
-    /// The entry's request numbers with the connection and the app's number they answer.
-    replies: HashMap<u64, (u64, u64)>,
+    /// The entry's request numbers with what they answer.
+    replies: HashMap<u64, Pending>,
     last_app: u64,
     last_request: u64,
 }
@@ -184,19 +184,23 @@ struct Connection {
     writer: SyncSender<Outgoing>,
     /// The app sent this build in its build check.
     same_build: bool,
-    /// A bypass-route request of this connection is queued or running.
+    /// An exception-route request of this connection waits for the entry's answer.
     routing: bool,
+}
+
+/// A request passed on to the entry.
+struct Pending {
+    app: u64,
+    /// The app's number for it.
+    id: u64,
+    /// An exception-route request, of which a connection has one at a time.
+    route: bool,
 }
 
 enum Outgoing {
     Message(PipeMessage),
     /// Answered once everything before it has been read by the app.
     Drained(Sender<()>),
-}
-
-enum RouteJob {
-    Read,
-    Write(BypassRoutesRequest),
 }
 
 impl Relay {
@@ -248,7 +252,7 @@ impl Relay {
             FromEntry::RepairRoutes { gateway } => {
                 let gateway = *gateway;
                 let relay = Arc::clone(self);
-                // A slow PowerShell must not hold up the entry's other messages.
+                // Changing routes must not hold up the entry's other messages.
                 thread::Builder::new()
                     .name("fvm-helper-route-repair".into())
                     .spawn(move || {
@@ -256,6 +260,11 @@ impl Relay {
                         relay.inbox().deliver(ToEntry::RoutesRepaired { outcome });
                     })
                     .expect("starting the route repair thread");
+            }
+            FromEntry::ChangeBypassRoutes { change } => {
+                self.route_changes
+                    .send(change.clone())
+                    .expect("the route thread runs as long as the Helper");
             }
             FromEntry::ExitAfterDraining {} => {
                 let _ = self.exits.send(Exit::AfterDraining);
@@ -273,12 +282,21 @@ impl Relay {
 
     /// Sends the entry's answer to request `id` to the connection that asked, if it is still open.
     fn answer(&self, id: u64, message: impl FnOnce(u64) -> PipeMessage) {
-        let (app, request) = self
-            .lock()
-            .replies
-            .remove(&id)
-            .expect("the entry answers each request once");
-        self.send(app, message(request));
+        let pending = {
+            let mut state = self.lock();
+            let pending = state
+                .replies
+                .remove(&id)
+                .expect("the entry answers each request once");
+            // Cleared before the answer leaves, so the app's next route request is taken.
+            if pending.route
+                && let Some(connection) = state.connections.get_mut(&pending.app)
+            {
+                connection.routing = false;
+            }
+            pending
+        };
+        self.send(pending.app, message(pending.id));
     }
 
     /// Queues `message` for connection `app`; one that is gone gets nothing. A connection whose
@@ -453,37 +471,29 @@ impl Relay {
                 self.send(app, reply(id, &failure));
             }
             PipeRequest::Connect { json, .. } => {
-                self.forward(app, id, AppRequest::Connect { json })
+                self.forward(app, id, AppRequest::Connect { json }, false)
             }
             PipeRequest::SubmitOtp { attempt, code, .. } => {
-                self.forward(app, id, AppRequest::SubmitOtp { attempt, code });
+                self.forward(app, id, AppRequest::SubmitOtp { attempt, code }, false);
             }
             PipeRequest::Disconnect {
                 attempt, reason, ..
-            } => self.forward(app, id, AppRequest::Disconnect { attempt, reason }),
-            PipeRequest::Status { .. } => self.forward(app, id, AppRequest::Status {}),
-            PipeRequest::ReadBypassRoutes { .. } => self.route_job(app, id, RouteJob::Read),
+            } => self.forward(app, id, AppRequest::Disconnect { attempt, reason }, false),
+            PipeRequest::Status { .. } => self.forward(app, id, AppRequest::Status {}, false),
+            PipeRequest::ReadBypassRoutes { .. } => {
+                self.forward_route(app, id, AppRequest::ReadBypassRoutes {});
+            }
             PipeRequest::WriteBypassRoutes { json, .. } => {
-                match serde_json::from_str::<BypassRoutesRequest>(&json) {
-                    Ok(request) => self.route_job(app, id, RouteJob::Write(request)),
-                    Err(_) => {
-                        let failure = BypassRoutesReply::Failure {
-                            error: HelperError {
-                                code: HelperErrorCode::InvalidRequest,
-                                message: "could not decode the route list".to_owned(),
-                            },
-                        };
-                        self.send(app, reply(id, &failure));
-                    }
-                }
+                self.forward_route(app, id, AppRequest::WriteBypassRoutes { json });
             }
         }
     }
 
-    /// Passes a run request to the entry under a number of the relay's own, since the apps' numbers
+    /// Passes a request to the entry under a number of the relay's own, since the apps' numbers
     /// may repeat across connections.
     /// Delivered under the lock, so it never follows the connection's AppDisconnected.
-    fn forward(&self, app: u64, id: u64, request: AppRequest) {
+    /// `route` tells an exception-route request, of which a connection has one at a time.
+    fn forward(&self, app: u64, id: u64, request: AppRequest, route: bool) {
         let mut state = self.lock();
         if !state.connections.contains_key(&app) {
             // It does not reach the entry, which would wipe the password and the OTP.
@@ -496,7 +506,7 @@ impl Relay {
         }
         state.last_request += 1;
         let number = state.last_request;
-        state.replies.insert(number, (app, id));
+        state.replies.insert(number, Pending { app, id, route });
         self.inbox().deliver(ToEntry::Request {
             id: number,
             app,
@@ -504,9 +514,9 @@ impl Relay {
         });
     }
 
-    /// Queues a bypass-route request. A connection may have one at a time, as the app sends them,
-    /// so another program cannot pile them up.
-    fn route_job(&self, app: u64, id: u64, job: RouteJob) {
+    /// Passes on an exception-route request. A connection may have one at a time, as the app
+    /// sends them, so another program cannot pile them up.
+    fn forward_route(&self, app: u64, id: u64, request: AppRequest) {
         let busy = match self.lock().connections.get_mut(&app) {
             Some(connection) => std::mem::replace(&mut connection.routing, true),
             None => return,
@@ -521,28 +531,16 @@ impl Relay {
             self.send(app, reply(id, &failure));
             return;
         }
-        self.route_jobs
-            .send((app, id, job))
-            .expect("the route thread runs as long as the Helper");
+        self.forward(app, id, request, true);
     }
 
-    /// Reads and writes the bypass routes one request at a time, apart from the entry, so tunnel
-    /// control never waits behind PowerShell. A connection that is gone gets no answer, and
-    /// PowerShell does not run for it.
-    fn serve_routes(&self, jobs: Receiver<(u64, u64, RouteJob)>) {
-        for (app, id, job) in jobs {
-            if !self.lock().connections.contains_key(&app) {
-                continue;
-            }
-            let answer = match job {
-                RouteJob::Read => routes::read_bypass_routes(&self.log),
-                RouteJob::Write(request) => routes::write_bypass_routes(&request, &self.log),
-            };
-            // Cleared before the answer leaves, so the app's next request is taken.
-            if let Some(connection) = self.lock().connections.get_mut(&app) {
-                connection.routing = false;
-            }
-            self.send(app, reply(id, &answer));
+    /// Changes the routing table as the entry asks, one change at a time, apart from the entry, so
+    /// tunnel control never waits behind it.
+    fn serve_routes(&self, changes: Receiver<BypassRoutesChange>) {
+        for change in changes {
+            let outcome = routes::change_bypass_routes(&change, &self.log);
+            self.inbox()
+                .deliver(ToEntry::BypassRoutesChanged { outcome });
         }
     }
 }

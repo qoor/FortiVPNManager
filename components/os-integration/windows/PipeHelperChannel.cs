@@ -23,14 +23,6 @@ internal sealed class PipeHelperChannel : IHelperChannel
     /// <summary>Answers normally arrive within milliseconds; this only guards against a hung Helper.</summary>
     private static readonly TimeSpan ReplyLimit = TimeSpan.FromSeconds(20);
 
-    /// <summary>
-    /// A route call takes the Helper's PowerShell up to 20 s, and a write 0.2 s more for each route it
-    /// changes: 60 s for the 200 the runtime changes at most, the bypass routes it wrote and the ones
-    /// it writes. It may also wait behind the route call of the connection before. Giving up on a call
-    /// the Helper still runs would get the next route call refused.
-    /// </summary>
-    private static readonly TimeSpan RouteLimit = TimeSpan.FromSeconds(90);
-
     private readonly NamedPipeClientStream pipe;
     private readonly ulong id;
     private readonly HelperInbound inbound;
@@ -80,8 +72,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
     {
         var id = Interlocked.Increment(ref lastRequest);
         var message = request(id);
-        var routeCall = message is HelperPipe.Request.ReadBypassRoutes or HelperPipe.Request.WriteBypassRoutes;
-        var limit = Task.Delay(routeCall ? RouteLimit : ReplyLimit);
+        var limit = Task.Delay(ReplyLimit);
         var answer = new TaskCompletionSource<HelperPipe.Message>(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = answer;
         // Closing fails what is pending; a request added after it would wait for nothing.

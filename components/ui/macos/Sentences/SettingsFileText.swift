@@ -7,7 +7,7 @@ extension AppInternal.ConfigFileError {
     var message: String {
         switch self {
         case let .invalidSettings(problem):
-            String(localized: "The settings to save are invalid. \(problem.kind.message)")
+            String(localized: "Couldn't save: \(problem.kind.message)")
         case let .unreadableFile(path, problem):
             String(localized: "Can't read the config file (\(path)). \(problem.displayMessage)")
         case let .notRegularFile(path):
@@ -23,9 +23,11 @@ extension AppInternal.ConfigFileError {
 }
 
 extension AppInternal.ConfigProblem {
-    /// The message, after the location when it is known: "Line 3, column 9: …".
     var displayMessage: String {
         guard let location else { return kind.message }
+        if case let .vpnServerAsRouteTarget(path) = kind {
+            return "\(location.description) (\(path)): \(kind.message)"
+        }
         return "\(location.description): \(kind.message)"
     }
 }
@@ -120,6 +122,8 @@ extension AppInternal.ConfigProblemKind {
             return String(localized: "In \(path), entry \(index + 1) repeats an earlier entry.")
         case let .overlappingRouteEntry(path, index, other):
             return String(localized: "In \(path), entry \(index + 1) overlaps \(other), which is already listed. Entries in one list must not overlap.")
+        case .vpnServerAsRouteTarget:
+            return String(localized: "The VPN server's address can't be registered as an exception target.")
         }
     }
 }

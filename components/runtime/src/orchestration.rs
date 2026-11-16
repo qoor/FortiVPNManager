@@ -109,6 +109,7 @@ pub(crate) struct Runtime {
     port_replies: HashMap<u64, PortReply>,
     /// Tunnel calls go one at a time; the next waits for the previous answer.
     helper_busy: bool,
+    quit_approved: bool,
     helper_queue: VecDeque<(HelperCall, PortReply)>,
     pending_lines: Vec<LogLine>,
     /// An attempt the core began whose first log line is still to come. That line starts the
@@ -188,6 +189,7 @@ impl Runtime {
             next_port_id: 0,
             port_replies: HashMap::new(),
             helper_busy: false,
+            quit_approved: false,
             helper_queue: VecDeque::new(),
             pending_lines: Vec::new(),
             unmarked_attempt: None,
@@ -304,7 +306,16 @@ impl Runtime {
             call,
             HelperCall::ReadBypassRoutes {} | HelperCall::WriteBypassRoutes { .. }
         ) {
-            self.request(PortRequest::CallHelper { call }, reply);
+            // An answer after the quit's approval changes nothing: the app may end at any moment,
+            // and its log was written out.
+            self.request(
+                PortRequest::CallHelper { call },
+                move |runtime, response| {
+                    if !runtime.quit_approved {
+                        reply(runtime, response);
+                    }
+                },
+            );
             return;
         }
         self.helper_queue.push_back((call, Box::new(reply)));
@@ -332,9 +343,13 @@ impl Runtime {
     // MARK: The judgment core
 
     pub(crate) fn feed(&mut self, input: connection::Input) {
+        let vpn_wanted = self.cm.wants_vpn();
         let effects = self.cm.handle(input, SystemTime::now());
         for effect in effects {
             self.carry_out(effect);
+        }
+        if self.cm.wants_vpn() != vpn_wanted {
+            self.sync_bypass_routes();
         }
     }
 
@@ -438,12 +453,18 @@ impl Runtime {
                 self.note(text);
             }
             Effect::OpenSettings => self.open_settings = true,
-            Effect::ApproveQuit => {
-                self.flush_log_lines();
-                self.log.flush();
-                self.action(PortAction::ApproveQuit {});
-            }
+            Effect::ApproveQuit => self.quit_after_removing_bypass_routes(),
         }
+    }
+
+    /// Finishes the log file and lets the app quit, once.
+    pub(crate) fn approve_quit(&mut self) {
+        if std::mem::replace(&mut self.quit_approved, true) {
+            return;
+        }
+        self.flush_log_lines();
+        self.log.flush();
+        self.action(PortAction::ApproveQuit {});
     }
 
     fn start_run(
@@ -590,7 +611,10 @@ impl Runtime {
                 }
                 return;
             }
-            SystemEvent::HelperConnectionLost {} => connection::Input::HelperConnectionLost,
+            SystemEvent::HelperConnectionLost {} => {
+                self.bypass_connection_lost();
+                connection::Input::HelperConnectionLost
+            }
         };
         self.feed(input);
     }

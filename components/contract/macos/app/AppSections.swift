@@ -332,14 +332,18 @@ extension AppInternal {
         case invalid(problem: AddressProblem)
         case duplicate(entry: String)
         case overlap(other: String)
+        /// A target that is the VPN server's address, which always goes out directly.
+        case vpnServer
     }
 
     enum BypassStatus: Decodable, Equatable, Sendable {
         case checking
         case noConfigFile
-        case applied(serviceName: String, router: String, onLinkTargets: Int, notImported: Int, keptThroughOtherGateways: Int)
-        case outsideNetworks(keptThroughOtherGateways: Int)
-        case noNetworksListed(keptThroughOtherGateways: Int)
+        case applied(serviceName: String, router: String, onLinkTargets: Int)
+        /// On a listed network, but the app does not want the VPN up.
+        case vpnOff
+        case outsideNetworks
+        case noNetworksListed
         case configInvalid
         case noNetwork
         case failed(failure: BypassFailure, retryInSeconds: Int?, stoppedAfterRetries: Int?)
@@ -350,7 +354,6 @@ extension AppInternal {
         case networkChanged
         case helperRefused(message: String)
         case settingsNotChanged(message: String)
-        case importNotSaved(error: ConfigFileError)
         case helperUnreachable(failure: HelperChannelFailure)
         case helperBuildMismatch(helperBuild: String, appBuild: String)
     }

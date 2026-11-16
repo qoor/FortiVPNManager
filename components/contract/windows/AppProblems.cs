@@ -59,6 +59,7 @@ public static partial class AppInternal
         public sealed record TooManyRouteEntries(string Path, uint Count, uint Limit) : ConfigProblemKind;
         public sealed record DuplicateRouteEntry(string Path, uint Index) : ConfigProblemKind;
         public sealed record OverlappingRouteEntry(string Path, uint Index, string Other) : ConfigProblemKind;
+        public sealed record VpnServerAsRouteTarget(string Path) : ConfigProblemKind;
     }
 
     [JsonConverter(typeof(EnumNameConverter<ValueKind>))]

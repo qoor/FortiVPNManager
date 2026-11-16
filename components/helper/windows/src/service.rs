@@ -232,8 +232,12 @@ mod tests {
     use serde::Deserialize;
     use widestring::U16CString;
 
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
     use super::*;
-    use crate::{command, routes};
+
+    const POWERSHELL: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
 
     /// As the user running the tests, connects to the pipe named on stdin the way the app's .NET
     /// side does and writes to it, then tries to open another pipe of that name the way another
@@ -273,19 +277,27 @@ try {
                 .security_descriptor(Some(SecurityDescriptor::deserialize(&security).unwrap()))
                 .create_duplex::<pipe_mode::Bytes>()
                 .unwrap();
-        let output = command::run(
-            routes::POWERSHELL,
-            &[
+        let mut powershell = Command::new(POWERSHELL)
+            .args([
                 "-NoLogo",
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
                 TRY_THE_PIPE,
-            ],
-            name.into_bytes(),
-            Duration::from_secs(120),
-        )
-        .unwrap();
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        // Closed once written, so the script reads to its end.
+        powershell
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(name.as_bytes())
+            .unwrap();
+        let output = powershell.wait_with_output().unwrap();
         let stdout = String::from_utf8_lossy(&output.stdout);
         serde_json::from_str(stdout.trim())
             .unwrap_or_else(|_| panic!("{stdout} {}", String::from_utf8_lossy(&output.stderr)))

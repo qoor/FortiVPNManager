@@ -33,7 +33,7 @@ use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunReques
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, UntestedVersion,
 };
-use fvm_contract::helper_internal::{LogCategory, LogLevel};
+use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel};
 
 pub use run::Run;
 
@@ -127,8 +127,21 @@ where
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
         repair_routes: impl FnOnce(Option<Ipv4Addr>),
-    ) {
-        recovery::clean_up(&*self.backend, &self.run_directory, log, repair_routes);
+        remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
+    ) -> Vec<AddedRoute> {
+        recovery::clean_up(
+            &*self.backend,
+            &self.run_directory,
+            log,
+            repair_routes,
+            remove_bypass_routes,
+        )
+    }
+
+    /// Records in the run directory the exception routes the Helper added, so that a later Helper
+    /// removes them if this one cannot; none removes the record.
+    pub fn record_bypass_routes(&self, routes: &[AddedRoute]) -> Result<(), Failure> {
+        recovery::write_bypass_record(&self.run_directory, routes)
     }
 }
 

@@ -13,7 +13,7 @@ use super::{
     MIN_SLEEP_MINUTES, OTP_METHODS, PORTS, Platform, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings,
     WEEKDAYS, minutes, normalized_days,
 };
-use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
+use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, vpn_server_target};
 
 /// Settings that pass come back unchanged when the text is read. The certificate values are not
 /// checked again: only the clients' rules produce them.
@@ -111,6 +111,11 @@ pub(super) fn write(
             }
         }
     }
+    if vpn_server_target(&settings.routes.bypass_vpn, &settings.vpn.host).is_some() {
+        return Err(ConfigProblemKind::VpnServerAsRouteTarget {
+            path: "routes.bypass_vpn".to_owned(),
+        });
+    }
     let text = render(settings, client);
     if text.len() > MAX_FILE_BYTES {
         return Err(ConfigProblemKind::FileTooLarge {
@@ -121,8 +126,8 @@ pub(super) fn write(
     Ok(text)
 }
 
-/// The comments that describe the OS the app runs on: where secrets live and how exception routes
-/// are kept.
+/// The comments that describe the OS the app runs on: where secrets live and what the network is
+/// called.
 struct Wording {
     secret_store: &'static str,
     secret_store_long: &'static str,
@@ -130,7 +135,6 @@ struct Wording {
     network: &'static str,
     router: &'static str,
     port: String,
-    route_storage: &'static str,
 }
 
 fn wording(client: &ClientRules<'_>) -> Wording {
@@ -145,7 +149,6 @@ fn wording(client: &ClientRules<'_>) -> Wording {
                 "Filled in on first launch from an existing {} config, if any (e.g. 8443). 443 is the default when the file has no value.",
                 client.name
             ),
-            route_storage: "The app keeps them as that service's additional routes (networksetup -setadditionalroutes) whether or not the VPN is connected, so they also survive a reboot. On a network listed above, routes added there outside the app through the same router are added here unless they overlap a target; routes through other gateways are left alone.",
         },
         Platform::Windows => Wording {
             secret_store: "Credential Manager",
@@ -155,7 +158,6 @@ fn wording(client: &ClientRules<'_>) -> Wording {
             router: "gateway",
             port: "VPN gateway port (e.g. 8443). 443 is the default when the file has no value."
                 .to_owned(),
-            route_storage: "The app keeps them as persistent routes of that interface whether or not the VPN is connected, so they also survive a reboot. On a network listed above, persistent routes added outside the app through the same gateway are added here unless they overlap a target; routes through other gateways are left alone.",
         },
     }
 }
@@ -168,7 +170,6 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         network,
         router,
         port: port_comment,
-        route_storage,
     } = wording(client);
     let vpn = &settings.vpn;
     let otp = &settings.otp;
@@ -207,7 +208,7 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         r#"# FortiVPNManager configuration file
 #
 # - Passwords (VPN password, Gmail app password) and the Google sign-in live in {secret_store_long}, not in this file.
-# - The app rewrites this file when you save in Settings, when it records a new server certificate, and when it adds routes found on the {network} to routes.bypass_vpn. Comments you added and unknown keys are removed then.
+# - The app rewrites this file when you save in Settings and when it records a new server certificate. Comments you added and unknown keys are removed then.
 # - The same file works on macOS and Windows.
 # - Do not write leading zeros in numbers (0443 is an error). Write numbers and true/false without quotes.
 # - This file contains the server and account details, so do not commit it to a public repository (dotfiles etc.).
@@ -251,7 +252,7 @@ routes:
   # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this {device}'s IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
   networks:{networks}
   # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the {router} of the active {network} (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this {device}'s own network need no route and are skipped.
-  # {route_storage}
+  # The app adds these routes only while it keeps the VPN up (connecting, connected, or waiting to reconnect), and removes them when the VPN is disconnected or stopped and when the app quits. The VPN server's own address can't be a target. The app never adds entries here, and routes added outside the app are left alone.
   bypass_vpn:{bypass_vpn}
 "#,
         host = quoted(&vpn.host),

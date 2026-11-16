@@ -697,3 +697,62 @@ fn timers_fire_once_per_generation() {
     assert_eq!(connection_effects(&h.send(Input::TimerFired(unknown))), []);
     assert_eq!(snapshot(&h), fired);
 }
+
+/// The exception routes are in place exactly while the app wants the VPN up (user decision,
+/// 2026-11-16): connecting, connected, stopping to connect again, or waiting to try again; not once
+/// it stopped for good, nor while it holds a reconnect for an away user.
+#[test]
+fn the_vpn_is_wanted_while_connecting_connected_or_about_to_retry() {
+    let mut h = Harness::new();
+    assert!(!h.cm.wants_vpn());
+    h.launch_connected();
+    assert!(h.cm.wants_vpn());
+    h.send(Input::ReconnectNow);
+    assert_eq!(
+        after(&h),
+        Some(AfterStop::Reconnect(AttemptReason::ReconnectNow))
+    );
+    assert!(h.cm.wants_vpn());
+
+    let mut h = Harness::new();
+    h.launch_connected();
+    h.send(Input::Disconnect);
+    assert_eq!(after(&h), Some(AfterStop::Idle));
+    assert!(!h.cm.wants_vpn());
+
+    let until = h.cm.now + secs(60.0);
+    let phases = [
+        (
+            Phase::WaitingRetry {
+                until,
+                reason: RetryReason::Network,
+            },
+            true,
+        ),
+        (
+            Phase::WaitingNetwork {
+                reason: RetryReason::Sleep,
+                delay_after_path: secs(0.0),
+            },
+            true,
+        ),
+        (
+            Phase::WaitingRetry {
+                until,
+                reason: RetryReason::UserAway,
+            },
+            false,
+        ),
+        (Phase::Failed(super::super::Failure::OtpRejected), false),
+        (Phase::Idle, false),
+    ];
+    for (phase, wanted) in phases {
+        h.cm.phase = phase.clone();
+        assert_eq!(h.cm.wants_vpn(), wanted, "{phase:?}");
+    }
+
+    let mut h = Harness::new();
+    h.launch_connected();
+    h.send(Input::QuitRequested);
+    assert!(!h.cm.wants_vpn());
+}

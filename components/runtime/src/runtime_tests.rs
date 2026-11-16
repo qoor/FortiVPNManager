@@ -8,16 +8,18 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    AdditionalRoute, BypassRoutesSnapshot, HelperStatus, OutputLine, OutputSource,
+    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperStatus,
+    OutputLine, OutputSource,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
-    FortiClientConnection, HelperCall, PortRequest, PortResponse, RegistrationStatus, SecretItem,
+    FortiClientConnection, HelperCall, HelperChannelFailure, PortAction, PortRequest, PortResponse,
+    RegistrationStatus, SecretItem,
 };
 use fvm_contract::app_internal::section::{
-    AccountFeedback, BypassStatus, ClientSettingsImport, ConfigSection, ConnectionStatus,
-    HelperState, ImportError, ImportedPassword, Section,
+    AccountFeedback, BypassFailure, BypassStatus, ClientSettingsImport, ConfigSection,
+    ConnectionStatus, HelperState, ImportError, ImportedPassword, Section,
 };
 use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
@@ -53,9 +55,21 @@ struct App {
     secrets: Vec<(SecretItem, SecretText)>,
     helper_registration: RegistrationStatus,
     helper_build: String,
-    /// The primary network service; `None` when there is no network.
+    /// The primary network; `None` when there is no network.
     service: Option<BypassRoutesSnapshot>,
+    /// The app's exception routes the fake Helper keeps in the routing table.
+    exception_routes: Vec<BypassRoute>,
+    /// Whether written routes stay in the routing table.
+    keeps_routes: bool,
+    /// The route calls find no Helper.
+    routes_unreachable: bool,
+    /// The route calls wait for `answer_held_route_calls`.
+    holds_route_calls: bool,
+    held_route_calls: Vec<(u64, HelperCall)>,
+    /// The app's exception routes when the quit was approved, once it was.
+    routes_at_quit: Option<Vec<BypassRoute>>,
     requests: Vec<PortRequest>,
+    actions: Vec<PortAction>,
     sections: Vec<Section>,
     log: Vec<LogLine>,
     open_settings: u32,
@@ -99,7 +113,14 @@ impl App {
             helper_registration: RegistrationStatus::Enabled,
             helper_build: APP_BUILD.into(),
             service: None,
+            exception_routes: Vec::new(),
+            keeps_routes: true,
+            routes_unreachable: false,
+            holds_route_calls: false,
+            held_route_calls: Vec::new(),
+            routes_at_quit: None,
             requests: Vec::new(),
+            actions: Vec::new(),
             sections: Vec::new(),
             log: Vec::new(),
             open_settings: 0,
@@ -211,12 +232,24 @@ impl App {
             }
             FromRuntime::PortRequest { id, request } => {
                 self.requests.push(request.clone());
+                if let PortRequest::CallHelper { call } = &request
+                    && is_route_call(call)
+                    && self.holds_route_calls
+                {
+                    self.held_route_calls.push((id, call.clone()));
+                    return;
+                }
                 let response = self.answer(request);
                 self.send(ToRuntime::PortResponse { id, response });
             }
             FromRuntime::OpenSettings {} => self.open_settings += 1,
             FromRuntime::LogLines { lines } => self.log.extend(lines),
-            FromRuntime::PortAction { .. } => {}
+            FromRuntime::PortAction { action } => {
+                if action == (PortAction::ApproveQuit {}) {
+                    self.routes_at_quit = Some(self.exception_routes.clone());
+                }
+                self.actions.push(action);
+            }
         }
     }
 
@@ -276,6 +309,21 @@ impl App {
         }
     }
 
+    fn answer_held_route_calls(&mut self) {
+        self.holds_route_calls = false;
+        for (id, call) in std::mem::take(&mut self.held_route_calls) {
+            let response = self.helper(call);
+            self.send(ToRuntime::PortResponse { id, response });
+        }
+    }
+
+    fn route_calls(&self) -> usize {
+        self.requests
+            .iter()
+            .filter(|request| matches!(request, PortRequest::CallHelper { call } if is_route_call(call)))
+            .count()
+    }
+
     fn secret(&self, item: &SecretItem) -> Option<SecretText> {
         self.secrets
             .iter()
@@ -303,21 +351,46 @@ impl App {
                 self.helper_build = APP_BUILD.into();
                 PortResponse::HelperReplyFlag { value: true }
             }
+            HelperCall::ReadBypassRoutes {} | HelperCall::WriteBypassRoutes { .. }
+                if self.routes_unreachable =>
+            {
+                PortResponse::HelperUnreachable {
+                    failure: HelperChannelFailure::ConnectionLost {},
+                }
+            }
             HelperCall::ReadBypassRoutes {} => match &self.service {
-                Some(service) => reply(json!({"success": {"_0": service}})),
+                Some(service) => reply(json!({"success": {
+                    "snapshot": service,
+                    "routes": self.exception_routes,
+                }})),
                 None => reply(
-                    json!({"failure": {"_0": {"code": "wrongPhase", "message": "no primary network service"}}}),
+                    json!({"failure": {"_0": {"code": "wrongPhase", "message": "no active network service"}}}),
                 ),
             },
-            HelperCall::WriteBypassRoutes { json } => {
-                let request: serde_json::Value = serde_json::from_str(&json).unwrap();
-                let service = self
-                    .service
-                    .as_mut()
-                    .expect("routes are written only on a network");
-                service.routes = serde_json::from_value(request["routes"].clone()).unwrap();
-                reply(json!({"success": {"_0": service}}))
-            }
+            HelperCall::WriteBypassRoutes { json } => match serde_json::from_str(&json).unwrap() {
+                BypassRoutesRequest::Write { expected, routes } => {
+                    if self.service.as_ref() != Some(&expected) {
+                        return reply(json!({"failure": {"_0": {
+                            "code": "wrongPhase",
+                            "message": "the network changed since it was read; read it again",
+                        }}}));
+                    }
+                    self.exception_routes = if self.keeps_routes {
+                        routes
+                    } else {
+                        Vec::new()
+                    };
+                    let reply_value = BypassRoutesReply::Success {
+                        snapshot: expected,
+                        routes: self.exception_routes.clone(),
+                    };
+                    reply(serde_json::to_value(reply_value).unwrap())
+                }
+                BypassRoutesRequest::Remove {} => {
+                    self.exception_routes.clear();
+                    reply(serde_json::to_value(BypassRoutesReply::Removed {}).unwrap())
+                }
+            },
             HelperCall::Connect { .. }
             | HelperCall::SubmitOtp { .. }
             | HelperCall::Disconnect { .. } => PortResponse::HelperReply { json: None },
@@ -686,70 +759,305 @@ fn a_draft_typed_against_replaced_fields_is_dropped() {
     assert_eq!(app.config_section().account.username, "alice");
 }
 
-#[test]
-fn exception_rules_write_the_routes_and_remember_them() {
-    let mut app = App::new();
-    app.write_config(&format!(
-        "{ACCOUNT}routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n"
-    ));
-    app.service = Some(BypassRoutesSnapshot {
+const WITH_RULE: &str = "routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n";
+
+fn office_wifi() -> BypassRoutesSnapshot {
+    BypassRoutesSnapshot {
         service_id: "SERVICE-1".into(),
         service_name: "Wi-Fi".into(),
         router: "192.168.0.1".into(),
         address: "192.168.0.10".into(),
         subnet_mask: "255.255.255.0".into(),
-        routes: Vec::new(),
-    });
-    app.launch();
-    app.settle_until("the applied rules", |app| {
-        matches!(app.bypass_status(), Some(BypassStatus::Applied { .. }))
-    });
-    let route = AdditionalRoute {
+    }
+}
+
+/// The rule's route through the office router.
+fn rule_route() -> BypassRoute {
+    BypassRoute {
         destination: "10.30.0.0".into(),
         subnet_mask: "255.255.0.0".into(),
         gateway: "192.168.0.1".into(),
-    };
-    assert_eq!(app.service.as_ref().unwrap().routes, vec![route]);
-    let state = fs::read_to_string(app.folder.join("state/state.json")).unwrap();
-    let state: serde_json::Value = serde_json::from_str(&state).unwrap();
-    assert_eq!(
-        state["appliedExceptionRoutes"]["SERVICE-1"][0]["destination"],
-        "10.30.0.0"
-    );
+    }
+}
+
+/// Has the app want the VPN up without reaching anything: with the account set up, it connects
+/// while offline, so the attempt waits for the network. The path report takes a few seconds to
+/// settle.
+fn want_the_vpn(app: &mut App) {
+    app.secrets
+        .push((vpn_password_item(), SecretText("secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("app password".into())));
+    app.send(ToRuntime::Event {
+        event: SystemEvent::NetworkPathChanged {
+            satisfied: false,
+            interfaces: Vec::new(),
+        },
+    });
+    thread::sleep(Duration::from_millis(3500));
+    app.command(Command::Connect {});
+    app.settle_until("the wait for the network", |app| {
+        app.connection_status() == Some(&ConnectionStatus::WaitingForNetwork {})
+    });
+}
+
+/// An app on the office Wi-Fi with one exception rule, launched.
+fn app_on_the_office_wifi() -> App {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.launch();
+    app
+}
+
+/// An app on the office Wi-Fi with one exception rule, its route written while it wants the VPN.
+fn app_with_the_rule_applied() -> App {
+    let mut app = app_on_the_office_wifi();
+    want_the_vpn(&mut app);
+    app.settle_until("the applied rules", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Applied { .. }))
+    });
+    assert_eq!(app.exception_routes, vec![rule_route()]);
+    app
+}
+
+fn is_route_call(call: &HelperCall) -> bool {
+    matches!(
+        call,
+        HelperCall::ReadBypassRoutes {} | HelperCall::WriteBypassRoutes { .. }
+    )
+}
+
+fn network_changed(app: &App) {
+    app.send(ToRuntime::Event {
+        event: SystemEvent::NetworkSettingsChanged {},
+    });
+}
+
+#[test]
+fn exception_rules_write_the_routes_and_keep_no_record_of_them() {
+    let mut app = app_with_the_rule_applied();
+    app.settle();
+    // The Helper keeps the record; the app's state file has none.
+    let state = fs::read_to_string(app.folder.join("state/state.json")).unwrap_or_default();
+    assert!(!state.contains("appliedExceptionRoutes"), "{state}");
 }
 
 #[test]
 fn a_rule_removed_from_the_file_takes_its_route_away() {
-    let mut app = App::new();
-    let with_rule =
-        format!("{ACCOUNT}routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n");
-    app.write_config(&with_rule);
-    let other = AdditionalRoute {
-        destination: "172.16.0.0".into(),
-        subnet_mask: "255.255.0.0".into(),
-        gateway: "192.168.0.254".into(),
-    };
-    app.service = Some(BypassRoutesSnapshot {
-        service_id: "SERVICE-1".into(),
-        service_name: "Wi-Fi".into(),
-        router: "192.168.0.1".into(),
-        address: "192.168.0.10".into(),
-        subnet_mask: "255.255.255.0".into(),
-        routes: vec![other.clone()],
-    });
-    app.launch();
-    app.settle_until("the applied rules", |app| {
-        app.service.as_ref().unwrap().routes.len() == 2
-    });
-    app.write_config(&with_rule.replace("bypass_vpn: [10.30.0.0/16]", "bypass_vpn: []"));
+    let mut app = app_with_the_rule_applied();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}").replace("[10.30.0.0/16]", "[]"));
     app.send(ToRuntime::Event {
-        event: fvm_contract::app_internal::event::SystemEvent::AppActivated {},
+        event: SystemEvent::AppActivated {},
     });
+    app.settle_until("the route removed", |app| app.exception_routes.is_empty());
+}
+
+/// Only the settings window and the file name targets: a route the Helper reports that the rules
+/// do not plan is removed, never added to the list.
+#[test]
+fn a_route_the_rules_do_not_plan_is_removed_not_imported() {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    let unplanned = BypassRoute {
+        destination: "10.40.0.0".into(),
+        subnet_mask: "255.255.0.0".into(),
+        gateway: "192.168.0.1".into(),
+    };
+    app.exception_routes = vec![unplanned];
+    app.launch();
+    want_the_vpn(&mut app);
+    app.settle_until("the planned route only", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+    assert!(!app.config_text().contains("10.40.0.0"));
+}
+
+#[test]
+fn the_routes_follow_the_network() {
+    let mut app = app_with_the_rule_applied();
+    // At home: the rules do not apply, so the route goes.
+    app.service = Some(BypassRoutesSnapshot {
+        router: "10.0.0.1".into(),
+        address: "10.0.0.20".into(),
+        ..office_wifi()
+    });
+    network_changed(&app);
+    app.settle_until("the route removed away from the office", |app| {
+        app.bypass_status() == Some(&BypassStatus::OutsideNetworks {})
+    });
+    assert!(app.exception_routes.is_empty());
+    // Back at the office, it comes back.
+    app.service = Some(office_wifi());
+    network_changed(&app);
+    app.settle_until("the route back", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+}
+
+#[test]
+fn routes_gone_with_the_helper_connection_are_written_again() {
+    let mut app = app_with_the_rule_applied();
+    // The Helper removes the routes of a connection that goes away.
+    app.exception_routes.clear();
+    app.send(ToRuntime::Event {
+        event: SystemEvent::HelperConnectionLost {},
+    });
+    app.settle_until("the route written again", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+}
+
+#[test]
+fn routes_the_routing_table_did_not_keep_are_reported_and_retried() {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.keeps_routes = false;
+    app.launch();
+    want_the_vpn(&mut app);
+    app.settle_until("the failure", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Failed { .. }))
+    });
+    assert_eq!(
+        app.bypass_status(),
+        Some(&BypassStatus::Failed {
+            failure: BypassFailure::RoutesNotKept {},
+            retry_in_seconds: Some(10),
+            stopped_after_retries: None,
+        })
+    );
+}
+
+#[test]
+fn quitting_removes_the_routes_before_the_quit_is_approved() {
+    let mut app = app_with_the_rule_applied();
+    app.send(ToRuntime::Event {
+        event: SystemEvent::QuitRequested {},
+    });
+    app.settle_until("the approved quit", |app| app.routes_at_quit.is_some());
+    assert_eq!(app.routes_at_quit, Some(Vec::new()));
+    // Nothing writes them again afterwards.
+    network_changed(&app);
+    app.settle();
+    assert!(app.exception_routes.is_empty());
+}
+
+/// A quit approved while a sync's read is under way, here with no Helper to remove the routes:
+/// whether the read succeeds or fails, its answer changes nothing, since the app may end at any
+/// moment and its log was written out. No route call, log line, status or notification follows.
+#[test]
+fn nothing_follows_an_approved_quit() {
+    // With no network the read fails, which is logged and shown.
+    for network_when_answered in [Some(office_wifi()), None] {
+        let mut app = App::new();
+        app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+        app.service = Some(office_wifi());
+        app.helper_registration = RegistrationStatus::NotRegistered;
+        app.holds_route_calls = true;
+        app.launch();
+        app.settle_until("the read under way", |app| !app.held_route_calls.is_empty());
+        app.send(ToRuntime::Event {
+            event: SystemEvent::QuitRequested {},
+        });
+        app.settle_until("the approved quit", |app| app.routes_at_quit.is_some());
+        let route_calls = app.route_calls();
+        let actions = app.actions.len();
+        let status = app.bypass_status().cloned();
+
+        app.service = network_when_answered;
+        app.answer_held_route_calls();
+        app.settle();
+        assert_eq!(app.route_calls(), route_calls);
+        let after = &app.actions[actions..];
+        assert!(
+            !after.iter().any(|action| matches!(
+                action,
+                PortAction::Log { .. } | PortAction::PostNotification { .. }
+            )),
+            "{after:?}"
+        );
+        assert_eq!(app.bypass_status().cloned(), status);
+    }
+}
+
+/// Without a VPN the routes mean nothing: they are in place only while the app wants it up.
+#[test]
+fn the_routes_are_in_place_only_while_the_vpn_is_wanted() {
+    let mut app = app_on_the_office_wifi();
+    app.settle_until("the rules not applied", |app| {
+        app.bypass_status() == Some(&BypassStatus::VpnOff {})
+    });
+    assert!(app.exception_routes.is_empty());
+    want_the_vpn(&mut app);
+    app.settle_until("the route written", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+    app.command(Command::Disconnect {});
     app.settle_until("the route removed", |app| {
-        app.service.as_ref().unwrap().routes.len() == 1
+        app.bypass_status() == Some(&BypassStatus::VpnOff {})
     });
-    // A route through another gateway was never the rules' to take.
-    assert_eq!(app.service.as_ref().unwrap().routes, vec![other]);
+    assert!(app.exception_routes.is_empty());
+}
+
+/// The VPN server always goes out directly: a file naming its address as a target is refused.
+#[test]
+fn a_file_naming_the_vpn_servers_address_as_a_target_is_refused() {
+    let mut app = App::new();
+    let config = format!("{ACCOUNT}{WITH_RULE}")
+        .replace("vpn.example.com", "10.30.0.1")
+        .replace("[10.30.0.0/16]", "[10.31.0.0/16, 10.30.0.1]");
+    app.write_config(&config);
+    app.service = Some(office_wifi());
+    app.launch();
+    app.settle_until("the file refused", |app| {
+        app.bypass_status() == Some(&BypassStatus::ConfigInvalid {})
+    });
+}
+
+#[test]
+fn a_read_that_fails_after_the_helper_connection_was_lost_is_retried() {
+    let mut app = app_with_the_rule_applied();
+    app.routes_unreachable = true;
+    app.send(ToRuntime::Event {
+        event: SystemEvent::HelperConnectionLost {},
+    });
+    app.settle_until("the retry", |app| {
+        app.bypass_status()
+            == Some(&BypassStatus::Failed {
+                failure: BypassFailure::HelperUnreachable {
+                    failure: HelperChannelFailure::ConnectionLost {},
+                },
+                retry_in_seconds: Some(10),
+                stopped_after_retries: None,
+            })
+    });
+}
+
+/// A sync that failed and stopped is tried again once a readiness check finds the Helper.
+#[test]
+fn a_failed_sync_is_tried_again_when_the_helper_answers() {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.routes_unreachable = true;
+    app.launch();
+    app.settle_until("the failure", |app| {
+        matches!(
+            app.bypass_status(),
+            Some(BypassStatus::Failed {
+                retry_in_seconds: None,
+                ..
+            })
+        )
+    });
+    app.routes_unreachable = false;
+    // Registering again follows the approval with readiness checks.
+    app.command(Command::RegisterHelper {});
+    app.settle_until("the sync", |app| {
+        app.bypass_status() == Some(&BypassStatus::VpnOff {})
+    });
 }
 
 fn forticlient_connection(name: &str, server: &str) -> FortiClientConnection {

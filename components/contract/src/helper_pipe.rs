@@ -48,7 +48,8 @@ pub enum PipeRequest {
     /// start a service again that stopped by itself. Goes between builds, so its shape and its
     /// answer's never change.
     ExitWhenIdle { id: u64 },
-    /// Answered by `Reply` with a `BypassRoutesReply`.
+    /// Answered by `Reply` with a `BypassRoutesReply`. A connection may have one exception-route
+    /// request at a time.
     ReadBypassRoutes { id: u64 },
     /// `json` is a `BypassRoutesRequest`. Answered by `Reply` with a `BypassRoutesReply`.
     WriteBypassRoutes { id: u64, json: String },

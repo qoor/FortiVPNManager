@@ -1,6 +1,6 @@
-//! Safe functions over the Windows IP Helper API, with which the Helper applies the VPN's network
-//! settings itself and reads them back to confirm them. The workspace's only unsafe blocks are here
-//! (user decision, 2026-11-16); nothing else calls windows-sys.
+//! Safe functions over the Windows IP Helper API, with which the Helper changes the routing table and
+//! other network settings itself and reads them back to confirm them. The workspace's only unsafe
+//! blocks are here (user decision, 2026-11-16); nothing else calls windows-sys.
 //!
 //! What Windows keeps, as checked on Windows 11: addresses, routes, MTUs and metrics written here
 //! live only in the active store, so a restart drops them; DNS servers go to the registry and stay
@@ -20,13 +20,13 @@ use windows_sys::Win32::NetworkManagement::IpHelper::{
     CreateIpForwardEntry2, CreateUnicastIpAddressEntry, DNS_INTERFACE_SETTINGS,
     DNS_INTERFACE_SETTINGS_VERSION1, DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER,
     DeleteIpForwardEntry2, DeleteUnicastIpAddressEntry, FreeInterfaceDnsSettings, FreeMibTable,
-    GetBestRoute2, GetInterfaceDnsSettings, GetIpForwardTable2, GetIpInterfaceEntry,
-    GetUnicastIpAddressTable, InitializeIpForwardEntry, InitializeIpInterfaceEntry,
-    InitializeUnicastIpAddressEntry, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
-    MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, SetInterfaceDnsSettings,
-    SetIpInterfaceEntry,
+    GetBestRoute2, GetIfEntry2, GetInterfaceDnsSettings, GetIpForwardTable2, GetIpInterfaceEntry,
+    GetUnicastIpAddressTable, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211, InitializeIpForwardEntry,
+    InitializeIpInterfaceEntry, InitializeUnicastIpAddressEntry, MIB_IF_ROW2, MIB_IPFORWARD_ROW2,
+    MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
+    MIB_UNICASTIPADDRESS_TABLE, SetInterfaceDnsSettings, SetIpInterfaceEntry,
 };
-use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
+use windows_sys::Win32::NetworkManagement::Ndis::{IfOperStatusUp, NET_LUID_LH};
 use windows_sys::Win32::Networking::WinSock::{
     ADDRESS_FAMILY, AF_INET, AF_INET6, IN_ADDR, IN_ADDR_0, IN6_ADDR, IN6_ADDR_0,
     IpDadStateDeprecated, IpDadStateDuplicate, IpDadStatePreferred, IpDadStateTentative,
@@ -138,6 +138,68 @@ impl Luid {
         // valid `Value`.
         Self(unsafe { raw.Value })
     }
+}
+
+/// What kind of link an interface is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Medium {
+    Ethernet,
+    Wifi,
+    Other,
+}
+
+/// An interface as Windows describes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Interface {
+    /// The name Windows shows for the adapter, such as `Ethernet` or `Wi-Fi`.
+    pub alias: String,
+    /// The interface GUID as Windows writes it: in braces, in upper case.
+    pub guid: String,
+    pub medium: Medium,
+    /// A hardware adapter, unlike a virtual one such as a VPN client's or Hyper-V's, which may
+    /// report Ethernet too.
+    pub hardware: bool,
+    /// Able to pass packets.
+    pub up: bool,
+}
+
+pub fn interface(luid: Luid) -> Result<Interface, Error> {
+    let mut row = MIB_IF_ROW2 {
+        InterfaceLuid: luid.raw(),
+        ..Default::default()
+    };
+    // SAFETY: `row` is live for the call, which reads its LUID and writes the rest. Every member
+    // is a plain integer, array of them or GUID, so any bytes the system writes are valid.
+    let code = unsafe { GetIfEntry2(&mut row) };
+    check("GetIfEntry2", code)?;
+    Ok(Interface {
+        alias: U16CStr::from_slice_truncate(&row.Alias)
+            .map(U16CStr::to_string_lossy)
+            .unwrap_or_default(),
+        guid: guid_text(row.InterfaceGuid),
+        medium: match row.Type {
+            IF_TYPE_ETHERNET_CSMACD => Medium::Ethernet,
+            IF_TYPE_IEEE80211 => Medium::Wifi,
+            _ => Medium::Other,
+        },
+        // HardwareInterface is the lowest bit of the flags.
+        hardware: row.InterfaceAndOperStatusFlags._bitfield & 1 != 0,
+        up: row.OperStatus == IfOperStatusUp,
+    })
+}
+
+/// `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`.
+fn guid_text(guid: GUID) -> String {
+    let GUID {
+        data1,
+        data2,
+        data3,
+        data4: d,
+    } = guid;
+    format!(
+        "{{{data1:08X}-{data2:04X}-{data3:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
+        d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]
+    )
 }
 
 /// An interface's settings for one address family.
@@ -486,20 +548,11 @@ mod tests {
     //! through, and routes to TEST-NET addresses (192.0.2.0/24, 2001:db8::/32), which nothing uses,
     //! through the primary interface. Each puts back what it changed, also when it fails.
 
+    use std::process::Command;
     use std::sync::PoisonError;
-    use std::time::Duration;
 
     use super::*;
-    use crate::routes::ROUTE_WRITES;
-
-    /// Runs its closure when dropped, so a failing test still puts back what it changed.
-    struct Undo<F: FnMut()>(F);
-
-    impl<F: FnMut()> Drop for Undo<F> {
-        fn drop(&mut self) {
-            (self.0)();
-        }
-    }
+    use crate::routes::{ROUTE_WRITES, Undo};
 
     fn loopback() -> Luid {
         best_route(Ipv4Addr::LOCALHOST.into()).unwrap().interface
@@ -527,6 +580,10 @@ mod tests {
     fn the_loopback_interface_is_read() {
         let loopback = loopback();
         assert_eq!(Luid::from_index(loopback.index().unwrap()), Ok(loopback));
+        let interface = interface(loopback).unwrap();
+        assert_eq!(interface.medium, Medium::Other, "{interface:?}");
+        assert!(!interface.hardware && interface.up, "{interface:?}");
+        assert!(interface.guid.starts_with('{') && interface.guid.len() == 38);
         let localhost = UnicastAddress {
             address: Ipv4Addr::LOCALHOST.into(),
             prefix_length: 8,
@@ -636,32 +693,21 @@ mod tests {
 
     /// The registry key that holds the interface's DNS settings of `family`.
     fn dns_key(luid: Luid, family: Family) -> String {
-        let GUID {
-            data1,
-            data2,
-            data3,
-            data4: d,
-        } = luid.guid().unwrap();
         let service = match family {
             Family::Ipv4 => "Tcpip",
             Family::Ipv6 => "Tcpip6",
         };
-        format!(
-            r"HKLM\SYSTEM\CurrentControlSet\Services\{service}\Parameters\Interfaces\{{{data1:08X}-{data2:04X}-{data3:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-            d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]
-        )
+        let guid = guid_text(luid.guid().unwrap());
+        format!(r"HKLM\SYSTEM\CurrentControlSet\Services\{service}\Parameters\Interfaces\{guid}")
     }
 
     /// Runs reg.exe and answers its output, or `None` when it failed, as for a missing key or value.
     fn reg(args: &[&str]) -> Option<String> {
-        let output = crate::command::run(
-            r"C:\Windows\System32\reg.exe",
-            args,
-            Vec::new(),
-            Duration::from_secs(10),
-        )
-        .ok()?;
-        let succeeded = output.status.is_some_and(|status| status.success());
+        let output = Command::new(r"C:\Windows\System32\reg.exe")
+            .args(args)
+            .output()
+            .ok()?;
+        let succeeded = output.status.success();
         succeeded.then(|| String::from_utf8_lossy(&output.stdout).into_owned())
     }
 

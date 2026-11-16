@@ -78,56 +78,6 @@ enum RouteRepair {
     }
 }
 
-/// `/sbin/route -n` lookups and changes.
-enum RouteTable {
-    struct Entry: Sendable {
-        var destination: String
-        var interface: String?
-        /// `UP`, `GATEWAY`, `HOST`, `STATIC`, ...
-        var flags: Set<String>
-    }
-
-    static let routePath = "/sbin/route"
-
-    /// The route `route -n get` reports for `destination`, or `nil` if there is none. A missing
-    /// route ("not in table") still exits with status 0, so the output decides.
-    static func lookup(_ destination: String) -> Entry? {
-        let result = SystemCommand.run(routePath, ["-n", "get", destination])
-        guard result.succeeded else { return nil }
-        return parse(result.output)
-    }
-
-    /// Runs `route -n <arguments>`. macOS route exits 0 even when the kernel rejects the change and
-    /// only prints "route: writing to routing socket: …" to stderr, so stderr output counts as failure.
-    /// Callers that need certainty re-check the table with `lookup`.
-    @discardableResult
-    static func change(_ arguments: [String]) -> Bool {
-        let result = SystemCommand.run(routePath, ["-n"] + arguments)
-        let succeeded = result.succeeded && result.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if !succeeded {
-            let command = arguments.joined(separator: " ")
-            let message = (result.errorOutput + result.output).trimmingCharacters(in: .whitespacesAndNewlines)
-            HelperLog.routes.error("route -n \(command, privacy: .public) failed (\(String(describing: result.status), privacy: .public)): \(message, privacy: .public)")
-        }
-        return succeeded
-    }
-
-    /// Parses the `key: value` lines of `route -n get`.
-    static func parse(_ output: String) -> Entry? {
-        var fields: [String: String] = [:]
-        for line in output.split(whereSeparator: \.isNewline) {
-            guard let colon = line.firstIndex(of: ":") else { continue }
-            let key = line[..<colon].trimmingCharacters(in: .whitespaces)
-            fields[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-        }
-        guard let destination = fields["destination"], !destination.isEmpty else { return nil }
-        let flags = fields["flags"].map { value in
-            Set(value.trimmingCharacters(in: CharacterSet(charactersIn: "<>")).split(separator: ",").map(String.init))
-        } ?? []
-        return Entry(destination: destination, interface: fields["interface"], flags: flags)
-    }
-}
-
 private extension HelperInternal.RouteRepairOutcome {
     /// A failure wins over a repair, which wins over "nothing to do".
     func combined(with other: HelperInternal.RouteRepairOutcome) -> HelperInternal.RouteRepairOutcome {

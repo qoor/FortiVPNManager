@@ -1,25 +1,22 @@
 //! state.json: what the device keeps that nobody edits.
 
-use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use fvm_contract::app_helper::{AdditionalRoute, HelperErrorCode};
+use fvm_contract::app_helper::HelperErrorCode;
 use fvm_core::connection::{Failure, FailureLedger};
 use serde::{Deserialize, Serialize};
 
 use crate::files;
 
-/// The state file grows only with routes; anything larger is not one.
+/// The state file holds a few small values; anything larger is not one.
 const MAX_FILE_BYTES: u64 = 1 << 20;
 
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct State {
     pub(crate) ledger: Option<FailureLedger>,
     pub(crate) login_item_registered: bool,
-    /// The routes the exception rules last wrote, by network service ID.
-    pub(crate) applied_routes: BTreeMap<String, Vec<AdditionalRoute>>,
 }
 
 pub(crate) struct StateFile {
@@ -76,6 +73,9 @@ fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 // MARK: Wire format
 
+/// Earlier builds also wrote `appliedExceptionRoutes`, the exception routes they kept in the OS's
+/// saved settings: it is ignored when read and left out when written, and those builds read a file
+/// without it.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Wire {
@@ -83,8 +83,6 @@ struct Wire {
     ledger: Option<WireLedger>,
     #[serde(default)]
     login_item_registered: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    applied_exception_routes: Option<BTreeMap<String, Vec<AdditionalRoute>>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -141,7 +139,6 @@ impl Wire {
                 recent_auth_attempts: ledger.recent_auth_attempts,
             }),
             login_item_registered: self.login_item_registered,
-            applied_routes: self.applied_exception_routes.unwrap_or_default(),
         }
     }
 
@@ -155,8 +152,6 @@ impl Wire {
                 recent_auth_attempts: ledger.recent_auth_attempts.clone(),
             }),
             login_item_registered: state.login_item_registered,
-            applied_exception_routes: (!state.applied_routes.is_empty())
-                .then(|| state.applied_routes.clone()),
         }
     }
 }
@@ -268,6 +263,7 @@ mod times {
 mod tests {
     use super::*;
 
+    /// As an earlier build wrote it, with the exception routes it kept.
     const SAVED_FILE: &str = r#"{
   "appliedExceptionRoutes" : {
     "F7929342-1853-4DEF-B9C0-9974F585CED1" : [
@@ -314,19 +310,19 @@ mod tests {
             })
         );
         assert!(state.login_item_registered);
-        assert_eq!(
-            state.applied_routes["F7929342-1853-4DEF-B9C0-9974F585CED1"][0].destination,
-            "10.30.161.16"
-        );
     }
 
     #[test]
-    fn writing_gives_back_the_saved_file() {
+    fn writing_gives_back_the_saved_file_without_the_exception_routes() {
         let state = serde_json::from_str::<Wire>(SAVED_FILE)
             .unwrap()
             .into_state();
         let written: serde_json::Value = serde_json::to_value(Wire::from_state(&state)).unwrap();
-        let original: serde_json::Value = serde_json::from_str(SAVED_FILE).unwrap();
+        let mut original: serde_json::Value = serde_json::from_str(SAVED_FILE).unwrap();
+        original
+            .as_object_mut()
+            .unwrap()
+            .remove("appliedExceptionRoutes");
         assert_eq!(written, original);
     }
 

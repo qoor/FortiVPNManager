@@ -1,11 +1,10 @@
 //! What the app and the Helper exchange. Every message uses Swift's standard Codable coding
-//! (`XPCCoding`), since the Helper's Swift side answers the bypass-route payloads itself,
-//! reading and writing networksetup: an enum value with data is an object keyed by its case name,
-//! data without a label uses the key `_0`, a case without data is `{}`, dates are seconds since
-//! 1970, and absent optional values are left out. Each type derives only the directions its two
-//! users need: the Helper receives the run request and sends everything else, and the app's runtime
-//! does the opposite. The bypass-route request and reply go both ways, since the Windows Helper
-//! answers them in Rust.
+//! (`XPCCoding`), so the Helper's Swift side can write the few answers it gives itself, such as a
+//! `HelperError` for a payload it cannot pass on: an enum value with data is an object keyed by its
+//! case name, data without a label uses the key `_0`, a case without data is `{}`, dates are seconds
+//! since 1970, and absent optional values are left out. The Helper receives the run request and the
+//! exception-route request and sends everything else, and the app's runtime does the opposite; the
+//! Helper entry, in Rust, reads and writes them on every OS.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -322,51 +321,61 @@ pub enum HelperErrorCode {
     InternalError,
 }
 
-/// One additional route of a network service, as `networksetup -getadditionalroutes` prints it.
+/// One exception route: a destination network, as an address and a subnet mask, through the router
+/// `gateway`. A host's mask is `255.255.255.255`.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdditionalRoute {
+pub struct BypassRoute {
     pub destination: String,
     pub subnet_mask: String,
     pub gateway: String,
 }
 
-/// The primary network service, the one macOS sends default traffic through, and its additional
-/// routes.
+/// The primary network: the physical interface the OS sends default traffic through, never a
+/// tunnel, with its IPv4 router and this device's IPv4 address on it.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BypassRoutesSnapshot {
-    /// Stable across renames.
+    /// Stable across renames: the network service on macOS, the interface GUID on Windows.
     #[serde(rename = "serviceID")]
     pub service_id: String,
-    /// The name networksetup uses, such as `Ethernet` or `Wi-Fi`.
+    /// The name the user knows it by, such as `Ethernet` or `Wi-Fi`.
     pub service_name: String,
-    /// The service's IPv4 router; exception routes go through it.
+    /// Exception routes go through it.
     pub router: String,
-    /// This Mac's IPv4 address on the service and its subnet mask.
     pub address: String,
     pub subnet_mask: String,
-    pub routes: Vec<AdditionalRoute>,
 }
 
-/// The complete additional route list for the service in `expected`. The Helper writes it only
-/// while the primary service, its router and its current routes are still exactly `expected`, and
-/// only with routes through that router or routes the service already has.
+/// What an app asks of its own exception routes. The Helper keeps them in the routing table, not in
+/// the OS's saved settings, and removes them when the app's connection goes away or the app asks.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct BypassRoutesRequest {
-    /// What the app read and planned from.
-    pub expected: BypassRoutesSnapshot,
-    pub routes: Vec<AdditionalRoute>,
+#[serde(rename_all = "camelCase")]
+pub enum BypassRoutesRequest {
+    /// The app's exception routes become `routes`, all through the router of `expected`. The Helper
+    /// changes nothing unless the primary network is still exactly `expected`, and adds only
+    /// routes to exception targets through that router.
+    Write {
+        /// What the app read and planned from.
+        expected: BypassRoutesSnapshot,
+        routes: Vec<BypassRoute>,
+    },
+    /// The app quits: its exception routes go, whatever the network.
+    Remove {},
 }
 
-/// Answer to reading or writing the bypass routes.
+/// Answer to reading or writing the exception routes.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BypassRoutesReply {
+    /// The primary network now, and those of the app's exception routes the routing table has:
+    /// after a write, of the routes written; after a read, of the routes the app last wrote.
     Success {
-        #[serde(rename = "_0")]
         snapshot: BypassRoutesSnapshot,
+        routes: Vec<BypassRoute>,
     },
+    /// Answers `BypassRoutesRequest::Remove`.
+    Removed {},
     Failure {
         #[serde(rename = "_0")]
         error: HelperError,

@@ -50,6 +50,7 @@ extension AppInternal {
         case tooManyRouteEntries(path: String, count: Int, limit: Int)
         case duplicateRouteEntry(path: String, index: Int)
         case overlappingRouteEntry(path: String, index: Int, other: String)
+        case vpnServerAsRouteTarget(path: String)
     }
 
     enum ValueKind: String, Decodable, Sendable {

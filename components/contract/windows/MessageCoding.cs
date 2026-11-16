@@ -221,10 +221,12 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.RowProblem.Invalid), TypeInfoPropertyName = "RowProblemInvalid")]
 [JsonSerializable(typeof(AppInternal.RowProblem.Duplicate), TypeInfoPropertyName = "RowProblemDuplicate")]
 [JsonSerializable(typeof(AppInternal.RowProblem.Overlap), TypeInfoPropertyName = "RowProblemOverlap")]
+[JsonSerializable(typeof(AppInternal.RowProblem.VpnServer), TypeInfoPropertyName = "RowProblemVpnServer")]
 
 [JsonSerializable(typeof(AppInternal.BypassStatus.Checking), TypeInfoPropertyName = "BypassStatusChecking")]
 [JsonSerializable(typeof(AppInternal.BypassStatus.NoConfigFile), TypeInfoPropertyName = "BypassStatusNoConfigFile")]
 [JsonSerializable(typeof(AppInternal.BypassStatus.Applied), TypeInfoPropertyName = "BypassStatusApplied")]
+[JsonSerializable(typeof(AppInternal.BypassStatus.VpnOff), TypeInfoPropertyName = "BypassStatusVpnOff")]
 [JsonSerializable(typeof(AppInternal.BypassStatus.OutsideNetworks), TypeInfoPropertyName = "BypassStatusOutsideNetworks")]
 [JsonSerializable(typeof(AppInternal.BypassStatus.NoNetworksListed), TypeInfoPropertyName = "BypassStatusNoNetworksListed")]
 [JsonSerializable(typeof(AppInternal.BypassStatus.ConfigInvalid), TypeInfoPropertyName = "BypassStatusConfigInvalid")]
@@ -235,7 +237,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.BypassFailure.NetworkChanged), TypeInfoPropertyName = "BypassFailureNetworkChanged")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.HelperRefused), TypeInfoPropertyName = "BypassFailureHelperRefused")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.SettingsNotChanged), TypeInfoPropertyName = "BypassFailureSettingsNotChanged")]
-[JsonSerializable(typeof(AppInternal.BypassFailure.ImportNotSaved), TypeInfoPropertyName = "BypassFailureImportNotSaved")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.HelperUnreachable), TypeInfoPropertyName = "BypassFailureHelperUnreachable")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.HelperBuildMismatch), TypeInfoPropertyName = "BypassFailureHelperBuildMismatch")]
 
@@ -365,6 +366,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.ConfigProblemKind.TooManyRouteEntries), TypeInfoPropertyName = "ConfigProblemKindTooManyRouteEntries")]
 [JsonSerializable(typeof(AppInternal.ConfigProblemKind.DuplicateRouteEntry), TypeInfoPropertyName = "ConfigProblemKindDuplicateRouteEntry")]
 [JsonSerializable(typeof(AppInternal.ConfigProblemKind.OverlappingRouteEntry), TypeInfoPropertyName = "ConfigProblemKindOverlappingRouteEntry")]
+[JsonSerializable(typeof(AppInternal.ConfigProblemKind.VpnServerAsRouteTarget), TypeInfoPropertyName = "ConfigProblemKindVpnServerAsRouteTarget")]
 
 [JsonSerializable(typeof(AppInternal.ConfigWarningKind.UnknownKey), TypeInfoPropertyName = "ConfigWarningKindUnknownKey")]
 [JsonSerializable(typeof(AppInternal.ConfigWarningKind.InvalidTrustedCert), TypeInfoPropertyName = "ConfigWarningKindInvalidTrustedCert")]

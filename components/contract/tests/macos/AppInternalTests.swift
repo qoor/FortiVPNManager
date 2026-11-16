@@ -475,21 +475,19 @@ private extension AppInternal {
                     rows: ["10.30.161.16", "10.30.161", "10.30.161.16/32"], problemRows: [1, 2], addRow: .disabled
                 ),
                 notice: .rowProblem(row: "10.30.161", problem: .invalid(problem: .malformed)),
-                status: .applied(
-                    serviceName: "Ethernet", router: "10.20.161.1", onLinkTargets: 1, notImported: 2,
-                    keptThroughOtherGateways: 3
-                ),
+                status: .applied(serviceName: "Ethernet", router: "10.20.161.1", onLinkTargets: 1),
                 hasChanges: true, addCurrentNetwork: .disabled, discard: .enabled, apply: .disabled
             ),
             bypassSection(
-                .outsideNetworks(keptThroughOtherGateways: 0),
+                .outsideNetworks,
                 notice: .rowProblem(row: "10.30.161.16/32", problem: .duplicate(entry: "10.30.161.16")),
                 currentNetwork: CurrentNetwork(serviceName: "Wi-Fi", address: "192.168.0.12", prefixLength: nil, within: nil)
             ),
             bypassSection(
-                .noNetworksListed(keptThroughOtherGateways: 1),
+                .noNetworksListed,
                 notice: .rowProblem(row: "10.30.170.9", problem: .overlap(other: "10.30.170.0/24"))
             ),
+            bypassSection(.vpnOff, notice: .rowProblem(row: "203.0.113.10", problem: .vpnServer)),
             bypassSection(.noConfigFile, notice: .applyFailed(error: unreadableFile)),
             bypassSection(.configInvalid, notice: nil),
             bypassSection(.noNetwork, notice: nil),
@@ -509,10 +507,6 @@ private extension AppInternal {
                     failure: .settingsNotChanged(message: "** Error: The parameters were not valid."),
                     retryInSeconds: nil, stoppedAfterRetries: nil
                 ),
-                notice: nil
-            ),
-            bypassSection(
-                .failed(failure: .importNotSaved(error: unreadableFile), retryInSeconds: nil, stoppedAfterRetries: nil),
                 notice: nil
             ),
             bypassSection(
@@ -642,6 +636,7 @@ private extension AppInternal {
             problem(.tooManyRouteEntries(path: "routes.networks", count: 101, limit: 100)),
             problem(.duplicateRouteEntry(path: "routes.bypass_vpn", index: 2)),
             problem(.overlappingRouteEntry(path: "routes.networks", index: 1, other: "10.20.0.0/16")),
+            problem(.vpnServerAsRouteTarget(path: "routes.bypass_vpn")),
         ]
 
         static let configWarnings: [ConfigWarning] = [

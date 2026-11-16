@@ -39,12 +39,12 @@
 | 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지켜야 할 약속 |
 | backend adapter | Helper(일부는 앱) | VPN client마다 다른 처리(openfortivpn, openconnect) |
 | process 모듈 | Helper | VPN client 확인과 실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout |
-| recovery 모듈 | Helper | 실행 기록, 이전 Helper가 남긴 프로세스 정리, route 복구 요청 |
-| entry 모듈 | Helper | 앱 요청 처리, 실행의 주인 판단, Helper 수명 |
-| Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 쓰기 |
+| recovery 모듈 | Helper | 실행 기록과 예외 route 기록, 이전 Helper가 남긴 프로세스와 예외 route 정리, route 복구 요청 |
+| entry 모듈 | Helper | 앱 요청 처리, 실행과 예외 route의 주인 판단, Helper 수명 |
+| Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 넣기·지우기 |
 | UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
-| Helper OS 영역 (Windows) | Helper | Windows 서비스(Helper 서비스)로 실행되며 세 모듈을 씀. 서비스 수명, 앱 연결 확인, route 정리, 예외 route 쓰기 |
+| Helper OS 영역 (Windows) | Helper | Windows 서비스(Helper 서비스)로 실행되며 세 모듈을 씀. 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | openfortivpn | Helper가 실행 | macOS의 VPN client와 그 pppd |
 | openconnect | Helper가 실행 | Windows의 VPN client(macOS·Linux는 추후)와 그 route 설정 스크립트. Windows는 앱과 함께 설치한 것 |
@@ -107,22 +107,24 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **제공 기능**: F-VR-01 client 준비, F-VR-02 실행과 stdin 입력, F-VR-04 시간 제한과 종료, F-VR-05 종료 사실과 보고. F-WN-03의 시작 때 client 확인을 맡는다.
 
 ## 2.6 recovery 모듈
-- **설명**: Helper가 실행 중에 죽어도 다음 Helper가 정리할 수 있게 실행을 기록하고, 다음 Helper가 시작할 때 그 기록으로 정리한다. 실행 기록의 형식은 이 모듈이 정한다. VPN client에 관한 것은 process 모듈이 넘겨준 backend adapter에 묻는다.
+- **설명**: Helper가 죽어도 다음 Helper가 정리할 수 있게 실행과 예외 route를 기록하고, 다음 Helper가 시작할 때 그 기록으로 정리한다. 기록의 형식은 이 모듈이 정한다. VPN client에 관한 것은 process 모듈이 넘겨준 backend adapter에 묻는다.
 - **역할**
-  - 실행 기록(실행 중인 client와 그것이 띄운 프로세스, 게이트웨이)
+  - 실행 기록(실행 중인 client와 그것이 띄운 프로세스, 게이트웨이)과 예외 route 기록(Helper가 넣고 아직 지우지 않은 예외 route)
   - 이전 Helper가 남긴 프로세스 정리와 남은 파일 지우기
   - route 복구 요청: 이전 Helper가 남긴 실행과, route를 되돌리지 않고 끝난 실행
-- **모르는 것**: route 복구 방법, 앱과의 통신, 실행을 요청한 사용자.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구
+  - 이전 Helper가 남긴 예외 route 지우기 요청
+- **모르는 것**: route를 고치고 넣고 지우는 방법, 앱과의 통신, 실행을 요청한 사용자.
+- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-BR-02 동기화의 예외 route 기록
 
 ## 2.7 entry 모듈
 - **설명**: Helper에서 OS에 의존하지 않는 앞단이다. 앱 요청을 받아 누가 무엇을 할 수 있는지 판단하고, VPN client에 관한 일은 process 모듈과 recovery 모듈에 맡긴다. 상태 같은 응답은 process 모듈이 알려 준 것으로 만든다. Helper의 OS별 시작 부분이 backend adapter(macOS는 openfortivpn)와 실행 기록 폴더를 골라 process 모듈에 주고 entry 모듈을 시작한다. Linux·Windows의 Helper 서비스도 이 부분을 그대로 쓴다.
 - **역할**
   - 앱 연결, 실행 하나와 그 주인 관리, 응답 만들기
+  - 앱 연결마다 원하는 예외 route와 Helper가 넣은 예외 route 관리, 넣고 지울 route를 OS 쪽에 하나씩 넘기기
   - 이전 Helper가 남긴 것의 정리와 route 복구가 끝날 때까지 앱 연결 막기, 실행이 요청한 route 복구를 OS 쪽에 넘기기
   - Helper가 끝날 때 판단, Helper 로그
-- **모르는 것**: 앱과의 통신 수단, 연결 확인, route 복구 방법, VPN client(backend adapter에 직접 접근할 수 없다), OS가 프로세스와 파일 권한을 다루는 방법.
-- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리
+- **모르는 것**: 앱과의 통신 수단, 연결 확인, route를 고치고 넣고 지우는 방법, VPN client(backend adapter에 직접 접근할 수 없다), OS가 프로세스와 파일 권한을 다루는 방법.
+- **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-BR-02 동기화의 Helper 쪽
 
 ## 2.8 UI (macOS)
 - **설명**: 도메인 구역을 화면으로 그리고 사용자 조작을 명령으로 보낸다. 사용자에게 보이는 모든 문장과 번역을 만든다.
@@ -144,8 +146,8 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **설명**: Helper 프로세스에서 OS에 의존하는 부분으로, 앱의 OS 연동에 대응한다. 나머지는 entry 모듈에 넘긴다.
 - **역할**
   - 앱 연결 받기와 서명 확인, Helper 실행 관리와 자가 업데이트
-  - route 복구와 예외 route 쓰기
-- **모르는 것**: 앱이 보낸 요청의 내용(버전 확인 제외), VPN client 실행.
+  - route 복구, entry가 요청한 예외 route 넣기·지우기와 주 네트워크 조회
+- **모르는 것**: 앱이 보낸 요청의 내용(버전 확인 제외), VPN client 실행, 어느 예외 route가 누구의 것인지.
 - **제공 기능**: F-SW-03 Helper OS 영역 (macOS)
 
 ## 2.11 UI (Windows)
@@ -170,8 +172,8 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **역할**
   - 서비스 수명(실행 중이라고 알리기 전에 process 모듈에 맡기는 VPN client 확인 포함), 앱 연결 받기와 확인
   - process 모듈에 줄 backend adapter(openconnect)와 실행 기록 폴더 고르기
-  - 게이트웨이 host route 정리, 예외 route 읽기·쓰기
-- **모르는 것**: VPN client 출력 문구, 재시도 판단.
+  - 게이트웨이 host route 정리, entry가 요청한 예외 route 넣기·지우기와 주 interface 조회
+- **모르는 것**: VPN client 출력 문구, 재시도 판단, 어느 예외 route가 누구의 것인지.
 - **제공 기능**: F-VR-06 남은 프로세스 정리와 route 복구, F-VR-07 Helper 요청 처리, F-WN-03 Helper OS 영역 (Windows)
 
 ## 2.14 설치 패키지 (Windows)
@@ -179,8 +181,8 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **역할**
   - 앱, Helper, OpenConnect 설치와 업그레이드
   - Helper 서비스, 이벤트 로그 출처, 시작 메뉴 바로 가기 등록
-  - 제거 때 앱이 PC에 넣은 것(예외 route, 로그인 시 열기, Helper와 그 실행 기록) 정리
-- **모르는 것**: 연결과 VPN client 실행, config.yaml 내용. 사용자 데이터는 제거할 때 앱이 쓴 예외 route 기록만 읽는다.
+  - 제거 때 앱이 PC에 넣은 것(로그인 시 열기, Helper와 그 실행 기록) 정리
+- **모르는 것**: 연결과 VPN client 실행, config.yaml과 상태 파일 내용.
 - **제공 기능**: F-WN-04 설치, 업그레이드, 제거 (Windows)
 
 # 3. 기능 명세
@@ -336,7 +338,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   2. 알 수 없는 키, 형식이 틀리거나 중복된 인증서 값, 최대 개수를 넘는 인증서 값은 경고하고 무시한다.
   3. 더 새로운 `schema_version`은 먼저 거부하고, 그 파일은 절대 덮어쓰지 않는다.
   4. 파일이 없으면 기본값이다. symlink는 따라가고, macOS에서 권한이 0600이 아니면 경고한다. Windows는 사용자 profile의 기본 권한을 따른다.
-  5. 같은 파일을 두 OS에서 그대로 쓸 수 있다. 앱이 쓰는 설명 주석은 그 OS에 맞춘다(비밀값 저장소, 예외 route 방식).
+  5. 같은 파일을 두 OS에서 그대로 쓸 수 있다. 앱이 쓰는 설명 주석은 그 OS에 맞춘다(비밀값 저장소, 네트워크와 router를 부르는 이름).
 - **제약**: 의도한 차이는 raw NEL·LS·PS 거부 하나다(YAML 1.1과 1.2가 다르게 읽는 유일한 경우). 그 밖에 YAML parser가 바뀌어 일부 오류의 줄·열 위치와 드문 문법(콜론 뒤 TAB, 매우 깊은 중첩, 따옴표 값의 tag)의 처리가 조금 다르다. 값을 다르게 읽는 경우는 없다.
 
 ### F-CF-02 설정 저장
@@ -457,34 +459,43 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 ### F-BR-01 적용 여부와 route 계산
 - **설명**: 사내망에 직접 연결돼 있을 때 지정한 host나 대역을 VPN 대신 그 네트워크의 router로 보낸다. VPN을 재연결해도 SSH 같은 TCP 세션이 끊기지 않게 하려는 것이다.
 - **담당**: 판단 코어
-- **입력 / 출력**: `routes.networks`, `routes.bypass_vpn`, 주 네트워크의 router·주소·route / 서비스가 가져야 할 route, 가져올 대상
+- **입력 / 출력**: `routes.networks`, `routes.bypass_vpn`, 주 네트워크의 router·주소, 앱이 VPN을 켜 두려는지, VPN 서버 주소 / 주 네트워크가 가져야 할 예외 route
 - **세부 기능**
-  1. 이 Mac의 IPv4 주소가 `routes.networks` 안에 있을 때만 적용한다. 밖에서는 앱이 넣은 route를 지운다. 이 목록에 앱이 스스로 추가하지 않는다.
-  2. 각 예외 대상을 현재 router 경유 route로 만든다. 같은 LAN 안의 대상은 만들지 않는다.
-  3. 앱이 마지막으로 쓴 route만 앱의 것으로 본다. 다른 gateway를 거치는 route는 건드리지 않는다.
-  4. 같은 router로 밖에서 추가된 route는 목록으로 가져온다. 기존 대상과 겹치거나 같은 LAN 안이면 가져오지 않는다.
-  5. 목록에 있는데 사라진 route는 다시 넣는다.
+  1. 이 Mac의 IPv4 주소가 `routes.networks` 안에 있고 앱이 VPN을 켜 두려 할 때만 적용한다. 그렇지 않으면 앱이 넣은 route를 지운다. 이 목록에 앱이 스스로 추가하지 않는다.
+  2. 앱이 VPN을 켜 두려 하는 때는 연결 중, 연결됨, 재연결하려고 끊는 중, 재시도 대기, 네트워크 대기다. 사용자가 끊었을 때, 실패로 멈췄을 때, 스케줄 밖이라 연결하지 않을 때, 자리 비움으로 재연결을 미룰 때, 앱이 끝날 때는 아니다(사용자 결정, 2026-11-16). 예외 경로는 VPN이 없으면 의미가 없다.
+  3. 각 예외 대상을 현재 router 경유 route로 만든다. 같은 LAN 안의 대상은 만들지 않는다.
+  4. VPN 서버 주소는 예외 대상이 될 수 없다. VPN 서버로 가는 트래픽은 항상 직접 나가기 때문이다(사용자 결정, 2026-11-16).
+     - `vpn.host`가 IP 주소이면, 그 주소와 같은 host 하나를 config.yaml과 설정창의 행에서 오류로 처리한다. 그 주소를 포함하는 대역은 오류가 아니다.
+     - `vpn.host`가 이름이면 동기화할 때 그 이름의 알려진 주소(이번 실행이 연결한 gateway 주소, 또는 네트워크 확인 때 찾은 주소)와 같은 host 대상에는 route를 만들지 않는다. 로그에 한 번 남기고, 설정창에는 그 대상을 적용하지 않았다고 보인다.
+  5. 예외 대상은 설정창과 config.yaml에서만 정한다. 밖에서 넣은 route를 목록으로 가져오지 않는다(사용자 결정, 2026-11-16). 실행 중 routing table에는 DHCP나 다른 VPN의 route가 섞여 있어 사용자가 넣은 예외를 가려낼 수 없다.
+  6. 앱이 넣은 route만 지운다. 밖에서 넣은 route는 같은 대상이어도 건드리지 않는다(F-BR-02).
+  7. 목록에 있는데 사라진 route는 다시 넣는다.
 - **제약**: 한 목록 안의 항목끼리는 겹칠 수 없다. 외부 네트워크가 같은 사설 대역을 쓰면 그곳에서도 적용된다(감수하는 위험).
 
 ### F-BR-02 동기화
-- **설명**: 계산한 route를 OS가 저장해 두는 route 목록에 쓰고, 실패하면 다시 시도하고 알린다. macOS는 주 네트워크 서비스의 additional routes, Windows는 주 interface의 persistent route다.
-- **담당**: 런타임, Helper OS 영역(macOS는 networksetup, Windows는 persistent route), OS 연동(알림), 설치 패키지(Windows 제거 때)
-- **입력 / 출력**: config.yaml, 네트워크 설정 변경 / route 쓰기, state.json 기록, OS 알림
+- **설명**: 계산한 route를 앱이 VPN을 켜 두려 하는 동안에만 routing table에 넣고, 그렇지 않게 되거나 앱이 끝나면 지운다. 실패하면 다시 시도하고 알린다. OS가 저장해 두는 route 목록(macOS additional routes, Windows persistent route)은 쓰지 않는다(사용자 결정, 2026-11-16).
+- **담당**: 런타임, entry 모듈, recovery 모듈, Helper OS 영역(macOS는 `/sbin/route`, Windows는 Windows API), OS 연동(알림)
+- **입력 / 출력**: config.yaml, 연결 상태, 네트워크 설정 변경, Helper 연결 끊김, 앱 종료 / route 넣기·지우기, Helper의 예외 route 기록, OS 알림
 - **세부 기능**
-  1. 앱 시작, Helper 준비, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다. Windows는 밖에서 바뀐 persistent route를 알려 주는 알림이 없어 짧은 주기로도 확인한다.
+  1. 앱 시작, Helper 준비, Helper 연결이 끊긴 뒤, 앱이 VPN을 켜 두려는지나 VPN 서버의 알려진 주소가 바뀔 때, `routes` 변경, 네트워크 설정 변경, 재시도 시각에 동기화한다. Windows는 route가 사라져도 알려 주는 알림이 없어 주소가 바뀔 때와 5분마다도 확인한다.
+     - 연결 시도를 시작하면 곧바로 동기화하므로 예외 route가 터널의 route보다 먼저 들어간다.
   2. config.yaml이 없거나 오류가 있으면 route를 건드리지 않는다.
-  3. 가져올 대상은 config.yaml에 먼저 저장하고, 그다음 route를 쓴다.
-  4. 읽은 뒤 네트워크나 route가 바뀌었으면 쓰지 않는다. 쓴 뒤 다시 읽어 확인하고, 앱이 쓴 route를 state.json에 기록한다.
-  5. 쓰기가 계속 실패하면 정해진 횟수만큼 다시 시도한 뒤 macOS 알림을 한 번 보내고 재시도를 그만둔다. 그 뒤에는 네트워크나 규칙이 바뀔 때만 다시 한다.
-  6. Windows에서 앱을 제거하면 설치 패키지가 사용자마다 state.json에 앱이 쓴 것으로 기록된 route만 지운다(F-WN-04). persistent route는 앱이 없어져도 OS에 남기 때문이다.
-- **제약**: OS가 저장해 두므로 재부팅과 VPN 재연결 뒤에도 유지되고 VPN 상태와 무관하다. `networksetup`은 실패해도 exit code 0이라 다시 읽어 확인한다. Windows는 persistent route만 읽고 실행 중 route는 보지 않는다. VPN 스크립트가 넣은 게이트웨이 host route가 "밖에서 추가된 route"로 들어오지 않게 하려는 것이다. Windows의 route 명령은 출력이 번역되므로 번역되는 문구를 해석하지 않는다. openconnect의 route 스크립트는 끝날 때 서버가 준 제외 대역과 목적지·mask가 같은 route를 지우므로, 그런 대상은 5번 규칙으로 다시 넣는다.
+  3. Helper에서 주 네트워크와, 이 앱이 마지막으로 보낸 route 중 routing table에 있는 것을 읽는다. 계산한 route와 다르면 이 앱의 route 목록을 통째로 보낸다. Helper는 앱이 읽은 뒤 주 네트워크가 바뀌었으면 아무것도 바꾸지 않는다. 바꿀 때는 routing table 전체를 바꾸기 전에 한 번, 바꾼 뒤에 한 번 읽어 결과를 알린다. route마다 따로 조회하지 않는다.
+  4. Helper는 앱 연결마다 원하는 route를 기억하고, 어느 앱도 원하지 않게 된 route를 지운다. 지우는 것은 Helper가 넣은 route뿐이다. 넣으려는 route가 이미 있으면 넣지 않고 밖에서 넣은 것으로 둔다.
+     - macOS: 대상·mask·gateway가 같은 static route만 이미 있는 route로 본다. 시스템이 다른 route에서 복제한 cloned route(W)나 한 interface에 묶인 route(I)는 아니다. 같은 대상의 cloned host route는 넣기를 막으므로 먼저 지우고 넣는다. 지우고 다시 볼 때도 static route만 다룬다.
+     - Windows: 대상·prefix·next hop이 같고 interface가 지금의 주 interface일 때만 이미 있는 route로 본다. 다른 interface의 route는 이 Helper가 그 interface로 넣은 것일 때만 지운다.
+  5. Helper는 넣기 전에 routing table을 읽어 아직 없는 route만 고르고, 그 route와 넣을 네트워크 서비스를 실행 기록 폴더에 기록한 뒤 넣는다. 그래서 기록에는 Helper가 넣으려 한 route만 있다. Helper가 다시 시작하면 앱 연결을 받기 전에 기록된 route를 지우고(F-VR-06), 앱은 새 연결에서 route를 다시 넣는다.
+  6. 앱이 끝날 때(종료)는 터널을 끝낸 뒤 Helper에게 이 앱의 route를 지우게 하고, 그 답이나 정해진 시간을 기다린 뒤 끝난다. 앱 연결이 끊기면(비정상 종료) Helper가 그 앱만 원하던 route를 지운다. macOS Helper가 유휴 종료로 먼저 끝났으면 지우기 요청이 Helper를 다시 띄우고, 새 Helper가 기록으로 지운다.
+  7. 쓰기, 또는 Helper 연결이 끊긴 뒤의 읽기가 계속 실패하면 정해진 횟수만큼 다시 시도한 뒤 macOS 알림을 한 번 보내고 재시도를 그만둔다. 그 뒤에는 네트워크나 규칙이 바뀌거나, 준비 상태 확인이 Helper의 답을 받을 때 다시 한다.
+  8. 이전 버전이 OS 설정에 저장해 둔 예외 route는 읽지도 지우지도 않는다. 설치할 때 사람이 지운다(사용자 결정, 2026-11-16).
+- **제약**: 실행 중 routing table에만 있어 재부팅하면 사라진다. `/sbin/route`는 실패해도 exit code 0이라 바꾼 뒤 읽은 routing table로 확인한다. openconnect의 route 스크립트는 끝날 때 서버가 준 제외 대역과 목적지·mask가 같은 route를 지우므로, 그런 대상은 다음 동기화가 다시 넣는다(F-BR-01의 7). 남은 게이트웨이 host route 정리(F-VR-06)는 게이트웨이로 가는 host route를 가리지 않고 지운다. VPN 서버 주소는 예외 대상이 아니므로(F-BR-01의 4) 예외 route를 지우지 않는다.
 
 ### F-BR-03 목록 편집 초안
 - **설명**: 예외 규칙 pane에서 두 목록을 편집하는 초안을 관리한다. [적용]을 눌러야 저장된다.
 - **담당**: 판단 코어, 런타임, UI
 - **입력 / 출력**: 행 편집, [현재 네트워크 추가], [변경 취소], [적용] / 행별 문제, 변경 여부
 - **세부 기능**
-  1. 행마다 형식 오류, 중복, 겹침을 찾는다. 문제가 있으면 [적용]할 수 없다.
+  1. 행마다 형식 오류, 중복, 겹침, VPN 서버 주소(F-BR-01의 4)를 찾는다. 문제가 있으면 [적용]할 수 없다.
   2. [변경 취소]는 저장된 목록으로 돌아간다. 같은 값의 다른 표기는 변경이 아니다.
   3. 초안은 설정창을 닫아도 남는다. 편집 중에 밖에서 목록이 바뀌면 바뀐 항목만 합친다.
 
@@ -495,7 +506,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **담당**: 런타임
 - **입력 / 출력**: 저장할 상태 / `~/Library/Application Support/FortiVPNManager/state.json`(Windows는 `%LOCALAPPDATA%\FortiVPNManager\state.json`)
 - **세부 기능**
-  1. 계정별 실패 기록, 로그인 시 열기를 처음 등록했는지, 네트워크 서비스(Windows는 interface)별로 앱이 쓴 예외 route를 저장한다.
+  1. 계정별 실패 기록, 로그인 시 열기를 처음 등록했는지를 저장한다. 이전 버전이 기록한 예외 route(`appliedExceptionRoutes`)는 읽을 때 무시하고 쓸 때 뺀다. 그 버전도 이 항목이 없는 파일을 읽는다.
   2. 바뀔 때만 0600으로 원자적으로 쓴다. 읽을 수 없으면 빈 상태로 시작한다.
   3. 설치된 앱(macOS는 `/Applications`, Windows는 `C:\Program Files\FortiVPNManager`)이 처음 실행되면 로그인 시 열기를 한 번 켠다. 그 뒤 사용자가 끈 것은 존중한다. Windows에서 앱을 제거하면 모든 사용자의 로그인 시 열기 등록이 지워진다(F-WN-04).
 
@@ -615,14 +626,15 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   3. 보고는 실행마다 정확히 한 번이고 마지막 메시지다.
 
 ### F-VR-06 남은 프로세스 정리와 route 복구
-- **설명**: 비정상 종료 뒤 남은 VPN client 프로세스와 깨진 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지고, openconnect가 강제로 끝나면 게이트웨이 host route가 남기 때문이다.
+- **설명**: 비정상 종료 뒤 남은 VPN client 프로세스와 깨진 route, 이전 Helper가 넣은 예외 route를 정리한다. openfortivpn이 비정상 종료하면 default route가 사라지고, openconnect가 강제로 끝나면 게이트웨이 host route가 남기 때문이다.
 - **담당**: recovery 모듈, entry 모듈, Helper OS 영역
-- **입력 / 출력**: pidfile의 프로세스 신원과 게이트웨이 IP / 정리 결과, route 복구 결과
+- **입력 / 출력**: pidfile의 프로세스 신원과 게이트웨이 IP, 예외 route 기록 / 정리 결과, route 복구 결과
 - **세부 기능**
   1. 실행 중에는 client(openfortivpn은 pppd도)의 신원과 게이트웨이 IPv4를 pidfile에 기록한다.
   2. Helper가 시작하면 연결을 받기 전에, 기록과 같은 관리자 권한 프로세스인 VPN client만 종료한다. 다른 프로세스는 건드리지 않는다. Windows에서는 Helper 서비스가 죽어도 openconnect가 혼자 남으므로 이 정리가 필요하다.
   3. macOS: default route가 없거나 ppp를 가리키면 주 네트워크의 router로 되돌리고, routing table을 다시 조회해 확인한다.
-  4. Windows: 남은 openconnect가 없는데 게이트웨이로 가는 host route가 남아 있으면 지우고 다시 조회해 확인한다. 강제로 끝난 터널 어댑터는 다음 openconnect 실행이 스스로 지우므로 건드리지 않는다.
+  4. Windows: 남은 openconnect가 없는데 router를 거쳐 게이트웨이로 가는 host route가 남아 있으면 지우고 다시 조회해 확인한다. 강제로 끝난 터널 어댑터는 다음 openconnect 실행이 스스로 지우므로 건드리지 않는다.
+  5. 이전 Helper가 기록해 둔 예외 route를 연결을 받기 전에 지운다. 지우지 못한 route는 기록에 남기고 이 Helper가 넣은 것으로 다뤄, 어느 앱도 원하지 않으면 다음 변경 때 다시 지운다(F-BR-02).
 - **제약**: `/sbin/route`는 실패해도 exit code 0이다. pid는 재사용될 수 있어 시작 시각과 경로로 같은 프로세스인지 확인한다.
 
 ### F-VR-07 Helper 요청 처리
@@ -632,7 +644,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
 - **세부 기능**
   1. 실행이 있으면 새 실행 요청은 같은 사용자에게 "사용 중", 다른 사용자에게 "권한 없음"이다. Windows는 Windows 세션으로 구분하고, 이 PC의 어느 계정이든 연결할 수 있다.
   2. OTP와 연결 해제는 현재 실행의 시도이고 같은 사용자일 때만 받는다.
-  3. 앱 연결이 끊기면 그 앱의 실행을 끝낸다. 정상 종료, 강제 종료, 크래시가 같은 경로다.
+  3. 앱 연결이 끊기면 그 앱의 실행을 끝내고, 그 앱만 원하던 예외 route를 지운다(F-BR-02). 정상 종료, 강제 종료, 크래시가 같은 경로다.
   4. macOS: 유휴 시 종료 요청에는 실행이 없을 때만 응하고 종료한다. 버전 확인과 이 요청의 모양은 빌드가 바뀌어도 바꾸지 않는다.
   5. macOS: 재설치로 실행 파일이 바뀌면 실행이 없을 때 종료하고, launchd가 다음 요청 때 새 Helper를 띄운다.
   6. SIGTERM이나 서비스 정지 요청을 받으면 실행을 끝내고 보고한 뒤 종료한다. Windows의 업그레이드와 제거는 앱을 닫고 서비스를 멈춘 뒤 파일을 바꾸거나 지운다. 업그레이드 뒤 새 Helper는 앱이 시작한다(F-WN-05).
@@ -683,7 +695,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   1. 남은 프로세스와 route의 정리(F-VR-06)가 끝났다고 entry가 알린 뒤에 XPC 연결을 받는다.
   2. 앱의 서명(Team ID + signing identifier)을 통과한 연결만 받고 버전 확인에 직접 답한다. 다른 요청은 내용을 보지 않고 entry에 넘긴다.
   3. 자기 실행 파일 교체를 감지해 entry에 알린다.
-  4. route 복구와 예외 route 읽기·쓰기(networksetup)를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다.
+  4. route 복구, entry가 요청한 예외 route 넣기·지우기와 주 네트워크 조회를 `/sbin/route`와 SCDynamicStore로 한다. 넣고 지운 뒤에는 routing table을 다시 조회해 확인한다. 터널 제어가 이를 기다리지 않게 따로 처리한다.
   5. 시스템 명령은 고정 argv, PATH만, shell 없이, 시간 제한을 두고 실행한다.
 - **제약**: Personal Team 서명이라 entitlement는 비워 두고, 번들 ID는 바꾸지 않는다.
 
@@ -727,7 +739,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   4. 사실만 알리고, 자리 비움 같은 판단은 Rust가 한다.
   5. 시간대는 IANA 이름으로 바꿔 알린다. 판단 코어가 IANA 시간대로 계산하기 때문이다.
   6. interface는 Windows가 보여 주는 어댑터 이름으로 부른다. 경로, 주소, 네트워크 변경 이벤트가 같은 이름을 써야 런타임이 맞춰 볼 수 있다.
-  7. persistent route가 바뀌었다는 알림이 없으므로, 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알린다(F-BR-02).
+  7. route가 사라져도 알림이 없으므로, 주소가 바뀔 때와 5분마다 네트워크 설정이 바뀌었다고 알린다(F-BR-02).
   8. Windows에서 로그아웃하거나 끌 때는 메뉴의 [종료]와 같이 종료를 요청한다. 설치 패키지가 업그레이드나 제거 때 앱을 닫으려고 보내는 요청도 같다(F-WN-04).
 
 ### F-WN-03 Helper OS 영역 (Windows)
@@ -741,7 +753,7 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   4. 연결 통로는 이 PC의 계정과 시스템이 열 수 있고(다른 컴퓨터의 연결은 받지 않는다), 시스템 계정이 소유한다. 버전 확인에 직접 답하고, 앱이 함께 보낸 빌드가 같은 연결에서만 연결·OTP·예외 route 요청을 처리한다.
   5. 유휴 시 종료 요청에는 끝나지 않는다고 답한다. Windows는 끝난 서비스를 다시 띄우지 않고, 업그레이드는 앱과 Helper를 함께 바꾼 뒤 다시 연 앱이 새 Helper를 시작하기 때문이다.
   6. VPN client를 끝낼 때는 그것이 띄운 프로세스까지 함께 끝낸다(F-VR-04). 남은 openconnect를 정리할 때도 같다(F-VR-06). 둘 다 process 모듈의 Windows 부분이 한다.
-  7. 예외 route 읽기·쓰기와 게이트웨이 host route 정리를 직접 한다. 터널 제어가 이를 기다리지 않게 따로 처리한다. 쓰기 직전에, 쓰기와 한 번에, 앱이 읽은 interface와 route가 그대로인지 확인하고, 그 interface의 gateway로 가는 올바른 대상이나 이미 있던 route만 쓴다.
+  7. entry가 요청한 예외 route 넣기·지우기와 주 interface 조회, 게이트웨이 host route 정리를 Windows API(IP Helper)로 직접 하고, 바꾼 뒤 다시 조회해 확인한다. 터널 제어가 이를 기다리지 않게 따로 처리한다. 넣기 전에 주 interface가 앱이 읽은 그대로인지 확인하고, 그 interface의 gateway로 가는 올바른 예외 대상만 넣는다.
   8. 시스템 명령은 고정 argv, 필요한 환경 변수만, shell 없이, 시간 제한을 두고 실행한다. 번역되는 출력은 해석하지 않는다.
   9. 실행 기록은 시스템과 관리자만 접근할 수 있는 곳에 둔다.
   10. 로그는 Windows 이벤트 로그에 쓴다. 로그 출처는 설치 패키지가 등록한다(F-WN-04).
@@ -761,11 +773,10 @@ Helper는 관리자 권한으로 VPN client를 실행하는 별도 프로세스�
   7. 새 MSI는 이전 버전을 바꾼다. 이전 버전은 같은 transaction 안에서 지우므로 설치가 실패하면 이전 버전이 돌아온다. 더 낮은 버전은 설치하지 않는다.
   8. 업그레이드와 제거는 실행 중인 앱을 닫는다. Windows 로그아웃 때처럼 종료를 요청하고(F-WN-02), 몇 초 뒤에도 남아 있으면 끝낸다. "사용 중인 파일" 창과 다시 시작 요청은 없다. 업그레이드 뒤 앱은 사용자가 다시 열 때까지 닫혀 있다. 로그인 시 열기가 켜져 있으면 다음 로그인 때 열린다.
   9. 제거는 실제 제거일 때만 다음을 한다. 업그레이드 중 이전 버전을 지울 때는 하지 않는다.
-     - 앱을 닫고, Helper를 멈추고 서비스를 지운다.
-     - 이 PC의 사용자마다, 그 사용자의 state.json에 앱이 쓴 것으로 기록된 예외 route만 지운다(F-BR-02). 밖에서 넣은 route는 건드리지 않는다.
+     - 앱을 닫고, Helper를 멈추고 서비스를 지운다. 앱이 끝나면서 예외 route를 지운다(F-BR-02).
      - 모든 사용자의 로그인 시 열기 등록을 지운다(F-SR-01).
      - Helper의 실행 기록 폴더, 설치한 파일, 시작 메뉴 바로 가기, 두 이벤트 로그 출처를 지운다.
-  10. 사용자마다의 config.yaml, state.json, 로그, 저장된 비밀값은 남긴다. 데이터를 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
+  10. 사용자마다의 config.yaml, state.json, 로그, 저장된 비밀값은 남긴다. 로그인 시 열기 등록을 읽을 수 없는 사용자는 로그에 남기고 건너뛴다. 그 때문에 제거가 실패하지는 않는다.
 - **제약**: 설치 패키지는 다른 설치 프로그램을 실행할 수 없어서 필요한 것을 모두 담는다. 화면 언어는 문서화되지 않은 Windows Installer 동작에 기대므로, 동작하지 않게 되면 영어 화면으로 설치된다(DESIGN §9).
 
 ### F-WN-05 앱 시작과 Helper 실행 (Windows)
