@@ -113,8 +113,7 @@ impl ConnectionManager {
         match &mut self.phase {
             Phase::Connecting(attempt) if attempt.stage == Stage::CheckingReadiness => {
                 if missing.is_empty() {
-                    let open = attempt.prepare_otp();
-                    self.effects.push(open);
+                    self.prepare_otp();
                 } else {
                     self.phase = Phase::SetupRequired(missing);
                 }

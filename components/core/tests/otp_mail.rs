@@ -441,3 +441,55 @@ fn the_gmail_junk_check_ignores_labels_but_not_the_window() {
         &[gmail("s", Some(3.2), Some("Hi"), spam)]
     ));
 }
+
+// MARK: The code of a stopped attempt
+
+/// An attempt stopped a second after its prompt; its code arrived 3.9 seconds before the next
+/// attempt's prompt, as on 2026-11-16.
+#[test]
+fn a_stopped_attempts_code_is_found_for_trashing_and_would_fit_the_next_prompt() {
+    let stopped_prompt = offset(-6.0);
+    let inbox = &["UNREAD", "INBOX"];
+
+    let stale = gmail("19a01", Some(-3.9), Some("AuthCode: 111111"), inbox);
+    let own = select_gmail(stopped_prompt, std::slice::from_ref(&stale), None).unwrap();
+    assert_eq!(own.code.0, "111111");
+    assert_eq!(own.all_candidate_ids, vec!["19a01"]);
+    // Stopped before its prompt, the search is anchored at when the credentials went out.
+    let credentials_sent_at = offset(-7.0);
+    assert_eq!(
+        select_gmail(credentials_sent_at, std::slice::from_ref(&stale), None)
+            .unwrap()
+            .code
+            .0,
+        "111111"
+    );
+    assert_eq!(
+        select_gmail(prompted_at(), std::slice::from_ref(&stale), None)
+            .unwrap()
+            .code
+            .0,
+        "111111"
+    );
+    let trashed = gmail("19a01", Some(-3.9), Some("AuthCode: 111111"), &["TRASH"]);
+    assert!(select_gmail(prompted_at(), std::slice::from_ref(&trashed), None).is_none());
+    assert_eq!(
+        select_gmail(prompted_at(), &[trashed, fresh_gmail("19a02")], None)
+            .unwrap()
+            .code
+            .0,
+        "482913"
+    );
+
+    // Over IMAP the trashed message leaves the archive the next session searches.
+    let stale = imap(700, -3.9, "AuthCode: 111111");
+    let own = select_imap(stopped_prompt, std::slice::from_ref(&stale)).unwrap();
+    assert_eq!(own.code.0, "111111");
+    assert_eq!(own.all_candidate_uids, vec![700]);
+    assert_eq!(
+        select_imap(prompted_at(), std::slice::from_ref(&stale))
+            .unwrap()
+            .uid,
+        700
+    );
+}

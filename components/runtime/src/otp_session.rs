@@ -3,7 +3,9 @@
 //! method and the Google account is connected, IMAP otherwise. When the API is refused before the
 //! session is ready and an app password exists, the same attempt goes on over IMAP. After the code
 //! was submitted, the used mail go to the trash; a session closed after the OTP time limit
-//! looks in the spam folder once. Also the Account pane's Gmail test.
+//! looks in the spam folder once. When the attempt ended after its credentials went out with no
+//! code submitted, the session can go on looking for its code and trash its mail when it comes.
+//! Also the Account pane's Gmail test.
 
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime};
@@ -51,6 +53,11 @@ enum Control {
     Search(SystemTime),
     /// The code was submitted: trash the used mail and end.
     Finish,
+    /// The attempt ended with no code submitted: search as after a prompt at `since` unless one
+    /// came, and once the code is found, finish without reporting it.
+    TrashStale {
+        since: SystemTime,
+    },
     Close {
         check_spam: bool,
     },
@@ -62,6 +69,9 @@ enum Report {
     Failed { failure: OtpFailure, reason: String },
     CodeFound { code: SecretText, note: String },
     FoundInSpam,
+    StaleCodeTrashed,
+    StaleCodeNotTrashed { reason: String },
+    SpamCheckFailed { reason: String },
 }
 
 struct Session {
@@ -245,6 +255,17 @@ impl Runtime {
                 self.note(note);
             }
             Report::FoundInSpam => self.feed(connection::Input::OtpFoundInSpam(attempt)),
+            Report::StaleCodeTrashed => self.feed(connection::Input::StaleOtpTrashed(attempt)),
+            Report::StaleCodeNotTrashed { reason } => {
+                self.note(format!(
+                    "‹the stopped attempt's OTP email was not trashed: {reason}›"
+                ));
+            }
+            Report::SpamCheckFailed { reason } => self.system_log(
+                LogLevel::Notice,
+                LogCategory::Otp,
+                format!("Gmail spam folder check failed: {reason}"),
+            ),
         }
     }
 
@@ -271,6 +292,13 @@ impl Runtime {
     pub(crate) fn close_otp_session(&mut self, attempt: &AttemptId, check_spam: bool) {
         if let Some(session) = self.session_for(attempt) {
             let _ = session.control.send(Control::Close { check_spam });
+        }
+    }
+
+    /// After the attempt ended with its credentials sent and no code submitted.
+    pub(crate) fn trash_stale_otp(&mut self, attempt: &AttemptId, since: SystemTime) {
+        if let Some(session) = self.session_for(attempt) {
+            let _ = session.control.send(Control::TrashStale { since });
         }
     }
 
@@ -528,27 +556,40 @@ async fn api_session(
     report(Report::Ready);
     let mut prompted_at = None;
     let mut selection: Option<otp_mail::GmailSelection> = None;
+    let mut trashing_stale = false;
     let mut seen: HashSet<String> = HashSet::new();
     let mut pending: Vec<MessageRef> = Vec::new();
     let mut messages: Vec<MessageMetadata> = Vec::new();
     let mut polls = 0u32;
     let mut failures = 0u32;
+    // A control that came while waiting for the next poll.
+    let mut received = None;
     let ending = loop {
-        // Before the prompt, and after a match, nothing is to be done until the next control.
-        if prompted_at.is_none() || selection.is_some() {
-            match controls.recv().await {
-                Some(Control::Search(at)) => {
-                    prompted_at.get_or_insert(at);
-                    continue;
-                }
-                Some(ending) => break Some(ending),
-                None => break None,
-            }
+        if trashing_stale && selection.is_some() {
+            break Some(Control::Finish);
         }
-        match controls.try_recv() {
-            Ok(Control::Search(_)) | Err(mpsc::error::TryRecvError::Empty) => {}
-            Ok(ending) => break Some(ending),
-            Err(mpsc::error::TryRecvError::Disconnected) => break None,
+        let control = match received.take() {
+            Some(control) => Some(control),
+            // Before the prompt, and after a match, nothing is to be done until the next control.
+            None if prompted_at.is_none() || selection.is_some() => Some(controls.recv().await),
+            None => match controls.try_recv() {
+                Ok(control) => Some(Some(control)),
+                Err(mpsc::error::TryRecvError::Empty) => None,
+                Err(mpsc::error::TryRecvError::Disconnected) => Some(None),
+            },
+        };
+        match control {
+            Some(Some(Control::Search(at))) => {
+                prompted_at.get_or_insert(at);
+                continue;
+            }
+            Some(Some(Control::TrashStale { since })) => {
+                prompted_at.get_or_insert(since);
+                trashing_stale = true;
+                continue;
+            }
+            Some(ending) => break ending,
+            None => {}
         }
         let poll_started = Instant::now();
         polls += 1;
@@ -587,34 +628,46 @@ async fn api_session(
             .is_none()
             .then(|| started_at - otp_mail::ARRIVAL_TOLERANCE);
         if let Some(found) = otp_mail::select_gmail(prompted, &messages, not_before) {
-            let note = api_timing_note(prompted, found.arrived_at, polls);
-            report(Report::CodeFound {
-                code: found.code.clone(),
-                note,
-            });
+            if !trashing_stale {
+                let note = api_timing_note(prompted, found.arrived_at, polls);
+                report(Report::CodeFound {
+                    code: found.code.clone(),
+                    note,
+                });
+            }
             selection = Some(found);
             continue;
         }
         let remaining = POLL_INTERVAL.saturating_sub(poll_started.elapsed());
         tokio::select! {
-            control = controls.recv() => match control {
-                Some(Control::Search(_)) => {}
-                Some(ending @ (Control::Finish | Control::Close { .. })) => break Some(ending),
-                None => break None,
-            },
+            control = controls.recv() => received = Some(control),
             () = tokio::time::sleep(remaining) => {}
         }
     };
     match ending {
         Some(Control::Finish) => {
+            let mut not_trashed = None;
             for id in selection
                 .map(|found| found.all_candidate_ids)
                 .unwrap_or_default()
             {
-                if let Some(request) = gmail_api::trash(&id) {
-                    let _ =
-                        api_call(&queue, &address, &request, gmail_api::trash_from_response).await;
+                let trashed = match gmail_api::trash(&id) {
+                    Some(request) => {
+                        api_call(&queue, &address, &request, gmail_api::trash_from_response)
+                            .await
+                            .map_err(|failure| failure.describe())
+                    }
+                    None => Err("a message ID unusable in a request".to_owned()),
+                };
+                if let Err(reason) = trashed {
+                    not_trashed.get_or_insert(reason);
                 }
+            }
+            if trashing_stale {
+                report(match not_trashed {
+                    None => Report::StaleCodeTrashed,
+                    Some(reason) => Report::StaleCodeNotTrashed { reason },
+                });
             }
         }
         Some(Control::Close { check_spam: true }) => {
@@ -846,13 +899,18 @@ async fn imap_session(
     let mut state = ImapState {
         prompted_at: None,
         selection: None,
+        trashing_stale: false,
         ending: None,
         searches: 0,
         notifications: 0,
     };
     match imap_watch(&address, &password, &mut controls, &report, &mut state).await {
         Ok((connection, mailboxes)) => {
-            let _ = imap_wrap_up(connection, &mailboxes, &state, &report).await;
+            if let Err(error) = imap_wrap_up(connection, &mailboxes, &state, &report).await {
+                report(Report::SpamCheckFailed {
+                    reason: error.describe(),
+                });
+            }
         }
         Err(error) => {
             if state.ending.is_none() && state.selection.is_none() {
@@ -873,6 +931,7 @@ async fn imap_session(
 struct ImapState {
     prompted_at: Option<SystemTime>,
     selection: Option<otp_mail::ImapSelection>,
+    trashing_stale: bool,
     ending: Option<Control>,
     searches: u32,
     notifications: u32,
@@ -905,6 +964,10 @@ async fn imap_watch(
                 Control::Search(at) => {
                     state.prompted_at.get_or_insert(at);
                 }
+                Control::TrashStale { since } => {
+                    state.prompted_at.get_or_insert(since);
+                    state.trashing_stale = true;
+                }
                 ending => {
                     state.ending = Some(ending);
                     return Ok((connection, mailboxes));
@@ -916,6 +979,10 @@ async fn imap_watch(
             state.searches += 1;
             imap_search(&mut connection, &snapshot, state, trigger, report).await?;
         }
+        if state.trashing_stale && state.selection.is_some() {
+            state.ending = Some(Control::Finish);
+            return Ok((connection, mailboxes));
+        }
         let searching = state.prompted_at.is_some() && state.selection.is_none();
         let period = if searching {
             IMAP_SEARCH_INTERVAL
@@ -926,6 +993,10 @@ async fn imap_watch(
         match interrupted {
             Some(Some(Control::Search(at))) => {
                 state.prompted_at.get_or_insert(at);
+            }
+            Some(Some(Control::TrashStale { since })) => {
+                state.prompted_at.get_or_insert(since);
+                state.trashing_stale = true;
             }
             Some(Some(ending)) => {
                 state.ending = Some(ending);
@@ -984,23 +1055,25 @@ async fn imap_search(
     let Some(selection) = otp_mail::select_imap(prompted_at, &messages) else {
         return Ok(());
     };
-    let rounded = |from: SystemTime, to: SystemTime| {
-        to.duration_since(from)
-            .unwrap_or_default()
-            .as_secs_f64()
-            .round() as u64
-    };
-    let note = format!(
-        "‹OTP mail: in Gmail {}s after the prompt · detected {}s after arrival ({trigger} · {} searches · {} IDLE notifications)›",
-        rounded(prompted_at, selection.arrived_at),
-        rounded(selection.arrived_at, SystemTime::now()),
-        state.searches,
-        state.notifications,
-    );
-    report(Report::CodeFound {
-        code: selection.code.clone(),
-        note,
-    });
+    if !state.trashing_stale {
+        let rounded = |from: SystemTime, to: SystemTime| {
+            to.duration_since(from)
+                .unwrap_or_default()
+                .as_secs_f64()
+                .round() as u64
+        };
+        let note = format!(
+            "‹OTP mail: in Gmail {}s after the prompt · detected {}s after arrival ({trigger} · {} searches · {} IDLE notifications)›",
+            rounded(prompted_at, selection.arrived_at),
+            rounded(selection.arrived_at, SystemTime::now()),
+            state.searches,
+            state.notifications,
+        );
+        report(Report::CodeFound {
+            code: selection.code.clone(),
+            note,
+        });
+    }
     state.selection = Some(selection);
     Ok(())
 }
@@ -1014,10 +1087,13 @@ async fn imap_wrap_up(
 ) -> Result<(), ImapError> {
     match &state.ending {
         Some(Control::Finish) => {
-            if let (Some(selection), Some(trash)) = (&state.selection, &mailboxes.trash)
-                && let Some(uids) = UidSet::new(selection.all_candidate_uids.clone())
-            {
-                let _ = connection
+            let uids = state
+                .selection
+                .as_ref()
+                .and_then(|selection| UidSet::new(selection.all_candidate_uids.clone()));
+            let moved = match (uids, &mailboxes.trash) {
+                (None, _) => Ok(Vec::new()),
+                (Some(uids), Some(trash)) => connection
                     .execute(
                         &Command::UidMove {
                             uids,
@@ -1025,7 +1101,15 @@ async fn imap_wrap_up(
                         },
                         deadline(),
                     )
-                    .await;
+                    .await
+                    .map_err(|rejection| ImapError::from(rejection).describe()),
+                (Some(_), None) => Err("Gmail listed no Trash mailbox".to_owned()),
+            };
+            if state.trashing_stale {
+                report(match moved {
+                    Ok(_) => Report::StaleCodeTrashed,
+                    Err(reason) => Report::StaleCodeNotTrashed { reason },
+                });
             }
         }
         Some(Control::Close { check_spam: true }) => {

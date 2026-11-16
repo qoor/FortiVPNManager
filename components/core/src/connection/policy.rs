@@ -8,6 +8,9 @@ use super::ConnectionSettings;
 pub(super) const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(150);
 /// From the OTP prompt to the code's submission.
 pub(super) const OTP_DEADLINE: Duration = Duration::from_secs(50);
+/// From the end of an attempt whose credentials went out with no code submitted: the longest the
+/// next login waits for its code email to be trashed.
+pub const STALE_OTP_WAIT: Duration = Duration::from_secs(20);
 /// The wait after the first counted authentication failure, and the least gap after any before a
 /// new attempt: FortiGate blocks the IP for a while after two failures.
 pub(super) const AUTH_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(90);

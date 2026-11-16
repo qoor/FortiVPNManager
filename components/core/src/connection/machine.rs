@@ -65,6 +65,8 @@ pub struct ConnectionManager {
     forced_retry_used: bool,
     /// The attempt whose failure the phase shows, for a late spam-folder finding.
     last_failure_attempt: Option<AttemptId>,
+    /// The code email the next login waits for.
+    stale_otp: Option<StaleOtp>,
     /// The account of the last run started: the run whose events are taken now. It differs from
     /// the settings' account when that changed during the run.
     pub(super) run_account: Option<VpnAccount>,
@@ -119,6 +121,11 @@ pub(super) enum Phase {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Stage {
     CheckingReadiness,
+    /// Readiness holds since `since`; an unused code email of an earlier attempt is not in the
+    /// trash yet.
+    WaitingForStaleOtp {
+        since: SystemTime,
+    },
     /// The OTP session takes its starting point.
     PreparingOtp,
     /// The run was asked for; its progress is the milestone.
@@ -131,8 +138,12 @@ pub(super) struct Attempt {
     pub(super) reason: AttemptReason,
     cert_retry_used: bool,
     started_at: SystemTime,
+    /// The attempt's time limit; the wait for an earlier attempt's code email does not count.
+    deadline: SystemTime,
     pub(super) stage: Stage,
     pub(super) milestone: Option<Milestone>,
+    /// When the credentials went out; the gateway sends the code email once it accepts them.
+    credentials_sent_at: Option<SystemTime>,
     otp_prompted_at: Option<SystemTime>,
     otp_submitted: bool,
     /// The OTP session is open and this attempt's; it closes itself after the submission.
@@ -147,21 +158,37 @@ pub(super) struct Attempt {
 }
 
 impl Attempt {
-    /// Readiness holds: the OTP session opens before the VPN client starts.
-    pub(super) fn prepare_otp(&mut self) -> Effect {
-        self.stage = Stage::PreparingOtp;
-        self.otp_session_open = true;
-        Effect::OpenOtpSession {
-            attempt: self.id.clone(),
+    /// Closes the session if it is open. Once the credentials went out and no code was used, the
+    /// gateway may have sent a code email that arrives late, within the next prompt's arrival
+    /// tolerance. With `search`, the session goes on looking for that email to trash it, from the
+    /// prompt or else from when the credentials went out (user decision 2026-11-16). The callers
+    /// turn it off on the app's quit and the Mac's sleep, at the OTP time limit and after a
+    /// rejected login.
+    fn close_otp_session(&mut self, check_spam: bool, search: bool) -> Option<Effect> {
+        if !mem::take(&mut self.otp_session_open) {
+            return None;
         }
-    }
-
-    fn close_otp_session(&mut self, check_spam: bool) -> Option<Effect> {
-        mem::take(&mut self.otp_session_open).then(|| Effect::CloseOtpSession {
-            attempt: self.id.clone(),
-            check_spam,
+        Some(match self.credentials_sent_at {
+            Some(sent_at) if search && self.milestone <= Some(Milestone::OtpPrompted) => {
+                Effect::TrashStaleOtp {
+                    attempt: self.id.clone(),
+                    since: self.otp_prompted_at.unwrap_or(sent_at),
+                }
+            }
+            _ => Effect::CloseOtpSession {
+                attempt: self.id.clone(),
+                check_spam,
+            },
         })
     }
+}
+
+/// The code email the gateway may have sent for an attempt that ended with no code submitted.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct StaleOtp {
+    attempt: AttemptId,
+    /// When the next login stops waiting for it.
+    until: SystemTime,
 }
 
 /// A tunnel that is up.
@@ -294,6 +321,7 @@ impl ConnectionManager {
             network_failure_streak: 0,
             forced_retry_used: false,
             last_failure_attempt: None,
+            stale_otp: None,
             run_account: None,
             timers: BTreeMap::new(),
             next_timer_generation: 0,
@@ -360,6 +388,7 @@ impl ConnectionManager {
             Input::OtpSessionFailed(attempt, failure) => self.otp_session_failed(&attempt, failure),
             Input::OtpCodeFound(attempt, code) => self.otp_code_found(&attempt, code),
             Input::OtpFoundInSpam(attempt) => self.otp_found_in_spam(&attempt),
+            Input::StaleOtpTrashed(attempt) => self.stale_otp_trashed(&attempt),
             Input::Helper(event) => self.helper_event(event),
             Input::RunRejected(attempt, code) => self.run_rejected(&attempt, code),
             Input::HelperConnectionLost => self.helper_connection_lost(),
@@ -402,7 +431,8 @@ impl ConnectionManager {
 
     fn finish(&mut self, marks: NoteMarks) -> Vec<Effect> {
         self.reconcile_timers();
-        let hold = !self.terminated && self.phase.holds_activity();
+        // A pending stale-code search keeps its polling and its time limit on time.
+        let hold = !self.terminated && (self.phase.holds_activity() || self.stale_otp.is_some());
         if hold != self.activity_held {
             self.activity_held = hold;
             self.effects.push(Effect::HoldActivity(hold));
@@ -470,10 +500,7 @@ impl ConnectionManager {
         }
         match &self.phase {
             Phase::Connecting(attempt) if attempt.stop_requested.is_none() => {
-                wanted.insert(
-                    TimerKind::AttemptDeadline,
-                    attempt.started_at + policy::ATTEMPT_TIMEOUT,
-                );
+                wanted.insert(TimerKind::AttemptDeadline, attempt.deadline);
                 if attempt.stage == Stage::Run
                     && !attempt.otp_submitted
                     && let Some(prompted) = attempt.otp_prompted_at
@@ -494,6 +521,9 @@ impl ConnectionManager {
                 wanted.insert(TimerKind::Retry, *until);
             }
             _ => {}
+        }
+        if let Some(stale) = &self.stale_otp {
+            wanted.insert(TimerKind::StaleOtp, stale.until);
         }
         if let Some(requested) = self.quit_requested_at {
             wanted.insert(TimerKind::QuitDeadline, requested + policy::QUIT_TIMEOUT);
@@ -782,6 +812,16 @@ impl ConnectionManager {
     }
 
     fn otp_session_failed(&mut self, id: &AttemptId, failure: OtpFailure) {
+        if self
+            .stale_otp
+            .as_ref()
+            .is_some_and(|stale| stale.attempt == *id)
+        {
+            // Nothing looks for the code email any more.
+            self.stale_otp = None;
+            self.stale_otp_wait_over(Note::StaleOtpSessionEnded);
+            return;
+        }
         let Phase::Connecting(attempt) = &mut self.phase else {
             return;
         };
@@ -806,7 +846,9 @@ impl ConnectionManager {
                     });
                 }
             }
-            Stage::CheckingReadiness => unreachable!("no OTP session before the readiness check"),
+            Stage::CheckingReadiness | Stage::WaitingForStaleOtp { .. } => {
+                unreachable!("no OTP session before it is prepared")
+            }
         }
     }
 
@@ -857,6 +899,75 @@ impl ConnectionManager {
         }
     }
 
+    /// Readiness holds: the OTP session opens before the VPN client starts, once an earlier
+    /// attempt's unused code email is in the trash or the wait for it is over.
+    pub(super) fn prepare_otp(&mut self) {
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("only an attempt prepares its OTP session");
+        };
+        if self
+            .stale_otp
+            .as_ref()
+            .is_some_and(|stale| self.now < stale.until)
+        {
+            attempt.stage = Stage::WaitingForStaleOtp { since: self.now };
+            self.effects.push(Effect::Note(Note::WaitingForStaleOtp));
+            return;
+        }
+        attempt.stage = Stage::PreparingOtp;
+        attempt.otp_session_open = true;
+        self.effects.push(Effect::OpenOtpSession {
+            attempt: attempt.id.clone(),
+        });
+    }
+
+    fn stale_otp_trashed(&mut self, id: &AttemptId) {
+        if self
+            .stale_otp
+            .as_ref()
+            .is_some_and(|stale| stale.attempt == *id)
+        {
+            self.stale_otp = None;
+            self.stale_otp_wait_over(Note::StaleOtpTrashed);
+        }
+    }
+
+    fn stale_otp_wait_ran_out(&mut self) {
+        let Some(stale) = self.stale_otp.take() else {
+            return;
+        };
+        self.effects.push(Effect::CloseOtpSession {
+            attempt: stale.attempt,
+            check_spam: false,
+        });
+        self.stale_otp_wait_over(Note::StaleOtpWaitRanOut);
+    }
+
+    /// The login waiting for the stale code goes on, its time limit moved by the wait.
+    fn stale_otp_wait_over(&mut self, note: Note) {
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            return;
+        };
+        let Stage::WaitingForStaleOtp { since } = attempt.stage else {
+            return;
+        };
+        attempt.deadline += elapsed(since, self.now);
+        self.effects.push(Effect::Note(note));
+        self.prepare_otp();
+    }
+
+    /// Hands over the close of an ended attempt's OTP session. A search for its unused code holds
+    /// the next login, which [`Self::prepare_otp`] decides, until it ends or its time limit.
+    fn push_otp_close(&mut self, close: Option<Effect>) {
+        if let Some(Effect::TrashStaleOtp { attempt, .. }) = &close {
+            self.stale_otp = Some(StaleOtp {
+                attempt: attempt.clone(),
+                until: self.now + policy::STALE_OTP_WAIT,
+            });
+        }
+        self.effects.extend(close);
+    }
+
     // MARK: Helper
 
     fn helper_event(&mut self, event: HelperEvent) {
@@ -892,6 +1003,7 @@ impl ConnectionManager {
             // The certificate check passed and the credentials go out: this counts toward the
             // attempt limit.
             self.ledger.record_auth_attempt(self.now);
+            attempt.credentials_sent_at = Some(self.now);
         }
         match milestone {
             Milestone::TunnelUp => {
@@ -916,7 +1028,7 @@ impl ConnectionManager {
 
     fn enter_connected(&mut self, mut attempt: Attempt, tunnel_ip: Option<Ipv4Addr>) {
         // Still open only when the gateway asked for no OTP.
-        self.effects.extend(attempt.close_otp_session(false));
+        self.push_otp_close(attempt.close_otp_session(false, true));
         self.network_failure_streak = 0;
         self.phase = Phase::Connected(Session {
             attempt: attempt.id,
@@ -935,8 +1047,6 @@ impl ConnectionManager {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
                 self.learn_certificates(facts);
-                self.effects.extend(attempt.close_otp_session(false));
-                self.last_failure_attempt = Some(id.clone());
                 let outcome = classify(&ExitContext {
                     facts,
                     seen_milestone: attempt.milestone,
@@ -949,6 +1059,11 @@ impl ConnectionManager {
                     observed_up: None,
                     kills_show_as_signals: self.kills_show_as_signals,
                 });
+                // No code email follows a login the gateway rejected, and its counted failure keeps
+                // the next login 90 s away, past the prompt's arrival tolerance.
+                let search = outcome != Outcome::AuthFailure(Failure::AuthenticationRejected);
+                self.push_otp_close(attempt.close_otp_session(false, search));
+                self.last_failure_attempt = Some(id.clone());
                 self.apply(outcome);
             }
             Phase::Connected(session) if session.attempt == *id => {
@@ -987,7 +1102,7 @@ impl ConnectionManager {
     fn run_rejected(&mut self, id: &AttemptId, code: HelperErrorCode) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
-                self.effects.extend(attempt.close_otp_session(false));
+                self.push_otp_close(attempt.close_otp_session(false, true));
                 match (attempt.otp_failure, code) {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
                     (Some(OtpFailure::Network), _) => self.network_failure(),
@@ -1016,7 +1131,7 @@ impl ConnectionManager {
     fn helper_connection_lost(&mut self) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run => {
-                self.effects.extend(attempt.close_otp_session(false));
+                self.push_otp_close(attempt.close_otp_session(false, true));
                 if attempt.otp_failure == Some(OtpFailure::Authentication) {
                     self.fail(Failure::GmailRejected);
                 } else {
@@ -1090,6 +1205,7 @@ impl ConnectionManager {
         match timer.kind {
             TimerKind::AttemptDeadline => self.attempt_deadline_passed(),
             TimerKind::OtpDeadline => self.otp_deadline_passed(),
+            TimerKind::StaleOtp => self.stale_otp_wait_ran_out(),
             TimerKind::Retry => {
                 if let Phase::WaitingRetry { reason, .. } = self.phase {
                     self.begin_attempt(AttemptReason::Retry(reason), false, false);
@@ -1115,7 +1231,8 @@ impl ConnectionManager {
         }
         if attempt.stage != Stage::Run {
             // The readiness check or the Gmail login hung; nothing runs yet.
-            self.effects.extend(attempt.close_otp_session(false));
+            let close = attempt.close_otp_session(false, true);
+            self.push_otp_close(close);
             self.network_failure();
             return;
         }
@@ -1124,7 +1241,8 @@ impl ConnectionManager {
             attempt: attempt.id.clone(),
             reason: StopReason::AttemptTimeout,
         });
-        self.effects.extend(attempt.close_otp_session(false));
+        let close = attempt.close_otp_session(false, true);
+        self.push_otp_close(close);
     }
 
     fn otp_deadline_passed(&mut self) {
@@ -1143,7 +1261,9 @@ impl ConnectionManager {
             attempt: attempt.id.clone(),
             reason: StopReason::OtpTimeout,
         });
-        self.effects.extend(attempt.close_otp_session(true));
+        // The spam check tells at once whether the code went there; no search for it.
+        let close = attempt.close_otp_session(true, false);
+        self.push_otp_close(close);
     }
 
     fn proactive_reconnect_due(&mut self) {
@@ -1524,13 +1644,15 @@ impl ConnectionManager {
         }
 
         let id = self.next_attempt_id();
-        let mut attempt = Attempt {
+        let attempt = Attempt {
             id,
             reason,
             cert_retry_used,
             started_at: self.now,
+            deadline: self.now + policy::ATTEMPT_TIMEOUT,
             stage: Stage::CheckingReadiness,
             milestone: None,
+            credentials_sent_at: None,
             otp_prompted_at: None,
             otp_submitted: false,
             otp_session_open: false,
@@ -1540,13 +1662,12 @@ impl ConnectionManager {
             stop_requested: None,
             account: self.settings.account.clone(),
         };
+        self.phase = Phase::Connecting(Box::new(attempt));
         if readiness_verified {
-            let open = attempt.prepare_otp();
-            self.effects.push(open);
+            self.prepare_otp();
         } else {
             self.check_readiness();
         }
-        self.phase = Phase::Connecting(Box::new(attempt));
     }
 
     /// The seed with the attempt count in its last eight bytes.
@@ -1574,8 +1695,9 @@ impl ConnectionManager {
 
     /// Ends an attempt the app no longer wants: the user's, the sleep's or the quit's.
     fn abort_attempt(&mut self, mut attempt: Attempt, stop: StopReason, after: AfterStop) {
+        let search = !matches!(stop, StopReason::AppQuit | StopReason::Sleep);
         if attempt.stage != Stage::Run {
-            self.effects.extend(attempt.close_otp_session(false));
+            self.push_otp_close(attempt.close_otp_session(false, search));
             self.settle(after);
             return;
         }
@@ -1585,7 +1707,7 @@ impl ConnectionManager {
                 reason: stop,
             });
         }
-        self.effects.extend(attempt.close_otp_session(false));
+        self.push_otp_close(attempt.close_otp_session(false, search));
         self.phase = Phase::Disconnecting(Stop {
             attempt: attempt.id,
             after,

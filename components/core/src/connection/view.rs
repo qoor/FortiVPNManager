@@ -144,7 +144,9 @@ impl ConnectionManager {
                 },
                 progress: match (attempt.stage, attempt.milestone) {
                     (Stage::CheckingReadiness, _) => ConnectProgress::CheckingReadiness,
-                    (Stage::PreparingOtp, _) => ConnectProgress::ConnectingToGmail,
+                    (Stage::WaitingForStaleOtp { .. } | Stage::PreparingOtp, _) => {
+                        ConnectProgress::ConnectingToGmail
+                    }
                     (Stage::Run, None | Some(Milestone::Spawned)) => {
                         ConnectProgress::ContactingServer
                     }

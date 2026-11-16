@@ -5,6 +5,16 @@
 //! IMAP snapshot, or the Gmail history point) and no earlier than the OTP prompt, less a small
 //! tolerance; of several, the latest wins. Every message whose subject carries a code is trashed
 //! after the OTP is submitted, stale ones included, so the next attempt never picks an old code.
+//!
+//! The gateway sends the code email once it accepts the credentials. When an attempt ends after
+//! that with no code submitted (Disconnect, a network change, the attempt's time limit, the Helper's
+//! end), its session goes on looking for that code by the same rules, anchored at the prompt or,
+//! without one, at when the credentials went out, and trashes the messages as after a submission.
+//! A login that starts meanwhile waits for that, at most for the connection rules' limit.
+//! Otherwise the late code email can arrive within the next prompt's tolerance, and the gateway
+//! rejects the old code as an authentication failure (user decision 2026-11-16, after it
+//! happened). The connection rules leave out the app's quit, the Mac's sleep, a rejected login and
+//! the OTP time limit.
 
 mod header;
 

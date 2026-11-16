@@ -37,6 +37,7 @@ use crate::config::CertificateList;
 pub use certs::merge_trusted_certs;
 pub use ledger::{Failure, FailureLedger};
 pub use machine::ConnectionManager;
+pub use policy::STALE_OTP_WAIT;
 pub use readiness::{HelperFacts, ReadinessFacts};
 pub use schedule::Schedule;
 
@@ -201,6 +202,8 @@ pub enum Input {
     OtpCodeFound(AttemptId, SecretText),
     /// After [`Effect::CloseOtpSession`] with `check_spam`: the OTP email was in the spam folder.
     OtpFoundInSpam(AttemptId),
+    /// Answers [`Effect::TrashStaleOtp`]: the ended attempt's code email is in the trash.
+    StaleOtpTrashed(AttemptId),
 
     /// A milestone or the exit of a run, from the connection that carries the runs.
     Helper(HelperEvent),
@@ -269,11 +272,21 @@ pub enum Effect {
         attempt: AttemptId,
         prompted_at: SystemTime,
     },
-    /// Close the session of `attempt`. With `check_spam`, first look in the spam folder once and
-    /// answer [`Input::OtpFoundInSpam`] if the OTP email is there.
+    /// Close the session of `attempt`, which stops one looking for a stale code. With
+    /// `check_spam`, first look in the spam folder once and answer [`Input::OtpFoundInSpam`] if
+    /// the OTP email is there.
     CloseOtpSession {
         attempt: AttemptId,
         check_spam: bool,
+    },
+    /// `attempt` ended after its credentials went out with no code submitted. Look for its code as
+    /// after a prompt at `since` (the prompt, or else when the credentials went out); once its
+    /// email is found, move it and the session's other OTP emails to the trash, answer
+    /// [`Input::StaleOtpTrashed`] and close the session. A session that fails answers
+    /// [`Input::OtpSessionFailed`].
+    TrashStaleOtp {
+        attempt: AttemptId,
+        since: SystemTime,
     },
     /// Read the VPN password of `account` and ask the Helper to start the run
     /// ([`VpnAccount::run_request`]).
@@ -335,6 +348,8 @@ pub struct TimerId {
 pub enum TimerKind {
     AttemptDeadline,
     OtpDeadline,
+    /// The longest the next login waits for an earlier attempt's unused code email.
+    StaleOtp,
     Retry,
     ProactiveReconnect,
     QuitDeadline,
@@ -353,9 +368,10 @@ pub enum TimerKind {
 }
 
 impl TimerKind {
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 12] = [
         Self::AttemptDeadline,
         Self::OtpDeadline,
+        Self::StaleOtp,
         Self::Retry,
         Self::ProactiveReconnect,
         Self::QuitDeadline,
@@ -398,7 +414,8 @@ pub struct ProbeResult {
     pub client_running: Option<bool>,
 }
 
-/// Schedule decisions the Log pane shows, so that a quiet evening can be told from a failure.
+/// Decisions the Log pane shows: the schedule's, so that a quiet evening can be told from a
+/// failure, and the wait for a stopped attempt's OTP email.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Note {
     ScheduledHoursStarted,
@@ -408,4 +425,12 @@ pub enum Note {
     ReconnectsSuspended {
         away_minutes: u32,
     },
+    /// The login waits until an earlier attempt's unused code email is in the trash.
+    WaitingForStaleOtp,
+    /// That email is in the trash; the login goes on.
+    StaleOtpTrashed,
+    /// The session looking for it ended first; the login goes on.
+    StaleOtpSessionEnded,
+    /// It was not trashed within [`STALE_OTP_WAIT`]; the login goes on.
+    StaleOtpWaitRanOut,
 }

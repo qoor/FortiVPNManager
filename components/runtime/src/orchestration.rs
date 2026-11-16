@@ -351,6 +351,7 @@ impl Runtime {
                 attempt,
                 check_spam,
             } => self.close_otp_session(&attempt, check_spam),
+            Effect::TrashStaleOtp { attempt, since } => self.trash_stale_otp(&attempt, since),
             Effect::StartRun { attempt, account } => self.start_run(attempt, account),
             Effect::SubmitOtp { attempt, code } => {
                 // The used mail go to the trash once the code is with the Helper.
@@ -419,6 +420,19 @@ impl Runtime {
                     }
                     Note::ReconnectsSuspended { away_minutes } => format!(
                         "‹schedule: away for {away_minutes} min outside the scheduled hours, automatic reconnects stopped›"
+                    ),
+                    Note::WaitingForStaleOtp => {
+                        "‹waiting for the stopped attempt's OTP email before signing in again›".to_owned()
+                    }
+                    Note::StaleOtpTrashed => {
+                        "‹the stopped attempt's OTP email is in the trash, signing in again›".to_owned()
+                    }
+                    Note::StaleOtpSessionEnded => {
+                        "‹the stopped attempt's Gmail session ended before its OTP email was trashed, signing in again›".to_owned()
+                    }
+                    Note::StaleOtpWaitRanOut => format!(
+                        "‹the stopped attempt's OTP email was not trashed within {} s, signing in again›",
+                        connection::STALE_OTP_WAIT.as_secs()
                     ),
                 };
                 self.note(text);
