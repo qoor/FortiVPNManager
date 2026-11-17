@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 
+use fvm_common::os_api::{self, DadState, Family, Luid, Medium, Route};
 use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
 use fvm_contract::backend::RouteRepairOutcome;
 use fvm_contract::helper_internal::{
@@ -19,11 +20,10 @@ use fvm_contract::helper_internal::{
 use fvm_core::bypass_rules::{Ipv4Network, MAX_ENTRIES};
 
 use crate::Log;
-use crate::os_api::{self, DadState, Family, Luid, Medium, Route};
 
 /// The route metric New-NetRoute gives a route, which the exception routes had while the Helper
 /// wrote them with PowerShell.
-const BYPASS_ROUTE_METRIC: u32 = 256;
+pub(crate) const BYPASS_ROUTE_METRIC: u32 = 256;
 
 /// Removes the host routes to `gateway` through a router, as openconnect's route script adds it,
 /// and checks they are gone.
@@ -225,7 +225,7 @@ fn was_added(route: &Route, added: &AddedRoute) -> bool {
 }
 
 /// Whether `table` has `wanted`: the same destination, prefix, next hop and interface.
-fn has(table: &[Route], wanted: &Route) -> bool {
+pub(crate) fn has(table: &[Route], wanted: &Route) -> bool {
     table.iter().any(|route| {
         route.interface == wanted.interface
             && route.destination == wanted.destination
@@ -235,13 +235,13 @@ fn has(table: &[Route], wanted: &Route) -> bool {
 }
 
 /// The primary interface and the network the app sees on it.
-struct Primary {
-    luid: Luid,
-    network: BypassRoutesSnapshot,
+pub(crate) struct Primary {
+    pub(crate) luid: Luid,
+    pub(crate) network: BypassRoutesSnapshot,
 }
 
 /// The primary interface among the default routes of `table`.
-fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError> {
+pub(crate) fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError> {
     let unreadable = |failure: os_api::Error| {
         let message = format!("reading the primary interface failed: {failure}");
         log(LogLevel::Error, LogCategory::Routes, &message);

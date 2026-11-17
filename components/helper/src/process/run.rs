@@ -6,11 +6,13 @@
 //! logout request before it reports the exit. The run keeps the pidfile up to date and removes its
 //! files before it reports the exit.
 
+mod network;
+
 use std::io::{self, PipeReader, PipeWriter, Read, Write};
 use std::iter;
 use std::mem;
 use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
@@ -25,7 +27,7 @@ use fvm_contract::backend::{
     Backend, ClientExecutable, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome,
     SessionInputs, SessionLaunch,
 };
-use fvm_contract::helper_internal::{LogCategory, LogLevel};
+use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkOutcome};
 use zeroize::Zeroizing;
 
 use crate::process::lines::{LineAssembler, MAX_LINE_BYTES};
@@ -79,6 +81,10 @@ impl Run {
             },
         };
         let (inputs, received) = mpsc::channel();
+        let values_watch = launch
+            .script_runner
+            .is_some()
+            .then(|| network::values_watcher(&files, &inputs));
         let spawned = match os::spawn(launch) {
             Ok(spawned) => spawned,
             Err(errno) => {
@@ -112,6 +118,8 @@ impl Run {
             attempt: request.attempt_id.clone(),
             files,
             record: RunRecord::default(),
+            script_runner: launch.script_runner.clone(),
+            network: network::Network::new(values_watch),
             timing,
             on_report,
             inputs: inputs.clone(),
@@ -288,6 +296,9 @@ pub(crate) enum Input {
     RoutesRepaired(RouteRepairOutcome),
     /// The gateway's IPv4 address, if it has one.
     Gateway(Option<Ipv4Addr>),
+    NetworkChanged(NetworkOutcome),
+    ValuesWritten,
+    ScriptExited,
 }
 
 fn report_spawn_failure(
@@ -329,6 +340,8 @@ struct Watch<R> {
     files: RunFiles,
     /// What the pidfile holds once written.
     record: RunRecord,
+    script_runner: Option<PathBuf>,
+    network: network::Network,
     timing: Timing,
     on_report: R,
     /// For the route repair's answer.
@@ -384,6 +397,7 @@ enum Phase {
     },
     /// The client could not log out; waiting for its logout request.
     LoggingOut(ExitFacts),
+    RevertingNetwork(ExitFacts),
     RepairingRoutes(ExitFacts),
     Reported,
 }
@@ -469,6 +483,9 @@ impl<R: FnMut(Report)> Watch<R> {
             Input::LoggedOut(text) => self.logged_out(text),
             Input::RoutesRepaired(outcome) => self.routes_repaired(outcome),
             Input::Gateway(gateway) => self.gateway_resolved(gateway),
+            Input::NetworkChanged(outcome) => self.network_changed(outcome),
+            Input::ValuesWritten => self.values_written(),
+            Input::ScriptExited => self.script_exited(),
         }
     }
 
@@ -484,6 +501,7 @@ impl<R: FnMut(Report)> Watch<R> {
             self.stdout.lines.idle_deadline(),
             self.stderr.lines.idle_deadline(),
             draining,
+            self.network.deadline(),
         ]
         .into_iter()
         .flatten()
@@ -509,6 +527,7 @@ impl<R: FnMut(Report)> Watch<R> {
         if matches!(self.phase, Phase::Draining { deadline, .. } if deadline <= now) {
             self.drain_expired(inputs);
         }
+        self.network_deadlines_passed(now);
         if self.batch_deadline.is_some_and(|deadline| deadline <= now) {
             self.flush_batch();
         }
@@ -562,7 +581,12 @@ impl<R: FnMut(Report)> Watch<R> {
         }
         match finding {
             Some(Finding::Milestone(milestone)) => self.advance(milestone),
-            Some(Finding::TunnelIp(ip)) => self.tunnel_ip = Some(ip),
+            Some(Finding::TunnelIp(ip)) => {
+                self.tunnel_ip = Some(ip);
+                self.tunnel_configured();
+            }
+            Some(Finding::ScriptLeftRunning) => self.script_left_running(),
+            Some(Finding::GatewayRouteRequested) => self.gateway_route_requested(),
             Some(Finding::CertificateRejected(value)) => {
                 self.certificate_rejected_at.get_or_insert(self.furthest);
                 self.rejected_certificates.push(value);
@@ -723,12 +747,17 @@ impl<R: FnMut(Report)> Watch<R> {
         let Some(stage) = self.stage.take() else {
             return;
         };
-        self.meta(format!(
+        let text = format!(
             "‹watchdog: {} did not finish within {}›",
             stage.name,
             seconds(stage.limit)
-        ));
-        self.stop(StopReason::Watchdog);
+        );
+        if self.network.watching() {
+            self.network_setup_failed(text);
+        } else {
+            self.meta(text);
+            self.stop(StopReason::Watchdog);
+        }
     }
 
     /// Between the login run and the tunnel run only the reason is kept, so the tunnel run does not
@@ -786,6 +815,7 @@ impl<R: FnMut(Report)> Watch<R> {
         };
         self.stdin = None;
         self.password = None;
+        self.network.stop_watching();
         // The tunnel run's stage goes on from the login run's.
         if !self.tunnel_pending() {
             self.stage = None;
@@ -870,7 +900,7 @@ impl<R: FnMut(Report)> Watch<R> {
                     })
                     .expect("starting the process logout thread");
             }
-            _ => self.repair_routes_or_report(facts),
+            _ => self.revert_network_or_continue(facts),
         }
     }
 
@@ -892,6 +922,10 @@ impl<R: FnMut(Report)> Watch<R> {
         self.tunnel_started = true;
         self.forced = false;
         self.generation += 1;
+        self.script_runner = launch.script_runner.clone();
+        if launch.script_runner.is_some() {
+            self.watch_values();
+        }
         let spawned = match os::spawn(&launch) {
             Ok(spawned) => spawned,
             Err(errno) => {
@@ -994,7 +1028,7 @@ impl<R: FnMut(Report)> Watch<R> {
             unreachable!("the logout request answers only when sent")
         };
         self.meta(text);
-        self.repair_routes_or_report(facts);
+        self.revert_network_or_continue(facts);
     }
 
     fn repair_routes_or_report(&mut self, facts: ExitFacts) {

@@ -19,7 +19,7 @@ tunnel_wait=90
 # vpn_backend.log lines start with ISO-8601 local timestamps, so the first 19 characters compare as strings.
 tunnel_up_since() {
     awk -v start="$1" 'substr($0, 1, 19) > start &&
-        (/Tunnel is up and running\./ || / \[out\] FortiVPNManager: route script finished connecting$/) { up = 1; exit }
+        (/Tunnel is up and running\./ || / \[▸\] ‹network settings applied›$/) { up = 1; exit }
         END { exit !up }' "$vpn_log" 2>/dev/null
 }
 

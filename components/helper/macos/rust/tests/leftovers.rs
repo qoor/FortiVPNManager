@@ -64,6 +64,44 @@ fn routes_are_repaired_and_leftovers_removed_before_ready() {
 }
 
 #[test]
+fn recorded_network_changes_are_reverted_before_the_route_repair_and_ready() {
+    let changes = json!({
+        "dnsServiceID": "svc",
+        "routes": [{
+            "destination": {"address": GATEWAY, "prefixLength": 32},
+            "router": "192.0.2.1",
+            "serviceID": "ethernet",
+        }],
+    });
+    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
+    let scratch = left_behind(&record.to_string());
+    let values = scratch.run_directory().join("values");
+    DirBuilder::new().mode(0o700).create(&values).unwrap();
+    fs::write(values.join("values.7"), "reason=connect\0").unwrap();
+    fs::write(values.join("values.8.tmp"), "reason=").unwrap();
+    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+
+    let first = swift.receive_within(Duration::from_secs(10));
+    assert_eq!(
+        first,
+        Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
+    );
+    let before_answer = swift.received_within(Duration::from_millis(300));
+    assert!(before_answer.is_empty(), "{before_answer:#?}");
+    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    swift.wait_until("the route repair", |swift| {
+        swift.position(is("repairRoutes")).is_some()
+    });
+    assert!(swift.has_log(
+        "notice routes: reverted the network settings an unfinished run left (0 of 1 route(s) still in place)"
+    ));
+    swift.send(json!({"routesRepaired": {"outcome": "notNeeded"}}));
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert_eq!(swift.scratch.run_directory_names(), ["unrelated", "values"]);
+    assert_eq!(fs::read_dir(&values).unwrap().count(), 0);
+}
+
+#[test]
 fn an_unreadable_pidfile_still_leads_to_a_route_repair() {
     let mut swift = Swift::launch(left_behind("not JSON"), Setup::fixture("success"));
     swift.wait_until("the route repair", |swift| {

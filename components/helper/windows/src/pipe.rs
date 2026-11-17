@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode};
 use fvm_contract::helper_internal::{
-    AppRequest, BypassRoutesChange, FromEntry, LogCategory, LogLevel, ToEntry,
+    AppRequest, BypassRoutesChange, FromEntry, LogCategory, LogLevel, NetworkChange, ToEntry,
 };
 use fvm_contract::helper_pipe::{MAX_MESSAGE_BYTES, PipeMessage, PipeRequest};
 use fvm_contract::stream;
@@ -31,7 +31,7 @@ use interprocess::os::windows::security_descriptor::SecurityDescriptor;
 use widestring::U16CString;
 use zeroize::Zeroizing;
 
-use crate::{BUILD, Log, routes};
+use crate::{BUILD, Log, network, routes};
 
 /// How long a connection whose accept failed waits before the next accept, so a failing pipe
 /// cannot spin.
@@ -163,8 +163,12 @@ struct Relay {
     log: Log,
     state: Mutex<State>,
     exits: Sender<Exit>,
-    /// The entry's exception-route changes, carried out one at a time.
-    route_changes: Sender<BypassRoutesChange>,
+    route_changes: Sender<RouteChange>,
+}
+
+enum RouteChange {
+    BypassRoutes(BypassRoutesChange),
+    Network(NetworkChange),
 }
 
 #[derive(Default)]
@@ -262,7 +266,12 @@ impl Relay {
             }
             FromEntry::ChangeBypassRoutes { change } => {
                 self.route_changes
-                    .send(change.clone())
+                    .send(RouteChange::BypassRoutes(change.clone()))
+                    .expect("the route thread runs as long as the Helper");
+            }
+            FromEntry::ChangeNetwork { change } => {
+                self.route_changes
+                    .send(RouteChange::Network(change.clone()))
                     .expect("the route thread runs as long as the Helper");
             }
             FromEntry::ExitAfterDraining {} => {
@@ -533,13 +542,17 @@ impl Relay {
         self.forward(app, id, request, true);
     }
 
-    /// Changes the routing table as the entry asks, one change at a time, apart from the entry, so
-    /// tunnel control never waits behind it.
-    fn serve_routes(&self, changes: Receiver<BypassRoutesChange>) {
+    fn serve_routes(&self, changes: Receiver<RouteChange>) {
         for change in changes {
-            let outcome = routes::change_bypass_routes(&change, &self.log);
-            self.inbox()
-                .deliver(ToEntry::BypassRoutesChanged { outcome });
+            let message = match change {
+                RouteChange::BypassRoutes(change) => ToEntry::BypassRoutesChanged {
+                    outcome: routes::change_bypass_routes(&change, &self.log),
+                },
+                RouteChange::Network(change) => ToEntry::NetworkChanged {
+                    outcome: network::change(&change, &self.log),
+                },
+            };
+            self.inbox().deliver(message);
         }
     }
 }

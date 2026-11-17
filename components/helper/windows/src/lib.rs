@@ -4,7 +4,7 @@
 //! answers the build check, repairs routes and changes the exception routes as the entry asks.
 #![cfg(windows)]
 
-pub mod os_api;
+mod network;
 mod pipe;
 mod routes;
 mod service;

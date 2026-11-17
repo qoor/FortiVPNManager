@@ -23,10 +23,10 @@ paths:
 - pppd만 끝내도 openfortivpn은 signal 없이 스스로 종료
 
 ## openconnect
-- route 스크립트
+- 스크립트
   - 끝날 때까지 VPN 통신 불가
   - 스크립트 완료 출력 부재
-  - 종료 시 서버가 준 제외 대역과 목적지·mask가 같은 route 삭제(앱의 예외 route 포함)
+  - "Configured as" 출력 뒤 실행
 - 끊김 감지
   - 어댑터가 꺼지면 즉시 감지
   - 게이트웨이와의 통신만 끊기면 약 20초 뒤 감지
@@ -37,16 +37,16 @@ paths:
   - 세션 정보 요청 응답으로 판단 가능: 터널이 열린 세션 403, 끝난 세션 302
 
 ### macOS
-- route 스크립트
+- 스크립트
   - 시간 제한 없이 대기
   - 스크립트 출력의 openconnect 출력 포함
 
 ### Windows
-- route 스크립트
+- 스크립트
   - 10초가 지나면 스크립트를 둔 채 진행
   - 스크립트 출력의 openconnect 출력 미포함
 - 종료 이벤트
-  - Ctrl+C, console 닫힘, logoff, shutdown: logout과 route 복원 후 종료
+  - Ctrl+C, console 닫힘, logoff, shutdown: logout 후 종료
   - Ctrl+Break: logout 없이 세션을 남긴 채 종료
 - 강제 종료
   - 터널 어댑터의 숨은 상태 잔류, 다음 실행 시 삭제

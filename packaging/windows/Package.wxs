@@ -51,6 +51,10 @@
     <Files Directory="OpenConnectFolder" Include="$(sys.SOURCEFILEDIR)OpenConnect-licenses\**" />
 
     <Component Directory="AppFolder">
+      <File Source="$(sys.SOURCEFILEDIR)vpnc-values.js" />
+    </Component>
+
+    <Component Directory="AppFolder">
       <File Source="$(var.AppFolder)\FortiVPNManager.exe">
         <Shortcut Name="FortiVPNManager" Directory="ProgramMenuFolder" WorkingDirectory="AppFolder" Advertise="no" />
       </File>

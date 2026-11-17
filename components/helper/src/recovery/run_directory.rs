@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 
-use fvm_contract::helper_internal::AddedRoute;
+use fvm_contract::helper_internal::{AddedRoute, OutsideChanges};
 use serde::{Deserialize, Serialize};
 
 use crate::process::os;
@@ -17,6 +17,8 @@ const RECORD: &str = "run.json";
 /// Written in full, then renamed over the pidfile.
 const RECORD_DRAFT: &str = "run.json.tmp";
 const CONFIG_PREFIX: &str = "config.";
+const VALUES_DIRECTORY: &str = "values";
+const VALUES_PREFIX: &str = "values.";
 /// Apart from the pidfile, whose name earlier Helpers clean up as their own.
 const BYPASS_RECORD: &str = "exception-routes.json";
 const BYPASS_RECORD_DRAFT: &str = "exception-routes.json.tmp";
@@ -30,6 +32,12 @@ pub(crate) struct RunRecord {
     /// For removing the client's host route to the gateway.
     #[serde(rename = "gatewayIP", default, skip_serializing_if = "Option::is_none")]
     pub gateway: Option<Ipv4Addr>,
+    #[serde(
+        rename = "outsideChanges",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub outside_changes: Option<OutsideChanges>,
 }
 
 /// A process told apart by pid, start time and executable path: a pid can be reused, so only a
@@ -71,18 +79,26 @@ impl fmt::Display for Failure {
     }
 }
 
-/// Where one run keeps its files: its config file, if its launch has one, and the pidfile.
+/// Where one run keeps its files: its config file, if its launch has one, its value file, if its
+/// client writes one, and the pidfile.
 pub(crate) struct RunFiles {
     pub directory: PathBuf,
     pub config: PathBuf,
+    pub values_directory: PathBuf,
+    pub values: PathBuf,
+    values_draft: PathBuf,
 }
 
 impl RunFiles {
     /// The files of run number `run`.
     pub fn new(directory: &Path, run: u64) -> Self {
+        let values_directory = directory.join(VALUES_DIRECTORY);
         Self {
             directory: directory.to_owned(),
             config: directory.join(format!("{CONFIG_PREFIX}{run}")),
+            values: values_directory.join(format!("{VALUES_PREFIX}{run}")),
+            values_draft: values_directory.join(format!("{VALUES_PREFIX}{run}.tmp")),
+            values_directory,
         }
     }
 
@@ -104,12 +120,17 @@ impl RunFiles {
         replace(&self.directory, RECORD, RECORD_DRAFT, &json)
     }
 
-    /// Deletes both once the run is over. The errors are lines for the Helper's log.
+    /// Deletes them once the run is over. The errors are lines for the Helper's log.
     pub fn remove(&self) -> Vec<String> {
-        [self.config.clone(), record_path(&self.directory)]
-            .iter()
-            .filter_map(|path| remove(path).err())
-            .collect()
+        [
+            self.config.clone(),
+            self.values.clone(),
+            self.values_draft.clone(),
+            record_path(&self.directory),
+        ]
+        .iter()
+        .filter_map(|path| remove(path).err())
+        .collect()
     }
 }
 
@@ -185,13 +206,12 @@ pub(crate) fn read_record(directory: &Path) -> Option<Result<RunRecord, serde_js
     Some(serde_json::from_slice(&bytes))
 }
 
-/// Config files and pidfiles, finished or not, and unfinished exception route records that an
-/// earlier Helper left.
+/// Config files, value files and pidfiles, finished or not, and unfinished exception route records
+/// that an earlier Helper left.
 pub(crate) fn leftovers(directory: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return Vec::new();
-    };
-    entries
+    let run_files = fs::read_dir(directory)
+        .into_iter()
+        .flatten()
         .filter_map(|entry| {
             let name = entry.ok()?.file_name();
             let name = name.to_str()?;
@@ -199,8 +219,12 @@ pub(crate) fn leftovers(directory: &Path) -> Vec<PathBuf> {
                 || name.starts_with(RECORD)
                 || name == BYPASS_RECORD_DRAFT)
                 .then(|| directory.join(name))
-        })
-        .collect()
+        });
+    let value_files = fs::read_dir(directory.join(VALUES_DIRECTORY))
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| Some(entry.ok()?.path()));
+    run_files.chain(value_files).collect()
 }
 
 /// Deletes a file; one that is already gone is fine. The error is the line for the Helper's log.

@@ -196,6 +196,7 @@ impl ConnectionManager {
     fn wait_reason(&self, reason: RetryReason) -> WaitReason {
         match reason {
             RetryReason::Network => WaitReason::Network {},
+            RetryReason::NetworkSetupFailed => WaitReason::NetworkSetupFailed {},
             RetryReason::ServerSessionEnded => WaitReason::ServerEndedSession {},
             RetryReason::ForcedTermination => WaitReason::ForcedTermination {},
             RetryReason::AuthFailure(failure) => WaitReason::AuthFailure {

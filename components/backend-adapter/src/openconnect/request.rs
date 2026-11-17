@@ -3,15 +3,14 @@
 //! the session cookie go to stdin.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{ClientExecutable, LaunchSpec, SessionLaunch};
 
-use super::output::ROUTES_SET_UP;
-use super::platform::{CURL, NULL_DEVICE, ROUTE_SCRIPT, SYSTEM_VARIABLES};
+use super::platform::{self, CURL, NULL_DEVICE, SYSTEM_VARIABLES};
 use crate::values;
 
 // openfortivpn's limits, so that one config.yaml and one password work with both clients.
@@ -31,12 +30,15 @@ const PLACEHOLDER_PIN: &str = "pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 /// curl's whole wait for the gateway's answer to the logout request.
 const LOGOUT_SECONDS: &str = "10";
 
+pub(super) const VALUES_VARIABLE: &str = "FVM_VALUES_FILE";
+
 /// Three runs: the login, which prints the session cookie and exits; the tunnel run, which reads
 /// the cookie on stdin; and the logout request for when the Helper has to end the tunnel run by
 /// force.
 pub(super) fn launch_spec(
     client: &ClientExecutable,
     request: &RunRequest,
+    values_path: &Path,
 ) -> Result<LaunchSpec, String> {
     check(request)?;
     let pins: Vec<&str> = if request.trusted_certs.is_empty() {
@@ -61,38 +63,50 @@ pub(super) fn launch_spec(
     .chain(servercert.clone())
     .chain(["--authenticate".to_owned(), url.clone()])
     .collect();
+    let script = platform::script();
     // The gateway refuses a dropped session, so waiting to reconnect only hides the drop: with 0
     // openconnect gives up after its first attempt fails and the app logs in again.
     let tunnel = ["--protocol=fortinet".to_owned()]
         .into_iter()
         .chain(servercert)
-        .chain(ROUTE_SCRIPT.map(|script| format!("--script={}", script_command(script))))
+        .chain(
+            script
+                .as_ref()
+                .map(|(argument, _)| format!("--script={argument}")),
+        )
         .chain([
             "--reconnect-timeout=0".to_owned(),
             "--cookie-on-stdin".to_owned(),
             url,
         ])
         .collect();
-    let run = |args| LaunchSpec {
+    let values = values_path
+        .to_str()
+        .expect("the Helper's run directory has a UTF-8 path")
+        .to_owned();
+    let mut tunnel_env = env.clone();
+    tunnel_env.push((VALUES_VARIABLE.to_owned(), values));
+    let login = LaunchSpec {
         program: client.path.clone(),
-        args,
+        args: login,
         env: env.clone(),
         config_file: None,
         session: None,
+        script_runner: None,
+    };
+    let tunnel = LaunchSpec {
+        args: tunnel,
+        env: tunnel_env,
+        script_runner: script.map(|(_, runner)| runner),
+        ..login.clone()
     };
     Ok(LaunchSpec {
         session: Some(Box::new(SessionLaunch {
-            tunnel: run(tunnel),
-            logout: logout(request, &pins, env.clone()),
+            tunnel,
+            logout: logout(request, &pins, env),
         })),
-        ..run(login)
+        ..login
     })
-}
-
-fn script_command(script: &str) -> String {
-    format!(
-        "{script}; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo '{ROUTES_SET_UP}'; fi; exit $code"
-    )
 }
 
 /// What openconnect itself sends when it logs out. curl checks the gateway's public key against the
@@ -133,6 +147,7 @@ fn logout(request: &RunRequest, pins: &[&str], env: Vec<(String, String)>) -> La
         env,
         config_file: None,
         session: None,
+        script_runner: None,
     }
 }
 
@@ -269,50 +284,5 @@ fn base64_value(byte: u8) -> Option<u8> {
         b'+' => Some(62),
         b'/' => Some(63),
         _ => None,
-    }
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use std::process::{self, Command};
-
-    use super::*;
-
-    #[test]
-    fn the_script_command_reports_only_a_successful_connect_and_keeps_the_status() {
-        let directory = env::temp_dir().join(format!("fvm-script-command-{}", process::id()));
-        let _ = fs::remove_dir_all(&directory);
-        fs::create_dir(&directory).unwrap();
-        for code in [0, 3] {
-            let script = directory.join(format!("vpnc-script-{code}"));
-            fs::write(
-                &script,
-                format!("#!/bin/sh\necho \"script $reason\"\nexit {code}\n"),
-            )
-            .unwrap();
-            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-            for reason in ["pre-init", "connect", "disconnect"] {
-                let output = Command::new("/bin/sh")
-                    .arg("-c")
-                    .arg(script_command(script.to_str().unwrap()))
-                    .env_clear()
-                    .env("reason", reason)
-                    .output()
-                    .unwrap();
-                let mut expected = format!("script {reason}\n");
-                if reason == "connect" && code == 0 {
-                    expected.push_str(&format!("{ROUTES_SET_UP}\n"));
-                }
-                assert_eq!(
-                    String::from_utf8_lossy(&output.stdout),
-                    expected,
-                    "{reason} {code}"
-                );
-                assert_eq!(output.status.code(), Some(code), "{reason} {code}");
-            }
-        }
-        fs::remove_dir_all(&directory).unwrap();
     }
 }

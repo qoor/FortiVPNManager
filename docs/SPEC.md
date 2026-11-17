@@ -48,7 +48,7 @@
 | Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 세 모듈 사용, 서비스 수명, 앱 연결 확인, route 정리, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | openfortivpn | Helper가 실행 | macOS에서 고를 수 있는 VPN client와 pppd |
-| openconnect | Helper가 실행 | Windows와 macOS(기본)의 VPN client, route 설정 스크립트, 앱과 함께 설치 |
+| openconnect | Helper가 실행 | Windows와 macOS(기본)의 VPN client, VPN 터널 정보 스크립트, 앱과 함께 설치 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
 | config.yaml · state.json · 로그 파일 | 사용자 디스크 | 설정, 기기별 상태, 실행 로그 |
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
@@ -109,16 +109,16 @@
   - 프로세스 실행, stdin 입력, 출력 줄 조립
   - 단계별 시간 제한, 종료, logout, 종료 사실 기록
   - Windows Helper 시작 시 시간 제한 없는 client 확인 1회
+  - 네트워크 설정 적용·원복 요청(적용 실패 시 재시도)
 - 제공 기능: 3.7 VPN 실행
 
 ## 2.6 recovery 모듈
 - 설명: Helper 비정상 종료 대비 실행·예외 route 기록, 다음 Helper 시작 시 그 기록으로 정리
   - VPN client 관련 처리: process 모듈이 넘긴 backend adapter에 위임
 - 역할
-  - 실행 기록(실행 중 client와 그 하위 프로세스, 게이트웨이), 예외 route 기록(Helper가 넣고 아직 지우지 않은 route)
-  - 이전 Helper가 남긴 프로세스 정리, 남은 파일 삭제
-  - route 복구 요청: 이전 Helper의 실행, route를 되돌리지 않고 끝난 실행
-  - 이전 Helper가 남긴 예외 route 삭제 요청
+  - 실행 기록, 예외 route 기록
+  - 이전 Helper가 남긴 프로세스 정리
+  - 이전 실행이 남긴 route·네트워크 설정·예외 route 복구 요청
 - 제공 기능: 3.5 예외 규칙, 4.7 사용자 시스템
 
 ## 2.7 entry 모듈
@@ -151,7 +151,8 @@
 - 역할
   - 앱 연결 접수와 서명 확인, Helper 실행 관리와 자가 업데이트
   - route 복구, entry 요청에 따른 예외 route 추가·삭제와 주 네트워크 조회
-- 제공 기능: 3.8 macOS
+  - 터널 네트워크 설정 적용·원복
+- 제공 기능: 3.7 VPN 실행, 3.8 macOS
 
 ## 2.11 UI (Windows)
 - 설명: UI (macOS)와 같은 역할의 Windows 구현
@@ -176,6 +177,7 @@
   - 서비스 수명(실행 중 알림 전 process 모듈의 VPN client 확인 포함), 앱 연결 접수·확인
   - process 모듈용 backend adapter(openconnect)와 실행 기록 폴더 선택
   - 게이트웨이 host route 정리, entry 요청에 따른 예외 route 추가·삭제와 주 interface 조회
+  - 터널 네트워크 설정 적용·원복
 - 제공 기능: 3.7 VPN 실행, 3.9 Windows
 
 ## 2.14 설치 패키지 (Windows)
@@ -230,12 +232,14 @@
 - 진행하지 못하는 연결: 단계별 시간 제한 후 종료
 - VPN client가 없거나 쓸 수 없으면 안내, 검증되지 않은 버전이면 고급 pane에 경고
 - macOS 앱 업데이트: 연결이 없을 때 새 Helper로 교체
+- openconnect 네트워크 설정: 서버가 준 값의 Helper 적용
 
 ## 3.8 macOS
 - 메뉴바 아이콘과 메뉴, 설정창(일반·계정·연결 관리·예외 규칙·고급·로그 pane), 사이드바와 설정 검색
 - 메뉴와 일반 pane의 [연결]·[연결 해제]·[지금 재연결]: 항상 표시, 쓸 수 없으면 흐리게
 - Helper 승인·버전 상태: 고급 pane에 안내
 - VPN client를 찾을 수 없을 때: openfortivpn은 설치 안내, openconnect는 앱 재설치 안내
+- openconnect DNS: 서버가 준 도메인만 VPN DNS로 조회, full tunnel이면 모든 조회에 사용
 
 ## 3.9 Windows
 - 알림 영역 아이콘(상태는 툴팁·메뉴), 클릭 시 메뉴, 더블클릭 시 설정창, 설정창은 macOS와 같은 pane·순서
@@ -268,6 +272,7 @@
 ## 4.3 파일 권한
 - config.yaml·state.json·로그 파일: macOS 0600(config.yaml이 0600이 아니면 경고), Windows 사용자 profile 기본 권한
 - openfortivpn 설정 파일: 0600, 비밀번호 미기록, 실행 종료 후 삭제
+- VPN 터널 정보 파일: 관리자(root·SYSTEM) 전용 폴더, Helper가 읽은 직후 삭제
 
 ## 4.4 config.yaml
 - 두 OS 공용 형식, 앱이 쓰는 설명 주석은 해당 OS 기준
@@ -291,6 +296,10 @@
 ## 4.7 사용자 시스템
 - 예외 route: 앱이 VPN을 켜 두려 하는 동안만 추가, 그 밖과 앱 종료 시 삭제, Helper가 넣은 것만 삭제
 - 이전 버전이 OS 설정에 저장한 예외 route: 읽기·삭제 없음
-- Helper 비정상 종료 뒤: 다음 시작 때 이전 실행이 남긴 VPN client 프로세스와 route 정리, 다른 프로세스 미변경
+- 터널 네트워크 설정: 실행 종료 시 Helper가 넣은 것만 원복
+- macOS DNS: Wi-Fi 등 저장된 네트워크 설정 미변경
+- Helper 비정상 종료 뒤 다음 시작 때 정리
+  - 대상: 이전 실행의 VPN client 프로세스, route, 네트워크 설정
+  - 다른 프로세스 미변경
 - 설정 가져오기 원본(openfortivpn 설정, FortiClient 연결): 읽기 전용
 - Windows 제거: 앱이 넣은 것 삭제, 사용자별 설정·상태·로그·비밀값 유지

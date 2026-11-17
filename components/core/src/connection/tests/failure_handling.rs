@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason, VpnClient};
 use fvm_contract::app_internal::ButtonState;
-use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus, FailureReason};
+use fvm_contract::app_internal::section::{
+    ConnectionIcon, ConnectionStatus, FailureReason, WaitReason,
+};
 
 use super::super::machine::{AttemptReason, Phase, RetryReason};
 use super::super::{Effect, Failure, Input, OtpFailure, TimerKind};
@@ -126,6 +128,37 @@ fn a_network_retry_delivered_slightly_early_starts_the_attempt() {
             .contains(&Effect::CheckReadiness)
     );
     assert_eq!(reason(&h), Some(retry(RetryReason::Network)));
+}
+
+#[test]
+fn network_setup_failures_back_off_like_network_errors_without_counting() {
+    let mut h = Harness::new();
+    h.launch();
+    for expected in [10.0, 20.0, 40.0] {
+        let id = h.start_tunnel();
+        h.run_milestones(&id, Milestone::Authenticated);
+        let effects =
+            h.exit(ended(Milestone::Authenticated).by_helper(StopReason::NetworkSetupFailed));
+        assert_eq!(
+            h.retry_wait(),
+            Some((h.now + secs(expected), RetryReason::NetworkSetupFailed))
+        );
+        assert_eq!(saved_ledger(&effects), None);
+        assert_eq!(
+            h.cm.connection_section().wait_reason,
+            Some(WaitReason::NetworkSetupFailed {})
+        );
+        h.fire(TimerKind::Retry);
+    }
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+    assert_eq!(h.cm.ledger.last_auth_failure, None);
+    h.start_tunnel();
+    h.exit(ended(Milestone::Spawned));
+    assert_eq!(
+        h.retry_wait(),
+        Some((h.now + secs(80.0), RetryReason::Network)),
+        "a network error goes on from the same backoff"
+    );
 }
 
 #[test]

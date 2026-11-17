@@ -114,6 +114,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.FailureReason.Helper), TypeInfoPropertyName = "FailureReasonHelper")]
 
 [JsonSerializable(typeof(AppInternal.WaitReason.Network), TypeInfoPropertyName = "WaitReasonNetwork")]
+[JsonSerializable(typeof(AppInternal.WaitReason.NetworkSetupFailed), TypeInfoPropertyName = "WaitReasonNetworkSetupFailed")]
 [JsonSerializable(typeof(AppInternal.WaitReason.ServerEndedSession), TypeInfoPropertyName = "WaitReasonServerEndedSession")]
 [JsonSerializable(typeof(AppInternal.WaitReason.ForcedTermination), TypeInfoPropertyName = "WaitReasonForcedTermination")]
 [JsonSerializable(typeof(AppInternal.WaitReason.AuthFailure), TypeInfoPropertyName = "WaitReasonAuthFailure")]

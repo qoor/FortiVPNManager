@@ -6,6 +6,7 @@
 //! and can log out when it has to end the tunnel by force.
 
 mod client;
+mod network;
 mod output;
 mod platform;
 mod request;
@@ -17,8 +18,8 @@ use fvm_contract::app_helper::RunRequest;
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
-    UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
+    OutputInterpreter, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -75,8 +76,13 @@ impl Backend for OpenConnect {
         client: &ClientExecutable,
         request: &RunRequest,
         _config_path: &Path,
+        values_path: &Path,
     ) -> Result<LaunchSpec, String> {
-        request::launch_spec(client, request)
+        request::launch_spec(client, request, values_path)
+    }
+
+    fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String> {
+        network::settings(values)
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {
@@ -87,8 +93,8 @@ impl Backend for OpenConnect {
         Box::new(Interpreter::default())
     }
 
-    /// Where the OS has a stop request (SIGTERM), openconnect logs out and its route script
-    /// restores the routes before it ends. Windows has none, so there it is killed at once.
+    /// Where the OS has a stop request (SIGTERM), openconnect logs out before it ends. Windows has
+    /// none, so there it is killed at once.
     fn stop_grace_period(&self) -> Duration {
         Duration::from_secs(10)
     }

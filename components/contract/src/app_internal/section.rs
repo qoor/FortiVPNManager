@@ -192,6 +192,7 @@ pub enum FailureReason {
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WaitReason {
     Network {},
+    NetworkSetupFailed {},
     ServerEndedSession {},
     ForcedTermination {},
     /// One authentication failure was counted; one more try follows.

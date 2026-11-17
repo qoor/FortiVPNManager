@@ -25,7 +25,8 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{ClientCheckWait, ClientProblemKind};
 use fvm_contract::helper_internal::{
-    AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, ToEntry,
+    AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
+    ToEntry,
 };
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
@@ -33,7 +34,7 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::process::{Report, Run, StartFailure, Watchdog};
 use crate::recovery::RouteRepair;
 
-use bypass_routes::BypassRoutes;
+use bypass_routes::{BypassRoutes, Job};
 
 /// How long exiting after the OS's termination request waits for the run to report its exit.
 /// Longer than the client's grace period, so a client that ignores the stop request is killed and
@@ -118,6 +119,36 @@ fn serve(watchdog: Watchdog, os: OsSide, sender: Sender<Event>, events: Receiver
 fn clean_up(watchdog: &Watchdog, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute> {
     watchdog.clean_up(
         |level, category, message| os.log(level, category, message),
+        |changes| {
+            let routes = changes.routes.len();
+            os.send(&FromEntry::ChangeNetwork {
+                change: NetworkChange::Revert { changes },
+            });
+            let Event::FromOs(ToEntry::NetworkChanged { outcome }) =
+                events.recv().expect("the entry holds a sender")
+            else {
+                panic!(
+                    "the OS side sent something other than the network revert's answer before ready"
+                );
+            };
+            let (level, message) = match outcome {
+                NetworkOutcome::Reverted { left } => (
+                    LogLevel::Notice,
+                    format!(
+                        "reverted the network settings an unfinished run left ({} of {routes} route(s) still in place)",
+                        left.len()
+                    ),
+                ),
+                NetworkOutcome::Failed { step, error, .. } => (
+                    LogLevel::Error,
+                    format!(
+                        "reverting the network settings an unfinished run left failed ({step:?}): {error}"
+                    ),
+                ),
+                other => panic!("the OS side answered a network revert with {other:?}"),
+            };
+            os.log(level, LogCategory::Routes, message);
+        },
         |gateway| {
             os.send(&FromEntry::RepairRoutes { gateway });
             let Event::FromOs(ToEntry::RoutesRepaired { outcome }) =
@@ -255,6 +286,7 @@ impl Entry {
             Event::FromOs(ToEntry::BypassRoutesChanged { outcome }) => {
                 self.bypass_routes_changed(outcome);
             }
+            Event::FromOs(ToEntry::NetworkChanged { outcome }) => self.network_changed(outcome),
             Event::Run(report) => self.run_report(report),
         }
     }
@@ -596,6 +628,7 @@ impl Entry {
                 self.route_repair = Some(repair);
                 self.os.send(&FromEntry::RepairRoutes { gateway });
             }
+            Report::ChangeNetwork(job) => self.queue_bypass_job(Job::Network(job)),
             Report::Log(level, category, message) => self.os.log(level, category, message),
         }
     }

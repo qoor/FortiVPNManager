@@ -33,6 +33,7 @@ pub(super) fn launch_spec(
         env: vec![("PATH".to_owned(), PATH.to_owned())],
         config_file: Some(config_file(request)),
         session: None,
+        script_runner: None,
     })
 }
 

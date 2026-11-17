@@ -19,12 +19,14 @@ use fvm_contract::app_helper::{
     VpnClient,
 };
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
-    RouteRepairOutcome, SessionLaunch, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
+    OutputInterpreter, RouteRepairOutcome, SessionLaunch, UntestedVersion,
 };
+use fvm_contract::helper_internal::{NetworkChange, NetworkOutcome};
 use fvm_helper_core::process::{Report, Run, Timing, Watchdog};
 
 const CMD: &str = r"C:\Windows\System32\cmd.exe";
+const CSCRIPT: &str = r"C:\Windows\System32\cscript.exe";
 const PASSWORD: &str = "Pa55 w#rd";
 const OTP: &str = "042137";
 const COOKIE: &str = "SVPNCOOKIE=Ab12Cd34Ef56";
@@ -45,15 +47,25 @@ echo COOKIE='SVPNCOOKIE=Ab12Cd34Ef56'\r
 echo HOST='203.0.113.10'\r
 ";
 
-/// Opens the tunnel with the session from stdin and stays up in a child process that holds its
-/// stderr, as a route script would.
+/// Opens the tunnel with the session from stdin, passes its network values through the value
+/// script and stays up in a child process that holds its stderr.
 const TUNNEL: &str = "@echo off\r
 set /p SESSION=\r
 >>\"%~1\" echo tunnel_cookie=%SESSION%\r
 echo Got Legacy IP address 10.10.0.5\r
 echo Configured as 10.10.0.5, with SSL disconnected and DTLS established\r
 >&2 echo Using Wintun device 'vpn', index 5\r
+set reason=connect\r
+set VPNGATEWAY=203.0.113.10\r
+set TUNDEV=vpn\r
+set TUNIDX=5\r
+set INTERNAL_IP4_ADDRESS=10.10.0.5\r
+set CISCO_DEF_DOMAIN=corp.example.com\r
+set CISCO_BANNER=사내 VPN\r
+C:\\Windows\\System32\\cscript.exe //nologo /e:JScript \"%VALUE_SCRIPT%\"\r
+>>\"%~1\" echo values_left=%ERRORLEVEL%\r
 ping -n 120 127.0.0.1 >nul\r
+ping -n 120 127.0.0.1 >nul 2>nul\r
 ";
 
 /// Answers like the adapter's curl request. Printing without a line break leaves error level 1,
@@ -67,6 +79,14 @@ exit /b 0\r
 
 /// openconnect as far as the watchdog can tell, but the client is the test's cmd script.
 struct Scripted(LaunchSpec);
+
+fn value_script() -> String {
+    env::current_dir()
+        .unwrap()
+        .join(r"..\..\packaging\windows\vpnc-values.js")
+        .display()
+        .to_string()
+}
 
 impl Backend for Scripted {
     fn client_name(&self) -> &'static str {
@@ -93,8 +113,22 @@ impl Backend for Scripted {
         _: &ClientExecutable,
         _: &RunRequest,
         _: &Path,
+        values_path: &Path,
     ) -> Result<LaunchSpec, String> {
-        Ok(self.0.clone())
+        let mut launch = self.0.clone();
+        if let Some(session) = launch.session.as_mut() {
+            let values = values_path.display().to_string();
+            session.tunnel.env.extend([
+                ("FVM_VALUES_FILE".to_owned(), values),
+                ("VALUE_SCRIPT".to_owned(), value_script()),
+            ]);
+            session.tunnel.script_runner = Some(PathBuf::from(CSCRIPT));
+        }
+        Ok(launch)
+    }
+
+    fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String> {
+        OpenConnect.network_settings(values)
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {
@@ -155,6 +189,7 @@ impl Scratch {
                 .collect(),
             config_file: None,
             session: None,
+            script_runner: None,
         }
     }
 
@@ -182,6 +217,10 @@ struct Session {
     lines: Vec<(OutputSource, String)>,
     milestones: Vec<Milestone>,
     exit: Option<ExitFacts>,
+    applied: Vec<NetworkSettings>,
+    applied_at: Vec<Instant>,
+    tunnel_up_at: Option<Instant>,
+    reverts: usize,
 }
 
 impl Session {
@@ -212,6 +251,10 @@ impl Session {
             lines: Vec::new(),
             milestones: Vec::new(),
             exit: None,
+            applied: Vec::new(),
+            applied_at: Vec::new(),
+            tunnel_up_at: None,
+            reverts: 0,
         }
     }
 
@@ -241,9 +284,33 @@ impl Session {
                     if milestone == Milestone::OtpPrompted {
                         self.run.submit_otp(OTP.to_owned()).unwrap();
                     }
+                    if milestone == Milestone::TunnelUp {
+                        self.tunnel_up_at = Some(Instant::now());
+                    }
                 }
                 Ok(Report::Event(HelperEventKind::Exited { facts })) => self.exit = Some(facts),
                 Ok(Report::RepairRoutes(repair)) => repair.finish(RouteRepairOutcome::NotNeeded),
+                Ok(Report::ChangeNetwork(job)) => {
+                    let outcome = match &job.change {
+                        NetworkChange::LookUp { .. } => NetworkOutcome::LookedUp {
+                            dns_service_id: "svc".to_owned(),
+                            missing: Vec::new(),
+                        },
+                        NetworkChange::Apply { settings, .. } => {
+                            self.applied.push((**settings).clone());
+                            self.applied_at.push(Instant::now());
+                            NetworkOutcome::Applied {
+                                added: Vec::new(),
+                                left: Vec::new(),
+                            }
+                        }
+                        NetworkChange::Revert { .. } => {
+                            self.reverts += 1;
+                            NetworkOutcome::Reverted { left: Vec::new() }
+                        }
+                    };
+                    job.finish(outcome);
+                }
                 Ok(Report::Log(..)) => {}
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => panic!("the run ended without an exit"),
@@ -283,6 +350,18 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         ]
     );
     assert_eq!(session.client_starts(), 2);
+    assert_eq!(session.applied.len(), 1);
+    let applied = &session.applied[0];
+    assert_eq!(
+        (applied.tunnel.name.as_str(), applied.tunnel.index),
+        ("vpn", Some(5))
+    );
+    assert_eq!(applied.default_domains, ["corp.example.com"]);
+    assert!(
+        session.has_text("‹network settings applied›"),
+        "{:#?}",
+        session.lines
+    );
     // One attempt: the client is named once, before the login run.
     let named: Vec<&str> = session
         .lines
@@ -296,6 +375,13 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
     assert_eq!(values["password"], PASSWORD);
     assert_eq!(values["otp"], OTP);
     assert_eq!(values["tunnel_cookie"], COOKIE);
+    assert_eq!(values["values_left"], "0");
+    assert_eq!(
+        fs::read_dir(scratch.run_directory().join("values"))
+            .unwrap()
+            .count(),
+        0
+    );
 
     session.run.stop(StopReason::UserDisconnect);
     let facts = session.wait_for_exit();
@@ -306,6 +392,7 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         }
     );
     assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
+    assert_eq!(session.reverts, 1);
     assert!(
         session.has_text("‹killed the process tree (reason: userDisconnect)›"),
         "{:#?}",
@@ -337,6 +424,62 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         "{:#?}",
         session.lines
     );
+}
+
+fn tunnel_with_a_sleeping_script(
+    scratch: &Scratch,
+    milliseconds: u32,
+    after_values: &str,
+) -> LaunchSpec {
+    fs::write(
+        scratch.0.join("sleep.js"),
+        format!("WScript.Sleep({milliseconds});\r\n"),
+    )
+    .unwrap();
+    let tunnel = TUNNEL
+        .replace(
+            "set reason=connect\r\n",
+            "start \"\" /b C:\\Windows\\System32\\cscript.exe //nologo /e:JScript \"%~dp0sleep.js\"\r\n\
+             set reason=connect\r\n",
+        )
+        .replace(
+            ">>\"%~1\" echo values_left=%ERRORLEVEL%\r\n",
+            &format!(">&2 echo {after_values}\r\n"),
+        );
+    let mut launch = scratch.launch("login", LOGIN);
+    launch.session = Some(Box::new(SessionLaunch {
+        tunnel: scratch.launch("tunnel", &tunnel),
+        logout: scratch.launch("logout", LOGOUT),
+    }));
+    launch
+}
+
+#[test]
+fn the_tunnel_is_up_only_once_every_script_runner_has_exited() {
+    let scratch = Scratch::new();
+    let launch = tunnel_with_a_sleeping_script(&scratch, 2500, "values written");
+    let mut session = Session::start(&scratch, launch);
+    session.wait(|session| session.milestones.contains(&Milestone::TunnelUp));
+    let waited = session.tunnel_up_at.unwrap() - session.applied_at[0];
+    assert!(waited >= Duration::from_secs(1), "{waited:?}");
+    session.run.stop(StopReason::UserDisconnect);
+    session.wait_for_exit();
+}
+
+#[test]
+fn a_script_the_client_left_running_does_not_hold_the_tunnel_back() {
+    let scratch = Scratch::new();
+    let launch = tunnel_with_a_sleeping_script(
+        &scratch,
+        60_000,
+        "Script did not complete within 10 seconds.",
+    );
+    let mut session = Session::start(&scratch, launch);
+    session.wait(|session| session.milestones.contains(&Milestone::TunnelUp));
+    let waited = session.tunnel_up_at.unwrap() - session.applied_at[0];
+    assert!(waited < Duration::from_secs(5), "{waited:?}");
+    session.run.stop(StopReason::UserDisconnect);
+    session.wait_for_exit();
 }
 
 #[test]

@@ -146,6 +146,7 @@ public static partial class AppInternal
         private WaitReason() { }
 
         public sealed record Network : WaitReason;
+        public sealed record NetworkSetupFailed : WaitReason;
         public sealed record ServerEndedSession : WaitReason;
         public sealed record ForcedTermination : WaitReason;
         public sealed record AuthFailure(FailureReason Reason) : WaitReason;

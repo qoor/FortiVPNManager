@@ -179,6 +179,7 @@ pub enum StopReason {
     Watchdog,
     /// The client asked again for the password or the OTP it was given: the gateway rejected it.
     PromptRepeated,
+    NetworkSetupFailed,
     HelperShutdown,
 }
 

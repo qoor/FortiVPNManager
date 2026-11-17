@@ -73,8 +73,10 @@ foreach (\$process in \$started) { \$process.WaitForExit() }
 foreach (\$test in \$tests) {
     Push-Location \$test.Dir
     \$output = & \$test.Exe 2>&1
-    if (\$LASTEXITCODE -ne 0) { \$failed++; \$output }
-    "{0}: {1}" -f \$test.Name, ((\$output | Select-String 'test result:') -join ' ')
+    \$code = \$LASTEXITCODE
+    \$result = \$output | Select-String 'test result:'
+    if (\$code -ne 0 -or -not \$result) { \$failed++; \$output }
+    if (\$result) { "{0}: {1}" -f \$test.Name, (\$result -join ' ') } else { "{0}: no test result" -f \$test.Name }
     Pop-Location
 }
 "windows tests: \$(\$tests.Count) programs, \$(\$started.Count) new, \$failed failed"

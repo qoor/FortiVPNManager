@@ -8,18 +8,27 @@ pub(super) const INSTALL_HINT: &str = "it comes with FortiVPNManager, so reinsta
 #[cfg(windows)]
 mod values {
     use std::fs;
+    use std::os::windows::io::AsHandle;
     use std::path::{Path, PathBuf};
+    use std::process::Child;
+    use std::time::Duration;
 
+    use fvm_common::os_api;
     use fvm_contract::backend::{ClientProblem, ClientProblemKind};
 
     /// The copy that ships in the app's folder; only administrators can change it.
     const CLIENT: &str = r"C:\Program Files\FortiVPNManager\OpenConnect\openconnect.exe";
-    pub(in super::super) const ROUTE_SCRIPT: Option<&str> = None;
+    pub(in super::super) fn script() -> Option<(String, PathBuf)> {
+        Some((
+            r"C:\Program Files\FortiVPNManager\vpnc-values.js".to_owned(),
+            PathBuf::from(r"C:\Windows\System32\cscript.exe"),
+        ))
+    }
     /// Windows' own curl, in System32, which only administrators can change.
     pub(in super::super) const CURL: &str = r"C:\Windows\System32\curl.exe";
     pub(in super::super) const NULL_DEVICE: &str = "NUL";
-    /// The Windows variables the client, its route script (vpnc-script-win.js, run by cscript and
-    /// cmd) and curl need, taken from the Helper's own environment. Proxy variables are left out.
+    /// The Windows variables the client, its route script (vpnc-values.js, run by cscript) and curl
+    /// need, taken from the Helper's own environment. Proxy variables are left out.
     pub(in super::super) const SYSTEM_VARIABLES: &[&str] = &[
         "SystemRoot",
         "SystemDrive",
@@ -51,33 +60,49 @@ mod values {
         path.to_str()
             .is_some_and(|path| path.eq_ignore_ascii_case(CLIENT))
     }
+
+    pub(in super::super) fn wait_for_exit(child: &Child, limit: Option<Duration>) -> bool {
+        os_api::wait_for_exit(child.as_handle(), limit)
+    }
 }
 
 #[cfg(target_os = "macos")]
 mod values {
     use std::path::{Path, PathBuf};
+    use std::process::Child;
+    use std::time::Duration;
 
+    use fvm_common::process_exit::ProcessExit;
     use fvm_contract::backend::ClientProblem;
 
+    use super::super::output::GATEWAY_ROUTE_REQUESTED;
+    use super::super::request::VALUES_VARIABLE;
     use crate::homebrew;
 
     const CLIENT: &str = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
-    pub(in super::super) const ROUTE_SCRIPT: Option<&str> =
-        Some("/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script");
+    pub(in super::super) fn script() -> Option<(String, PathBuf)> {
+        let file = format!("\"${VALUES_VARIABLE}\"");
+        let draft = format!("\"${VALUES_VARIABLE}.tmp\"");
+        let command = format!(
+            "case \"$reason\" in connect) /usr/bin/env -0 > {draft} && /bin/mv -f {draft} {file};; attempt-reconnect) echo '{GATEWAY_ROUTE_REQUESTED}';; esac; exit 0"
+        );
+        Some((command, PathBuf::from("/bin/sh")))
+    }
     pub(in super::super) const CURL: &str = "/usr/bin/curl";
     pub(in super::super) const NULL_DEVICE: &str = "/dev/null";
     pub(in super::super) const SYSTEM_VARIABLES: &[&str] = &["PATH"];
 
     pub(in super::super) fn executable() -> Result<PathBuf, ClientProblem> {
         homebrew::check_file(Path::new(CLIENT))?;
-        if let Some(script) = ROUTE_SCRIPT {
-            homebrew::check_file(Path::new(script))?;
-        }
         Ok(PathBuf::from(CLIENT))
     }
 
     pub(in super::super) fn is_own_executable(path: &Path) -> bool {
         path == Path::new(CLIENT)
+    }
+
+    pub(in super::super) fn wait_for_exit(child: &Child, limit: Option<Duration>) -> bool {
+        ProcessExit::watch(child.id()).is_none_or(|exit| exit.wait(limit))
     }
 }
 
@@ -86,11 +111,15 @@ mod values {
 #[cfg(not(any(windows, target_os = "macos")))]
 mod values {
     use std::path::{Path, PathBuf};
+    use std::process::Child;
+    use std::time::Duration;
 
     use fvm_contract::backend::{ClientProblem, ClientProblemKind};
 
     pub(in super::super) const INSTALL_HINT: &str = "openconnect is not supported on this OS yet";
-    pub(in super::super) const ROUTE_SCRIPT: Option<&str> = None;
+    pub(in super::super) fn script() -> Option<(String, PathBuf)> {
+        None
+    }
     pub(in super::super) const CURL: &str = "/usr/bin/curl";
     pub(in super::super) const NULL_DEVICE: &str = "/dev/null";
     pub(in super::super) const SYSTEM_VARIABLES: &[&str] = &["PATH"];
@@ -105,10 +134,14 @@ mod values {
     pub(in super::super) fn is_own_executable(_: &Path) -> bool {
         false
     }
+
+    pub(in super::super) fn wait_for_exit(_: &Child, _: Option<Duration>) -> bool {
+        unreachable!("openconnect is never found on this OS")
+    }
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
 pub(super) use values::INSTALL_HINT;
 pub(super) use values::{
-    CURL, NULL_DEVICE, ROUTE_SCRIPT, SYSTEM_VARIABLES, executable, is_own_executable,
+    CURL, NULL_DEVICE, SYSTEM_VARIABLES, executable, is_own_executable, script, wait_for_exit,
 };

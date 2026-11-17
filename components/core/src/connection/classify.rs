@@ -41,6 +41,7 @@ pub(super) enum Outcome {
     ForcedTermination,
     /// Uncounted; back off.
     NetworkError,
+    NetworkSetupFailed,
     /// Counted.
     AuthFailure(Failure),
     /// Stop without retrying.
@@ -58,6 +59,14 @@ pub(super) fn classify(context: &ExitContext) -> Outcome {
             OtpFailure::Authentication => Outcome::Fatal(Failure::GmailRejected),
             OtpFailure::Network => Outcome::NetworkError,
         };
+    }
+
+    if facts.stop_initiator
+        == (StopInitiator::Helper {
+            reason: StopReason::NetworkSetupFailed,
+        })
+    {
+        return Outcome::NetworkSetupFailed;
     }
 
     let rejected = !facts.cert_rejected_digests.is_empty();

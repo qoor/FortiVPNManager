@@ -3,8 +3,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use fvm_contract::backend::{
     ClientCheckWait, ClientExecutable, ClientProblem, ClientProblemKind, UntestedVersion,
@@ -17,7 +16,6 @@ const TESTED_SERIES: &str = "9.21";
 /// A `Limited` check's limit: `--version` prints and exits at once; a client that does not is not
 /// used.
 const VERSION_LIMIT: Duration = Duration::from_secs(5);
-const VERSION_POLL: Duration = Duration::from_millis(50);
 
 static KNOWN_VERSION: Mutex<Option<(FileStamp, String)>> = Mutex::new(None);
 
@@ -102,21 +100,16 @@ fn version(path: &Path, wait: ClientCheckWait) -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let deadline = match wait {
-        ClientCheckWait::Limited => Some(Instant::now() + VERSION_LIMIT),
+    let limit = match wait {
+        ClientCheckWait::Limited => Some(VERSION_LIMIT),
         ClientCheckWait::UntilExit => None,
     };
-    let status = loop {
-        if let Some(status) = child.try_wait().ok()? {
-            break status;
-        }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return None;
-        }
-        thread::sleep(VERSION_POLL);
-    };
+    if !platform::wait_for_exit(&child, limit) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return None;
+    }
+    let status = child.wait().ok()?;
     let mut output = String::new();
     child.stdout.take()?.read_to_string(&mut output).ok()?;
     if !status.success() {
@@ -139,7 +132,7 @@ fn parse_version(output: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     #[test]
     fn the_version_is_asked_again_only_when_the_file_changes() {
         use std::os::unix::fs::PermissionsExt;
@@ -181,6 +174,29 @@ mod tests {
             Some("9.210")
         );
         assert_eq!(run_count(), 2);
+        fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_version_check_that_does_not_end_is_given_up_after_its_limit() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::process;
+        use std::time::Instant;
+
+        let directory = std::env::temp_dir().join(format!("fvm-oc-hang-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let client = directory.join("openconnect");
+        fs::write(&client, "#!/bin/sh\nexec /bin/sleep 30\n").unwrap();
+        fs::set_permissions(&client, fs::Permissions::from_mode(0o755)).unwrap();
+        let started = Instant::now();
+        assert_eq!(version(&client, ClientCheckWait::Limited), None);
+        let waited = started.elapsed();
+        assert!(
+            waited >= VERSION_LIMIT && waited < VERSION_LIMIT + Duration::from_secs(3),
+            "{waited:?}"
+        );
         fs::remove_dir_all(&directory).unwrap();
     }
 

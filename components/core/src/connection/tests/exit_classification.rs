@@ -303,6 +303,23 @@ fn a_repeated_prompt_is_a_rejected_login_or_otp() {
 }
 
 #[test]
+fn a_network_setup_the_helper_gave_up_on_is_its_own_uncounted_outcome() {
+    for exit in [
+        ended(Milestone::Authenticated),
+        ended(Milestone::TunnelUp).up(600.0),
+        ended(Milestone::TunnelUp).up(30.0),
+    ] {
+        let facts = exit.by_helper(StopReason::NetworkSetupFailed).facts();
+        assert_eq!(plain(facts), Outcome::NetworkSetupFailed);
+    }
+    assert_eq!(
+        plain(killed(Milestone::Authenticated).facts()),
+        auth(Failure::TunnelSetupFailed),
+        "other ends after the login keep their rule"
+    );
+}
+
+#[test]
 fn killed_before_the_tunnel_came_up_keeps_the_stage_rules() {
     assert_eq!(
         plain(killed(Milestone::Spawned).facts()),

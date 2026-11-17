@@ -7,6 +7,7 @@
 //! about to add, before it adds them.
 
 use std::collections::{HashMap, VecDeque};
+use std::net::{IpAddr, Ipv4Addr};
 
 use fvm_contract::app_helper::{
     BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperError,
@@ -14,10 +15,11 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, FromEntry, LogCategory, LogLevel,
-    NetworkCheck,
+    NetworkChange, NetworkCheck, NetworkOutcome, OutsideRoute,
 };
 
 use super::{Entry, error, to_json};
+use crate::process::NetworkJob;
 
 /// Whether `added` and `route` through `service` are the same route in the routing table. On
 /// Windows a route belongs to an interface, so the same route through another one is another
@@ -42,7 +44,8 @@ struct Wanted {
     routes: Vec<BypassRoute>,
 }
 
-enum Job {
+pub(super) enum Job {
+    Network(NetworkJob),
     Read {
         app: u64,
         id: u64,
@@ -67,7 +70,7 @@ enum Job {
     },
 }
 
-enum WriteStep {
+pub(super) enum WriteStep {
     /// Which of the routes the table has.
     LookingUp,
     /// Removing what no app wants any more and adding what the table lacked.
@@ -162,7 +165,7 @@ impl Entry {
         });
     }
 
-    fn queue_bypass_job(&mut self, job: Job) {
+    pub(super) fn queue_bypass_job(&mut self, job: Job) {
         self.bypass_routes.jobs.push_back(job);
         if self.bypass_routes.jobs.len() == 1 {
             self.start_bypass_job();
@@ -172,6 +175,9 @@ impl Entry {
     /// Starts the first job that needs the OS side, answering those before it that need none.
     fn start_bypass_job(&mut self) {
         while let Some(job) = self.bypass_routes.jobs.pop_front() {
+            if let Job::Network(job) = job {
+                return self.send_network_job(job);
+            }
             if let Some((job, change)) = self.begin_bypass_job(job) {
                 self.send_bypass_job(job, change);
                 return;
@@ -190,6 +196,7 @@ impl Entry {
     fn begin_bypass_job(&mut self, job: Job) -> Option<(Job, BypassRoutesChange)> {
         let routes = &mut self.bypass_routes;
         match job {
+            Job::Network(_) => unreachable!("network jobs are started apart"),
             Job::Read { app, id } | Job::Write { app, id, .. } | Job::Remove { app, id, .. }
                 if !self.apps.contains_key(&app) =>
             {
@@ -259,6 +266,9 @@ impl Entry {
             .pop_front()
             .expect("the OS side answers only the change it was asked for");
         match (job, outcome) {
+            (Job::Network(_), _) => {
+                panic!("the OS side answered a network change with an exception-route outcome")
+            }
             (Job::Read { id, .. }, BypassRoutesOutcome::Changed { network, found, .. }) => {
                 let snapshot = network.expect("a read reads the network");
                 let reply = BypassRoutesReply::Success {
@@ -487,12 +497,85 @@ impl Entry {
         }
     }
 
+    fn send_network_job(&mut self, mut job: NetworkJob) {
+        match &mut job.change {
+            NetworkChange::Apply { remove, .. } => self.keep_exception_routes(remove),
+            NetworkChange::Revert { changes } => self.keep_exception_routes(&mut changes.routes),
+            NetworkChange::LookUp { .. } => {}
+        }
+        let change = job.change.clone();
+        self.bypass_routes.jobs.push_front(Job::Network(job));
+        self.os.send(&FromEntry::ChangeNetwork { change });
+    }
+
+    pub(super) fn network_changed(&mut self, outcome: NetworkOutcome) {
+        let Some(Job::Network(job)) = self.bypass_routes.jobs.pop_front() else {
+            panic!("the OS side answered a network change it was not asked for");
+        };
+        job.finish(outcome);
+        self.start_bypass_job();
+    }
+
+    fn keep_exception_routes(&mut self, routes: &mut Vec<OutsideRoute>) {
+        let bypass = &mut self.bypass_routes;
+        let mut kept = Vec::new();
+        routes.retain(|route| {
+            let wanted = bypass.wanted.values().find_map(|wanted| {
+                if cfg!(windows) && wanted.service_id != route.service_id {
+                    return None;
+                }
+                let found = wanted
+                    .routes
+                    .iter()
+                    .find(|exception| is_exception_route(route, exception))?;
+                Some(AddedRoute {
+                    route: found.clone(),
+                    service_id: route.service_id.clone(),
+                })
+            });
+            let Some(added) = wanted else {
+                return true;
+            };
+            kept.push(added);
+            false
+        });
+        if kept.is_empty() {
+            return;
+        }
+        for added in kept {
+            if !bypass
+                .added
+                .iter()
+                .any(|known| same_route(known, &added.route, &added.service_id))
+            {
+                bypass.added.push(added);
+            }
+        }
+        let added = bypass.added.clone();
+        self.record_added(&added);
+    }
+
     fn reply_bypass(&self, id: u64, reply: &BypassRoutesReply) {
         self.os.send(&FromEntry::Reply {
             id,
             json: Some(to_json(reply)),
         });
     }
+}
+
+fn is_exception_route(route: &OutsideRoute, exception: &BypassRoute) -> bool {
+    let prefix_length = exception
+        .subnet_mask
+        .parse::<Ipv4Addr>()
+        .ok()
+        .and_then(|mask| {
+            let bits = u32::from(mask);
+            let length = bits.leading_ones();
+            (bits.checked_shl(length).unwrap_or(0) == 0).then_some(length)
+        });
+    exception.destination.parse::<IpAddr>() == Ok(route.destination.address)
+        && prefix_length == Some(u32::from(route.destination.prefix_length))
+        && exception.gateway.parse::<IpAddr>() == Ok(route.router)
 }
 
 fn failure(code: HelperErrorCode, message: impl Into<String>) -> BypassRoutesReply {

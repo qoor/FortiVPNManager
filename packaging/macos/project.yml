@@ -181,7 +181,12 @@ targets:
       - path: ../../components/helper/macos/swift/RouteTable.swift
       - path: ../../components/helper/macos/swift/SystemCommand.swift
       - path: ../../components/helper/macos/swift/HelperLog.swift
+      - path: ../../components/helper/macos/swift/BypassRoutes.swift
+      - path: ../../components/helper/macos/swift/TunnelInterface.swift
+      - path: ../../components/helper/macos/swift/TunnelNetwork.swift
+      - path: ../../components/contract/macos/HelperInternal.swift
       - path: ../../components/contract/macos/xpc/BypassRouteMessages.swift
+      - path: ../../components/contract/macos/xpc/HelperError.swift
       - path: ../../components/contract/macos/xpc/Identifiers.swift
       - path: ../../components/helper/macos/tests
     settings:

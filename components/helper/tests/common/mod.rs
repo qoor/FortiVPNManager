@@ -19,7 +19,7 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
-    OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs, UntestedVersion,
+    NetworkSettings, OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs, UntestedVersion,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_helper_core::process::{Report, Run, StageLimits, Timing, Watchdog};
@@ -79,8 +79,13 @@ impl Backend for FakeOpenFortiVpn {
         _: &ClientExecutable,
         _: &RunRequest,
         _: &Path,
+        _: &Path,
     ) -> Result<LaunchSpec, String> {
         Ok(self.launch.clone())
+    }
+
+    fn network_settings(&self, _: &[u8]) -> Result<NetworkSettings, String> {
+        unreachable!("the fake openfortivpn runs no value script")
     }
 
     /// Every code: the adapters test their own rule.
@@ -220,6 +225,8 @@ impl Default for Setup {
                 output_batch: Duration::from_millis(20),
                 line_idle_flush: Duration::from_millis(250),
                 pipe_drain: Duration::from_secs(1),
+                network_values: Duration::from_secs(5),
+                network_retry: Duration::from_millis(200),
             },
             grace_period: Duration::from_secs(2),
             password: PASSWORD.to_owned(),
@@ -277,6 +284,7 @@ pub fn shell(program: &str, args: Vec<String>) -> LaunchSpec {
         env: vec![("PATH".to_owned(), PATH.to_owned())],
         config_file: None,
         session: None,
+        script_runner: None,
     }
 }
 
@@ -452,6 +460,7 @@ impl Session {
                 self.delivered.push(Delivered::RepairRoutes);
                 repair.finish(self.route_repair);
             }
+            Report::ChangeNetwork(_) => unreachable!("the fake openfortivpn changes no network"),
             Report::Log(level, category, message) => {
                 self.delivered
                     .push(Delivered::Log(level, category, message));

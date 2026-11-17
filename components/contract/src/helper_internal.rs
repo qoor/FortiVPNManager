@@ -7,12 +7,12 @@
 //! uses synthesized `Codable`. The entry only receives `ToEntry` and only sends `FromEntry`.
 
 use std::fmt;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use serde::{Deserialize, Serialize};
 
 use crate::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError};
-use crate::backend::RouteRepairOutcome;
+use crate::backend::{IpNetwork, NetworkSettings, RouteRepairOutcome, TunnelDevice};
 
 /// Sent by the OS side.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
@@ -22,9 +22,14 @@ pub enum ToEntry {
     /// rights on Windows; `app` names it in later messages. `uid` tells the apps' users apart: the
     /// uid on macOS, the session id on Windows, where only one user may connect. The OS side holds
     /// the connection until `FromEntry::Admitted` answers.
-    AppConnected { app: u64, uid: u32 },
+    AppConnected {
+        app: u64,
+        uid: u32,
+    },
     /// The connection is gone, whether the app quit, crashed or was killed.
-    AppDisconnected { app: u64 },
+    AppDisconnected {
+        app: u64,
+    },
     /// `id` names the request in its reply.
     Request {
         id: u64,
@@ -38,9 +43,16 @@ pub enum ToEntry {
     /// The OS asked the Helper to stop: SIGTERM on macOS, the service stop on Windows.
     TerminationRequested {},
     /// Answers `FromEntry::RepairRoutes`.
-    RoutesRepaired { outcome: RouteRepairOutcome },
+    RoutesRepaired {
+        outcome: RouteRepairOutcome,
+    },
     /// Answers `FromEntry::ChangeBypassRoutes`.
-    BypassRoutesChanged { outcome: BypassRoutesOutcome },
+    BypassRoutesChanged {
+        outcome: BypassRoutesOutcome,
+    },
+    NetworkChanged {
+        outcome: NetworkOutcome,
+    },
 }
 
 /// An app request with its values exactly as the app sent them; Rust checks them, so a bad value
@@ -108,7 +120,10 @@ pub enum FromEntry {
     Ready {},
     /// Answers `ToEntry::AppConnected`. A refused connection is dropped without
     /// `ToEntry::AppDisconnected`.
-    Admitted { app: u64, accept: bool },
+    Admitted {
+        app: u64,
+        accept: bool,
+    },
     /// Answers a connect, submitOtp, disconnect, status or exception-route request with the data
     /// for the app; `None` is the empty (success) reply.
     Reply {
@@ -117,11 +132,20 @@ pub enum FromEntry {
         json: Option<String>,
     },
     /// Answers an exitWhenIdle request.
-    ReplyFlag { id: u64, value: bool },
+    ReplyFlag {
+        id: u64,
+        value: bool,
+    },
     /// A `HelperEvent` for that app connection.
-    SendEvent { app: u64, json: String },
+    SendEvent {
+        app: u64,
+        json: String,
+    },
     /// A batch of `OutputLine`s for that app connection.
-    SendOutput { app: u64, json: String },
+    SendOutput {
+        app: u64,
+        json: String,
+    },
     /// Check the routing table a client may have left broken and repair it; `gateway` is the VPN
     /// gateway it connected to, if known.
     RepairRoutes {
@@ -129,7 +153,12 @@ pub enum FromEntry {
         gateway: Option<Ipv4Addr>,
     },
     /// Change the exception routes in the routing table.
-    ChangeBypassRoutes { change: BypassRoutesChange },
+    ChangeBypassRoutes {
+        change: BypassRoutesChange,
+    },
+    ChangeNetwork {
+        change: NetworkChange,
+    },
     /// Accept no more connections and exit once what was sent to apps has left.
     ExitAfterDraining {},
     /// Exit at once, even if something sent to apps has not left yet.
@@ -205,6 +234,77 @@ pub enum BypassRoutesOutcome {
     /// primary network, it is not the one expected, or a route to add is not one the Helper
     /// writes.
     Refused { error: HelperError },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkChange {
+    LookUp {
+        tunnel: TunnelDevice,
+        outside: Vec<IpNetwork>,
+    },
+    Apply {
+        settings: Box<NetworkSettings>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        previous: Option<Box<NetworkSettings>>,
+        remove: Vec<OutsideRoute>,
+        add: Vec<OutsideRoute>,
+    },
+    Revert {
+        changes: OutsideChanges,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutsideRoute {
+    pub destination: IpNetwork,
+    pub router: IpAddr,
+    #[serde(rename = "serviceID")]
+    pub service_id: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutsideChanges {
+    #[serde(rename = "dnsServiceID")]
+    pub dns_service_id: String,
+    pub routes: Vec<OutsideRoute>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkOutcome {
+    LookedUp {
+        #[serde(rename = "dnsServiceID")]
+        dns_service_id: String,
+        missing: Vec<OutsideRoute>,
+    },
+    Applied {
+        added: Vec<OutsideRoute>,
+        left: Vec<OutsideRoute>,
+    },
+    Reverted {
+        left: Vec<OutsideRoute>,
+    },
+    Failed {
+        step: NetworkStep,
+        error: String,
+        added: Vec<OutsideRoute>,
+        left: Vec<OutsideRoute>,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkStep {
+    Network,
+    Addresses,
+    Mtu,
+    Routes,
+    OutsideRoutes,
+    Dns,
+    Wins,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]

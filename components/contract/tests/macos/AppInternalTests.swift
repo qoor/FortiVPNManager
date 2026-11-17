@@ -338,6 +338,7 @@ private extension AppInternal {
 
         static let waitReasons: [WaitReason] = [
             .network,
+            .networkSetupFailed,
             .serverEndedSession,
             .forcedTermination,
             .authFailure(reason: .otpNotReceived(inSpam: true, waitedSeconds: 50)),

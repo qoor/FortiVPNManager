@@ -22,6 +22,7 @@ const PIN: &str = "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A=";
 const OTHER_PIN: &str = "pin-sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 const PLACEHOLDER_PIN: &str = "pin-sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const PASSWORD: &str = " Pa55 w#rd ";
+const VALUES_PATH: &str = "/var/run/com.qoor.FortiVPNManager.Helper/values.3";
 
 fn request() -> RunRequest {
     RunRequest {
@@ -49,18 +50,29 @@ fn launch(request: &RunRequest) -> Result<LaunchSpec, String> {
         path: CLIENT_PATH.into(),
         version: "9.21".into(),
     };
-    OpenConnect.launch_spec(&client, request, Path::new("unused"))
+    OpenConnect.launch_spec(
+        &client,
+        request,
+        Path::new("unused"),
+        Path::new(VALUES_PATH),
+    )
 }
 
 mod launching {
     use super::*;
 
     #[cfg(target_os = "macos")]
-    const ROUTE_SCRIPT: &[&str] = &[
-        "--script=/Applications/FortiVPNManager.app/Contents/Resources/vpnc-script; code=$?; if [ \"$reason\" = connect ] && [ $code -eq 0 ]; then echo 'FortiVPNManager: route script finished connecting'; fi; exit $code",
-    ];
-    #[cfg(not(target_os = "macos"))]
-    const ROUTE_SCRIPT: &[&str] = &[];
+    const SCRIPT: Option<(&str, &str)> = Some((
+        "--script=case \"$reason\" in connect) /usr/bin/env -0 > \"$FVM_VALUES_FILE.tmp\" && /bin/mv -f \"$FVM_VALUES_FILE.tmp\" \"$FVM_VALUES_FILE\";; attempt-reconnect) echo 'FortiVPNManager: gateway route requested';; esac; exit 0",
+        "/bin/sh",
+    ));
+    #[cfg(windows)]
+    const SCRIPT: Option<(&str, &str)> = Some((
+        r"--script=C:\Program Files\FortiVPNManager\vpnc-values.js",
+        r"C:\Windows\System32\cscript.exe",
+    ));
+    #[cfg(not(any(windows, target_os = "macos")))]
+    const SCRIPT: Option<(&str, &str)> = None;
 
     /// The login run prints the session; the tunnel run reads it on stdin and gives up reconnecting
     /// at once.
@@ -83,17 +95,33 @@ mod launching {
         assert_eq!(later.tunnel.program, Path::new(CLIENT_PATH));
         let servercert = format!("--servercert={PIN}");
         let mut tunnel = vec!["--protocol=fortinet", servercert.as_str()];
-        tunnel.extend(ROUTE_SCRIPT);
+        tunnel.extend(SCRIPT.map(|(argument, _)| argument));
         tunnel.extend([
             "--reconnect-timeout=0",
             "--cookie-on-stdin",
             "https://203.0.113.10:8443/",
         ]);
         assert_eq!(later.tunnel.args, tunnel);
-        assert_eq!(later.tunnel.env, spec.env);
+        let mut tunnel_env = spec.env.clone();
+        tunnel_env.push(("FVM_VALUES_FILE".to_owned(), VALUES_PATH.to_owned()));
+        assert_eq!(later.tunnel.env, tunnel_env);
+        assert!(!spec.env.iter().any(|(name, _)| name == "FVM_VALUES_FILE"));
         assert_eq!(
             (later.tunnel.config_file, later.tunnel.session),
             (None, None)
+        );
+        assert_eq!(
+            later.tunnel.script_runner.as_deref(),
+            SCRIPT.map(|(_, runner)| Path::new(runner))
+        );
+        assert_eq!(spec.script_runner, None);
+        assert_eq!(later.logout.script_runner, None);
+        assert!(
+            !later
+                .logout
+                .env
+                .iter()
+                .any(|(name, _)| name == "FVM_VALUES_FILE")
         );
     }
 
@@ -488,7 +516,6 @@ mod output {
             Finding::Milestone(Milestone::ConnectedToGateway),
             Finding::Milestone(Milestone::Authenticated),
             Finding::TunnelIp(Ipv4Addr::new(10, 10, 0, 5)),
-            Finding::Milestone(Milestone::TunnelUp),
         ]
     }
 
@@ -500,12 +527,14 @@ mod output {
             [Prompt::Password, Prompt::Otp]
         );
         assert_eq!(replay(&mut run, &TUNNEL_RUN), []);
-        assert_eq!(run.findings, logged_in());
-        assert!(run.interpreter.routes_left_unrestored());
+        let mut expected = logged_in();
+        expected.push(Finding::ScriptLeftRunning);
+        assert_eq!(run.findings, expected);
+        assert!(!run.interpreter.routes_left_unrestored());
     }
 
     #[test]
-    fn the_route_script_line_shows_the_tunnel_up() {
+    fn the_gateway_route_request_line_is_reported() {
         let mut run = run();
         replay(&mut run, &LOGIN_RUN);
         let tunnel_run: [(OutputSource, &[u8]); 3] = [
@@ -515,13 +544,28 @@ mod output {
             ),
             (
                 Stdout,
-                b"Configured as 10.10.0.5, with SSL connected and DTLS in progress\nFortiVPNManager: route script finished connecting.\n echo FortiVPNManager: route script finished connecting\n",
+                b"Configured as 10.10.0.5, with SSL connected and DTLS in progress\nFortiVPNManager: gateway route requested.\n echo FortiVPNManager: gateway route requested\n",
             ),
-            (Stdout, b"FortiVPNManager: route script finished connecting\n"),
+            (Stdout, b"FortiVPNManager: gateway route requested\n"),
         ];
         assert_eq!(replay(&mut run, &tunnel_run), []);
-        assert_eq!(run.findings, logged_in());
-        assert!(run.interpreter.routes_left_unrestored());
+        let mut expected = logged_in();
+        expected.push(Finding::GatewayRouteRequested);
+        assert_eq!(run.findings, expected);
+        assert!(!run.interpreter.routes_left_unrestored());
+    }
+
+    #[test]
+    fn a_tunnel_with_ipv6_reports_its_ipv4_address() {
+        let mut run = run();
+        run.read(
+            Stdout,
+            b"Configured as 10.10.0.5 + 2001:db8::5/64, with SSL disconnected and DTLS established\n",
+        );
+        assert_eq!(
+            run.findings,
+            [Finding::TunnelIp(Ipv4Addr::new(10, 10, 0, 5))]
+        );
     }
 
     /// Text without a line break before the session line, such as a prompt, does not carry the
@@ -575,10 +619,11 @@ mod output {
         ];
         assert_eq!(replay(&mut run, &tail), []);
         let mut expected = logged_in();
+        expected.push(Finding::ScriptLeftRunning);
         // Reconnecting to log out; the watchdog keeps the furthest milestone.
         expected.push(Finding::Milestone(Milestone::ConnectedToGateway));
         assert_eq!(run.findings, expected);
-        assert!(run.interpreter.routes_left_unrestored());
+        assert!(!run.interpreter.routes_left_unrestored());
     }
 
     #[test]
@@ -648,5 +693,342 @@ mod output {
         for milestone in [Milestone::OtpPrompted, Milestone::TunnelUp] {
             assert!(!interpreter.password_expected(milestone), "{milestone:?}");
         }
+    }
+}
+
+mod network_values {
+    use std::net::IpAddr;
+
+    use fvm_contract::backend::{
+        FamilySettings, IpNetwork, NetworkSettings, TunnelDevice, TunnelRoutes,
+    };
+
+    use super::*;
+
+    fn values(entries: &[&str]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for entry in entries {
+            bytes.extend_from_slice(entry.as_bytes());
+            bytes.push(0);
+        }
+        bytes
+    }
+
+    fn network(address: &str, prefix_length: u8) -> IpNetwork {
+        IpNetwork {
+            address: address.parse().unwrap(),
+            prefix_length,
+        }
+    }
+
+    fn ip(address: &str) -> IpAddr {
+        address.parse().unwrap()
+    }
+
+    const SPLIT_TUNNEL: &[&str] = &[
+        "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+        "FVM_VALUES_FILE=/var/run/com.qoor.FortiVPNManager.Helper/values.3",
+        "reason=connect",
+        "VPNGATEWAY=203.0.113.10",
+        "VPNPID=4242",
+        "TUNDEV=utun5",
+        "LOG_LEVEL=1",
+        "IDLE_TIMEOUT=3000",
+        "INTERNAL_IP4_ADDRESS=10.10.0.5",
+        "INTERNAL_IP4_MTU=1351",
+        "INTERNAL_IP4_DNS=10.20.0.53 10.20.0.54 10.20.0.53",
+        "INTERNAL_IP4_NBNS=10.20.0.60",
+        "CISCO_DEF_DOMAIN=corp.example.com",
+        "CISCO_SPLIT_DNS=corp.example.com,example.net",
+        "CISCO_SPLIT_INC=2",
+        "CISCO_SPLIT_INC_0_ADDR=10.20.161.0",
+        "CISCO_SPLIT_INC_0_MASK=255.255.255.0",
+        "CISCO_SPLIT_INC_0_MASKLEN=24",
+        "CISCO_SPLIT_INC_0_PROTOCOL=0",
+        "CISCO_SPLIT_INC_1_ADDR=192.168.50.7",
+        "CISCO_SPLIT_INC_1_MASK=255.255.255.0",
+        "CISCO_SPLIT_INC_1_MASKLEN=24",
+        "CISCO_SPLIT_EXC=4",
+        "CISCO_SPLIT_EXC_0_ADDR=10.20.161.16",
+        "CISCO_SPLIT_EXC_0_MASK=255.255.255.255",
+        "CISCO_SPLIT_EXC_1_ADDR=0.0.0.0",
+        "CISCO_SPLIT_EXC_1_MASK=255.0.0.0",
+        "CISCO_SPLIT_EXC_2_ADDR=127.0.0.0",
+        "CISCO_SPLIT_EXC_2_MASK=255.0.0.0",
+        "CISCO_SPLIT_EXC_3_ADDR=169.254.0.0",
+        "CISCO_SPLIT_EXC_3_MASK=255.255.0.0",
+    ];
+
+    fn split_tunnel() -> NetworkSettings {
+        NetworkSettings {
+            tunnel: TunnelDevice {
+                name: "utun5".into(),
+                index: None,
+            },
+            gateway: ip("203.0.113.10"),
+            mtu: Some(1351),
+            ipv4: FamilySettings {
+                address: network("10.10.0.5", 32),
+                routes: TunnelRoutes::Split {
+                    include: vec![network("10.20.161.0", 24), network("192.168.50.0", 24)],
+                },
+            },
+            ipv6: None,
+            split_exclude: vec![network("10.20.161.16", 32)],
+            dns_servers: vec![ip("10.20.0.53"), ip("10.20.0.54")],
+            default_domains: vec!["corp.example.com".into()],
+            split_dns_domains: vec!["corp.example.com".into(), "example.net".into()],
+            wins_servers: vec![Ipv4Addr::new(10, 20, 0, 60)],
+        }
+    }
+
+    #[test]
+    fn a_split_tunnel_is_read_without_the_unroutable_excludes() {
+        assert_eq!(
+            OpenConnect.network_settings(&values(SPLIT_TUNNEL)),
+            Ok(split_tunnel())
+        );
+    }
+
+    #[test]
+    fn a_full_tunnel_with_ipv6_is_read_from_windows_variables() {
+        let mut banner = b"CISCO_BANNER=".to_vec();
+        banner.extend_from_slice(b"\xb3\xd7\xc6\xae\xbf\xf6\xc5\xa9");
+        banner.push(0);
+        banner.extend(values(&[
+            "=C:=C:\\Windows\\System32",
+            "SystemRoot=C:\\Windows",
+            "reason=connect",
+            "VPNGATEWAY=2001:db8::10",
+            "TUNDEV=203.0.113.10",
+            "TUNIDX=54",
+            "INTERNAL_IP4_ADDRESS=10.10.0.5",
+            "INTERNAL_IP4_NETMASK=255.255.255.0",
+            "INTERNAL_IP4_DNS=10.20.0.53",
+            "INTERNAL_IP6_ADDRESS=fd00:10::5",
+            "INTERNAL_IP6_NETMASK=fd00:10::/64",
+            "INTERNAL_IP6_DNS=fd00:10::53",
+            "CISCO_SPLIT_INC=2",
+            "CISCO_SPLIT_INC_0_ADDR=10.20.161.0",
+            "CISCO_SPLIT_INC_0_MASK=255.255.255.0",
+            "CISCO_SPLIT_INC_1_ADDR=0.0.0.0",
+            "CISCO_SPLIT_INC_1_MASK=0.0.0.0",
+            "CISCO_IPV6_SPLIT_INC=1",
+            "CISCO_IPV6_SPLIT_INC_0_ADDR=fd00:20::1",
+            "CISCO_IPV6_SPLIT_INC_0_MASKLEN=48",
+            "CISCO_IPV6_SPLIT_EXC=1",
+            "CISCO_IPV6_SPLIT_EXC_0_ADDR=2001:db8:5::",
+            "CISCO_IPV6_SPLIT_EXC_0_MASKLEN=64",
+        ]));
+        assert_eq!(
+            OpenConnect.network_settings(&banner),
+            Ok(NetworkSettings {
+                tunnel: TunnelDevice {
+                    name: "203.0.113.10".into(),
+                    index: Some(54),
+                },
+                gateway: ip("2001:db8::10"),
+                mtu: None,
+                ipv4: FamilySettings {
+                    address: network("10.10.0.5", 24),
+                    routes: TunnelRoutes::Full {},
+                },
+                ipv6: Some(FamilySettings {
+                    address: network("fd00:10::5", 64),
+                    routes: TunnelRoutes::Split {
+                        include: vec![network("fd00:20::", 48)],
+                    },
+                }),
+                split_exclude: vec![network("2001:db8:5::", 64)],
+                dns_servers: vec![ip("10.20.0.53"), ip("fd00:10::53")],
+                default_domains: Vec::new(),
+                split_dns_domains: Vec::new(),
+                wins_servers: Vec::new(),
+            })
+        );
+    }
+
+    #[test]
+    fn no_split_include_is_a_full_tunnel_for_each_family() {
+        let settings = OpenConnect
+            .network_settings(&values(&[
+                "reason=connect",
+                "VPNGATEWAY=203.0.113.10",
+                "TUNDEV=utun5",
+                "INTERNAL_IP4_ADDRESS=10.10.0.5",
+                "INTERNAL_IP6_ADDRESS=fd00:10::5",
+                "CISCO_SPLIT_INC=0",
+                "CISCO_IPV6_SPLIT_INC=1",
+                "CISCO_IPV6_SPLIT_INC_0_ADDR=::",
+                "CISCO_IPV6_SPLIT_INC_0_MASKLEN=0",
+            ]))
+            .unwrap();
+        assert_eq!(settings.ipv4.routes, TunnelRoutes::Full {});
+        assert_eq!(
+            settings.ipv6,
+            Some(FamilySettings {
+                address: network("fd00:10::5", 128),
+                routes: TunnelRoutes::Full {},
+            })
+        );
+    }
+
+    #[test]
+    fn values_that_cannot_be_applied_are_refused() {
+        let with = |name: &str, value: Option<&str>| {
+            let mut entries: Vec<String> = SPLIT_TUNNEL
+                .iter()
+                .filter(|entry| !entry.starts_with(&format!("{name}=")))
+                .map(|entry| (*entry).to_owned())
+                .collect();
+            entries.extend(value.map(|value| format!("{name}={value}")));
+            let entries: Vec<&str> = entries.iter().map(String::as_str).collect();
+            OpenConnect.network_settings(&values(&entries))
+        };
+        let refused = [
+            (
+                "reason",
+                Some("disconnect"),
+                "reason is \"disconnect\", not connect",
+            ),
+            (
+                "INTERNAL_IP4_ADDRESS",
+                None,
+                "INTERNAL_IP4_ADDRESS is missing",
+            ),
+            (
+                "VPNGATEWAY",
+                Some("vpn.example.com"),
+                "VPNGATEWAY has an unreadable value: \"vpn.example.com\"",
+            ),
+            (
+                "TUNDEV",
+                Some("-utun5"),
+                "TUNDEV is not a device name: \"-utun5\"",
+            ),
+            (
+                "INTERNAL_IP4_MTU",
+                Some("0"),
+                "INTERNAL_IP4_MTU 0 is outside 68 to 65535",
+            ),
+            (
+                "INTERNAL_IP4_NETMASK",
+                Some("255.0.255.0"),
+                "INTERNAL_IP4_NETMASK is not a subnet mask: \"255.0.255.0\"",
+            ),
+            (
+                "CISCO_SPLIT_INC",
+                Some("3"),
+                "CISCO_SPLIT_INC_2_ADDR is missing",
+            ),
+            (
+                "CISCO_SPLIT_INC_1_MASK",
+                Some("255.0.255.0"),
+                "CISCO_SPLIT_INC_1_MASK is not a subnet mask: \"255.0.255.0\"",
+            ),
+            (
+                "INTERNAL_IP4_DNS",
+                Some("10.20.0.53 dns"),
+                "INTERNAL_IP4_DNS has an unreadable value: \"dns\"",
+            ),
+            (
+                "CISCO_SPLIT_DNS",
+                Some("example.net,bad domain!"),
+                "CISCO_SPLIT_DNS has a value that is not a domain: \"domain!\"",
+            ),
+            (
+                "INTERNAL_IP6_NETMASK",
+                Some("fd00::/129"),
+                "INTERNAL_IP6_NETMASK is not an address/length: \"fd00::/129\"",
+            ),
+        ];
+        for (name, value, error) in refused {
+            assert_eq!(with(name, value), Err(error.to_owned()), "{name}");
+        }
+        let mut not_utf8 = values(SPLIT_TUNNEL);
+        not_utf8.extend_from_slice(b"CISCO_DEF_DOMAIN=\xff\0");
+        assert_eq!(
+            OpenConnect.network_settings(&not_utf8),
+            Err("CISCO_DEF_DOMAIN is not UTF-8".to_owned())
+        );
+        assert_eq!(
+            OpenConnect.network_settings(b""),
+            Err("reason is missing".to_owned())
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod value_script {
+    use std::fs;
+    use std::process::{self, Command};
+
+    use super::*;
+
+    #[test]
+    fn only_connect_passes_the_values_and_attempt_reconnect_asks_for_the_gateway_route() {
+        let spec = launch(&request()).unwrap();
+        let tunnel = spec.session.unwrap().tunnel;
+        let script = tunnel
+            .args
+            .iter()
+            .find_map(|arg| arg.strip_prefix("--script="))
+            .unwrap()
+            .to_owned();
+        assert_eq!(tunnel.script_runner.as_deref(), Some(Path::new("/bin/sh")));
+        let directory = std::env::temp_dir().join(format!("fvm-value-script-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let file = directory.join("values.3");
+        let draft = directory.join("values.3.tmp");
+        for reason in [
+            "pre-init",
+            "connect",
+            "disconnect",
+            "reconnect",
+            "attempt-reconnect",
+        ] {
+            let _ = fs::remove_file(&file);
+            let output = Command::new("/bin/sh")
+                .arg("-c")
+                .arg(&script)
+                .env_clear()
+                .env("reason", reason)
+                .env("FVM_VALUES_FILE", &file)
+                .env("CISCO_BANNER", "a\nb=c")
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(0), "{reason}");
+            assert_eq!(String::from_utf8_lossy(&output.stderr), "", "{reason}");
+            let expected_output = if reason == "attempt-reconnect" {
+                "FortiVPNManager: gateway route requested\n"
+            } else {
+                ""
+            };
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                expected_output,
+                "{reason}"
+            );
+            assert!(!draft.exists(), "{reason}");
+            if reason == "connect" {
+                let written = fs::read(&file).unwrap();
+                let mut entries: Vec<&[u8]> = written.split(|&byte| byte == 0).collect();
+                assert_eq!(entries.pop(), Some(&b""[..]));
+                let values_entry = format!("FVM_VALUES_FILE={}", file.display());
+                let given: [&[u8]; 3] = [
+                    b"CISCO_BANNER=a\nb=c",
+                    values_entry.as_bytes(),
+                    b"reason=connect",
+                ];
+                for entry in given {
+                    assert!(entries.contains(&entry), "{entries:?}");
+                }
+                assert!(OpenConnect.network_settings(&written).is_err());
+            } else {
+                assert!(!file.exists(), "{reason}");
+            }
+        }
+        fs::remove_dir_all(&directory).unwrap();
     }
 }

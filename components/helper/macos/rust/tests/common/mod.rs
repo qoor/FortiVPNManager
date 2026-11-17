@@ -16,8 +16,8 @@ use std::{env, fs, process};
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
 use fvm_contract::app_helper::{RunRequest, VpnClient};
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
-    UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
+    OutputInterpreter, UntestedVersion,
 };
 use fvm_contract::stream;
 use serde_json::{Value, json};
@@ -72,8 +72,9 @@ impl Backend for TestBackend {
         client: &ClientExecutable,
         request: &RunRequest,
         config_path: &Path,
+        values_path: &Path,
     ) -> Result<LaunchSpec, String> {
-        let checked = OpenFortiVpn.launch_spec(client, request, config_path)?;
+        let checked = OpenFortiVpn.launch_spec(client, request, config_path, values_path)?;
         let mut args = vec![
             self.fixture.display().to_string(),
             self.record.display().to_string(),
@@ -84,6 +85,10 @@ impl Backend for TestBackend {
             args,
             ..checked
         })
+    }
+
+    fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String> {
+        OpenFortiVpn.network_settings(values)
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {

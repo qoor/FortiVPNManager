@@ -5,19 +5,17 @@
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::Backend;
-use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel};
+use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel, OutsideChanges};
 
 use crate::process::os;
 use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
 
 /// How long the processes get to disappear after the forced stop.
 const KILL_LIMIT: Duration = Duration::from_secs(2);
-const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Cleans up after an earlier Helper in `directory`. If it died during a run, stops the processes
 /// its pidfile names that still run and belong to one of `clients`, calls `repair_routes` with the
@@ -30,6 +28,7 @@ pub(crate) fn clean_up(
     clients: &[(VpnClient, Arc<dyn Backend>)],
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
+    revert_network: impl FnOnce(OutsideChanges),
     repair_routes: impl FnOnce(Option<Ipv4Addr>),
     remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
 ) -> Vec<AddedRoute> {
@@ -81,6 +80,9 @@ pub(crate) fn clean_up(
                 .max()
                 .unwrap_or_default();
             terminate(&orphans, grace_period, &log);
+        }
+        if let Some(changes) = record.outside_changes {
+            revert_network(changes);
         }
         repair_routes(record.gateway);
     }
@@ -161,18 +163,56 @@ fn stop(processes: &[ProcessIdentity], how: fn(&ProcessIdentity)) {
 /// The processes still running once all are gone or `limit` passed.
 fn wait_for_exit(processes: &[ProcessIdentity], limit: Duration) -> Vec<ProcessIdentity> {
     let deadline = Instant::now() + limit;
-    let mut remaining: Vec<ProcessIdentity> = processes
+    processes
         .iter()
-        .filter(|process| process.is_running())
+        .filter(|process| {
+            os::watch_exit(process).is_some_and(|exit| {
+                !exit.wait(Some(deadline.saturating_duration_since(Instant::now())))
+            })
+        })
         .cloned()
-        .collect();
-    while !remaining.is_empty() && Instant::now() < deadline {
-        thread::sleep(POLL_INTERVAL);
-        remaining.retain(ProcessIdentity::is_running);
-    }
-    remaining
+        .collect()
 }
 
 fn pids(processes: &[ProcessIdentity]) -> Vec<u32> {
     processes.iter().map(|process| process.pid).collect()
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use std::process::{Command, Stdio};
+    use std::{slice, thread};
+
+    use super::*;
+
+    #[test]
+    fn leftovers_are_waited_for_until_they_exit_or_the_limit_passes() {
+        let mut child = Command::new(r"C:\Windows\System32\cmd.exe")
+            .args(["/d", "/c", "ping -n 30 127.0.0.1 >nul"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let leftover = os::process(child.id()).unwrap();
+        let started = Instant::now();
+        assert_eq!(
+            wait_for_exit(slice::from_ref(&leftover), Duration::from_millis(300)),
+            slice::from_ref(&leftover)
+        );
+        let waited = started.elapsed();
+        assert!(
+            waited >= Duration::from_millis(300 - 16) && waited < Duration::from_secs(2),
+            "{waited:?}"
+        );
+        let stopped = leftover.clone();
+        let killer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(500));
+            os::force_stop(&stopped);
+            child.wait().unwrap();
+        });
+        let started = Instant::now();
+        assert!(wait_for_exit(slice::from_ref(&leftover), Duration::from_secs(10)).is_empty());
+        let waited = started.elapsed();
+        assert!(waited < Duration::from_secs(5), "{waited:?}");
+        killer.join().unwrap();
+    }
 }

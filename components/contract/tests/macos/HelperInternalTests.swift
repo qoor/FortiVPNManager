@@ -17,6 +17,42 @@ struct HelperInternalTests {
         serviceID: "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"
     )
 
+    private let dnsService = "6B29FC40-CA47-1067-B31D-00DD010662DA"
+    private let utun = HelperInternal.TunnelDevice(name: "utun5", index: nil)
+
+    private func ipNetwork(_ address: String, _ prefixLength: Int) -> HelperInternal.IPNetwork {
+        HelperInternal.IPNetwork(address: address, prefixLength: prefixLength)
+    }
+
+    private func outside(_ destination: HelperInternal.IPNetwork) -> HelperInternal.OutsideRoute {
+        HelperInternal.OutsideRoute(destination: destination, router: "10.20.161.1", serviceID: ethernet.serviceID)
+    }
+
+    private var gatewayRoute: HelperInternal.OutsideRoute { outside(ipNetwork("203.0.113.10", 32)) }
+    private var excludedRoute: HelperInternal.OutsideRoute { outside(ipNetwork("10.30.161.0", 24)) }
+
+    private var splitTunnel: HelperInternal.NetworkSettings {
+        HelperInternal.NetworkSettings(
+            tunnel: utun, gateway: "203.0.113.10", mtu: 1354,
+            ipv4: .init(
+                address: ipNetwork("10.212.133.105", 32),
+                routes: .split(include: [ipNetwork("10.30.0.0", 16), ipNetwork("192.168.50.0", 24)])
+            ),
+            ipv6: nil, splitExclude: [ipNetwork("10.30.161.0", 24)], dnsServers: ["10.30.0.53", "10.30.0.54"],
+            defaultDomains: ["corp.example.com"], splitDnsDomains: ["corp.example.com", "example.net"], winsServers: []
+        )
+    }
+
+    private var fullTunnel: HelperInternal.NetworkSettings {
+        HelperInternal.NetworkSettings(
+            tunnel: .init(name: "OpenConnect", index: 23), gateway: "2001:db8::10", mtu: nil,
+            ipv4: .init(address: ipNetwork("10.212.133.105", 24), routes: .full),
+            ipv6: .init(address: ipNetwork("fd00:10::5", 64), routes: .full),
+            splitExclude: [], dnsServers: ["10.30.0.53", "fd00:10::53"], defaultDomains: [], splitDnsDomains: [],
+            winsServers: ["10.30.0.60"]
+        )
+    }
+
     private func fixture(_ name: String) throws -> Data {
         let tests = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         return try Data(contentsOf: tests.appending(path: "fixtures/helper-internal/\(name)"))
@@ -41,9 +77,23 @@ struct HelperInternalTests {
             .bypassRoutesChanged(outcome: .changed(network: ethernet, added: [lan], found: [host, lan], left: [])),
             .bypassRoutesChanged(outcome: .changed(network: nil, added: [], found: [], left: [stale])),
             .bypassRoutesChanged(outcome: .refused(error: HelperError(.wrongPhase, "no active network service"))),
+            .networkChanged(outcome: .lookedUp(dnsServiceID: dnsService, missing: [gatewayRoute, excludedRoute])),
+            .networkChanged(outcome: .applied(added: [gatewayRoute, excludedRoute], left: [])),
+            .networkChanged(outcome: .reverted(left: [excludedRoute])),
+            .networkChanged(outcome: .failed(
+                step: .dns, error: "the DNS settings could not be written", added: [gatewayRoute], left: []
+            )),
+            .networkChanged(outcome: .failed(step: .network, error: "no active network service", added: [], left: [])),
         ]
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(messages)) as? NSArray
         let expected = try JSONSerialization.jsonObject(with: fixture("to_entry.json")) as? NSArray
+        #expect(encoded != nil && encoded == expected)
+    }
+
+    @Test func networkSteps() throws {
+        let steps: [HelperInternal.NetworkStep] = [.network, .addresses, .mtu, .routes, .outsideRoutes, .dns, .wins]
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(steps)) as? NSArray
+        let expected = try JSONSerialization.jsonObject(with: fixture("network_steps.json")) as? NSArray
         #expect(encoded != nil && encoded == expected)
     }
 
@@ -68,6 +118,12 @@ struct HelperInternalTests {
             )),
             .changeBypassRoutes(change: .init(network: .read, remove: [], add: [], lookUp: [host])),
             .changeBypassRoutes(change: .init(network: .skip, remove: [stale], add: [], lookUp: [])),
+            .changeNetwork(change: .lookUp(tunnel: utun, outside: [ipNetwork("203.0.113.10", 32), ipNetwork("10.30.161.0", 24)])),
+            .changeNetwork(change: .apply(
+                settings: splitTunnel, previous: nil, remove: [], add: [gatewayRoute, excludedRoute]
+            )),
+            .changeNetwork(change: .apply(settings: fullTunnel, previous: splitTunnel, remove: [excludedRoute], add: [])),
+            .changeNetwork(change: .revert(changes: .init(dnsServiceID: dnsService, routes: [gatewayRoute, excludedRoute]))),
             .exitAfterDraining,
             .exitNow,
             .log(level: .info, category: .routes, message: "gateway has no IPv4 address; its host route will not be repaired"),

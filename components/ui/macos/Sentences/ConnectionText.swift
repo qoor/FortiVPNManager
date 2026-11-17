@@ -169,6 +169,7 @@ extension AppInternal.WaitReason {
     func summary(time: TimeStyle) -> String {
         switch self {
         case .network: String(localized: "Network error")
+        case .networkSetupFailed: String(localized: "VPN network setup failed")
         case .serverEndedSession: String(localized: "Server ended the session")
         case .forcedTermination: String(localized: "Connection was forcibly ended")
         case let .authFailure(reason):

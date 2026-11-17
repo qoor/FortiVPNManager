@@ -1,19 +1,16 @@
-//! Safe functions over the Windows IP Helper API, with which the Helper changes the routing table and
-//! other network settings itself and reads them back to confirm them. The workspace's only unsafe
-//! blocks are here (user decision, 2026-11-16); nothing else calls windows-sys.
-//!
-//! What Windows keeps, as checked on Windows 11: addresses, routes, MTUs and metrics written here
-//! live only in the active store, so a restart drops them; DNS servers go to the registry and stay
-//! until they are cleared.
 #![allow(unsafe_code)]
 
 use std::fmt;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
+use std::time::Duration;
 use std::{ptr, slice};
 
 use widestring::{U16CStr, U16CString};
 use windows_sys::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS, NO_ERROR, WIN32_ERROR,
+    ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER, ERROR_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS,
+    NO_ERROR, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
 };
 use windows_sys::Win32::NetworkManagement::IpHelper::{
     ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToGuid, ConvertInterfaceLuidToIndex,
@@ -32,6 +29,13 @@ use windows_sys::Win32::Networking::WinSock::{
     IpDadStateDeprecated, IpDadStateDuplicate, IpDadStatePreferred, IpDadStateTentative,
     NL_DAD_STATE, SOCKADDR_IN, SOCKADDR_IN6, SOCKADDR_INET,
 };
+use windows_sys::Win32::System::Registry::{
+    HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_MULTI_SZ, RegCloseKey, RegOpenKeyExW,
+    RegQueryValueExW, RegSetValueExW,
+};
+use windows_sys::Win32::System::Threading::{
+    INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+};
 use windows_sys::core::GUID;
 
 /// A failed IP Helper call: which call, and the Win32 error code it returned.
@@ -45,6 +49,10 @@ impl Error {
     /// The address or route to add is there already, which the caller checks rather than fails on.
     pub fn already_exists(self) -> bool {
         self.code == ERROR_OBJECT_ALREADY_EXISTS
+    }
+
+    pub fn not_found(self) -> bool {
+        self.code == ERROR_NOT_FOUND || self.code == ERROR_FILE_NOT_FOUND
     }
 }
 
@@ -75,7 +83,7 @@ pub enum Family {
 }
 
 impl Family {
-    fn of(address: IpAddr) -> Self {
+    pub fn of(address: IpAddr) -> Self {
         match address {
             IpAddr::V4(_) => Self::Ipv4,
             IpAddr::V6(_) => Self::Ipv6,
@@ -200,6 +208,26 @@ fn guid_text(guid: GUID) -> String {
         "{{{data1:08X}-{data2:04X}-{data3:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
         d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]
     )
+}
+
+fn guid_from_text(text: &str) -> Result<GUID, Error> {
+    let invalid = Error {
+        operation: "reading a GUID",
+        code: ERROR_INVALID_PARAMETER,
+    };
+    let digits: String = text
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .ok_or(invalid)?
+        .chars()
+        .filter(|&c| c != '-')
+        .collect();
+    if text.len() != 38 || digits.len() != 32 {
+        return Err(invalid);
+    }
+    u128::from_str_radix(&digits, 16)
+        .map(GUID::from_u128)
+        .map_err(|_| invalid)
 }
 
 /// An interface's settings for one address family.
@@ -450,8 +478,8 @@ fn route(row: &MIB_IPFORWARD_ROW2, family: Family) -> Route {
 
 /// Replaces the interface's DNS servers of `family` with `servers`, which are of that family; none
 /// clears them. Windows keeps them in the registry until they are replaced or cleared.
-pub fn set_dns_servers(luid: Luid, family: Family, servers: &[IpAddr]) -> Result<(), Error> {
-    let guid = luid.guid()?;
+pub fn set_dns_servers(interface: &str, family: Family, servers: &[IpAddr]) -> Result<(), Error> {
+    let guid = guid_from_text(interface)?;
     let list: Vec<String> = servers.iter().map(ToString::to_string).collect();
     let mut list = U16CString::from_str(list.join(",")).expect("addresses have no NUL");
     let settings = DNS_INTERFACE_SETTINGS {
@@ -498,6 +526,87 @@ pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
         .split([',', ' '])
         .filter_map(|server| server.parse().ok())
         .collect())
+}
+
+pub fn clear_wins_servers(interface: &str) -> Result<(), Error> {
+    let path =
+        format!(r"SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\Tcpip_{interface}");
+    let path = U16CString::from_str(path).expect("the path has no NUL");
+    let mut key = ptr::null_mut();
+    // SAFETY: `path` is a NUL-terminated string and `key` is live for the call, which reads the
+    // first and writes the second.
+    let code = unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            path.as_ptr(),
+            0,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &mut key,
+        )
+    };
+    check("RegOpenKeyExW", code)?;
+    let name = U16CString::from_str("NameServerList").expect("the name has no NUL");
+    // SAFETY: `key` is open, and `name` is live for the call, which only reads it; the null
+    // pointers ask for nothing but whether the value exists.
+    let code = unsafe {
+        RegQueryValueExW(
+            key,
+            name.as_ptr(),
+            ptr::null(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        )
+    };
+    let cleared = check("RegQueryValueExW", code).and_then(|()| {
+        let empty = [0u16; 2];
+        // SAFETY: `key` is open, and `name` and `empty` are live for the call, which only reads
+        // them; `empty` is an empty REG_MULTI_SZ list, two NULs, and its size is given in bytes.
+        let code = unsafe {
+            RegSetValueExW(
+                key,
+                name.as_ptr(),
+                0,
+                REG_MULTI_SZ,
+                empty.as_ptr().cast(),
+                size_of_val(&empty) as u32,
+            )
+        };
+        check("RegSetValueExW", code)
+    });
+    // SAFETY: `key` is open and closed once, after its last use.
+    unsafe { RegCloseKey(key) };
+    cleared
+}
+
+pub fn open_process(pid: u32) -> Result<OwnedHandle, Error> {
+    // SAFETY: The call takes only values.
+    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+    if handle.is_null() {
+        let code = io::Error::last_os_error()
+            .raw_os_error()
+            .expect("a failed OpenProcess leaves an error code");
+        return Err(Error {
+            operation: "OpenProcess",
+            code: code as u32,
+        });
+    }
+    // SAFETY: A handle OpenProcess returned is open, and nothing else owns or closes it.
+    Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+}
+
+pub fn wait_for_exit(process: BorrowedHandle<'_>, limit: Option<Duration>) -> bool {
+    let milliseconds = limit.map_or(INFINITE, |limit| {
+        u32::try_from(limit.as_nanos().div_ceil(1_000_000))
+            .unwrap_or(INFINITE - 1)
+            .min(INFINITE - 1)
+    });
+    // SAFETY: `process` is an open handle for the call.
+    match unsafe { WaitForSingleObject(process.as_raw_handle(), milliseconds) } {
+        WAIT_OBJECT_0 => true,
+        WAIT_TIMEOUT => false,
+        other => panic!("WaitForSingleObject on a process returned {other}"),
+    }
 }
 
 /// `address` as the calls take it: no port, flow or scope, and zeros past an IPv4 address.
@@ -548,11 +657,22 @@ mod tests {
     //! through, and routes to TEST-NET addresses (192.0.2.0/24, 2001:db8::/32), which nothing uses,
     //! through the primary interface. Each puts back what it changed, also when it fails.
 
-    use std::process::Command;
-    use std::sync::PoisonError;
+    use std::os::windows::io::AsHandle;
+    use std::process::{Command, Stdio};
+    use std::sync::{Mutex, PoisonError};
+    use std::time::Instant;
 
     use super::*;
-    use crate::routes::{ROUTE_WRITES, Undo};
+
+    static ROUTE_WRITES: Mutex<()> = Mutex::new(());
+
+    struct Undo<F: FnMut()>(F);
+
+    impl<F: FnMut()> Drop for Undo<F> {
+        fn drop(&mut self) {
+            (self.0)();
+        }
+    }
 
     fn loopback() -> Luid {
         best_route(Ipv4Addr::LOCALHOST.into()).unwrap().interface
@@ -574,6 +694,32 @@ mod tests {
             code: 5,
         };
         assert!(!denied.already_exists());
+    }
+
+    #[test]
+    fn a_process_is_waited_for_until_it_exits_or_the_limit_passes() {
+        let mut child = Command::new(r"C:\Windows\System32\cmd.exe")
+            .args(["/d", "/c", "ping -n 30 127.0.0.1 >nul"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let process = open_process(child.id()).unwrap();
+        let started = Instant::now();
+        assert!(!wait_for_exit(
+            process.as_handle(),
+            Some(Duration::from_millis(300))
+        ));
+        let waited = started.elapsed();
+        assert!(
+            waited >= Duration::from_millis(300 - 16) && waited < Duration::from_secs(2),
+            "{waited:?}"
+        );
+        child.kill().unwrap();
+        assert!(wait_for_exit(process.as_handle(), None));
+        assert!(wait_for_exit(child.as_handle(), Some(Duration::ZERO)));
+        child.wait().unwrap();
+        let error = open_process(0).unwrap_err();
+        assert_eq!(error.operation, "OpenProcess");
     }
 
     #[test]
@@ -713,14 +859,32 @@ mod tests {
 
     /// The key's server list as the registry holds it: `None` without the key, `Some(None)` with
     /// the key but no list.
-    fn registered_servers(key: &str) -> Option<Option<String>> {
+    fn registered_servers(key: &str, value: &str, kind: &str) -> Option<Option<String>> {
         reg(&["query", key])?;
-        let list = reg(&["query", key, "/v", "NameServer"]).map(|output| {
-            let line = output.lines().find(|line| line.contains("REG_SZ"));
-            let (_, list) = line.and_then(|line| line.split_once("REG_SZ")).unwrap();
+        let list = reg(&["query", key, "/v", value]).map(|output| {
+            let line = output.lines().find(|line| line.contains(kind));
+            let (_, list) = line.and_then(|line| line.split_once(kind)).unwrap();
             list.trim().to_owned()
         });
         Some(list)
+    }
+
+    #[test]
+    fn clearing_the_wins_servers_of_an_interface_without_a_key_creates_none() {
+        let guid = "{0F0E0D0C-0B0A-0908-0706-050403020100}";
+        let key = format!(
+            r"HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\Tcpip_{guid}"
+        );
+        assert_eq!(
+            registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
+            None
+        );
+        let error = clear_wins_servers(guid).unwrap_err();
+        assert!(error.not_found(), "{error}");
+        assert_eq!(
+            registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
+            None
+        );
     }
 
     #[test]
@@ -739,7 +903,7 @@ mod tests {
         for (family, servers) in written {
             let key = dns_key(loopback, family);
             // Put back through reg.exe as it was, key and value, rather than as a write here would.
-            let before = registered_servers(&key);
+            let before = registered_servers(&key, "NameServer", "REG_SZ");
             let (undo_key, undo_before) = (key.clone(), before.clone());
             let undo = Undo(move || {
                 let key = undo_key.as_str();
@@ -762,12 +926,13 @@ mod tests {
             if before.is_none() {
                 assert_eq!(dns_servers(loopback, family), Ok(Vec::new()));
             }
-            set_dns_servers(loopback, family, &servers).unwrap();
+            let guid = interface(loopback).unwrap().guid;
+            set_dns_servers(&guid, family, &servers).unwrap();
             assert_eq!(dns_servers(loopback, family), Ok(servers));
-            set_dns_servers(loopback, family, &[]).unwrap();
+            set_dns_servers(&guid, family, &[]).unwrap();
             assert_eq!(dns_servers(loopback, family), Ok(Vec::new()));
             drop(undo);
-            assert_eq!(registered_servers(&key), before);
+            assert_eq!(registered_servers(&key, "NameServer", "REG_SZ"), before);
         }
     }
 }

@@ -31,9 +31,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # The macOS Helper's Rust start is macOS only.
       - run: cargo clippy --workspace --exclude fvm-helper-macos --all-targets -- -D warnings
-      # The Helper's exception-route tests, which read the PC's primary network and change its
-      # routing table directly or through the pipe, were not tried on this runner; they run on the
-      # Windows PC (scripts/test-windows.sh).
+      # The Helper's exception-route and VPN network tests, which read the PC's primary network and
+      # change its routing table or WINS servers directly or through the pipe, were not tried on
+      # this runner; they run on the Windows PC (scripts/test-windows.sh).
       - run: >-
           cargo test --workspace --exclude fvm-helper-macos --
           --skip routes::tests::a_change_for_a_network_that_changed_since_it_was_read_changes_nothing
@@ -41,6 +41,9 @@ jobs:
           --skip routes::tests::exception_routes_are_added_found_and_removed
           --skip routes::tests::routes_this_helper_does_not_write_are_refused_before_any_change
           --skip routes::tests::the_primary_network_is_read
+          --skip network::tests::split_settings_are_applied_changed_and_reverted_on_the_loopback_interface
+          --skip network::tests::an_apply_through_a_router_that_is_no_longer_current_changes_nothing
+          --skip network::tests::wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid
           --skip the_bypass_routes_are_read_after_the_build_check
           --skip a_connection_has_one_route_request_at_a_time
 

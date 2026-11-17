@@ -4227,6 +4227,16 @@
         }
       }
     },
+    "VPN network setup failed": {
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VPN 네트워크 설정 실패"
+          }
+        }
+      }
+    },
     "Verifying OTP": {
       "localizations": {
         "ko": {

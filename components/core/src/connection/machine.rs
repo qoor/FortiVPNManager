@@ -224,6 +224,7 @@ pub(super) enum AfterStop {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum RetryReason {
     Network,
+    NetworkSetupFailed,
     ServerSessionEnded,
     ForcedTermination,
     /// One authentication failure was counted; one more try follows the cooldown.
@@ -833,7 +834,7 @@ impl ConnectionManager {
             // The VPN client was never started: a Gmail credential problem costs no VPN login.
             Stage::PreparingOtp => match failure {
                 OtpFailure::Authentication => self.fail(Failure::GmailRejected),
-                OtpFailure::Network => self.network_failure(),
+                OtpFailure::Network => self.network_failure(RetryReason::Network),
             },
             // No OTP can arrive any more: stop now instead of at the deadline; the exit classifies.
             Stage::Run => {
@@ -1105,7 +1106,7 @@ impl ConnectionManager {
                 self.push_otp_close(attempt.close_otp_session(false, true));
                 match (attempt.otp_failure, code) {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
-                    (Some(OtpFailure::Network), _) => self.network_failure(),
+                    (Some(OtpFailure::Network), _) => self.network_failure(RetryReason::Network),
                     (
                         None,
                         HelperErrorCode::ClientUnavailable
@@ -1121,7 +1122,7 @@ impl ConnectionManager {
                         | HelperErrorCode::WrongPhase
                         | HelperErrorCode::UnknownAttempt
                         | HelperErrorCode::InternalError,
-                    ) => self.network_failure(),
+                    ) => self.network_failure(RetryReason::Network),
                 }
             }
             Phase::Disconnecting(stop) if stop.attempt == *id => self.finish_stop(stop, None),
@@ -1255,7 +1256,7 @@ impl ConnectionManager {
             // The readiness check or the Gmail login hung; nothing runs yet.
             let close = attempt.close_otp_session(false, true);
             self.push_otp_close(close);
-            self.network_failure();
+            self.network_failure(RetryReason::Network);
             return;
         }
         attempt.stop_requested = Some(StopReason::AttemptTimeout);
@@ -1834,7 +1835,8 @@ impl ConnectionManager {
                 policy::SERVER_SESSION_END_DELAY,
             ),
             Outcome::ForcedTermination => self.forced_termination(),
-            Outcome::NetworkError => self.network_failure(),
+            Outcome::NetworkError => self.network_failure(RetryReason::Network),
+            Outcome::NetworkSetupFailed => self.network_failure(RetryReason::NetworkSetupFailed),
             Outcome::AuthFailure(failure) => self.auth_failure(failure),
             Outcome::Fatal(failure) => self.fail(failure),
         }
@@ -1845,7 +1847,7 @@ impl ConnectionManager {
     /// would otherwise repeat VPN logins and OTP emails without end.
     fn forced_termination(&mut self) {
         if self.forced_retry_used {
-            self.network_failure();
+            self.network_failure(RetryReason::Network);
             return;
         }
         self.forced_retry_used = true;
@@ -1856,12 +1858,9 @@ impl ConnectionManager {
         );
     }
 
-    fn network_failure(&mut self) {
+    fn network_failure(&mut self, reason: RetryReason) {
         self.network_failure_streak += 1;
-        self.schedule_retry(
-            RetryReason::Network,
-            policy::network_backoff(self.network_failure_streak),
-        );
+        self.schedule_retry(reason, policy::network_backoff(self.network_failure_streak));
     }
 
     fn auth_failure(&mut self, failure: Failure) {

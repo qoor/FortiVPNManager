@@ -99,6 +99,7 @@ extension AppInternal {
 
     enum WaitReason: Decodable, Equatable, Sendable {
         case network
+        case networkSetupFailed
         case serverEndedSession
         case forcedTermination
         case authFailure(reason: FailureReason)

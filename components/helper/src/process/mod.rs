@@ -27,13 +27,16 @@ pub(crate) use windows as os;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 
 use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest, VpnClient};
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, UntestedVersion,
 };
-use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel};
+use fvm_contract::helper_internal::{
+    AddedRoute, LogCategory, LogLevel, NetworkChange, NetworkOutcome, OutsideChanges,
+};
 
 pub use run::Run;
 
@@ -107,10 +110,22 @@ impl Watchdog {
         let number = self.runs_started + 1;
         let files = RunFiles::new(&self.run_directory, number);
         let launch = backend
-            .launch_spec(&client, request, &files.config)
+            .launch_spec(&client, request, &files.config, &files.values)
             .map_err(StartFailure::InvalidRequest)?;
+        let writes_values = launch.script_runner.is_some()
+            || launch
+                .session
+                .as_ref()
+                .is_some_and(|session| session.tunnel.script_runner.is_some());
         // The run directory also holds the pidfile, so it is prepared without a config file too.
         os::prepare_run_directory(&self.run_directory)
+            .and_then(|()| {
+                if writes_values {
+                    os::prepare_run_directory(&files.values_directory)
+                } else {
+                    Ok(())
+                }
+            })
             .and_then(|()| {
                 launch
                     .config_file
@@ -138,6 +153,7 @@ impl Watchdog {
     pub fn clean_up(
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
+        revert_network: impl FnOnce(OutsideChanges),
         repair_routes: impl FnOnce(Option<Ipv4Addr>),
         remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
     ) -> Vec<AddedRoute> {
@@ -145,6 +161,7 @@ impl Watchdog {
             &self.clients,
             &self.run_directory,
             log,
+            revert_network,
             repair_routes,
             remove_bypass_routes,
         )
@@ -180,6 +197,7 @@ pub enum Report {
     /// The client exited without restoring the routes it changed. The run reports its exit once
     /// the repair is finished.
     RepairRoutes(RouteRepair),
+    ChangeNetwork(NetworkJob),
     /// A line for the Helper's own log, which the app never sees.
     Log(LogLevel, LogCategory, String),
 }
@@ -195,6 +213,8 @@ pub struct Timing {
     /// How long to wait for the end of the output after the client exited: a process it started,
     /// such as pppd, may still hold a pipe.
     pub pipe_drain: Duration,
+    pub network_values: Duration,
+    pub network_retry: Duration,
 }
 
 impl Default for Timing {
@@ -204,6 +224,39 @@ impl Default for Timing {
             output_batch: Duration::from_millis(100),
             line_idle_flush: Duration::from_millis(250),
             pipe_drain: Duration::from_secs(1),
+            network_values: Duration::from_secs(10),
+            network_retry: Duration::from_secs(1),
+        }
+    }
+}
+
+#[must_use = "the run waits for the answer to its network change"]
+pub struct NetworkJob {
+    pub change: NetworkChange,
+    answer: Option<Box<dyn FnOnce(NetworkOutcome) + Send>>,
+}
+
+impl NetworkJob {
+    fn new(change: NetworkChange, answer: impl FnOnce(NetworkOutcome) + Send + 'static) -> Self {
+        Self {
+            change,
+            answer: Some(Box::new(answer)),
+        }
+    }
+
+    pub fn finish(mut self, outcome: NetworkOutcome) {
+        let answer = self
+            .answer
+            .take()
+            .expect("a network change is answered once");
+        answer(outcome);
+    }
+}
+
+impl Drop for NetworkJob {
+    fn drop(&mut self) {
+        if self.answer.is_some() && !thread::panicking() {
+            panic!("a network change was dropped unanswered; the run would wait for it forever");
         }
     }
 }

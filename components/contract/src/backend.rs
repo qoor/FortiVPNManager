@@ -3,7 +3,7 @@
 //! with what its adapter returns, so neither hard-codes a client's name, options or output wording.
 
 use std::fmt;
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -37,7 +37,10 @@ pub trait Backend: Send + Sync {
         client: &ClientExecutable,
         request: &RunRequest,
         config_path: &Path,
+        values_path: &Path,
     ) -> Result<LaunchSpec, String>;
+
+    fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String>;
 
     /// Checks an OTP from the app before it goes to the client's stdin. The error is an English
     /// reason for the app.
@@ -117,6 +120,7 @@ pub struct LaunchSpec {
     /// For a client that logs in and opens the tunnel in separate runs, what follows this login
     /// run; `None` for a client that does both in one run.
     pub session: Option<Box<SessionLaunch>>,
+    pub script_runner: Option<PathBuf>,
 }
 
 /// The rest of an attempt whose login run printed a session (`Finding::Session`). Neither has a
@@ -167,6 +171,8 @@ pub enum Finding {
     Session(SessionInputs),
     /// A line that holds a secret but could not be read as one; it is not logged either.
     Hidden,
+    ScriptLeftRunning,
+    GatewayRouteRequested,
 }
 
 /// Reads one run's output.
@@ -193,4 +199,48 @@ pub enum RouteRepairOutcome {
     Repaired,
     NotNeeded,
     Failed,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkSettings {
+    pub tunnel: TunnelDevice,
+    pub gateway: IpAddr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtu: Option<u32>,
+    pub ipv4: FamilySettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipv6: Option<FamilySettings>,
+    pub split_exclude: Vec<IpNetwork>,
+    pub dns_servers: Vec<IpAddr>,
+    pub default_domains: Vec<String>,
+    pub split_dns_domains: Vec<String>,
+    pub wins_servers: Vec<Ipv4Addr>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct TunnelDevice {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<u32>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct FamilySettings {
+    pub address: IpNetwork,
+    pub routes: TunnelRoutes,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TunnelRoutes {
+    Full {},
+    Split { include: Vec<IpNetwork> },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IpNetwork {
+    pub address: IpAddr,
+    pub prefix_length: u8,
 }

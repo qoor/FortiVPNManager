@@ -19,8 +19,8 @@ use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::AccountSaveError;
 #[cfg(unix)]
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, OutputInterpreter,
-    UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
+    OutputInterpreter, UntestedVersion,
 };
 
 pub use output::Interpreter;
@@ -91,8 +91,13 @@ impl Backend for OpenFortiVpn {
         client: &ClientExecutable,
         request: &RunRequest,
         config_path: &Path,
+        _values_path: &Path,
     ) -> Result<LaunchSpec, String> {
         request::launch_spec(client, request, config_path)
+    }
+
+    fn network_settings(&self, _: &[u8]) -> Result<NetworkSettings, String> {
+        unreachable!("openfortivpn runs no value script")
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {

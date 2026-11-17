@@ -115,6 +115,7 @@ fn stop_reasons() {
         AppQuit,
         AppDisconnected,
         Watchdog,
+        NetworkSetupFailed,
         HelperShutdown,
     ];
     both_ways(

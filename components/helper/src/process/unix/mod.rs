@@ -12,6 +12,7 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsE
 use std::path::Path;
 use std::time::Duration;
 
+pub(crate) use fvm_common::process_exit::ProcessExit;
 use fvm_contract::app_helper::ProcessExitStatus;
 use fvm_contract::backend::LaunchSpec;
 use libproc::libproc::bsd_info::BSDInfo;
@@ -272,6 +273,19 @@ pub(crate) fn children(parent: u32) -> Vec<ProcessIdentity> {
     // Listing fails when there are none.
     let children = pids_by_type(ProcFilter::ByParentProcess { ppid: parent }).unwrap_or_default();
     children.into_iter().filter_map(process).collect()
+}
+
+pub(crate) fn running_scripts(client: u32, _runner: &Path) -> Vec<ProcessExit> {
+    pids_by_type(ProcFilter::ByParentProcess { ppid: client })
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(ProcessExit::watch)
+        .collect()
+}
+
+pub(crate) fn watch_exit(process: &ProcessIdentity) -> Option<ProcessExit> {
+    let exit = ProcessExit::watch(process.pid)?;
+    process.is_running().then_some(exit)
 }
 
 /// SIGTERM, so that a client can restore the routes. It may have exited since it was checked.

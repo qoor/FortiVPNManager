@@ -39,7 +39,7 @@ enum BypassRoutes {
                 ))
             }
         }
-        guard let before = RouteTable.read() else {
+        guard let before = RouteTable.read(.inet) else {
             return .refused(error: HelperError(.internalError, "the routing table could not be read"))
         }
         var changed = false
@@ -53,18 +53,10 @@ enum BypassRoutes {
         for wanted in change.add {
             guard let route = RouteTable.Route(wanted), !before.contains(where: route.matches) else { continue }
             changed = true
-            // A copy of the default route the system made for this host, for every interface, makes
-            // the add fail; the system makes another when it needs one.
-            for copy in before where copy.flags.contains("W") && !copy.flags.contains("I")
-                && copy.destination == route.destination && copy.prefixLength == route.prefixLength {
-                if let copy = RouteTable.Route(destination: copy.destination, subnetMask: route.subnetMask, gateway: copy.gateway) {
-                    RouteTable.delete(copy)
-                }
-            }
-            RouteTable.add(route)
+            RouteTable.add(route, replacingCopiesIn: before)
             tried.append(wanted)
         }
-        let after = changed ? RouteTable.read() : before
+        let after = changed ? RouteTable.read(.inet) : before
         // `nil` when the table could not be read again.
         let inTable = { (route: BypassRoute) -> Bool? in
             guard let route = RouteTable.Route(route) else { return false }
@@ -84,21 +76,18 @@ enum BypassRoutes {
         )
     }
 
-    /// The service of `State:/Network/Global/IPv4` with its IPv4 router, this Mac's first IPv4 address
-    /// and mask on it, and its name in the network settings. A tunnel interface never counts as primary.
+    /// The primary service with its IPv4 router, this Mac's first IPv4 address and mask on it, and
+    /// its name in the network settings.
     private static func primaryNetwork() -> Result<BypassRoutesSnapshot, HelperError> {
         guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil),
-              let global = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
-              let serviceID = global[kSCDynamicStorePropNetPrimaryService as String] as? String,
-              let interface = global[kSCDynamicStorePropNetPrimaryInterface as String] as? String,
-              !interface.hasPrefix("ppp"), !interface.hasPrefix("utun")
+              let serviceID = primaryServiceID(in: store)
         else {
             return .failure(HelperError(.wrongPhase, "no active network service"))
         }
         let serviceKey = "State:/Network/Service/\(serviceID)/IPv4" as CFString
-        guard let router = global[kSCPropNetIPv4Router as String] as? String,
+        guard let state = SCDynamicStoreCopyValue(store, serviceKey) as? [String: Any],
+              let router = state[kSCPropNetIPv4Router as String] as? String,
               IPv4Network.parseDottedQuad(Substring(router)) != nil,
-              let state = SCDynamicStoreCopyValue(store, serviceKey) as? [String: Any],
               let address = (state[kSCPropNetIPv4Addresses as String] as? [String])?.first,
               let subnetMask = (state[kSCPropNetIPv4SubnetMasks as String] as? [String])?.first,
               IPv4Network.parseDottedQuad(Substring(address)) != nil,
@@ -115,5 +104,32 @@ enum BypassRoutes {
         return .success(BypassRoutesSnapshot(
             serviceID: serviceID, serviceName: name, router: router, address: address, subnetMask: subnetMask
         ))
+    }
+
+    static func primaryServiceID(in store: SCDynamicStore) -> String? {
+        let value = { (key: String) in SCDynamicStoreCopyValue(store, key as CFString) as? [String: Any] }
+        return primaryServiceID(
+            global: value("State:/Network/Global/IPv4"),
+            serviceOrder: value("Setup:/Network/Global/IPv4")?[kSCPropNetServiceOrder as String] as? [String] ?? [],
+            ipv4: { value("State:/Network/Service/\($0)/IPv4") }
+        )
+    }
+
+    static func primaryServiceID(
+        global: [String: Any]?, serviceOrder: [String], ipv4: (String) -> [String: Any]?
+    ) -> String? {
+        let isTunnel = { (interface: String) in interface.hasPrefix("ppp") || interface.hasPrefix("utun") }
+        guard let serviceID = global?[kSCDynamicStorePropNetPrimaryService as String] as? String,
+              let interface = global?[kSCDynamicStorePropNetPrimaryInterface as String] as? String
+        else { return nil }
+        guard serviceID == TunnelNetwork.serviceID else {
+            return isTunnel(interface) ? nil : serviceID
+        }
+        return serviceOrder.first { candidate in
+            guard let state = ipv4(candidate), let interface = state[kSCPropInterfaceName as String] as? String else {
+                return false
+            }
+            return state[kSCPropNetIPv4Router as String] != nil && !isTunnel(interface)
+        }
     }
 }

@@ -5,13 +5,14 @@
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, PipeReader, PipeWriter, Read};
+use std::os::windows::io::{AsHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{self, Command, Stdio};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use fvm_common::os_api;
 use fvm_contract::app_helper::ProcessExitStatus;
 use fvm_contract::backend::LaunchSpec;
 use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System, Uid, UpdateKind};
@@ -20,8 +21,6 @@ use crate::recovery::run_directory::{Failure, ProcessIdentity};
 
 /// The process gets a console that has no window, so nothing shows on a desktop.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-/// How often the exit watch looks at the client: std can wait for a child only through `&mut`.
-const EXIT_POLL: Duration = Duration::from_millis(50);
 /// Windows' own taskkill, which only administrators can change. It ends a process together with the
 /// processes it started.
 const TASKKILL: &str = r"C:\Windows\System32\taskkill.exe";
@@ -69,7 +68,7 @@ pub(crate) fn spawn(launch: &LaunchSpec) -> Result<Spawned, i32> {
     let id = child.id();
     Ok(Spawned {
         child: Child {
-            process: Arc::new(Mutex::new(child)),
+            process: Mutex::new(child),
             id,
         },
         stdin,
@@ -82,7 +81,7 @@ pub(crate) fn spawn(launch: &LaunchSpec) -> Result<Spawned, i32> {
 
 /// The client until it is reaped. Its process handle stays open, so its pid is not reused.
 pub(crate) struct Child {
-    process: Arc<Mutex<process::Child>>,
+    process: Mutex<process::Child>,
     id: u32,
 }
 
@@ -114,7 +113,7 @@ impl Child {
     }
 
     pub(crate) fn exit_watch(&self) -> ExitWatch {
-        ExitWatch(Arc::clone(&self.process))
+        ExitWatch(os_api::open_process(self.id).expect("opening the unreaped client"))
     }
 
     pub(crate) fn reap(self) -> ProcessExitStatus {
@@ -130,23 +129,20 @@ impl Child {
     }
 }
 
-pub(crate) struct ExitWatch(Arc<Mutex<process::Child>>);
+pub(crate) struct ExitWatch(OwnedHandle);
 
 impl ExitWatch {
     /// Returns once the client exited; `Child::reap` collects the status.
     pub(crate) fn wait(self) {
-        loop {
-            let exited = self
-                .0
-                .lock()
-                .expect("the client's handle is never held across a panic")
-                .try_wait();
-            // An error means it cannot be watched any more; `reap` reports that.
-            if !matches!(exited, Ok(None)) {
-                return;
-            }
-            thread::sleep(EXIT_POLL);
-        }
+        os_api::wait_for_exit(self.0.as_handle(), None);
+    }
+}
+
+pub(crate) struct ProcessExit(OwnedHandle);
+
+impl ProcessExit {
+    pub(crate) fn wait(&self, limit: Option<Duration>) -> bool {
+        os_api::wait_for_exit(self.0.as_handle(), limit)
     }
 }
 
@@ -212,6 +208,25 @@ pub(crate) fn children(parent: u32) -> Vec<ProcessIdentity> {
         .filter(|(_, process)| process.parent() == Some(parent))
         .filter_map(|(pid, _)| process(pid.as_u32()))
         .collect()
+}
+
+pub(crate) fn running_scripts(client: u32, runner: &Path) -> Vec<ProcessExit> {
+    let Some(client) = process(client) else {
+        return Vec::new();
+    };
+    let runner = runner.to_str().expect("a script runner's path is UTF-8");
+    children(client.pid)
+        .iter()
+        .filter(|child| {
+            child.path.eq_ignore_ascii_case(runner) && child.start_seconds >= client.start_seconds
+        })
+        .filter_map(watch_exit)
+        .collect()
+}
+
+pub(crate) fn watch_exit(process: &ProcessIdentity) -> Option<ProcessExit> {
+    let handle = os_api::open_process(process.pid).ok()?;
+    process.is_running().then_some(ProcessExit(handle))
 }
 
 fn identity(pid: u32, process: &Process) -> Option<ProcessIdentity> {
@@ -309,22 +324,17 @@ fn kill_tree(pid: u32) -> bool {
     else {
         return false;
     };
-    let deadline = Instant::now() + TASKKILL_LIMIT;
-    loop {
-        match taskkill.try_wait() {
-            Ok(Some(status)) => return status.success(),
-            Ok(None) if Instant::now() < deadline => thread::sleep(EXIT_POLL),
-            _ => {
-                let _ = taskkill.kill();
-                let _ = taskkill.wait();
-                return false;
-            }
-        }
+    if os_api::wait_for_exit(taskkill.as_handle(), Some(TASKKILL_LIMIT)) {
+        return taskkill.wait().is_ok_and(|status| status.success());
     }
+    let _ = taskkill.kill();
+    let _ = taskkill.wait();
+    false
 }
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;

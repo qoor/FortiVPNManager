@@ -342,6 +342,7 @@ fn connection_kinds() {
         "wait_reasons.json",
         [
             WaitReason::Network {},
+            WaitReason::NetworkSetupFailed {},
             WaitReason::ServerEndedSession {},
             WaitReason::ForcedTermination {},
             WaitReason::AuthFailure {

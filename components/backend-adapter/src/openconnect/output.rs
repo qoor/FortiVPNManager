@@ -20,15 +20,13 @@ const CERTIFICATE_REJECTED: &str = " specified via --servercert match server's c
 /// The login run's last lines, shell-quoted: `COOKIE='SVPNCOOKIE=…'`, then HOST, CONNECT_URL,
 /// FINGERPRINT and RESOLVE, which hold no secret.
 const COOKIE_LINE: &str = "COOKIE=";
-pub(super) const ROUTES_SET_UP: &str = "FortiVPNManager: route script finished connecting";
+pub(super) const GATEWAY_ROUTE_REQUESTED: &str = "FortiVPNManager: gateway route requested";
+const SCRIPT_LEFT_RUNNING: &str = "Script did not complete within 10 seconds.";
 
 #[derive(Default)]
 pub struct Interpreter {
     /// In the order printed.
     rejected_certificates: Vec<String>,
-    /// The route script set up the tunnel's routes, including the host route to the gateway that
-    /// stays behind when openconnect is killed.
-    configured: bool,
 }
 
 impl OutputInterpreter for Interpreter {
@@ -64,7 +62,7 @@ impl OutputInterpreter for Interpreter {
     }
 
     fn routes_left_unrestored(&self) -> bool {
-        self.configured
+        false
     }
 }
 
@@ -75,25 +73,26 @@ impl Interpreter {
         if let Some(at) = text.find(COOKIE_LINE) {
             return Some(session(&text[at + COOKIE_LINE.len()..]));
         }
-        if text == ROUTES_SET_UP {
-            return Some(Finding::Milestone(Milestone::TunnelUp));
+        if text == GATEWAY_ROUTE_REQUESTED {
+            return Some(Finding::GatewayRouteRequested);
         }
         if text.starts_with("Got Legacy IP address ") {
             return Some(Finding::Milestone(Milestone::Authenticated));
         }
         // "Configured as 10.212.133.105, with SSL disconnected and DTLS established"
-        let ip = text.strip_prefix("Configured as ")?.split(',').next()?;
+        let ip = text
+            .strip_prefix("Configured as ")?
+            .split(',')
+            .next()?
+            .split(" + ")
+            .next()?;
         let ip = ip.parse::<Ipv4Addr>().ok()?;
-        self.configured = true;
         Some(Finding::TunnelIp(ip))
     }
 
     fn stderr_line(&mut self, text: &str) -> Option<Finding> {
-        // "Using Wintun device '<name>', index <n>": the tunnel's adapter exists, so the
-        // connection can be watched. The route script still adds routes for a few seconds.
-        // openconnect prints no line break after the OTP prompt, so this may follow it on one line.
-        if text.contains("Using Wintun device '") {
-            return Some(Finding::Milestone(Milestone::TunnelUp));
+        if text.contains(SCRIPT_LEFT_RUNNING) {
+            return Some(Finding::ScriptLeftRunning);
         }
         // "None of the 1 fingerprint(s) specified via --servercert match server's certificate:
         // pin-sha256:…"

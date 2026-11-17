@@ -18,6 +18,7 @@ nonisolated enum HelperInternal {
         case routesRepaired(outcome: RouteRepairOutcome)
         /// Answers `FromEntry.changeBypassRoutes`.
         case bypassRoutesChanged(outcome: BypassRoutesOutcome)
+        case networkChanged(outcome: NetworkOutcome)
     }
 
     /// An app request with its values exactly as the app sent them; Rust checks them.
@@ -75,6 +76,7 @@ nonisolated enum HelperInternal {
         case repairRoutes(gateway: String?)
         /// Change the exception routes in the routing table.
         case changeBypassRoutes(change: BypassRoutesChange)
+        case changeNetwork(change: NetworkChange)
         /// Accept no more connections and exit once what was sent to apps has left.
         case exitAfterDraining
         /// Exit at once, even if something sent to apps has not left yet.
@@ -103,6 +105,73 @@ nonisolated enum HelperInternal {
         case read
         /// Change nothing unless the primary network is still exactly `network`.
         case expect(network: BypassRoutesSnapshot)
+    }
+
+    enum NetworkChange: Decodable, Sendable {
+        case lookUp(tunnel: TunnelDevice, outside: [IPNetwork])
+        case apply(settings: NetworkSettings, previous: NetworkSettings?, remove: [OutsideRoute], add: [OutsideRoute])
+        case revert(changes: OutsideChanges)
+    }
+
+    struct NetworkSettings: Decodable, Sendable {
+        var tunnel: TunnelDevice
+        var gateway: String
+        var mtu: UInt32?
+        var ipv4: FamilySettings
+        var ipv6: FamilySettings?
+        var splitExclude: [IPNetwork]
+        var dnsServers: [String]
+        var defaultDomains: [String]
+        var splitDnsDomains: [String]
+        var winsServers: [String]
+    }
+
+    struct TunnelDevice: Decodable, Sendable {
+        var name: String
+        var index: UInt32?
+    }
+
+    struct FamilySettings: Decodable, Sendable {
+        var address: IPNetwork
+        var routes: TunnelRoutes
+    }
+
+    enum TunnelRoutes: Decodable, Sendable {
+        case full
+        case split(include: [IPNetwork])
+    }
+
+    struct IPNetwork: Codable, Sendable, Hashable {
+        var address: String
+        var prefixLength: Int
+    }
+
+    struct OutsideRoute: Codable, Sendable, Hashable {
+        var destination: IPNetwork
+        var router: String
+        var serviceID: String
+    }
+
+    struct OutsideChanges: Decodable, Sendable {
+        var dnsServiceID: String
+        var routes: [OutsideRoute]
+    }
+
+    enum NetworkOutcome: Encodable, Sendable {
+        case lookedUp(dnsServiceID: String, missing: [OutsideRoute])
+        case applied(added: [OutsideRoute], left: [OutsideRoute])
+        case reverted(left: [OutsideRoute])
+        case failed(step: NetworkStep, error: String, added: [OutsideRoute], left: [OutsideRoute])
+    }
+
+    enum NetworkStep: String, Encodable, Sendable {
+        case network
+        case addresses
+        case mtu
+        case routes
+        case outsideRoutes
+        case dns
+        case wins
     }
 
     enum LogLevel: String, Decodable, Sendable {

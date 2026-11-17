@@ -142,6 +142,10 @@ enum EntryRelay {
             BypassRoutes.queue.async {
                 stream.send(.bypassRoutesChanged(outcome: BypassRoutes.change(change)))
             }
+        case .changeNetwork(let change):
+            BypassRoutes.queue.async {
+                stream.send(.networkChanged(outcome: TunnelNetwork.change(change)))
+            }
         case .exitAfterDraining:
             exitAfterDraining()
         case .exitNow:

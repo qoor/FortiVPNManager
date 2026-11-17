@@ -3,10 +3,12 @@
 //! receives; `tests/macos/HelperInternalTests.swift` checks the Swift types the opposite way against
 //! the same files.
 
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
 use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
-use fvm_contract::backend::RouteRepairOutcome;
+use fvm_contract::backend::{
+    FamilySettings, IpNetwork, NetworkSettings, RouteRepairOutcome, TunnelDevice, TunnelRoutes,
+};
 use fvm_contract::helper_internal::*;
 use serde_json::Value;
 
@@ -45,6 +47,85 @@ fn stale() -> AddedRoute {
         service_id: "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0".into(),
     }
 }
+
+fn ip_network(address: &str, prefix_length: u8) -> IpNetwork {
+    IpNetwork {
+        address: address.parse().unwrap(),
+        prefix_length,
+    }
+}
+
+fn outside(destination: IpNetwork) -> OutsideRoute {
+    OutsideRoute {
+        destination,
+        router: "10.20.161.1".parse().unwrap(),
+        service_id: ethernet().service_id,
+    }
+}
+
+fn gateway_route() -> OutsideRoute {
+    outside(ip_network("203.0.113.10", 32))
+}
+
+fn excluded_route() -> OutsideRoute {
+    outside(ip_network("10.30.161.0", 24))
+}
+
+fn utun() -> TunnelDevice {
+    TunnelDevice {
+        name: "utun5".into(),
+        index: None,
+    }
+}
+
+fn split_tunnel() -> NetworkSettings {
+    NetworkSettings {
+        tunnel: utun(),
+        gateway: "203.0.113.10".parse().unwrap(),
+        mtu: Some(1354),
+        ipv4: FamilySettings {
+            address: ip_network("10.212.133.105", 32),
+            routes: TunnelRoutes::Split {
+                include: vec![ip_network("10.30.0.0", 16), ip_network("192.168.50.0", 24)],
+            },
+        },
+        ipv6: None,
+        split_exclude: vec![ip_network("10.30.161.0", 24)],
+        dns_servers: vec!["10.30.0.53".parse().unwrap(), "10.30.0.54".parse().unwrap()],
+        default_domains: vec!["corp.example.com".into()],
+        split_dns_domains: vec!["corp.example.com".into(), "example.net".into()],
+        wins_servers: Vec::new(),
+    }
+}
+
+fn full_tunnel() -> NetworkSettings {
+    NetworkSettings {
+        tunnel: TunnelDevice {
+            name: "OpenConnect".into(),
+            index: Some(23),
+        },
+        gateway: "2001:db8::10".parse().unwrap(),
+        mtu: None,
+        ipv4: FamilySettings {
+            address: ip_network("10.212.133.105", 24),
+            routes: TunnelRoutes::Full {},
+        },
+        ipv6: Some(FamilySettings {
+            address: ip_network("fd00:10::5", 64),
+            routes: TunnelRoutes::Full {},
+        }),
+        split_exclude: Vec::new(),
+        dns_servers: vec![
+            "10.30.0.53".parse().unwrap(),
+            "fd00:10::53".parse::<IpAddr>().unwrap(),
+        ],
+        default_domains: Vec::new(),
+        split_dns_domains: Vec::new(),
+        wins_servers: vec![Ipv4Addr::new(10, 30, 0, 60)],
+    }
+}
+
+const DNS_SERVICE: &str = "6B29FC40-CA47-1067-B31D-00DD010662DA";
 
 #[test]
 fn messages_to_the_entry() {
@@ -125,6 +206,57 @@ fn messages_to_the_entry() {
                     },
                 },
             },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::LookedUp {
+                    dns_service_id: DNS_SERVICE.into(),
+                    missing: vec![gateway_route(), excluded_route()],
+                },
+            },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Applied {
+                    added: vec![gateway_route(), excluded_route()],
+                    left: Vec::new(),
+                },
+            },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Reverted {
+                    left: vec![excluded_route()],
+                },
+            },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Failed {
+                    step: NetworkStep::Dns,
+                    error: "the DNS settings could not be written".into(),
+                    added: vec![gateway_route()],
+                    left: Vec::new(),
+                },
+            },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Failed {
+                    step: NetworkStep::Network,
+                    error: "no active network service".into(),
+                    added: Vec::new(),
+                    left: Vec::new(),
+                },
+            },
+        ]
+    );
+}
+
+#[test]
+fn network_steps() {
+    let steps: Vec<NetworkStep> =
+        serde_json::from_str(include_str!("fixtures/helper-internal/network_steps.json")).unwrap();
+    assert_eq!(
+        steps,
+        [
+            NetworkStep::Network,
+            NetworkStep::Addresses,
+            NetworkStep::Mtu,
+            NetworkStep::Routes,
+            NetworkStep::OutsideRoutes,
+            NetworkStep::Dns,
+            NetworkStep::Wins,
         ]
     );
 }
@@ -190,6 +322,36 @@ fn messages_from_the_entry() {
                 remove: vec![stale()],
                 add: Vec::new(),
                 look_up: Vec::new(),
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::LookUp {
+                tunnel: utun(),
+                outside: vec![ip_network("203.0.113.10", 32), ip_network("10.30.161.0", 24)],
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::Apply {
+                settings: Box::new(split_tunnel()),
+                previous: None,
+                remove: Vec::new(),
+                add: vec![gateway_route(), excluded_route()],
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::Apply {
+                settings: Box::new(full_tunnel()),
+                previous: Some(Box::new(split_tunnel())),
+                remove: vec![excluded_route()],
+                add: Vec::new(),
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::Revert {
+                changes: OutsideChanges {
+                    dns_service_id: DNS_SERVICE.into(),
+                    routes: vec![gateway_route(), excluded_route()],
+                },
             },
         },
         FromEntry::ExitAfterDraining {},

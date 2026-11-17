@@ -40,7 +40,12 @@ fn launch(request: &RunRequest) -> Result<LaunchSpec, String> {
         path: CLIENT_PATH.into(),
         version: "1.24.1".into(),
     };
-    OpenFortiVpn.launch_spec(&client, request, Path::new(CONFIG_PATH))
+    OpenFortiVpn.launch_spec(
+        &client,
+        request,
+        Path::new(CONFIG_PATH),
+        Path::new("unused"),
+    )
 }
 
 fn config(request: &RunRequest) -> String {

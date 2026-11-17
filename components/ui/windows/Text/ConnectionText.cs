@@ -160,6 +160,7 @@ public static class ConnectionText
     public static string Summary(this WaitReason reason, TimeStyle time) => reason switch
     {
         WaitReason.Network => L("Network error"),
+        WaitReason.NetworkSetupFailed => L("VPN network setup failed"),
         WaitReason.ServerEndedSession => L("Server ended the session"),
         WaitReason.ForcedTermination => L("Connection was forcibly ended"),
         WaitReason.AuthFailure failure => L("Authentication failed (%@), retrying once", failure.Reason.Summary()),

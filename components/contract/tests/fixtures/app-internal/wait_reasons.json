@@ -3,6 +3,9 @@
     "network": {}
   },
   {
+    "networkSetupFailed": {}
+  },
+  {
     "serverEndedSession": {}
   },
   {
