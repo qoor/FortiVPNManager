@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
@@ -378,6 +379,14 @@ fn an_attempt_runs_both_processes_and_logs_out_after_the_forced_stop() {
         .collect();
     assert_eq!(named, ["‹VPN client: openconnect 9.21›"]);
     assert_eq!(session.lines[0].1, named[0]);
+    let deadline = Instant::now() + WAIT_LIMIT;
+    while !scratch.values().contains_key("values_left") {
+        assert!(
+            Instant::now() < deadline,
+            "the tunnel script never recorded values_left"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
     let values = scratch.values();
     assert_eq!(values["password"], PASSWORD);
     assert_eq!(values["otp"], OTP);
