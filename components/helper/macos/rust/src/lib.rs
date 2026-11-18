@@ -1,6 +1,6 @@
 //! The macOS Helper's Rust start. Swift reaches the Helper's Rust side only through the socket
 //! returned by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`, and
-//! the shared Helper entry has the watchdog run the VPN client with its backend adapter.
+//! the shared Helper entry has the session manager run the VPN client with its backend adapter.
 
 use std::io::{self, BufReader};
 use std::os::fd::IntoRawFd;
@@ -12,7 +12,7 @@ use std::thread;
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::backend::Backend;
 use fvm_contract::stream;
-use fvm_helper_core::process::{Timing, Watchdog};
+use fvm_helper_core::session::{SessionManager, Timing};
 
 /// Root-only: it holds the pidfile.
 const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
@@ -30,8 +30,8 @@ pub extern "C" fn fvm_helper_entry_start() -> i32 {
 pub fn start(backend: Arc<dyn Backend>, run_directory: PathBuf) -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
     let writer = ours.try_clone().expect("cloning the socket to Swift");
-    let watchdog = Watchdog::new(backend, run_directory, Timing::default());
-    let inbox = fvm_helper_core::entry::start(watchdog, move |message| {
+    let sessions = SessionManager::new(backend, run_directory, Timing::default());
+    let inbox = fvm_helper_core::entry::start(sessions, move |message| {
         stream::send(&mut &writer, message).expect("writing a message to Swift");
     });
     thread::Builder::new()

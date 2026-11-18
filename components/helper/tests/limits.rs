@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use common::*;
 use fvm_contract::app_helper::{Milestone, ProcessExitStatus, StopInitiator, StopReason};
 use fvm_contract::backend::RouteRepairOutcome;
-use fvm_helper_core::process::StageLimits;
+use fvm_helper_core::session::StageLimits;
 use rustix::process::Pid;
 
 const TINY: Duration = Duration::from_millis(150);

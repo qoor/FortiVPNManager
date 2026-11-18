@@ -22,7 +22,7 @@ use fvm_contract::helper_internal::{
 use fvm_contract::helper_pipe::{MAX_MESSAGE_BYTES, PipeMessage, PipeRequest};
 use fvm_contract::stream;
 use fvm_helper_core::entry::Inbox;
-use fvm_helper_core::process::Watchdog;
+use fvm_helper_core::session::SessionManager;
 use interprocess::os::windows::named_pipe::{
     DuplexPipeStream, PipeListener, PipeListenerOptions, PipeMode, RecvPipeStream, SendPipeStream,
     pipe_mode,
@@ -47,7 +47,7 @@ pub struct Options {
     /// The pipe's security descriptor in SDDL: who may connect, and its owner.
     pub security: String,
     /// The VPN client, with its run files where only the Helper may write.
-    pub watchdog: Watchdog,
+    pub sessions: SessionManager,
 }
 
 /// How the entry wants the Helper to end.
@@ -88,7 +88,7 @@ impl Helper {
         });
         let (ready_sender, ready) = mpsc::channel();
         let entry_side = Arc::clone(&relay);
-        let inbox = fvm_helper_core::entry::start(options.watchdog, move |message| {
+        let inbox = fvm_helper_core::entry::start(options.sessions, move |message| {
             if let FromEntry::Ready {} = message {
                 // The entry says it once; nothing waits for it afterwards.
                 let _ = ready_sender.send(());

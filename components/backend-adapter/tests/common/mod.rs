@@ -1,6 +1,6 @@
-//! Feeds output to an interpreter the way the backend contract says the watchdog does: complete
-//! lines to `line`, decoded as the watchdog does, and after each read that leaves an unfinished
-//! line, that line's bytes to `prompt`.
+//! Feeds output to an interpreter the way the backend contract says the session manager does:
+//! complete lines to `line`, decoded as the session manager does, and after each read that leaves
+//! an unfinished line, that line's bytes to `prompt`.
 
 #![allow(dead_code)] // Each test file uses a different part.
 

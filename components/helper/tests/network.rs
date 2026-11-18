@@ -22,8 +22,8 @@ use fvm_contract::backend::{
 use fvm_contract::helper_internal::{
     NetworkChange, NetworkOutcome, NetworkStep, OutsideChanges, OutsideRoute,
 };
-use fvm_helper_core::process::{NetworkJob, Report, Run, StageLimits, Timing, Watchdog};
 use fvm_helper_core::recovery::RecordSlot;
+use fvm_helper_core::session::{NetworkJob, Report, Run, SessionManager, StageLimits, Timing};
 use serde_json::Value;
 
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
@@ -170,8 +170,8 @@ impl Session {
             network_values: Duration::from_secs(1),
             network_retry: RETRY,
         };
-        let mut watchdog =
-            Watchdog::new(Arc::new(Scripted { client }), directory.join("run"), timing);
+        let mut sessions =
+            SessionManager::new(Arc::new(Scripted { client }), directory.join("run"), timing);
         let mut request = RunRequest {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
             replacing: None,
@@ -187,7 +187,7 @@ impl Session {
             password: "secret".to_owned(),
         };
         let (sender, reports) = mpsc::channel();
-        let (run, _) = watchdog
+        let (run, _) = sessions
             .start(&mut request, RecordSlot::First, None, move |report| {
                 let _ = sender.send(report);
             })

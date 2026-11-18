@@ -19,7 +19,7 @@ use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus};
 use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
-use fvm_helper_core::process::{Timing, Watchdog};
+use fvm_helper_core::session::{SessionManager, Timing};
 use fvm_helper_windows::{BUILD, Exit, Helper, Options};
 use interprocess::os::windows::named_pipe::{DuplexPipeStream, pipe_mode};
 use serde::de::DeserializeOwned;
@@ -45,7 +45,7 @@ fn start() -> Test {
         Options {
             pipe_name: pipe.clone(),
             security: "D:P(A;;GA;;;SY)(A;;0x12019f;;;AU)".to_owned(),
-            watchdog: Watchdog::new(
+            sessions: SessionManager::new(
                 Arc::new(OpenConnect),
                 env::temp_dir().join(name),
                 Timing::default(),

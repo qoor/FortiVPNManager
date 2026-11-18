@@ -19,8 +19,8 @@ use fvm_contract::helper_internal::{
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::process::{NotReplaceable, Replaced, Report, Run, StartFailure, Watchdog};
 use crate::recovery::{RecordSlot, RouteRepair};
+use crate::session::{NotReplaceable, Replaced, Report, Run, SessionManager, StartFailure};
 
 use bypass_routes::{BypassRoutes, Job};
 
@@ -43,16 +43,16 @@ impl Inbox {
     }
 }
 
-/// Starts the entry on its own thread with `watchdog` for the VPN client. `send` takes the entry's
+/// Starts the entry on its own thread with `sessions` for the VPN client. `send` takes the entry's
 /// messages for the OS side, in order, on the entry's thread; the first is "ready", once the
-/// watchdog cleaned up after an earlier Helper.
-pub fn start(watchdog: Watchdog, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox {
+/// session manager cleaned up after an earlier Helper.
+pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox {
     let (sender, events) = mpsc::channel();
     let inbox = Inbox(sender.clone());
     thread::Builder::new()
         .name("fvm-entry".into())
         .spawn(move || {
-            serve(watchdog, OsSide(Box::new(send)), sender, events);
+            serve(sessions, OsSide(Box::new(send)), sender, events);
         })
         .expect("starting the entry thread");
     inbox
@@ -81,11 +81,11 @@ impl OsSide {
     }
 }
 
-fn serve(watchdog: Watchdog, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
-    let left = clean_up(&watchdog, &os, &events);
+fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
+    let left = clean_up(&sessions, &os, &events);
     os.send(&FromEntry::Ready {});
     Entry {
-        watchdog,
+        sessions,
         os,
         events,
         sender,
@@ -99,13 +99,13 @@ fn serve(watchdog: Watchdog, os: OsSide, sender: Sender<Event>, events: Receiver
     .run()
 }
 
-/// Has the watchdog clean up after an earlier Helper, and the OS side repair the routes a run that
-/// did not finish may have left broken and remove the exception routes the earlier Helper added,
-/// before any app connection is accepted. Returns the exception routes that could not be removed.
-/// Until "ready", the OS side accepts no app connection and passes on no stop request, so the
-/// answers to these requests are the only messages it sends.
-fn clean_up(watchdog: &Watchdog, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute> {
-    watchdog.clean_up(
+/// Has the session manager clean up after an earlier Helper, and the OS side repair the routes a
+/// run that did not finish may have left broken and remove the exception routes the earlier Helper
+/// added, before any app connection is accepted. Returns the exception routes that could not be
+/// removed. Until "ready", the OS side accepts no app connection and passes on no stop request, so
+/// the answers to these requests are the only messages it sends.
+fn clean_up(sessions: &SessionManager, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute> {
+    sessions.clean_up(
         |level, category, message| os.log(level, category, message),
         |changes| {
             let routes = changes.routes.len();
@@ -184,7 +184,7 @@ fn clean_up(watchdog: &Watchdog, os: &OsSide, events: &Receiver<Event>) -> Vec<A
 }
 
 struct Entry {
-    watchdog: Watchdog,
+    sessions: SessionManager,
     os: OsSide,
     events: Receiver<Event>,
     /// For the run's reports.
@@ -447,7 +447,7 @@ impl Entry {
         };
         let reports = self.sender.clone();
         let attempt = request.attempt_id.clone();
-        let started = self.watchdog.start(request, slot, replaced, move |report| {
+        let started = self.sessions.start(request, slot, replaced, move |report| {
             reports
                 .send(Event::Run(attempt.clone(), report))
                 .expect("the event loop runs as long as the process");
@@ -575,7 +575,7 @@ impl Entry {
             .runs
             .values()
             .any(|held| held.run.process_id().is_some());
-        let client = match self.watchdog.find_client(ClientCheckWait::Limited) {
+        let client = match self.sessions.find_client(ClientCheckWait::Limited) {
             Ok((executable, untested_version)) => ClientStatus {
                 path: Some(executable.path.display().to_string()),
                 version: Some(executable.version),

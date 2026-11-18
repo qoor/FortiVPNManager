@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use fvm_contract::helper_internal::{AddedRoute, OutsideChanges};
 use serde::{Deserialize, Serialize};
 
-use crate::process::os;
+use crate::session::os;
 
 const RECORD: &str = "run.json";
 /// Written in full, then renamed over the pidfile.

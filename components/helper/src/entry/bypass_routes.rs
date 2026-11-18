@@ -19,7 +19,7 @@ use fvm_contract::helper_internal::{
 };
 
 use super::{Entry, error, to_json};
-use crate::process::NetworkJob;
+use crate::session::NetworkJob;
 
 /// Whether `added` and `route` through `service` are the same route in the routing table. On
 /// Windows a route belongs to an interface, so the same route through another one is another
@@ -439,7 +439,7 @@ impl Entry {
                 });
             }
         }
-        if let Err(problem) = self.watchdog.record_bypass_routes(&recorded) {
+        if let Err(problem) = self.sessions.record_bypass_routes(&recorded) {
             let message = format!("cannot record the exception routes: {problem}");
             self.os
                 .log(LogLevel::Error, LogCategory::Routes, message.clone());
@@ -488,7 +488,7 @@ impl Entry {
     }
 
     fn record_added(&self, added: &[AddedRoute]) {
-        if let Err(failure) = self.watchdog.record_bypass_routes(added) {
+        if let Err(failure) = self.sessions.record_bypass_routes(added) {
             self.os.log(
                 LogLevel::Error,
                 LogCategory::Routes,

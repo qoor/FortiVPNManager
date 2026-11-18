@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use common::*;
 use fvm_contract::app_helper::StopReason;
-use fvm_helper_core::process::{Report, Run};
+use fvm_helper_core::session::{Report, Run};
 
 #[test]
 fn submit_otp_and_stop_from_on_report_panic() {

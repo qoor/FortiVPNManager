@@ -1,6 +1,6 @@
 //! Helper service (Windows): the Windows Helper, a service of the system account written in Rust
-//! alone. It runs the shared Helper entry with a watchdog for openconnect, and does itself what
-//! the Helper's Swift side does on macOS: it takes the app's connections over a named pipe,
+//! alone. It runs the shared Helper entry with a session manager for openconnect, and does itself
+//! what the Helper's Swift side does on macOS: it takes the app's connections over a named pipe,
 //! answers the build check, repairs routes and changes the exception routes as the entry asks.
 #![cfg(windows)]
 

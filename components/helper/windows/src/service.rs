@@ -11,7 +11,7 @@ use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
-use fvm_helper_core::process::{Timing, Watchdog};
+use fvm_helper_core::session::{SessionManager, Timing};
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
 };
@@ -101,17 +101,17 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         ServiceExitCode::Win32(0),
         0,
     );
-    let watchdog = Watchdog::new(
+    let sessions = SessionManager::new(
         Arc::new(OpenConnect),
         PathBuf::from(RUN_DIRECTORY),
         Timing::default(),
     );
-    run_client_once(&handle, &watchdog);
+    run_client_once(&handle, &sessions);
     let options = Options {
         pipe_name: PIPE_NAME.to_owned(),
         // The system account owns the pipe, so no user can change who may do what with it.
         security: format!("O:SYG:SY{PIPE_ACCESS}"),
-        watchdog,
+        sessions,
     };
     let started = match Helper::start(options, Arc::clone(&log)) {
         Ok(started) => started,
@@ -146,20 +146,23 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
     std::process::exit(0);
 }
 
-/// Has the watchdog run the client once before the Helper takes app connections, so that the
+/// Has the session manager run the client once before the Helper takes app connections, so that the
 /// client's first run on this PC is over before the app asks for anything (user decision,
 /// 2026-11-14). Security software can hold a newly installed client's first run for minutes, and a
 /// held process cannot be ended, so this run waits without a time limit: a limit would only report
 /// a working client as broken while the wait went on anyway. Nothing is kept from it; status and
 /// connect check the client again within their short limit, and status reports a missing or broken
 /// one. Meanwhile the service control manager hears every `START_PROGRESS` that the start goes on.
-fn run_client_once(handle: &service_control_handler::ServiceStatusHandle, watchdog: &Watchdog) {
+fn run_client_once(
+    handle: &service_control_handler::ServiceStatusHandle,
+    sessions: &SessionManager,
+) {
     thread::scope(|scope| {
         let (done, finished) = mpsc::channel();
         thread::Builder::new()
             .name("fvm-helper-client-run".into())
             .spawn_scoped(scope, move || {
-                let _ = watchdog.find_client(ClientCheckWait::UntilExit);
+                let _ = sessions.find_client(ClientCheckWait::UntilExit);
                 let _ = done.send(());
             })
             .expect("starting the client run thread");

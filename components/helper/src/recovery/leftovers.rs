@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use fvm_contract::backend::Backend;
 use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel, OutsideChanges};
 
-use crate::process::os;
 use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
+use crate::session::os;
 
 /// How long the processes get to disappear after the forced stop.
 const KILL_LIMIT: Duration = Duration::from_secs(2);

@@ -45,7 +45,7 @@ use crate::recovery::{self, Failure, RecordSlot, RouteRepair};
 
 /// The VPN client the Helper runs, with the adapter that describes it, and its runs' files in a
 /// directory only the Helper may use.
-pub struct Watchdog {
+pub struct SessionManager {
     backend: Arc<dyn Backend>,
     run_directory: PathBuf,
     timing: Timing,
@@ -55,7 +55,7 @@ pub struct Watchdog {
 
 pub type FoundClient = Result<(ClientExecutable, Option<UntestedVersion>), ClientProblem>;
 
-impl Watchdog {
+impl SessionManager {
     pub fn new(backend: Arc<dyn Backend>, run_directory: PathBuf, timing: Timing) -> Self {
         Self {
             backend,
@@ -158,7 +158,7 @@ impl Watchdog {
     }
 }
 
-/// Why `Watchdog::start` started no run.
+/// Why `SessionManager::start` started no run.
 #[derive(Debug)]
 pub enum StartFailure {
     /// The client executable cannot be used; the adapter's English description for the app.

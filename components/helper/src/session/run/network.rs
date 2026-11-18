@@ -15,8 +15,8 @@ use fvm_contract::helper_internal::{
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
 use super::{Input, Phase, Watch, seconds};
-use crate::process::{NetworkJob, Report, os};
 use crate::recovery::run_directory::{self, RunFiles};
+use crate::session::{NetworkJob, Report, os};
 
 const RETRIES: u32 = 3;
 const APPLIED: &str = "‹network settings applied›";

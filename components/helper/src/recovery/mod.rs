@@ -1,7 +1,7 @@
 //! What a Helper leaves for a later one: the run directory with the run record and the record of the
 //! exception routes it added, whose formats this module alone decides; cleaning up after an earlier
 //! Helper; and the route repair a run asks for. The cleanup gets the backend adapters of every
-//! client the OS can run from `process`.
+//! client the OS can run from `session`.
 
 mod leftovers;
 pub(crate) mod run_directory;

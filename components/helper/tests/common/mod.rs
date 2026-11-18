@@ -22,8 +22,8 @@ use fvm_contract::backend::{
     NetworkSettings, OutputInterpreter, Prompt, RouteRepairOutcome, SessionInputs, UntestedVersion,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
-use fvm_helper_core::process::{Report, Run, StageLimits, Timing, Watchdog};
 use fvm_helper_core::recovery::RecordSlot;
+use fvm_helper_core::session::{Report, Run, SessionManager, StageLimits, Timing};
 use zeroize::Zeroizing;
 
 pub const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -311,7 +311,7 @@ pub fn start_run(
         launch,
         grace_period: setup.grace_period,
     };
-    let mut watchdog = Watchdog::new(Arc::new(backend), directory.path.clone(), setup.timing);
+    let mut sessions = SessionManager::new(Arc::new(backend), directory.path.clone(), setup.timing);
     let mut request = RunRequest {
         attempt_id: ATTEMPT.parse().unwrap(),
         replacing: None,
@@ -324,7 +324,7 @@ pub fn start_run(
         dtls: false,
         password: setup.password.clone(),
     };
-    match watchdog.start(&mut request, RecordSlot::First, None, on_report) {
+    match sessions.start(&mut request, RecordSlot::First, None, on_report) {
         Ok((run, _)) => run,
         Err(failure) => panic!("the run did not start: {failure:?}"),
     }

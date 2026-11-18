@@ -30,11 +30,11 @@ use fvm_contract::backend::{
 use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkOutcome};
 use zeroize::Zeroizing;
 
-use crate::process::lines::{LineAssembler, MAX_LINE_BYTES};
-use crate::process::os::{self, Child, Spawned};
-use crate::process::{Report, Timing};
 use crate::recovery::RouteRepair;
 use crate::recovery::run_directory::{self, RunFiles, RunRecord};
+use crate::session::lines::{LineAssembler, MAX_LINE_BYTES};
+use crate::session::os::{self, Child, Spawned};
+use crate::session::{Report, Timing};
 
 pub use network::{NotReplaceable, Replaced};
 
@@ -58,7 +58,7 @@ impl Run {
     ///
     /// The request's password goes to stdin at the client's first password prompt, if the
     /// interpreter expects one there, and is then zeroed. The process must ignore SIGPIPE (see the
-    /// `process` documentation).
+    /// `session` documentation).
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn start(
         backend: Arc<dyn Backend>,

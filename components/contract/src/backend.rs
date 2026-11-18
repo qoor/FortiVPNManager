@@ -1,6 +1,6 @@
-//! What a backend adapter provides for one VPN client. The Helper's OS start hands the watchdog the
-//! client's adapter, and the watchdog runs the client with what the adapter returns, so neither
-//! hard-codes a client's name, options or output wording.
+//! What a backend adapter provides for one VPN client. The Helper's OS start hands the session
+//! manager the client's adapter, and the session manager runs the client with what the adapter
+//! returns, so neither hard-codes a client's name, options or output wording.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
@@ -181,8 +181,8 @@ pub trait OutputInterpreter {
     fn prompt(&mut self, source: OutputSource, partial_line: &[u8]) -> Option<Prompt>;
 
     /// Whether the client may ask for the password once the run has reached `milestone`; clients
-    /// differ in when they ask. The watchdog answers only the first password prompt, and only
-    /// where this holds.
+    /// differ in when they ask. The session manager answers only the first password prompt, and
+    /// only where this holds.
     fn password_expected(&self, milestone: Milestone) -> bool;
 
     fn line(&mut self, source: OutputSource, text: &str) -> Option<Finding>;

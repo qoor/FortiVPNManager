@@ -19,7 +19,7 @@ use fvm_contract::helper_internal::{
     ToEntry,
 };
 use fvm_helper_core::entry::{self, Inbox};
-use fvm_helper_core::process::{Timing, Watchdog};
+use fvm_helper_core::session::{SessionManager, Timing};
 
 const WIFI: &str = "{6B29FC40-CA47-1067-B31D-00DD010662DA}";
 const ETHERNET: &str = "{3F2504E0-4F89-11D3-9A0C-0305E82C3301}";
@@ -65,9 +65,10 @@ impl OsSide {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&folder).unwrap();
-        let watchdog = Watchdog::new(Arc::new(OpenConnect), folder.join("run"), Timing::default());
+        let sessions =
+            SessionManager::new(Arc::new(OpenConnect), folder.join("run"), Timing::default());
         let (sender, messages) = mpsc::channel();
-        let inbox = entry::start(watchdog, move |message| {
+        let inbox = entry::start(sessions, move |message| {
             let _ = sender.send(message.clone());
         });
         let os = Self {

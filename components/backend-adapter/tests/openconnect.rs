@@ -454,7 +454,7 @@ mod output {
         vec![
             Finding::Milestone(Milestone::ConnectedToGateway),
             session(),
-            // The tunnel run connects again; the watchdog keeps the furthest milestone.
+            // The tunnel run connects again; the session manager keeps the furthest milestone.
             Finding::Milestone(Milestone::ConnectedToGateway),
             Finding::Milestone(Milestone::Authenticated),
             Finding::TunnelIp(Ipv4Addr::new(10, 10, 0, 5)),
@@ -576,7 +576,7 @@ mod output {
         assert_eq!(replay(&mut run, &tail), []);
         let mut expected = logged_in();
         expected.push(Finding::ScriptLeftRunning);
-        // Reconnecting to log out; the watchdog keeps the furthest milestone.
+        // Reconnecting to log out; the session manager keeps the furthest milestone.
         expected.push(Finding::Milestone(Milestone::ConnectedToGateway));
         assert_eq!(run.findings, expected);
         assert!(!run.interpreter.routes_left_unrestored());
@@ -625,7 +625,7 @@ mod output {
         );
     }
 
-    /// A second prompt is the gateway's rejection; the watchdog ends the run on it.
+    /// A second prompt is the gateway's rejection; the session manager ends the run on it.
     #[test]
     fn prompts_are_recognised_each_time_and_only_on_stderr() {
         let mut run = run();

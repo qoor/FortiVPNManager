@@ -1,7 +1,7 @@
-//! The watchdog on Windows with openconnect's output reading: a client started in a new console,
-//! its output read, its process tree killed, and an attempt's two runs and logout request. The fake
-//! clients are cmd scripts, so the test executable starts nothing but cmd.exe and what the scripts
-//! start.
+//! The session manager on Windows with openconnect's output reading: a client started in a new
+//! console, its output read, its process tree killed, and an attempt's two runs and logout request.
+//! The fake clients are cmd scripts, so the test executable starts nothing but cmd.exe and what the
+//! scripts start.
 #![cfg(windows)]
 
 use std::collections::HashMap;
@@ -24,8 +24,8 @@ use fvm_contract::backend::{
     OutputInterpreter, RouteRepairOutcome, SessionLaunch, UntestedVersion,
 };
 use fvm_contract::helper_internal::{NetworkChange, NetworkOutcome};
-use fvm_helper_core::process::{Report, Run, Timing, Watchdog};
 use fvm_helper_core::recovery::RecordSlot;
+use fvm_helper_core::session::{Report, Run, SessionManager, Timing};
 
 const CMD: &str = r"C:\Windows\System32\cmd.exe";
 const CSCRIPT: &str = r"C:\Windows\System32\cscript.exe";
@@ -79,7 +79,7 @@ set /p HEADER=\r
 exit /b 0\r
 ";
 
-/// openconnect as far as the watchdog can tell, but the client is the test's cmd script.
+/// openconnect as far as the session manager can tell, but the client is the test's cmd script.
 struct Scripted(LaunchSpec);
 
 fn value_script() -> String {
@@ -227,7 +227,7 @@ struct Session {
 
 impl Session {
     fn start(scratch: &Scratch, launch: LaunchSpec) -> Self {
-        let mut watchdog = Watchdog::new(
+        let mut sessions = SessionManager::new(
             Arc::new(Scripted(launch)),
             scratch.run_directory(),
             Timing::default(),
@@ -245,7 +245,7 @@ impl Session {
             password: PASSWORD.to_owned(),
         };
         let (sender, reports) = mpsc::channel();
-        let started = watchdog.start(&mut request, RecordSlot::First, None, move |report| {
+        let started = sessions.start(&mut request, RecordSlot::First, None, move |report| {
             let _ = sender.send(report);
         });
         let (run, _) = started.unwrap();
