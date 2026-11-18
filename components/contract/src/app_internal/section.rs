@@ -312,8 +312,6 @@ pub enum HelperState {
 #[serde(rename_all = "camelCase")]
 pub struct VpnClientInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub untested_version: Option<UntestedVersion>,

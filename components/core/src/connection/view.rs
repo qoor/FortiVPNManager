@@ -99,7 +99,6 @@ impl ConnectionManager {
                 build,
                 status: Some(status),
             }) if *build == self.app_build => Some(VpnClientInfo {
-                path: status.client.path.clone(),
                 version: status.client.version.clone(),
                 untested_version: status.client.untested_version.clone(),
                 problem: status.client.problem.clone(),

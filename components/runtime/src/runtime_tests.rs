@@ -436,7 +436,6 @@ impl App {
                 let status = HelperStatus {
                     client_running: false,
                     client: ClientStatus {
-                        path: None,
                         version: None,
                         problem: Some(ClientProblem {
                             kind: ClientProblemKind::NotFound {},

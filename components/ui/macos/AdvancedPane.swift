@@ -48,15 +48,6 @@ struct AdvancedPane: View {
                 .searchAnchor("Type", navigation)
             LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
                 .searchAnchor("Version", navigation)
-            LabeledContent("Path") {
-                if let path = found.path {
-                    Button("Show in Finder") { revealInFinder(path) }
-                        .help(path)
-                } else {
-                    Text("Not found")
-                }
-            }
-            .searchAnchor("Path", navigation)
             if let untested = found.untestedVersion {
                 NoticeRow(text: untested.message, style: .warning)
             }

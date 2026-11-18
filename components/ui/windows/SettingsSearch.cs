@@ -142,7 +142,6 @@ public static class SettingsSearch
             // The client's name is not translated.
             new SearchItem(pane, "openconnect", "openconnect", "Type", SearchCondition.VpnClientFound),
             Item(pane, "Version", when: SearchCondition.VpnClientFound),
-            Item(pane, "Path", when: SearchCondition.VpnClientFound),
             Item(pane, "Settings File"),
             Item(pane, "Show in File Explorer", row: "Settings File"),
         ],

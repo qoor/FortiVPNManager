@@ -46,7 +46,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         swift.status(1),
         json!({
             "childAlive": true,
-            "client": {"path": "/bin/sh", "version": "9.21"},
+            "client": {"version": "9.21"},
         })
     );
 
@@ -342,29 +342,6 @@ fn a_client_that_is_not_found_has_no_path_in_the_status() {
 }
 
 #[test]
-fn a_client_with_another_problem_keeps_its_path_in_the_status() {
-    let path = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
-    let mut swift = Swift::start(Setup {
-        client: Err(ClientProblem {
-            kind: ClientProblemKind::NotExecutable {},
-            path: PathBuf::from(path),
-        }),
-        ..Setup::fixture("success")
-    });
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(
-        swift.status(1),
-        json!({
-            "childAlive": false,
-            "client": {
-                "path": path,
-                "problem": {"kind": {"notExecutable": {}}, "path": path},
-            },
-        })
-    );
-}
-
-#[test]
 fn the_status_carries_the_adapters_version_judgment() {
     let mut swift = Swift::start(Setup {
         client: Ok(ClientExecutable {
@@ -379,7 +356,6 @@ fn the_status_carries_the_adapters_version_judgment() {
         json!({
             "childAlive": false,
             "client": {
-                "path": "/bin/sh",
                 "version": "9.22",
                 "untestedVersion": {"testedSeries": "9.21"},
             },

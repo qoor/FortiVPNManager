@@ -441,7 +441,6 @@ fn readiness_sections() {
                 register_helper: ButtonState::Hidden,
                 register_error: None,
                 client: Some(VpnClientInfo {
-                    path: Some("/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn".into()),
                     version: Some("1.25.0".into()),
                     untested_version: Some(UntestedVersion {
                         tested_series: "1.24".into(),
@@ -464,7 +463,6 @@ fn readiness_sections() {
                     description: "Operation not permitted".into(),
                 }),
                 client: Some(VpnClientInfo {
-                    path: None,
                     version: None,
                     untested_version: None,
                     problem: Some(ClientProblem {

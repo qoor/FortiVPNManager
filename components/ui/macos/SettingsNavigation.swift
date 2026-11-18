@@ -253,7 +253,6 @@ enum SettingsSearch {
                 item(pane, "Type", when: .vpnClientFound),
                 item(pane, "openconnect", row: "Type", when: .vpnClientFound),
                 item(pane, "Version", when: .vpnClientFound),
-                item(pane, "Path", when: .vpnClientFound),
                 item(pane, "Settings File"),
                 item(pane, "Show in Finder", row: "Settings File"),
             ]

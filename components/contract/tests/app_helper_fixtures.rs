@@ -337,15 +337,14 @@ fn output_batch() {
 
 #[test]
 fn helper_statuses() {
-    let found = |path: &str, version: &str| ClientStatus {
-        path: Some(path.into()),
+    let found = |version: &str| ClientStatus {
         version: Some(version.into()),
         problem: None,
         untested_version: None,
     };
     let running = HelperStatus {
         client_running: true,
-        client: found(OPENCONNECT_PATH, "9.21"),
+        client: found("9.21"),
     };
     both_ways(
         running,
@@ -358,7 +357,7 @@ fn helper_statuses() {
             untested_version: Some(UntestedVersion {
                 tested_series: "9.21".into(),
             }),
-            ..found(OPENCONNECT_PATH, "9.22")
+            ..found("9.22")
         },
     };
     both_ways(
@@ -370,7 +369,6 @@ fn helper_statuses() {
         HelperStatus {
             client_running: false,
             client: ClientStatus {
-                path: None,
                 version: None,
                 problem: Some(ClientProblem {
                     kind: ClientProblemKind::NotFound {},
@@ -382,7 +380,6 @@ fn helper_statuses() {
         HelperStatus {
             client_running: false,
             client: ClientStatus {
-                path: Some(OPENCONNECT_PATH.into()),
                 version: None,
                 problem: Some(ClientProblem {
                     kind: ClientProblemKind::WritableByOthers { mode: 0o775 },

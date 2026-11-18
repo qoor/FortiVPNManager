@@ -94,8 +94,7 @@ pub struct ClientProblem {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ClientProblemKind {
-    /// Nothing usable at `path`, where the client is looked for. The Helper status leaves the
-    /// client path empty for it.
+    /// Nothing usable at `path`, where the client is looked for.
     NotFound {},
     NotRegularFile {},
     /// Other users may modify it; `mode` holds the permission bits.

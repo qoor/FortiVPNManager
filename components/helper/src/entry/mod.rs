@@ -11,7 +11,7 @@ use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
     HelperStatus, Milestone, OutputBatch, RunRequest, StopReason,
 };
-use fvm_contract::backend::{ClientCheckWait, ClientProblemKind};
+use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
     ToEntry,
@@ -577,15 +577,11 @@ impl Entry {
             .any(|held| held.run.process_id().is_some());
         let client = match self.sessions.find_client(ClientCheckWait::Limited) {
             Ok((executable, untested_version)) => ClientStatus {
-                path: Some(executable.path.display().to_string()),
                 version: Some(executable.version),
                 problem: None,
                 untested_version,
             },
             Err(problem) => ClientStatus {
-                // Nothing was found where the client is looked for, so there is no path to show.
-                path: (problem.kind != ClientProblemKind::NotFound {})
-                    .then(|| problem.path.display().to_string()),
                 version: None,
                 problem: Some(problem),
                 untested_version: None,

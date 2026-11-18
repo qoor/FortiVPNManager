@@ -164,7 +164,6 @@ extension AppInternal {
     }
 
     struct VpnClientInfo: Decodable, Equatable, Sendable {
-        var path: String?
         var version: String?
         var untestedVersion: UntestedVersion?
         var problem: ClientProblem?

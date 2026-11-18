@@ -325,8 +325,6 @@ pub struct HelperStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ClientStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub problem: Option<ClientProblem>,

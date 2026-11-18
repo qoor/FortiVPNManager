@@ -359,8 +359,7 @@ private extension AppInternal {
             ReadinessSection(
                 helper: .running(build: "20261109120000"), registerHelper: .hidden, registerError: nil,
                 client: VpnClientInfo(
-                    path: "/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn", version: "1.25.0",
-                    untestedVersion: UntestedVersion(testedSeries: "1.24"), problem: nil
+                    version: "1.25.0", untestedVersion: UntestedVersion(testedSeries: "1.24"), problem: nil
                 )
             ),
             ReadinessSection(
@@ -370,7 +369,7 @@ private extension AppInternal {
                 helper: .running(build: "20261109120000"), registerHelper: .hidden,
                 registerError: .failed(description: "Operation not permitted"),
                 client: VpnClientInfo(
-                    path: nil, version: nil, untestedVersion: nil,
+                    version: nil, untestedVersion: nil,
                     problem: ClientProblem(kind: .notFound, path: "/opt/homebrew/bin/openfortivpn")
                 )
             ),

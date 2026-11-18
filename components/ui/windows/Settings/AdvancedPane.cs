@@ -23,8 +23,6 @@ internal sealed class AdvancedPane : IPane
     private readonly InfoBar registerError = Cards.Notice(InfoBarSeverity.Error);
     private readonly StackPanel client = new() { Spacing = 4 };
     private readonly TextBlock clientVersion = Cards.Value();
-    private readonly Button showClient = new() { Content = L("Show in File Explorer") };
-    private readonly TextBlock clientNotFound = Cards.Value();
     private readonly InfoBar untested = Cards.Notice(InfoBarSeverity.Warning);
     private readonly InfoBar clientProblem = Cards.Notice(InfoBarSeverity.Error);
     private readonly TextBlock filePath = new() { IsTextSelectionEnabled = true, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
@@ -34,7 +32,6 @@ internal sealed class AdvancedPane : IPane
     private readonly StackPanel warnings = new() { Spacing = 4 };
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
     private readonly Dictionary<string, FrameworkElement> rows = [];
-    private string? clientPath;
     private string? settingsPath;
     private IReadOnlyList<ConfigWarning> shownWarnings = [];
 
@@ -49,19 +46,9 @@ internal sealed class AdvancedPane : IPane
         body.Children.Add(rows["Register Helper"] = registerCard);
         body.Children.Add(registerError);
 
-        // The path runs long and would wrap; the button shows it in File Explorer, its tooltip as text.
-        showClient.Click += (_, _) =>
-        {
-            if (clientPath is { } path)
-            {
-                Cards.ShowInFileExplorer(path);
-            }
-        };
-        clientNotFound.Text = L("Not found");
         client.Children.Add(Cards.SectionHeader(L("VPN client")));
         client.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
         client.Children.Add(rows["Version"] = Cards.Card(L("Version"), clientVersion));
-        client.Children.Add(rows["Path"] = Cards.Card(L("Path"), Cards.Row(showClient, clientNotFound)));
         client.Children.Add(untested);
         client.Children.Add(clientProblem);
         body.Children.Add(client);
@@ -100,10 +87,6 @@ internal sealed class AdvancedPane : IPane
         if (readiness.Client is { } info)
         {
             clientVersion.Text = info.Version ?? L("Unknown");
-            clientPath = info.Path;
-            showClient.Visible(info.Path is not null);
-            ToolTipService.SetToolTip(showClient, info.Path);
-            clientNotFound.Visible(info.Path is null);
             untested.Show(info.UntestedVersion?.Message());
             clientProblem.Show(info.Problem?.Message());
         }

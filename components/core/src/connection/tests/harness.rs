@@ -182,7 +182,6 @@ pub(super) fn ready() -> ReadinessFacts {
             status: Some(HelperStatus {
                 client_running: false,
                 client: ClientStatus {
-                    path: Some("/opt/homebrew/Cellar/vpn/1.24.1/bin/vpn".to_owned()),
                     version: Some("1.24.1".to_owned()),
                     problem: None,
                     untested_version: None,

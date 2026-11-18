@@ -225,7 +225,6 @@ public static partial class AppInternal
     }
 
     public sealed record VpnClientInfo(
-        string? Path = null,
         string? Version = null,
         UntestedVersion? UntestedVersion = null,
         ClientProblem? Problem = null);

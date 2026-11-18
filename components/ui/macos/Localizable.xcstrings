@@ -2511,16 +2511,6 @@
         }
       }
     },
-    "Not found": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "찾을 수 없음"
-          }
-        }
-      }
-    },
     "Not registered": {
       "localizations": {
         "ko": {
@@ -2727,16 +2717,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "붙여넣기"
-          }
-        }
-      }
-    },
-    "Path": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "경로"
           }
         }
       }
