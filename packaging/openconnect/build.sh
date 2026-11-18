@@ -51,12 +51,11 @@ if [ "${2-}" != build ]; then
             echo "$os"
             echo "$gitlink"
             shasum -a 256 < "$0"
-            for formula in $formulas; do
-                readlink "$brew/opt/$formula"
-            done
             if [ "$os" = macos ]; then
                 xcrun clang --version | head -1
                 xcrun --show-sdk-version
+            else
+                readlink "$brew/opt/mingw-w64"
             fi
         } | shasum -a 256 | cut -c 1-16
     )
