@@ -50,7 +50,8 @@ pub fn timing() -> Timing {
         },
         output_batch: Duration::from_millis(20),
         network_retry: RETRY,
-        cancel_repeat: Duration::from_secs(10),
+        detach_after: Duration::from_secs(10),
+        stuck_after: Duration::from_secs(30),
     }
 }
 
@@ -147,6 +148,7 @@ pub enum Delivered {
     Output(Vec<OutputLine>),
     Event(HelperEventKind),
     Log(LogLevel, LogCategory, String),
+    Stuck,
 }
 
 pub struct Session {
@@ -236,6 +238,7 @@ impl Session {
                 self.delivered
                     .push(Delivered::Log(level, category, message));
             }
+            Report::Stuck => self.delivered.push(Delivered::Stuck),
         }
     }
 

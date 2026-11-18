@@ -1,9 +1,8 @@
 //! One run: a session thread that runs the backend's session, and a run thread that owns everything
 //! else about the run and handles, in order, what the session reports, its end, the caller's
 //! requests and the time limits. When the session opened, its secret is saved off the session
-//! thread; once the session ends, the session thread sends the logout request if the session never
-//! got to its main loop, deletes the secret and only then reports the end. The run keeps its run
-//! record up to date and removes it before it reports the exit.
+//! thread; once the session ends, the session thread deletes the secret and only then reports the
+//! end. The run keeps its run record up to date and removes it before it reports the exit.
 
 mod network;
 
@@ -14,7 +13,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle, ThreadId};
+use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
@@ -25,7 +24,7 @@ use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkChange, Networ
 use fvm_contract::validation;
 use zeroize::Zeroizing;
 
-use crate::recovery::logout::{self, SessionSecret};
+use crate::recovery::logout::SessionSecret;
 use crate::recovery::run_directory::{self, RunFiles, RunRecord};
 use crate::secrets::SecretStore;
 use crate::session::backend::{
@@ -71,7 +70,7 @@ impl Run {
         let port = u16::try_from(request.port).expect("the backend checked the port");
         let attempt = request.attempt_id.to_string();
         let (inputs, received) = mpsc::channel();
-        let saving: Arc<Mutex<Option<JoinHandle<Saved>>>> = Arc::default();
+        let saving: Arc<Mutex<Option<_>>> = Arc::default();
         let link = Arc::new(Link::new(
             {
                 let inputs = inputs.clone();
@@ -94,10 +93,7 @@ impl Run {
                     };
                     let saver = thread::Builder::new()
                         .name("fvm-session-secret".to_owned())
-                        .spawn(move || {
-                            let saved = secrets.save(&attempt, &secret.encode());
-                            Saved { secret, saved }
-                        })
+                        .spawn(move || secrets.save(&attempt, &secret.encode()))
                         .expect("starting the session secret thread");
                     *saving.lock().expect(LOCK) = Some(saver);
                 }
@@ -123,7 +119,7 @@ impl Run {
                     let saver = saving.lock().expect(LOCK).take();
                     let saved = saver
                         .map(|saver| saver.join().expect("saving a session secret never panics"));
-                    let ended = finish_session(end.mainloop_ran, saved, secrets.as_ref(), &attempt);
+                    let ended = finish_session(saved, secrets.as_ref(), &attempt);
                     let _ = inputs.send(Input::Ended(ended));
                 })
                 .expect("starting the session thread");
@@ -150,7 +146,8 @@ impl Run {
             certificate_rejected_at: None,
             tunnel_address_in_use: false,
             stop: None,
-            cancel_repeat_at: None,
+            detach_at: None,
+            stuck_at: None,
             batch: Vec::new(),
             batch_deadline: None,
             stage: None,
@@ -251,29 +248,20 @@ impl Run {
     }
 }
 
-struct Saved {
-    secret: SessionSecret,
-    saved: Result<(), String>,
-}
-
 pub(crate) struct Ended {
-    logout: Option<String>,
     failures: Vec<String>,
 }
 
 fn finish_session(
-    mainloop_ran: bool,
-    saved: Option<Saved>,
+    saved: Option<Result<(), String>>,
     secrets: &dyn SecretStore,
     attempt: &str,
 ) -> Ended {
-    let Some(Saved { secret, saved }) = saved else {
+    let Some(saved) = saved else {
         return Ended {
-            logout: None,
             failures: Vec::new(),
         };
     };
-    let logout = (!mainloop_ran).then(|| logout::log_out(&secret));
     let failure = match saved {
         Ok(()) => secrets
             .delete(attempt)
@@ -282,7 +270,6 @@ fn finish_session(
         Err(error) => Some(format!("cannot save the session secret: {error}")),
     };
     Ended {
-        logout,
         failures: failure.into_iter().collect(),
     }
 }
@@ -334,7 +321,8 @@ struct Watch<R> {
     tunnel_address_in_use: bool,
     /// The first stop reason.
     stop: Option<StopReason>,
-    cancel_repeat_at: Option<Instant>,
+    detach_at: Option<Instant>,
+    stuck_at: Option<Instant>,
 
     batch: Vec<OutputLine>,
     batch_deadline: Option<Instant>,
@@ -412,7 +400,8 @@ impl<R: FnMut(Report)> Watch<R> {
         [
             self.batch_deadline,
             self.stage.as_ref().map(|stage| stage.deadline),
-            self.cancel_repeat_at,
+            self.detach_at,
+            self.stuck_at,
             self.network.deadline(),
         ]
         .into_iter()
@@ -428,16 +417,15 @@ impl<R: FnMut(Report)> Watch<R> {
         {
             self.stage_expired();
         }
-        if self
-            .cancel_repeat_at
-            .is_some_and(|deadline| deadline <= now)
-        {
-            if self.link.cancel() {
-                self.cancel_repeat_at = Some(now + self.timing.cancel_repeat);
-                self.meta("‹session still running: cancel sent again›");
-            } else {
-                self.cancel_repeat_at = None;
+        if self.detach_at.is_some_and(|deadline| deadline <= now) {
+            self.detach_at = None;
+            if self.link.detach() {
+                self.meta("‹session still running: detach sent›");
             }
+        }
+        if self.stuck_at.is_some_and(|deadline| deadline <= now) {
+            self.stuck_at = None;
+            self.stuck();
         }
         self.network_deadlines_passed(now);
         if self.batch_deadline.is_some_and(|deadline| deadline <= now) {
@@ -595,8 +583,23 @@ impl<R: FnMut(Report)> Watch<R> {
             .expect("a stop reason serializes as its raw value");
         self.meta(format!("‹session cancelled (reason: {raw})›"));
         if self.link.cancel() {
-            self.cancel_repeat_at = Some(Instant::now() + self.timing.cancel_repeat);
+            self.detach_at = Some(Instant::now() + self.timing.detach_after);
         }
+        self.stuck_at = Some(Instant::now() + self.timing.stuck_after);
+    }
+
+    fn stuck(&mut self) {
+        let limit = seconds(self.timing.stuck_after);
+        self.meta(format!(
+            "‹session did not end within {limit} after the cancel: restarting the Helper›"
+        ));
+        self.flush_batch();
+        let message = format!(
+            "{}: session did not end within {limit} after the cancel; aborting so the OS restarts the Helper",
+            self.name
+        );
+        self.log(LogLevel::Error, LogCategory::Helper, message);
+        (self.on_report)(Report::Stuck);
     }
 
     // The end
@@ -607,7 +610,8 @@ impl<R: FnMut(Report)> Watch<R> {
         };
         self.returned.store(true, Ordering::Relaxed);
         self.stage = None;
-        self.cancel_repeat_at = None;
+        self.detach_at = None;
+        self.stuck_at = None;
         self.network.stop_watching();
     }
 
@@ -621,9 +625,6 @@ impl<R: FnMut(Report)> Watch<R> {
             self.log(LogLevel::Error, LogCategory::Helper, message);
         }
         self.meta(format!("‹session ended: code {}›", end.code));
-        if let Some(text) = ended.logout {
-            self.meta(format!("‹{text}›"));
-        }
         let facts = ExitFacts {
             furthest_milestone: Some(self.furthest),
             stop_initiator: match self.stop {

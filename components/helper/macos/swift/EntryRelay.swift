@@ -141,9 +141,11 @@ enum EntryRelay {
                 stream.send(.networkChanged(outcome: TunnelNetwork.change(change)))
             }
         case .exitAfterDraining:
-            exitAfterDraining()
+            exitAfterDraining { exit(EXIT_SUCCESS) }
         case .exitNow:
             exit(EXIT_SUCCESS)
+        case .abortAfterDraining:
+            exitAfterDraining { abort() }
         case .log(let level, let category, let message):
             let logger = switch category {
             case .helper: HelperLog.helper
@@ -170,8 +172,8 @@ enum EntryRelay {
         return reply
     }
 
-    /// Exits once everything sent to the apps has left, or after `drainLimit`.
-    private static func exitAfterDraining() {
+    /// Ends the process with `end` once everything sent to the apps has left, or after `drainLimit`.
+    private static func exitAfterDraining(_ end: @escaping @Sendable () -> Never) {
         let clients = state.withLock { state in
             state.accepting = false
             return Array(state.clients.values)
@@ -181,7 +183,7 @@ enum EntryRelay {
             drained.enter()
             client.afterPendingSends { drained.leave() }
         }
-        drained.notify(queue: .global()) { exit(EXIT_SUCCESS) }
-        DispatchQueue.global().asyncAfter(deadline: .now() + drainLimit) { exit(EXIT_SUCCESS) }
+        drained.notify(queue: .global()) { end() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + drainLimit) { end() }
     }
 }

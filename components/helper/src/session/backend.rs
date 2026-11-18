@@ -33,7 +33,12 @@ pub struct SessionRequest {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SessionEnd {
     pub code: i32,
-    pub mainloop_ran: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Command {
+    Cancel,
+    Detach,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -76,7 +81,7 @@ pub struct Link {
 #[derive(Default)]
 struct Cancel {
     requested: bool,
-    write: Option<Box<dyn Fn() + Send>>,
+    write: Option<Box<dyn Fn(Command) + Send>>,
 }
 
 impl Link {
@@ -118,7 +123,7 @@ impl Link {
         opened(cookie);
     }
 
-    pub fn arm_cancel(&self, write: impl Fn() + Send + 'static) -> bool {
+    pub fn arm_cancel(&self, write: impl Fn(Command) + Send + 'static) -> bool {
         let mut cancel = self.cancel.lock().expect(LOCK);
         if cancel.requested {
             return false;
@@ -136,11 +141,20 @@ impl Link {
         cancel.requested = true;
         let armed = cancel.write.is_some();
         if let Some(write) = &cancel.write {
-            write();
+            write(Command::Cancel);
         }
         self.otp_sender
             .send(None)
             .expect("the link holds the OTP receiver");
         armed
+    }
+
+    pub fn detach(&self) -> bool {
+        let cancel = self.cancel.lock().expect(LOCK);
+        let Some(write) = &cancel.write else {
+            return false;
+        };
+        write(Command::Detach);
+        true
     }
 }

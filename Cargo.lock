@@ -341,6 +341,7 @@ dependencies = [
  "fvm-contract",
  "fvm-helper-core",
  "nix",
+ "rustls",
  "windows-sys 0.61.2",
  "zeroize",
 ]

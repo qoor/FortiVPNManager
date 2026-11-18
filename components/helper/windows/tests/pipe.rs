@@ -14,6 +14,8 @@
 mod fake;
 
 use std::env;
+use std::io::Write;
+use std::process::{self, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -25,9 +27,13 @@ use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
 use fvm_helper_core::session::{SessionManager, Timing};
 use fvm_helper_windows::{BUILD, Exit, Helper, Options};
-use interprocess::os::windows::named_pipe::{DuplexPipeStream, pipe_mode};
+use interprocess::os::windows::named_pipe::{
+    DuplexPipeStream, PipeListener, PipeListenerOptions, PipeMode, pipe_mode,
+};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+
+const ABORTING_WRITER_PIPE: &str = "FVM_ABORTING_WRITER_PIPE";
 
 struct Test {
     helper: Helper,
@@ -271,4 +277,57 @@ fn a_termination_request_without_a_run_exits_after_draining() {
     test.helper.terminate();
     assert_eq!(test.helper.wait_for_exit(), Exit::AfterDraining);
     test.helper.drain(Duration::from_secs(1));
+}
+
+#[test]
+fn a_message_written_before_the_writer_aborts_still_reaches_the_reader() {
+    let pipe = format!(r"\\.\pipe\fvm-helper-abort-{}", process::id());
+    let mut writer = Command::new(env::current_exe().unwrap())
+        .args(["--exact", "write_then_abort", "--ignored"])
+        .env(ABORTING_WRITER_PIPE, &pipe)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let connection = loop {
+        match DuplexPipeStream::<pipe_mode::Bytes>::connect_by_path(pipe.as_str()) {
+            Ok(connection) => break connection,
+            Err(error) => {
+                assert!(Instant::now() < deadline, "{error}");
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    };
+    let status = writer.wait().unwrap();
+    assert_eq!(
+        status.code(),
+        Some(0xC000_0409_u32.cast_signed()),
+        "{status}"
+    );
+    let message: Value = stream::receive(&mut &connection).unwrap();
+    assert_eq!(
+        message,
+        json!({ "output": { "json": "written before the abort" } })
+    );
+}
+
+#[test]
+#[ignore = "the aborting writer of a_message_written_before_the_writer_aborts_still_reaches_the_reader"]
+fn write_then_abort() {
+    let pipe = env::var(ABORTING_WRITER_PIPE).unwrap();
+    let listener: PipeListener<pipe_mode::Bytes, pipe_mode::Bytes> = PipeListenerOptions::new()
+        .path(pipe.as_str())
+        .mode(PipeMode::Bytes)
+        .create_duplex::<pipe_mode::Bytes>()
+        .unwrap();
+    let connection = listener.accept().unwrap();
+    let mut frame = Vec::new();
+    stream::send(
+        &mut frame,
+        &json!({ "output": { "json": "written before the abort" } }),
+    )
+    .unwrap();
+    (&connection).write_all(&frame).unwrap();
+    process::abort();
 }

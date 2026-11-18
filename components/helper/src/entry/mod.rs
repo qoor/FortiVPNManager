@@ -24,8 +24,8 @@ use crate::session::{NotReplaceable, Replaced, Report, Run, SessionManager, Star
 use bypass_routes::{BypassRoutes, Job};
 
 /// How long exiting after the OS's termination request waits for the run to report its exit.
-/// Longer than the logout request's wait for the gateway, so a run whose session could not log out
-/// itself still logs out and is reported first.
+/// Longer than a stopped session's wait before it is detached, so a run whose logout hangs is still
+/// detached and reported first.
 const SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
 /// Lets the reply to an exitWhenIdle request leave before the Helper exits.
 const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
@@ -623,6 +623,11 @@ impl Entry {
             }
             Report::ChangeNetwork(job) => self.queue_bypass_job(Job::Network(job)),
             Report::Log(level, category, message) => self.os.log(level, category, message),
+            Report::Stuck => {
+                if !matches!(self.lifecycle, Lifecycle::Exiting) {
+                    self.exit(FromEntry::AbortAfterDraining {});
+                }
+            }
         }
     }
 

@@ -45,31 +45,23 @@ pub(super) fn run(request: SessionRequest, link: &Link) -> SessionEnd {
     assert_eq!(vpninfo.parse_url(&url), 0, "the request was checked");
     let armed = vpninfo.arm_cancel();
     if armed != 0 {
-        return ended(armed);
+        return SessionEnd { code: armed };
     }
     let code = vpninfo.obtain_cookie();
     if code != 0 {
-        return ended(code);
+        return SessionEnd { code };
     }
     link.opened(vpninfo.cookie());
     link.report(SessionEvent::Authenticated);
     let code = vpninfo.make_cstp_connection();
     if code != 0 {
-        return ended(code);
+        return SessionEnd { code };
     }
     if request.dtls && vpninfo.setup_dtls(DTLS_ATTEMPT_PERIOD) != 0 {
         vpninfo.disable_dtls();
     }
     SessionEnd {
         code: vpninfo.mainloop(0, RECONNECT_INTERVAL_MIN),
-        mainloop_ran: true,
-    }
-}
-
-fn ended(code: c_int) -> SessionEnd {
-    SessionEnd {
-        code,
-        mainloop_ran: false,
     }
 }
 
@@ -268,6 +260,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use fvm_helper_core::session::backend::Command;
     use zeroize::Zeroizing;
 
     use super::*;
@@ -325,7 +318,8 @@ mod tests {
         let ((), events) = reported(&[PIN], |context| {
             assert!(context.link.arm_cancel({
                 let cancels = Arc::clone(&cancels);
-                move || {
+                move |command| {
+                    assert_eq!(command, Command::Cancel);
                     cancels.fetch_add(1, Ordering::SeqCst);
                 }
             }));

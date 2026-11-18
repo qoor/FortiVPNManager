@@ -67,7 +67,7 @@ fn reconnecting(settings: NetworkSettings, reconnect: mpsc::Receiver<()>) -> Scr
             line(link, "Reconnected");
             link.report(SessionEvent::Reconnected);
         }
-        ended(-EINTR, true)
+        ended(-EINTR)
     })
 }
 
@@ -241,7 +241,7 @@ fn settings_the_backend_could_not_read_end_the_run_with_nothing_to_revert() {
             "the IPv4 address is missing".to_owned(),
         )));
         wait_for_cancel(link);
-        ended(-EINTR, true)
+        ended(-EINTR)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -266,7 +266,7 @@ fn a_stopping_run_does_not_look_up_the_settings_that_arrive() {
         open(link);
         let _ = wait_ready.recv();
         tunnel_ready(link, settings("utun9", "10.10.0.5"));
-        ended(-EINTR, true)
+        ended(-EINTR)
     });
     let mut session = Session::start(script, Setup::default());
     session.wait_for(Milestone::Authenticated);
@@ -333,7 +333,7 @@ fn a_look_up_answered_after_the_session_returned_is_not_recorded_or_applied() {
         open(link);
         tunnel_ready(link, settings("utun9", "10.10.0.5"));
         let _ = ends.recv();
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let mut session = Session::start(script, setup);
     let look_up = session.next_job();
@@ -367,7 +367,7 @@ fn an_apply_answered_after_the_session_returned_does_not_bring_the_tunnel_up() {
         open(link);
         tunnel_ready(link, settings("utun9", "10.10.0.5"));
         let _ = ends.recv();
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let mut session = Session::start(script, setup);
     session
@@ -434,7 +434,7 @@ fn a_tunnel_device_refused_for_the_replaced_runs_address_is_told_in_the_exit() {
             Some("10.10.0.5".parse().unwrap()),
             None,
         ));
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let mut new = Session::start_replacing(script, replacing_setup(), Some(replaced));
     let facts = address_in_use_end(&mut new);
@@ -461,7 +461,7 @@ fn a_tunnel_device_refused_for_another_address_is_not_an_address_in_use() {
             Some("10.10.0.6".parse().unwrap()),
             None,
         ));
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let mut new = Session::start_replacing(script, replacing_setup(), Some(replaced));
     let facts = new.wait_for_exit();

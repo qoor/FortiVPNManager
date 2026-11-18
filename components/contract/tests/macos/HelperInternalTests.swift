@@ -134,6 +134,7 @@ struct HelperInternalTests {
             )),
             .exitAfterDraining,
             .exitNow,
+            .abortAfterDraining,
             .log(level: .info, category: .routes, message: "gateway has no IPv4 address; its host route will not be repaired"),
             .log(level: .notice, category: .helper, message: "run \(attempt): tunnel up"),
             .log(level: .error, category: .helper, message: "cannot write the pidfile: ‹denied›"),

@@ -8,10 +8,15 @@ use std::{env, fs, thread};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_helper_core::session::backend::{Backend, Link, SessionEnd, SessionEvent, SessionRequest};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls::{ServerConfig, ServerConnection};
 use zeroize::Zeroizing;
 
 const EINTR: i32 = 4;
 const TLS_HANDSHAKE: u8 = 0x16;
+const GATEWAY_CERT: &[u8] = include_bytes!("gateway/cert.der");
+const GATEWAY_KEY: &[u8] = include_bytes!("gateway/key.der");
+const GATEWAY_PIN: &str = "pin-sha256:MLXLDsm7DieFNnn7zYx1QArmPMlMb2vn3VZQHWavoXY=";
 const OPENSSL_CONFIG_WITHOUT_ALGORITHMS: &str = "openssl_conf = openssl_init
 [openssl_init]
 providers = providers
@@ -85,10 +90,50 @@ fn a_cancel_during_the_tls_handshake_ends_it_at_once() {
     );
     let cancelled = Instant::now();
     link.cancel();
-    let (end, ended) = session.join().unwrap();
+    let (_, ended) = session.join().unwrap();
     let waited = ended - cancelled;
     assert!(waited < Duration::from_secs(3), "{waited:?}");
-    assert!(!end.mainloop_ran);
+}
+
+#[test]
+fn a_detach_while_the_gateway_never_answers_ends_the_session_at_once() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (link, _) = link();
+    let session = thread::spawn({
+        let link = Arc::clone(&link);
+        move || {
+            let mut request = request(port);
+            request.pins = vec![GATEWAY_PIN.to_owned()];
+            let end = backend().run(request, &link);
+            (end, Instant::now())
+        }
+    });
+    let mut stream = accept(&listener);
+    let mut tls = ServerConnection::new(gateway_config()).unwrap();
+    let mut gateway = rustls::Stream::new(&mut tls, &mut stream);
+    let mut head = Vec::new();
+    let mut byte = [0];
+    while !head.ends_with(b"\r\n\r\n") {
+        gateway.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    assert!(
+        head.starts_with(b"GET /"),
+        "{}",
+        String::from_utf8_lossy(&head)
+    );
+    thread::sleep(Duration::from_secs(1));
+    assert!(
+        !session.is_finished(),
+        "the session waits for the gateway's answer"
+    );
+    let detached = Instant::now();
+    assert!(link.detach());
+    let (end, ended) = session.join().unwrap();
+    let waited = ended - detached;
+    assert!(waited < Duration::from_secs(3), "{waited:?}");
+    assert_ne!(end.code, 0);
 }
 
 #[test]
@@ -119,15 +164,23 @@ fn a_session_cancelled_before_it_starts_never_connects() {
     let (link, events) = link();
     link.cancel();
     let end = backend().run(request(listener.local_addr().unwrap().port()), &link);
-    assert_eq!(
-        end,
-        SessionEnd {
-            code: -EINTR,
-            mainloop_ran: false,
-        }
-    );
+    assert_eq!(end, SessionEnd { code: -EINTR });
     assert_eq!(listener.accept().unwrap_err().kind(), ErrorKind::WouldBlock);
     assert_eq!(events.try_iter().count(), 0);
+}
+
+fn gateway_config() -> Arc<ServerConfig> {
+    let config =
+        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![CertificateDer::from(GATEWAY_CERT)],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(GATEWAY_KEY)),
+            )
+            .unwrap();
+    Arc::new(config)
 }
 
 fn accept(listener: &TcpListener) -> TcpStream {

@@ -11,6 +11,11 @@
 		<key>com.qoor.FortiVPNManager.Helper</key>
 		<true/>
 	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>Crashed</key>
+		<true/>
+	</dict>
 	<key>ProcessType</key>
 	<string>Interactive</string>
 	<key>ExitTimeOut</key>

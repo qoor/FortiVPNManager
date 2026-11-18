@@ -19,6 +19,7 @@ use std::ptr::{self, NonNull};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
+use fvm_helper_core::session::backend::Command;
 #[cfg(target_os = "macos")]
 use nix::sys::socket::{
     AddressFamily, SockFlag, SockProtocol, SockType, SysControlAddr, connect, socket,
@@ -41,6 +42,7 @@ pub(super) const EINTR: c_int = 4;
 pub(super) const EIO: c_int = 5;
 const EINVAL: c_int = 22;
 const OC_CMD_CANCEL: u8 = b'x';
+const OC_CMD_DETACH: u8 = b'd';
 const USER_AGENT: &CStr = c"AnyConnect-compatible OpenConnect VPN Agent";
 #[cfg(target_os = "macos")]
 const UTUN_CONTROL_NAME: &str = "com.apple.net.utun_control";
@@ -257,7 +259,12 @@ impl<'a> VpnInfo<'a> {
         if pipe == CMD_PIPE_ERR {
             return -EIO;
         }
-        if self.callbacks.context.link.arm_cancel(move || cancel(pipe)) {
+        if self
+            .callbacks
+            .context
+            .link
+            .arm_cancel(move |command| send_command(pipe, command))
+        {
             0
         } else {
             -EINTR
@@ -306,18 +313,26 @@ impl Drop for VpnInfo<'_> {
 }
 
 #[cfg(unix)]
-fn cancel(pipe: CmdSocket) {
+fn send_command(pipe: CmdSocket, command: Command) {
     // SAFETY: The link writes only while armed, and the session disarms it before
     // openconnect_vpninfo_free closes the pipe; ManuallyDrop leaves it open.
     let pipe = ManuallyDrop::new(unsafe { File::from_raw_fd(pipe) });
-    let _ = (&*pipe).write(&[OC_CMD_CANCEL]);
+    let _ = (&*pipe).write(&[command_byte(command)]);
 }
 
 #[cfg(windows)]
-fn cancel(pipe: CmdSocket) {
+fn send_command(pipe: CmdSocket, command: Command) {
+    let byte = command_byte(command);
     // SAFETY: The link writes only while armed, and the session disarms it before
     // openconnect_vpninfo_free closes the socket; the byte is live for the call.
-    unsafe { windows_sys::Win32::Networking::WinSock::send(pipe, &OC_CMD_CANCEL, 1, 0) };
+    unsafe { windows_sys::Win32::Networking::WinSock::send(pipe, &byte, 1, 0) };
+}
+
+fn command_byte(command: Command) -> u8 {
+    match command {
+        Command::Cancel => OC_CMD_CANCEL,
+        Command::Detach => OC_CMD_DETACH,
+    }
 }
 
 pub(super) struct Form<'f>(&'f mut OcAuthForm);

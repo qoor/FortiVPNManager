@@ -152,6 +152,7 @@ pub enum FromEntry {
     ExitAfterDraining {},
     /// Exit at once, even if something sent to apps has not left yet.
     ExitNow {},
+    AbortAfterDraining {},
     /// A line for the unified log.
     Log {
         level: LogLevel,

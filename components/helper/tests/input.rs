@@ -26,7 +26,7 @@ fn an_otp_before_the_prompt_is_refused() {
                 trust_gateway(link);
             }
             wait_for_cancel(link);
-            ended(-EIO, false)
+            ended(-EIO)
         });
         let mut session = Session::start(script, Setup::default());
         session.wait_for(milestone);
@@ -49,7 +49,7 @@ fn an_otp_is_accepted_once_while_prompted_and_reaches_the_session() {
         let otp = ask_otp(link);
         got.send(otp.map(|code| code.to_string())).unwrap();
         wait_for_cancel(link);
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     session.wait_for(Milestone::OtpPrompted);
@@ -83,7 +83,7 @@ fn an_otp_that_is_not_one_is_refused_before_the_run_sees_it() {
         trust_gateway(link);
         let otp = ask_otp(link);
         assert!(otp.is_none(), "the session got an OTP");
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     session.wait_for(Milestone::OtpPrompted);
@@ -99,8 +99,8 @@ fn a_stop_ends_the_otp_wait_and_refuses_a_later_otp() {
     let script = script(|_, link| {
         trust_gateway(link);
         match ask_otp(link) {
-            Some(_) => ended(0, false),
-            None => ended(-EIO, false),
+            Some(_) => ended(0),
+            None => ended(-EIO),
         }
     });
     let mut session = Session::start(script, Setup::default());
@@ -127,7 +127,7 @@ fn a_repeated_login_form_ends_the_run_as_a_repeated_prompt() {
         trust_gateway(link);
         link.report(SessionEvent::FormRepeated(FormKind::Login));
         error_line(link, "Failed to complete authentication");
-        ended(-EPERM, false)
+        ended(-EPERM)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -152,7 +152,7 @@ fn a_repeated_otp_form_ends_the_run_as_a_repeated_prompt() {
         if ask_otp(link).is_some() {
             link.report(SessionEvent::FormRepeated(FormKind::Otp));
         }
-        ended(-EPERM, false)
+        ended(-EPERM)
     });
     let mut session = Session::start(script, Setup::default().submitting_otp());
     let facts = session.wait_for_exit();

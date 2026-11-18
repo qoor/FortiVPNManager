@@ -15,6 +15,9 @@ nix = { workspace = true, features = ["ioctl", "socket"] }
 fvm-common.workspace = true
 windows-sys.workspace = true
 
+[dev-dependencies]
+rustls.workspace = true
+
 [build-dependencies]
 cc.workspace = true
 

@@ -128,6 +128,10 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
     match helper.wait_for_exit() {
         Exit::AfterDraining => helper.drain(DRAIN_LIMIT),
         Exit::Now => {}
+        Exit::AbortAfterDraining => {
+            helper.drain(DRAIN_LIMIT);
+            std::process::abort();
+        }
     }
     report(&handle, ServiceState::Stopped, ServiceExitCode::Win32(0));
     // The other threads would keep the process alive.

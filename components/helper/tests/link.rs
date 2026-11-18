@@ -1,32 +1,31 @@
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use fvm_helper_core::session::backend::Link;
+use fvm_helper_core::session::backend::{Command, Link};
 use zeroize::Zeroizing;
 
 #[test]
-fn a_cancel_writes_only_while_the_session_is_armed() {
+fn a_cancel_or_detach_writes_only_while_the_session_is_armed() {
     let link = Link::new(|_| {}, |_| {});
-    let writes = Arc::new(AtomicUsize::new(0));
+    let writes = Arc::new(Mutex::new(Vec::new()));
+    assert!(!link.detach());
     assert!(link.arm_cancel({
         let writes = Arc::clone(&writes);
-        move || {
-            writes.fetch_add(1, Ordering::SeqCst);
-        }
+        move |command| writes.lock().unwrap().push(command)
     }));
     assert!(link.cancel());
-    assert_eq!(writes.load(Ordering::SeqCst), 1);
-    assert!(link.cancel());
-    assert_eq!(writes.load(Ordering::SeqCst), 2);
+    assert_eq!(*writes.lock().unwrap(), [Command::Cancel]);
+    assert!(link.detach());
+    assert_eq!(*writes.lock().unwrap(), [Command::Cancel, Command::Detach]);
     link.disarm_cancel();
     assert!(!link.cancel());
-    assert_eq!(writes.load(Ordering::SeqCst), 2);
+    assert!(!link.detach());
+    assert_eq!(*writes.lock().unwrap(), [Command::Cancel, Command::Detach]);
 
     let cancelled = Link::new(|_| {}, |_| {});
     assert!(!cancelled.cancel());
-    assert!(!cancelled.arm_cancel(|| unreachable!("a cancelled session is never armed")));
+    assert!(!cancelled.arm_cancel(|_| unreachable!("a cancelled session is never armed")));
 }
 
 #[test]

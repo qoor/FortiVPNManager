@@ -49,7 +49,7 @@ fn a_session_goes_through_every_milestone_and_ends_on_the_users_stop() {
             tunnel_ready(link, settings("utun9", "10.10.0.5"));
             wait_for_cancel(link);
             line(link, "Logged out");
-            ended(-EINTR, true)
+            ended(-EINTR)
         })
     };
     let mut session = Session::start(script, Setup::default().submitting_otp());
@@ -141,7 +141,7 @@ fn a_rejected_certificate_is_told_in_the_exit_once() {
         link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
         link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
         error_line(link, "SSL connection failure");
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -166,7 +166,7 @@ fn a_certificate_rejected_after_the_gateway_was_trusted_is_told_where_it_came() 
     let script = script(|_, link| {
         trust_gateway(link);
         link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -184,7 +184,7 @@ fn a_session_that_fails_before_the_first_form_ends_at_spawned() {
             link,
             "SSL connection failure: The TLS connection was non-properly terminated.",
         );
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -204,7 +204,7 @@ fn a_tunnel_that_cannot_be_set_up_ends_after_authentication() {
             Some("10.10.0.5".parse().unwrap()),
             Some("Operation not permitted (os error 1)".to_owned()),
         ));
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
@@ -226,7 +226,7 @@ fn the_gateway_ending_a_session_is_the_clients_end() {
         tunnel_ready(link, settings("utun9", "10.10.0.5"));
         let _ = cut_wait.recv();
         error_line(link, "Server closed connection");
-        ended(-EPIPE, true)
+        ended(-EPIPE)
     });
     let mut session = Session::start(script, Setup::default());
     session.bring_up(vec![gateway_route("192.0.2.1")]);
@@ -266,7 +266,7 @@ fn output_goes_out_in_batches_before_each_event() {
                 assert!(!lines.is_empty());
                 output_since_event = true;
             }
-            Delivered::Log(..) => {}
+            Delivered::Log(..) | Delivered::Stuck => {}
             Delivered::Event(kind) => {
                 let silent = matches!(
                     kind,

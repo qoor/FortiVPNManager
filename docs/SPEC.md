@@ -40,7 +40,7 @@
 | 판단 코어 | 앱 | Connection Manager 규칙과 데이터 형식 해석, 바깥과 직접 통신 없음 |
 | 공통 계약 | 앱·Helper | 앱과 Helper가 주고받는 내용, VPN client 처리가 지킬 약속 |
 | backend adapter | Helper(일부는 앱) | VPN client별 처리(openfortivpn, openconnect) |
-| process 모듈 | Helper | VPN client 확인과 실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료, logout |
+| process 모듈 | Helper | VPN client 확인과 실행, 비밀번호·OTP·cookie 입력, 출력 처리, 시간 제한, 종료 |
 | recovery 모듈 | Helper | 실행 기록과 예외 route 기록, 이전 Helper가 남긴 프로세스와 예외 route 정리, route 복구 요청 |
 | entry 모듈 | Helper | 앱 요청 처리, 실행과 예외 route의 주인 판단, Helper 수명 |
 | Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, route 복구와 예외 route 넣기·지우기 |
@@ -103,12 +103,12 @@
 
 ## 2.5 process 모듈
 - 설명: Helper 안의 VPN client 담당, client 확인과 시도 하나의 실행 준비부터 종료까지 관리
-  - 로그인·터널 분리 client: 두 프로세스 순차 실행, 강제 종료 후 logout 요청
+  - 로그인·터널 분리 client: 두 프로세스 순차 실행
   - VPN client별 차이: backend adapter에 위임
 - 역할
   - client 확인, 실행 명세·설정 파일 준비, OTP 형식 확인
   - 프로세스 실행, stdin 입력, 출력 줄 조립
-  - 단계별 시간 제한, 종료, logout, 종료 사실 기록
+  - 단계별 시간 제한, 종료, 종료 사실 기록
   - Windows Helper 시작 시 시간 제한 없는 client 확인 1회
   - 네트워크 설정 적용·원복 요청(적용 실패 시 재시도)
 - 제공 기능: 3.7 VPN 실행
@@ -236,6 +236,7 @@
 ## 3.7 VPN 실행
 - VPN client가 비밀번호·OTP를 다시 물으면 즉시 종료(서버 거부)
 - 진행하지 못하는 연결: 단계별 시간 제한 후 종료
+- 중지: logout은 openconnect 처리, 중지 후 10초 안에 끝나지 않으면 logout 없이 종료, 30초 안에 세션이 끝나지 않으면 Helper 재시작
 - VPN client가 없거나 쓸 수 없으면 안내, 검증되지 않은 버전이면 고급 pane에 경고
 - macOS 앱 업데이트: 연결이 없을 때 새 Helper로 교체
 - openconnect 네트워크 설정: 서버가 준 값의 Helper 적용
@@ -298,7 +299,7 @@
 - 로그 파일: VPN client와 무관한 하나의 파일, 크기 초과 시 회전
 
 ## 4.6 서버
-- VPN 세션: VPN client가 스스로 logout하지 못한 종료에서도 logout 요청
+- VPN 세션: Helper 비정상 종료로 logout하지 못한 세션은 다음 Helper 시작 때 logout 요청
 
 ## 4.7 사용자 시스템
 - 예외 route: 앱이 VPN을 켜 두려 하는 동안만 추가, 그 밖과 앱 종료 시 삭제, Helper가 넣은 것만 삭제

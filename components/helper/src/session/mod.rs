@@ -1,6 +1,6 @@
 //! The Helper's VPN sessions: checking a run request, starting a run whose session the backend
 //! runs on a thread of its own, and following it until it ends (the password and the OTP, its log
-//! lines, the stage time limits, stopping it, the logout, the exit report). The run record and the
+//! lines, the stage time limits, stopping it, the exit report). The run record and the
 //! session secrets a run leaves for a later Helper, and cleaning up after an earlier one, are
 //! `recovery`'s. Everything that depends on the VPN client comes from the `Backend` and the
 //! `SecretStore` the Helper's OS start hands over.
@@ -124,6 +124,7 @@ pub enum Report {
     ChangeNetwork(NetworkJob),
     /// A line for the Helper's own log, which the app never sees.
     Log(LogLevel, LogCategory, String),
+    Stuck,
 }
 
 /// The time values of a run. The defaults are the Helper's.
@@ -133,7 +134,8 @@ pub struct Timing {
     /// Lines go out in batches at most this far apart, and before every event.
     pub output_batch: Duration,
     pub network_retry: Duration,
-    pub cancel_repeat: Duration,
+    pub detach_after: Duration,
+    pub stuck_after: Duration,
 }
 
 impl Default for Timing {
@@ -142,7 +144,8 @@ impl Default for Timing {
             stages: StageLimits::default(),
             output_batch: Duration::from_millis(100),
             network_retry: Duration::from_secs(1),
-            cancel_repeat: Duration::from_secs(10),
+            detach_after: Duration::from_secs(10),
+            stuck_after: Duration::from_secs(30),
         }
     }
 }

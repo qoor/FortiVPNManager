@@ -57,6 +57,7 @@ pub enum Exit {
     AfterDraining,
     /// At once.
     Now,
+    AbortAfterDraining,
 }
 
 /// The running Helper, from the service's or a test's side.
@@ -267,6 +268,9 @@ impl Relay {
             }
             FromEntry::ExitNow {} => {
                 let _ = self.exits.send(Exit::Now);
+            }
+            FromEntry::AbortAfterDraining {} => {
+                let _ = self.exits.send(Exit::AbortAfterDraining);
             }
             FromEntry::Log {
                 level,

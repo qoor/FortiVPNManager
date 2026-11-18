@@ -374,6 +374,7 @@ fn messages_from_the_entry() {
         },
         FromEntry::ExitAfterDraining {},
         FromEntry::ExitNow {},
+        FromEntry::AbortAfterDraining {},
         log(
             LogLevel::Info,
             LogCategory::Routes,

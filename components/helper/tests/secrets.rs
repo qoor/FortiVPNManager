@@ -1,17 +1,18 @@
 mod common;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use common::*;
 use fvm_contract::app_helper::{Milestone, StopReason};
 use serde_json::{Value, json};
 
-fn opened_then(end: i32, mainloop_ran: bool) -> Script {
-    script(move |_, link| {
+fn opened_then_returned() -> Script {
+    script(|_, link| {
         trust_gateway(link);
         open(link);
         error_line(link, "Failed to open HTTPS connection to 127.0.0.1");
-        ended(end, mainloop_ran)
+        ended(-EIO)
     })
 }
 
@@ -51,7 +52,7 @@ fn an_opened_session_is_saved_off_the_session_thread_and_deleted_at_its_end() {
 }
 
 #[test]
-fn a_session_whose_main_loop_ran_logs_out_itself() {
+fn a_stopped_session_is_not_logged_out_by_the_helper() {
     let gateway = FakeGateway::start();
     let setup = setup_for(&gateway);
     let secrets = Arc::clone(&setup.secrets);
@@ -69,21 +70,19 @@ fn a_session_whose_main_loop_ran_logs_out_itself() {
 }
 
 #[test]
-fn a_session_that_ends_before_its_main_loop_is_logged_out_with_curl() {
+fn a_session_that_ends_by_itself_is_not_logged_out_by_the_helper() {
     let gateway = FakeGateway::start();
     let setup = setup_for(&gateway);
     let secrets = Arc::clone(&setup.secrets);
-    let mut session = Session::start(opened_then(-EIO, false), setup);
+    let mut session = Session::start(opened_then_returned(), setup);
     let facts = session.wait_for_exit();
     assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
-    assert_eq!(gateway.connections(), [TLS_HANDSHAKE.to_vec()]);
+    session.settle(Duration::from_millis(200));
+    assert!(gateway.connections().is_empty());
     let texts = session.texts();
-    let ended = texts
-        .iter()
-        .position(|text| *text == "‹session ended: code -5›")
-        .unwrap();
+    assert!(texts.contains(&"‹session ended: code -5›"), "{texts:?}");
     assert!(
-        texts[ended + 1].starts_with("‹logout request failed: HTTP 000 ("),
+        !texts.iter().any(|text| text.contains("logout request")),
         "{texts:?}"
     );
     assert_eq!(secrets.deletes(), [ATTEMPT]);
@@ -98,7 +97,7 @@ fn a_session_that_never_opened_has_nothing_to_save_or_log_out() {
     let secrets = Arc::clone(&setup.secrets);
     let script = script(|_, link| {
         trust_gateway(link);
-        ended(-EPERM, false)
+        ended(-EPERM)
     });
     let mut session = Session::start(script, setup);
     session.wait_for_exit();
@@ -115,9 +114,9 @@ fn a_secret_that_could_not_be_saved_is_logged_and_not_deleted() {
         ..setup_for(&gateway)
     };
     let secrets = Arc::clone(&setup.secrets);
-    let mut session = Session::start(opened_then(-EIO, false), setup);
+    let mut session = Session::start(opened_then_returned(), setup);
     session.wait_for_exit();
-    assert_eq!(gateway.connections().len(), 1);
+    assert!(gateway.connections().is_empty());
     assert!(secrets.deletes().is_empty());
     assert!(
         session.logs().contains(
@@ -138,7 +137,7 @@ fn the_run_reports_its_end_only_after_the_secret_is_deleted() {
     let script = script(|_, link| {
         trust_gateway(link);
         open(link);
-        ended(-EIO, true)
+        ended(-EIO)
     });
     let setup = Setup {
         secrets: Arc::clone(&secrets),

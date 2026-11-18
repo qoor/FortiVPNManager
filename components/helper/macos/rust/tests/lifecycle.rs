@@ -126,7 +126,7 @@ fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
     let stuck = script(move |_, link| {
         trust_gateway(link);
         let _ = released.recv();
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut swift = Swift::start(Setup::with([stuck]));
     assert!(swift.connect_app(1, 501));

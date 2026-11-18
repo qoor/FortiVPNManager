@@ -78,8 +78,8 @@ impl Backend for FakeBackend {
     }
 }
 
-pub fn ended(code: i32, mainloop_ran: bool) -> SessionEnd {
-    SessionEnd { code, mainloop_ran }
+pub fn ended(code: i32) -> SessionEnd {
+    SessionEnd { code }
 }
 
 pub fn line(link: &Link, text: &str) {
@@ -115,7 +115,7 @@ pub fn tunnel_ready(link: &Link, settings: NetworkSettings) {
 
 pub fn wait_for_cancel(link: &Link) {
     let (cancelled, wait) = mpsc::channel();
-    if link.arm_cancel(move || {
+    if link.arm_cancel(move |_| {
         let _ = cancelled.send(());
     }) {
         let _ = wait.recv();
@@ -127,12 +127,12 @@ pub fn up(settings: NetworkSettings) -> Script {
     script(move |_, link| {
         trust_gateway(link);
         if ask_otp(link).is_none() {
-            return ended(-EIO, false);
+            return ended(-EIO);
         }
         open(link);
         tunnel_ready(link, settings);
         wait_for_cancel(link);
-        ended(-EINTR, true)
+        ended(-EINTR)
     })
 }
 
@@ -142,7 +142,7 @@ pub fn up_without_otp(settings: NetworkSettings) -> Script {
         open(link);
         tunnel_ready(link, settings);
         wait_for_cancel(link);
-        ended(-EINTR, true)
+        ended(-EINTR)
     })
 }
 

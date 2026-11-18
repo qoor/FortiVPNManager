@@ -19,7 +19,7 @@ fn failed_login() -> Script {
     script(|_, link| {
         trust_gateway(link);
         error_line(link, "Failed to complete authentication");
-        ended(-EPERM, false)
+        ended(-EPERM)
     })
 }
 
@@ -36,7 +36,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
             open(link);
             tunnel_ready(link, settings("utun9", "10.10.0.5"));
             wait_for_cancel(link);
-            ended(-EINTR, true)
+            ended(-EINTR)
         })
     };
     let mut swift = Swift::start(Setup::with([script]));
@@ -178,7 +178,7 @@ fn every_output_batch_names_its_attempt() {
 fn a_rejected_certificate_is_reported_with_its_value() {
     let script = script(|_, link| {
         link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let mut swift = Swift::start(Setup::with([script]));
     assert!(swift.connect_app(1, 501));

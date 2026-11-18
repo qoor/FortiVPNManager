@@ -71,6 +71,7 @@ nonisolated enum HelperInternal {
         case exitAfterDraining
         /// Exit at once, even if something sent to apps has not left yet.
         case exitNow
+        case abortAfterDraining
         case log(level: LogLevel, category: LogCategory, message: String)
     }
 

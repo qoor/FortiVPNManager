@@ -1,8 +1,6 @@
 mod common;
 
-use std::net::TcpListener;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -10,9 +8,12 @@ use common::*;
 use fvm_contract::app_helper::{
     HelperError, HelperErrorCode, Milestone, ProcessExitStatus, StopInitiator, StopReason,
 };
-use fvm_contract::helper_internal::NetworkOutcome;
-use fvm_helper_core::session::StageLimits;
-use fvm_helper_core::session::backend::Link;
+use fvm_contract::helper_internal::{
+    AppRequest, FromEntry, LogCategory, LogLevel, NetworkOutcome, ToEntry,
+};
+use fvm_helper_core::entry;
+use fvm_helper_core::session::backend::{Command, Link};
+use fvm_helper_core::session::{SessionManager, StageLimits};
 
 const TINY: Duration = Duration::from_millis(150);
 
@@ -71,8 +72,7 @@ fn a_stalled_stage_cancels_the_session() {
         .into_iter()
         .map(|(name, furthest, submits_otp, shrink, stall)| {
             thread::spawn(move || {
-                let gateway = FakeGateway::start();
-                let mut setup = Setup::default().logging_out_to(&gateway);
+                let mut setup = Setup::default();
                 if submits_otp {
                     setup = setup.submitting_otp();
                 }
@@ -80,7 +80,7 @@ fn a_stalled_stage_cancels_the_session() {
                 let script = script(move |_, link| {
                     stall(link);
                     wait_for_cancel(link);
-                    ended(-EIO, false)
+                    ended(-EIO)
                 });
                 let mut session = Session::start(script, setup);
                 let facts = session.wait_for_exit();
@@ -195,108 +195,255 @@ fn a_second_stop_keeps_the_first_reason() {
 }
 
 #[test]
-fn a_session_that_outlasts_its_cancel_is_cancelled_again_until_it_ends() {
-    let repeat = Duration::from_millis(300);
+fn a_session_that_outlasts_its_cancel_is_detached_once() {
+    let detach_after = Duration::from_millis(300);
     let mut setup = Setup::default();
-    setup.timing.cancel_repeat = repeat;
-    let writes = Arc::new(AtomicUsize::new(0));
-    let (written, cancels) = mpsc::channel();
+    setup.timing.detach_after = detach_after;
+    let writes = Arc::new(Mutex::new(Vec::new()));
     let script = script({
         let writes = Arc::clone(&writes);
         move |_, link| {
-            assert!(link.arm_cancel(move || {
-                writes.fetch_add(1, Ordering::SeqCst);
+            let (written, wait) = mpsc::channel();
+            assert!(link.arm_cancel(move |command| {
+                writes.lock().unwrap().push((command, Instant::now()));
                 let _ = written.send(());
             }));
             trust_gateway(link);
-            assert_eq!(cancels.iter().take(3).count(), 3);
+            assert_eq!(wait.iter().take(2).count(), 2);
+            thread::sleep(detach_after * 3);
             link.disarm_cancel();
-            thread::sleep(repeat * 2);
-            ended(-EINTR, true)
+            ended(-EINTR)
         }
     });
     let mut session = Session::start(script, setup);
     session.wait_for(Milestone::ConnectedToGateway);
-    let stopped = Instant::now();
     session.run.stop(StopReason::UserDisconnect);
     let facts = session.wait_for_exit();
-    let waited = stopped.elapsed();
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
             reason: StopReason::UserDisconnect
         }
     );
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::Exited { code: -EINTR }
-    );
-    assert!(waited >= repeat * 4, "{waited:?}");
-    session.settle(repeat * 3);
-    assert_eq!(writes.load(Ordering::SeqCst), 3);
-    let again = "‹session still running: cancel sent again›";
+    let writes = writes.lock().unwrap().clone();
+    let commands: Vec<_> = writes.iter().map(|(command, _)| *command).collect();
+    assert_eq!(commands, [Command::Cancel, Command::Detach]);
+    let waited = writes[1].1 - writes[0].1;
+    assert!(waited >= detach_after, "{waited:?}");
     let texts = session.texts();
     let end = texts
         .iter()
         .position(|text| text.starts_with("‹session ended: "))
         .unwrap_or_else(|| panic!("no session end in {texts:?}"));
+    let detached = "‹session still running: detach sent›";
     assert_eq!(
-        texts[..end].iter().filter(|&&text| text == again).count(),
-        2,
+        texts[..end]
+            .iter()
+            .filter(|&&text| text == detached)
+            .count(),
+        1,
         "{texts:?}"
     );
-    assert!(!texts[end..].contains(&again), "{texts:?}");
+    assert!(!texts[end..].contains(&detached), "{texts:?}");
     session.assert_finished_cleanly();
 }
 
 #[test]
-fn a_session_that_returned_is_not_cancelled_again_while_it_logs_out() {
-    let repeat = Duration::from_millis(100);
-    let hold = repeat * 5;
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_deleted() {
+    let detach_after = Duration::from_millis(100);
     let mut setup = Setup::default();
-    setup.timing.cancel_repeat = repeat;
-    setup.request.host = "127.0.0.1".to_owned();
-    setup.request.port = i64::from(listener.local_addr().unwrap().port());
-    let gateway = thread::spawn(move || {
-        let (connection, _) = listener.accept().unwrap();
-        thread::sleep(hold);
-        drop(connection);
-    });
-    let script = script(|_, link| {
-        trust_gateway(link);
-        open(link);
-        wait_for_cancel(link);
-        ended(-EINTR, false)
+    setup.timing.detach_after = detach_after;
+    setup.timing.stuck_after = detach_after * 2;
+    let release = setup.secrets.hold_deletes();
+    let commands = Arc::new(Mutex::new(Vec::new()));
+    let script = script({
+        let commands = Arc::clone(&commands);
+        move |_, link| {
+            trust_gateway(link);
+            open(link);
+            let (written, wait) = mpsc::channel();
+            assert!(link.arm_cancel(move |command| {
+                commands.lock().unwrap().push(command);
+                let _ = written.send(());
+            }));
+            wait.recv().unwrap();
+            ended(-EINTR)
+        }
     });
     let mut session = Session::start(script, setup);
     session.wait_for(Milestone::Authenticated);
-    let stopped = Instant::now();
     session.run.stop(StopReason::UserDisconnect);
+    assert!(session.wait(Duration::from_secs(5), |session| {
+        !session.run.session_running()
+    }));
+    session.settle(detach_after * 5);
+    assert_eq!(session.exit_facts(), None);
+    release.send(()).unwrap();
     session.wait_for_exit();
-    let waited = stopped.elapsed();
-    gateway.join().unwrap();
-    assert!(waited >= hold, "{waited:?}");
-    let texts = session.texts();
-    assert!(
-        texts
-            .iter()
-            .any(|text| text.starts_with("‹logout request failed: HTTP 000")),
-        "{texts:?}"
-    );
+    assert_eq!(*commands.lock().unwrap(), [Command::Cancel]);
     assert_eq!(
-        session.count_text("‹session still running: cancel sent again›"),
+        session.count_text("‹session still running: detach sent›"),
         0,
-        "{texts:?}"
+        "{:?}",
+        session.texts()
+    );
+    assert!(
+        !session
+            .delivered
+            .iter()
+            .any(|delivered| matches!(delivered, Delivered::Stuck))
     );
     session.assert_finished_cleanly();
+}
+
+#[test]
+fn a_session_still_running_after_its_cancel_is_reported_stuck_after_its_lines() {
+    let stuck_after = Duration::from_millis(300);
+    let mut setup = Setup::default();
+    setup.timing.detach_after = Duration::from_millis(100);
+    setup.timing.stuck_after = stuck_after;
+    let (release, held) = mpsc::channel::<()>();
+    let script = script(move |_, link| {
+        assert!(link.arm_cancel(|_| {}));
+        trust_gateway(link);
+        let _ = held.recv();
+        link.disarm_cancel();
+        ended(-EINTR)
+    });
+    let mut session = Session::start(script, setup);
+    session.wait_for(Milestone::ConnectedToGateway);
+    let stopped = Instant::now();
+    session.run.stop(StopReason::UserDisconnect);
+    let stuck = |session: &Session| {
+        session
+            .delivered
+            .iter()
+            .filter(|delivered| matches!(delivered, Delivered::Stuck))
+            .count()
+    };
+    assert!(
+        session.wait(Duration::from_secs(5), |session| stuck(session) == 1),
+        "{:?}",
+        session.texts()
+    );
+    let waited = stopped.elapsed();
+    assert!(waited >= stuck_after, "{waited:?}");
+    assert!(session.run.session_running());
+    assert_eq!(session.exit_facts(), None);
+    let line = "‹session did not end within 0.3s after the cancel: restarting the Helper›";
+    let log = format!(
+        "0277070470 run {ATTEMPT}: session did not end within 0.3s after the cancel; aborting so the OS restarts the Helper"
+    );
+    let delivered = &session.delivered;
+    let shown = delivered.iter().position(|delivered| {
+        matches!(delivered, Delivered::Output(lines) if lines.iter().any(|shown| shown.text == line))
+    });
+    let logged = delivered.iter().position(|delivered| {
+        matches!(
+            delivered,
+            Delivered::Log(LogLevel::Error, LogCategory::Helper, message) if *message == log
+        )
+    });
+    let reported = delivered
+        .iter()
+        .position(|delivered| matches!(delivered, Delivered::Stuck));
+    assert!(
+        matches!((shown, logged, reported), (Some(shown), Some(logged), Some(reported)) if shown < logged && logged < reported),
+        "{delivered:?}"
+    );
+    release.send(()).unwrap();
+    session.wait_for_exit();
+    assert_eq!(stuck(&session), 1);
+    session.assert_finished_cleanly();
+}
+
+#[test]
+fn a_stuck_session_has_the_entry_abort_the_helper_after_its_lines() {
+    let mut timing = timing();
+    timing.stuck_after = Duration::from_millis(300);
+    let (release, held) = mpsc::channel::<()>();
+    let script = script(move |_, _| {
+        let _ = held.recv();
+        ended(-EINTR)
+    });
+    let directory = RunDirectory::new();
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::new([script])),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        timing,
+    );
+    let (sender, messages) = mpsc::channel();
+    let inbox = entry::start(sessions, move |message| {
+        let _ = sender.send(message.clone());
+    });
+    let mut received = Vec::new();
+    let mut wait_for = |wanted: fn(&FromEntry) -> bool| {
+        loop {
+            let message = messages
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or_else(|error| panic!("{error}: {received:?}"));
+            let found = wanted(&message);
+            received.push(message);
+            if found {
+                return;
+            }
+        }
+    };
+    wait_for(|message| matches!(message, FromEntry::Ready {}));
+    inbox.deliver(ToEntry::AppConnected { app: 1, uid: 1 });
+    wait_for(|message| {
+        matches!(
+            message,
+            FromEntry::Admitted {
+                app: 1,
+                accept: true
+            }
+        )
+    });
+    let json = serde_json::to_string(&request(ATTEMPT)).unwrap();
+    inbox.deliver(ToEntry::Request {
+        id: 1,
+        app: 1,
+        request: AppRequest::Connect { json },
+    });
+    wait_for(|message| matches!(message, FromEntry::Reply { id: 1, json: None }));
+    inbox.deliver(ToEntry::Request {
+        id: 2,
+        app: 1,
+        request: AppRequest::Disconnect {
+            attempt: ATTEMPT.to_owned(),
+            reason: "userDisconnect".to_owned(),
+        },
+    });
+    wait_for(|message| matches!(message, FromEntry::AbortAfterDraining {}));
+    let shown = received.iter().position(|message| {
+        matches!(
+            message,
+            FromEntry::SendOutput { app: 1, json }
+                if json.contains("‹session did not end within 0.3s after the cancel: restarting the Helper›")
+        )
+    });
+    let logged = received.iter().position(|message| {
+        matches!(
+            message,
+            FromEntry::Log { level: LogLevel::Error, category: LogCategory::Helper, message }
+                if message.ends_with("session did not end within 0.3s after the cancel; aborting so the OS restarts the Helper")
+        )
+    });
+    let aborted = received.len() - 1;
+    assert!(
+        matches!((shown, logged), (Some(shown), Some(logged)) if shown < logged && logged < aborted),
+        "{received:?}"
+    );
+    release.send(()).unwrap();
 }
 
 fn opened_then_returned() -> Script {
     script(|_, link| {
         trust_gateway(link);
         open(link);
-        ended(-EIO, false)
+        ended(-EIO)
     })
 }
 
@@ -312,55 +459,51 @@ fn assert_ended_by_the_client(session: &Session) {
             .any(|text| text.starts_with("‹watchdog: ") || text.starts_with("‹session cancelled")),
         "{texts:?}"
     );
-    assert!(
-        texts
-            .iter()
-            .any(|text| text.starts_with("‹logout request failed: HTTP 000")),
-        "{texts:?}"
-    );
     session.assert_finished_cleanly();
 }
 
 #[test]
-fn a_stage_limit_does_not_expire_while_a_returned_session_logs_out() {
-    let gateway = FakeGateway::holding();
-    let mut setup = Setup::default().logging_out_to(&gateway);
+fn a_stage_limit_does_not_expire_while_a_returned_session_deletes_its_secret() {
+    let mut setup = Setup::default();
     setup.timing.stages.auth_to_tunnel = TINY;
+    let secrets = Arc::clone(&setup.secrets);
+    let release = secrets.hold_deletes();
     let mut session = Session::start(opened_then_returned(), setup);
-    gateway.wait_for_connections(1);
+    assert!(session.wait(Duration::from_secs(5), |_| !secrets.deletes().is_empty()));
     session.settle(TINY * 3);
     assert_eq!(session.exit_facts(), None);
-    gateway.release();
+    release.send(()).unwrap();
     session.wait_for_exit();
     assert_ended_by_the_client(&session);
 }
 
 #[test]
-fn a_stop_while_a_returned_session_logs_out_changes_nothing() {
-    let gateway = FakeGateway::holding();
-    let setup = Setup::default().logging_out_to(&gateway);
+fn a_stop_while_a_returned_session_deletes_its_secret_changes_nothing() {
+    let setup = Setup::default();
+    let secrets = Arc::clone(&setup.secrets);
+    let release = secrets.hold_deletes();
     let mut session = Session::start(opened_then_returned(), setup);
-    gateway.wait_for_connections(1);
     assert!(session.wait(Duration::from_secs(5), |session| {
-        !session.run.session_running()
+        !secrets.deletes().is_empty() && !session.run.session_running()
     }));
     session.run.stop(StopReason::UserDisconnect);
     session.settle(Duration::from_millis(100));
     assert_eq!(session.exit_facts(), None);
     assert!(!session.run.session_running());
-    gateway.release();
+    release.send(()).unwrap();
     session.wait_for_exit();
     assert_ended_by_the_client(&session);
 }
 
 #[test]
-fn an_otp_while_a_returned_session_logs_out_is_refused_as_for_a_run_that_is_not_running() {
-    let gateway = FakeGateway::holding();
-    let setup = Setup::default().logging_out_to(&gateway);
+fn an_otp_while_a_returned_session_deletes_its_secret_is_refused_as_for_a_run_that_is_not_running()
+{
+    let setup = Setup::default();
+    let secrets = Arc::clone(&setup.secrets);
+    let release = secrets.hold_deletes();
     let mut session = Session::start(opened_then_returned(), setup);
-    gateway.wait_for_connections(1);
     assert!(session.wait(Duration::from_secs(5), |session| {
-        !session.run.session_running()
+        !secrets.deletes().is_empty() && !session.run.session_running()
     }));
     assert_eq!(
         session.run.submit_otp(OTP.to_owned()),
@@ -371,7 +514,7 @@ fn an_otp_while_a_returned_session_logs_out_is_refused_as_for_a_run_that_is_not_
     );
     session.settle(Duration::from_millis(100));
     assert_eq!(session.exit_facts(), None);
-    gateway.release();
+    release.send(()).unwrap();
     session.wait_for_exit();
     assert!(!session.has_text("‹OTP sent›"));
     assert!(!session.reached(Milestone::OtpSubmitted));

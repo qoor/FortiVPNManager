@@ -3,7 +3,7 @@
 //! - `entry`, the Helper's front: it admits the app connections the OS side passes on, decides who
 //!   may do what with the one run, answers the app's requests, and decides when the Helper exits.
 //! - `session`, the VPN sessions: checking a request, running a session with the password, OTP and
-//!   network settings, its log lines, the time limits, stopping it and the logout.
+//!   network settings, its log lines, the time limits and stopping it.
 //! - `recovery`, what a run leaves for a later Helper: the run record, the session secrets, and
 //!   cleaning up after an earlier Helper.
 //!

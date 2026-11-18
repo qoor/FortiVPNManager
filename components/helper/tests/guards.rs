@@ -31,7 +31,7 @@ fn submit_otp_and_stop_from_on_report_panic() {
     let script = script(|_, link| {
         std::thread::sleep(Duration::from_millis(200));
         line(link, "late");
-        ended(-EIO, false)
+        ended(-EIO)
     });
     let (run, _directory) = start(script, move |report| {
         if let (Report::Output(_), Some(run)) = (&report, shared.get()) {
