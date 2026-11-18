@@ -482,15 +482,22 @@ fn the_hourly_limit_keeps_the_tunnel() {
 #[test]
 fn a_renewal_started_by_reconnect_now_shows_what_a_reconnect_attempt_shows() {
     let (mut renewing, old) = connected();
-    let (mut restarting, _) = connected_with(settings());
-    for h in [&mut renewing, &mut restarting] {
-        h.advance(600.0);
-        h.send(Input::ReconnectNow);
-    }
+    let (mut restarting, _) = connected();
+    renewing.advance(600.0);
+    renewing.send(Input::ReconnectNow);
+    restarting.advance(180.0 * 60.0 - 60.0);
+    assert_eq!(
+        stop_reasons(&restarting.send(Input::ReconnectNow)),
+        [StopReason::Reconnect]
+    );
+    assert_eq!(
+        after(&restarting),
+        Some(AfterStop::Reconnect(AttemptReason::ReconnectNow))
+    );
     restarting.exit(
         ended(Milestone::TunnelUp)
             .by_helper(StopReason::Reconnect)
-            .up(600.0),
+            .up(180.0 * 60.0 - 60.0),
     );
     let section = renewing.cm.connection_section();
     assert_eq!(section, restarting.cm.connection_section());
