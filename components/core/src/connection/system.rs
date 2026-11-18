@@ -320,6 +320,10 @@ impl ConnectionManager {
     fn tunnel_ip(&self) -> Option<Ipv4Addr> {
         match &self.phase {
             Phase::Connected(session) => session.tunnel_ip,
+            Phase::Connecting(attempt) => attempt
+                .replacing
+                .as_ref()
+                .and_then(|session| session.tunnel_ip),
             _ => None,
         }
     }

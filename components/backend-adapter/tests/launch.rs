@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-use fvm_contract::app_helper::{RunRequest, VpnClient};
+use fvm_contract::app_helper::{RunRequest, SessionId, VpnClient};
 use fvm_contract::backend::{Backend, ClientExecutable, LaunchSpec};
 
 const DIGEST_A: &str = "4d1b72371c42a69bd949048883897aa673059f2e7b1cc992a650584132aae8f3";
@@ -19,12 +19,15 @@ const INVALID_HOST: &str = "host must be a DNS hostname (letters, digits and hyp
 fn request() -> RunRequest {
     RunRequest {
         attempt_id: "6F9619FF-8B86-D011-B42D-00C04FC964FF".parse().unwrap(),
+        replacing: None,
+        session_id: SessionId(277_070_470),
         client: VpnClient::Openfortivpn,
         host: "vpn.example.com".into(),
         port: 8443,
         username: "alice".into(),
         realm: None,
         trusted_certs: vec![DIGEST_A.into()],
+        dtls: false,
         password: "s3cr3t".into(),
     }
 }
@@ -98,6 +101,11 @@ fn renders_a_minimal_request_exactly() {
             "host = vpn.example.com\nport = 8443\nusername = alice\ntrusted-cert = {DIGEST_A}\n"
         )
     );
+}
+
+#[test]
+fn dtls_does_not_change_the_launch() {
+    assert_eq!(launch(&with(|r| r.dtls = true)), launch(&request()));
 }
 
 #[test]

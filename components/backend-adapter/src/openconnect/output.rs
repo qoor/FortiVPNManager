@@ -22,6 +22,7 @@ const CERTIFICATE_REJECTED: &str = " specified via --servercert match server's c
 const COOKIE_LINE: &str = "COOKIE=";
 pub(super) const GATEWAY_ROUTE_REQUESTED: &str = "FortiVPNManager: gateway route requested";
 const SCRIPT_LEFT_RUNNING: &str = "Script did not complete within 10 seconds.";
+const ADDRESS_IN_USE: &str = " is UP and using our IPv4 address. Cannot resolve.";
 
 #[derive(Default)]
 pub struct Interpreter {
@@ -93,6 +94,9 @@ impl Interpreter {
     fn stderr_line(&mut self, text: &str) -> Option<Finding> {
         if text.contains(SCRIPT_LEFT_RUNNING) {
             return Some(Finding::ScriptLeftRunning);
+        }
+        if text.starts_with("Adapter \"") && text.ends_with(ADDRESS_IN_USE) {
+            return Some(Finding::TunnelAddressInUse);
         }
         // "None of the 1 fingerprint(s) specified via --servercert match server's certificate:
         // pin-sha256:…"

@@ -9,7 +9,7 @@ use std::process::{Child, Command};
 use std::time::Duration;
 
 use common::*;
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// A run directory as an earlier Helper left it: the pidfile, a config file and an unfinished
 /// pidfile.
@@ -99,6 +99,159 @@ fn recorded_network_changes_are_reverted_before_the_route_repair_and_ready() {
     swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
     assert_eq!(swift.scratch.run_directory_names(), ["unrelated", "values"]);
     assert_eq!(fs::read_dir(&values).unwrap().count(), 0);
+}
+
+#[test]
+fn every_pidfile_left_is_cleaned_up_before_ready() {
+    let changes = |dns: &str, destination: &str| {
+        json!({
+            "dnsServiceID": dns,
+            "routes": [{
+                "destination": {"address": destination, "prefixLength": 32},
+                "router": "192.0.2.1",
+                "serviceID": "ethernet",
+            }],
+        })
+    };
+    let first = changes("first", GATEWAY);
+    let second = changes("second", "198.51.100.7");
+    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": first});
+    let scratch = left_behind(&record.to_string());
+    let record = json!({"processes": [], "outsideChanges": second});
+    fs::write(
+        scratch.run_directory().join("run.json.2"),
+        record.to_string(),
+    )
+    .unwrap();
+    fs::write(scratch.run_directory().join("run.json.2.tmp"), "{").unwrap();
+    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+
+    let requests = |swift: &Swift| -> Vec<Value> {
+        let logged = is("log");
+        swift
+            .received
+            .iter()
+            .filter(|message| !logged(message))
+            .cloned()
+            .collect()
+    };
+    for (number, (asked, answer)) in [
+        (
+            json!({"changeNetwork": {"change": {"revert": {"changes": first}}}}),
+            json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
+        ),
+        (
+            json!({"repairRoutes": {"gateway": GATEWAY}}),
+            json!({"routesRepaired": {"outcome": "notNeeded"}}),
+        ),
+        (
+            json!({"changeNetwork": {"change": {"revert": {"changes": second}}}}),
+            json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
+        ),
+        (
+            json!({"repairRoutes": {}}),
+            json!({"routesRepaired": {"outcome": "notNeeded"}}),
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        swift.wait_until("the next cleanup request", |swift| {
+            requests(swift).len() > number
+        });
+        assert_eq!(requests(&swift)[number], asked, "{:#?}", swift.received);
+        swift.send(answer);
+    }
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
+}
+
+#[test]
+fn both_records_of_a_switch_left_halfway_are_reverted_before_ready() {
+    let route = |destination: &str| {
+        json!({
+            "destination": {"address": destination, "prefixLength": 32},
+            "router": "192.0.2.1",
+            "serviceID": "ethernet",
+        })
+    };
+    let changes = json!({
+        "dnsServiceID": "svc",
+        "routes": [route(GATEWAY), route("10.20.161.16")],
+    });
+    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
+    let scratch = left_behind(&record.to_string());
+    fs::write(
+        scratch.run_directory().join("run.json.2"),
+        record.to_string(),
+    )
+    .unwrap();
+    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+
+    let requests = |swift: &Swift| -> Vec<Value> {
+        let logged = is("log");
+        swift
+            .received
+            .iter()
+            .filter(|message| !logged(message))
+            .cloned()
+            .collect()
+    };
+    let revert = (
+        json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}),
+        json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
+    );
+    let repair = (
+        json!({"repairRoutes": {"gateway": GATEWAY}}),
+        json!({"routesRepaired": {"outcome": "notNeeded"}}),
+    );
+    for (number, (asked, answer)) in [revert.clone(), repair.clone(), revert, repair]
+        .into_iter()
+        .enumerate()
+    {
+        swift.wait_until("the next cleanup request", |swift| {
+            requests(swift).len() > number
+        });
+        assert_eq!(requests(&swift)[number], asked, "{:#?}", swift.received);
+        swift.send(answer);
+    }
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
+}
+
+#[test]
+fn a_second_pidfile_left_alone_is_cleaned_up_before_ready() {
+    let changes = json!({
+        "dnsServiceID": "svc",
+        "routes": [{
+            "destination": {"address": GATEWAY, "prefixLength": 32},
+            "router": "192.0.2.1",
+            "serviceID": "ethernet",
+        }],
+    });
+    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
+    let scratch = Scratch::new();
+    let directory = scratch.run_directory();
+    DirBuilder::new().mode(0o700).create(&directory).unwrap();
+    fs::write(directory.join("run.json.2"), record.to_string()).unwrap();
+    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+
+    let first = swift.receive_within(Duration::from_secs(10));
+    assert_eq!(
+        first,
+        Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
+    );
+    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    swift.wait_until("the route repair", |swift| {
+        swift.position(is("repairRoutes")).is_some()
+    });
+    assert_eq!(
+        swift.received[swift.position(is("repairRoutes")).unwrap()],
+        json!({"repairRoutes": {"gateway": GATEWAY}})
+    );
+    swift.send(json!({"routesRepaired": {"outcome": "notNeeded"}}));
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert!(swift.scratch.run_directory_names().is_empty());
 }
 
 #[test]

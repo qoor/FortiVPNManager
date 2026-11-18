@@ -16,6 +16,7 @@ pub const STALE_OTP_WAIT: Duration = Duration::from_secs(20);
 pub(super) const AUTH_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(90);
 /// Counted authentication failures in a row that stop the retries.
 pub(super) const MAX_CONSECUTIVE_AUTH_FAILURES: u32 = 2;
+pub(super) const MAX_COUNTED_PREPARATIONS: u32 = 2;
 pub(super) const SERVER_SESSION_END_DELAY: Duration = Duration::from_secs(5);
 /// A session at least this long is stable: it clears the failure count, and a drop before it is
 /// counted as an authentication failure.

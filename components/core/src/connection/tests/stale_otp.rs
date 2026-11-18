@@ -96,7 +96,13 @@ fn the_next_login_waits_until_the_stopped_attempts_code_is_trashed() {
     h.advance(2.5);
     let connected_at = h.now;
     let (next, effects) = connect_again(&mut h);
-    assert_eq!(effects, [Effect::Note(Note::WaitingForStaleOtp)]);
+    assert_eq!(
+        effects,
+        [Effect::Note {
+            attempt: Some(next.clone()),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
     assert!(waiting(&h));
     assert!(
         matches!(
@@ -117,7 +123,10 @@ fn the_next_login_waits_until_the_stopped_attempts_code_is_trashed() {
     assert_eq!(
         connection_effects(&h.send(Input::StaleOtpTrashed(stopped.clone()))),
         [
-            Effect::Note(Note::StaleOtpTrashed),
+            Effect::Note {
+                attempt: Some(next.clone()),
+                note: Note::StaleOtpTrashed
+            },
             Effect::OpenOtpSession {
                 attempt: next.clone()
             },
@@ -150,8 +159,14 @@ fn a_stop_after_the_credentials_before_the_prompt_searches_too() {
         "{effects:?}"
     );
     h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::UserDisconnect));
-    let (_, effects) = connect_again(&mut h);
-    assert_eq!(effects, [Effect::Note(Note::WaitingForStaleOtp)]);
+    let (next, effects) = connect_again(&mut h);
+    assert_eq!(
+        effects,
+        [Effect::Note {
+            attempt: Some(next),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
 
     // The Helper's end, whose immediate reconnect waits.
     let (mut h, id) = after_the_credentials();
@@ -164,9 +179,13 @@ fn a_stop_after_the_credentials_before_the_prompt_searches_too() {
         h.attempt().map(|attempt| attempt.reason),
         Some(retry(RetryReason::ForcedTermination))
     );
+    let next = h.current_id();
     assert_eq!(
         connection_effects(&h.send(Input::ReadinessChecked(ready()))),
-        [Effect::Note(Note::WaitingForStaleOtp)]
+        [Effect::Note {
+            attempt: Some(next),
+            note: Note::WaitingForStaleOtp
+        }]
     );
 }
 
@@ -291,7 +310,13 @@ fn the_wait_ends_when_the_stopped_attempts_session_fails() {
     h.advance(2.0);
     let connected_at = h.now;
     let (next, effects) = connect_again(&mut h);
-    assert_eq!(effects, [Effect::Note(Note::WaitingForStaleOtp)]);
+    assert_eq!(
+        effects,
+        [Effect::Note {
+            attempt: Some(next.clone()),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
     h.advance(1.0);
     assert_eq!(
         connection_effects(&h.send(Input::OtpSessionFailed(
@@ -299,7 +324,10 @@ fn the_wait_ends_when_the_stopped_attempts_session_fails() {
             OtpFailure::Network
         ))),
         [
-            Effect::Note(Note::StaleOtpSessionEnded),
+            Effect::Note {
+                attempt: Some(next.clone()),
+                note: Note::StaleOtpSessionEnded
+            },
             Effect::OpenOtpSession {
                 attempt: next.clone()
             },
@@ -332,7 +360,13 @@ fn the_wait_runs_out_twenty_seconds_after_the_stop() {
     let limit = h.timer(TimerKind::StaleOtp).unwrap();
     h.advance(15.0);
     let (next, effects) = connect_again(&mut h);
-    assert_eq!(effects, [Effect::Note(Note::WaitingForStaleOtp)]);
+    assert_eq!(
+        effects,
+        [Effect::Note {
+            attempt: Some(next.clone()),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
     let effects = connection_effects(&h.fire(TimerKind::StaleOtp));
     assert_eq!(h.now, limit);
     assert_eq!(
@@ -340,7 +374,10 @@ fn the_wait_runs_out_twenty_seconds_after_the_stop() {
         [
             // The stopped attempt's session stops looking.
             close(&stopped, false),
-            Effect::Note(Note::StaleOtpWaitRanOut),
+            Effect::Note {
+                attempt: Some(next.clone()),
+                note: Note::StaleOtpWaitRanOut
+            },
             Effect::OpenOtpSession { attempt: next },
             // Waited from the readiness check, right at Connect, to the limit.
             h.set(TimerKind::AttemptDeadline, limit + secs(150.0)),
@@ -379,8 +416,14 @@ fn no_search_on_quit_or_sleep() {
 
     // A quit while the next login waits is approved at once.
     let (mut h, _) = disconnected_at_the_prompt();
-    let (_, effects) = connect_again(&mut h);
-    assert_eq!(effects, [Effect::Note(Note::WaitingForStaleOtp)]);
+    let (next, effects) = connect_again(&mut h);
+    assert_eq!(
+        effects,
+        [Effect::Note {
+            attempt: Some(next),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
     let quit = connection_effects(&h.send(Input::QuitRequested));
     assert_eq!(quit.last(), Some(&Effect::ApproveQuit));
     assert!(!opens_otp_session(&quit), "{quit:?}");

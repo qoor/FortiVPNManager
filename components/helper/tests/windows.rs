@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, StopInitiator, StopReason,
-    VpnClient,
+    ExitFacts, HelperEventKind, Milestone, OutputSource, ProcessExitStatus, RunRequest, SessionId,
+    StopInitiator, StopReason, VpnClient,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
@@ -24,6 +24,7 @@ use fvm_contract::backend::{
 };
 use fvm_contract::helper_internal::{NetworkChange, NetworkOutcome};
 use fvm_helper_core::process::{Report, Run, Timing, Watchdog};
+use fvm_helper_core::recovery::RecordSlot;
 
 const CMD: &str = r"C:\Windows\System32\cmd.exe";
 const CSCRIPT: &str = r"C:\Windows\System32\cscript.exe";
@@ -232,16 +233,19 @@ impl Session {
         );
         let mut request = RunRequest {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
+            replacing: None,
+            session_id: SessionId(277_070_470),
             client: VpnClient::Openconnect,
             host: "203.0.113.10".to_owned(),
             port: 443,
             username: "alice".to_owned(),
             realm: None,
             trusted_certs: Vec::new(),
+            dtls: false,
             password: PASSWORD.to_owned(),
         };
         let (sender, reports) = mpsc::channel();
-        let started = watchdog.start(&mut request, move |report| {
+        let started = watchdog.start(&mut request, RecordSlot::First, None, move |report| {
             let _ = sender.send(report);
         });
         let (run, _) = started.unwrap();
@@ -307,6 +311,9 @@ impl Session {
                         NetworkChange::Revert { .. } => {
                             self.reverts += 1;
                             NetworkOutcome::Reverted { left: Vec::new() }
+                        }
+                        NetworkChange::Prepare { .. } | NetworkChange::Switch { .. } => {
+                            panic!("a run that replaces none neither prepares nor switches")
                         }
                     };
                     job.finish(outcome);
@@ -480,6 +487,29 @@ fn a_script_the_client_left_running_does_not_hold_the_tunnel_back() {
     assert!(waited < Duration::from_secs(5), "{waited:?}");
     session.run.stop(StopReason::UserDisconnect);
     session.wait_for_exit();
+}
+
+#[test]
+fn an_adapter_already_using_the_tunnels_address_is_told_in_the_exit() {
+    let scratch = Scratch::new();
+    let tunnel = "@echo off\r
+set /p SESSION=\r
+echo Got Legacy IP address 10.10.0.5\r
+echo Configured as 10.10.0.5, with SSL disconnected and DTLS established\r
+>&2 echo Adapter \"OpenConnect 2\" / 23 is UP and using our IPv4 address. Cannot resolve.\r
+exit /b 1\r
+";
+    let mut launch = scratch.launch("login", LOGIN);
+    launch.session = Some(Box::new(SessionLaunch {
+        tunnel: scratch.launch("tunnel", tunnel),
+        logout: scratch.launch("logout", LOGOUT),
+    }));
+    let mut session = Session::start(&scratch, launch);
+    let facts = session.wait_for_exit();
+    assert!(facts.tunnel_address_in_use, "{:#?}", session.lines);
+    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 1 });
 }
 
 #[test]

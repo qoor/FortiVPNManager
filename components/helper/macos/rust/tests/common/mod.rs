@@ -209,10 +209,17 @@ impl Swift {
             record: scratch.root.join("record.txt"),
             grace_period: setup.grace_period,
         };
-        let stream = fvm_helper_macos::start(
-            vec![(VpnClient::Openfortivpn, Arc::new(backend))],
-            scratch.run_directory(),
-        );
+        Self::launch_with(scratch, vec![(VpnClient::Openfortivpn, Arc::new(backend))])
+    }
+
+    pub fn start_with(clients: Vec<(VpnClient, Arc<dyn Backend>)>) -> Self {
+        let mut swift = Self::launch_with(Scratch::new(), clients);
+        swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+        swift
+    }
+
+    fn launch_with(scratch: Scratch, clients: Vec<(VpnClient, Arc<dyn Backend>)>) -> Self {
+        let stream = fvm_helper_macos::start(clients, scratch.run_directory());
         let reader = BufReader::new(stream.try_clone().unwrap());
         Self {
             stream,
@@ -403,7 +410,7 @@ impl Swift {
             .iter()
             .filter(|message| message["sendOutput"]["app"] == app)
             .flat_map(|message| {
-                embedded(&message["sendOutput"]["json"])
+                embedded(&message["sendOutput"]["json"])["lines"]
                     .as_array()
                     .unwrap()
                     .iter()
@@ -465,11 +472,13 @@ fn embedded(json: &Value) -> Value {
 pub fn connect_request(attempt: &str) -> Value {
     connect_request_with(json!({
         "attemptID": attempt,
+        "sessionID": 277_070_470,
         "client": "openfortivpn",
         "host": GATEWAY,
         "port": 443,
         "username": "alice",
         "trustedCerts": [],
+        "dtls": false,
         "password": PASSWORD,
     }))
 }

@@ -8,8 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, ClientStatus,
-    HelperStatus, OutputLine, OutputSource, VpnClient,
+    AttemptId, BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
+    ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone, OutputBatch,
+    OutputLine, OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason, VpnClient,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
@@ -19,7 +20,7 @@ use fvm_contract::app_internal::port::{
 };
 use fvm_contract::app_internal::section::{
     AccountFeedback, BypassFailure, BypassStatus, ClientSettingsImport, ConfigSection,
-    ConnectionStatus, HelperState, ImportError, ImportedPassword, Section,
+    ConnectProgress, ConnectionStatus, HelperState, ImportError, ImportedPassword, Section,
 };
 use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
@@ -27,7 +28,7 @@ use fvm_contract::app_internal::{
 use fvm_contract::backend::{ClientProblem, ClientProblemKind};
 use serde_json::json;
 
-use crate::orchestration::{self, ClientSettings, Input, Paths};
+use crate::orchestration::{self, ClientSettings, Input, Paths, Runtime};
 
 const APP_BUILD: &str = "100";
 /// No message for this long: the runtime has nothing more to do on its own.
@@ -67,6 +68,8 @@ struct App {
     /// The route calls wait for `answer_held_route_calls`.
     holds_route_calls: bool,
     held_route_calls: Vec<(u64, HelperCall)>,
+    holds_gmail_reads: bool,
+    held_gmail_reads: usize,
     /// The app's exception routes when the quit was approved, once it was.
     routes_at_quit: Option<Vec<BypassRoute>>,
     requests: Vec<PortRequest>,
@@ -119,6 +122,8 @@ impl App {
             routes_unreachable: false,
             holds_route_calls: false,
             held_route_calls: Vec::new(),
+            holds_gmail_reads: false,
+            held_gmail_reads: 0,
             routes_at_quit: None,
             requests: Vec::new(),
             actions: Vec::new(),
@@ -184,16 +189,98 @@ impl App {
     }
 
     /// A line the Helper writes itself.
-    fn helper_line(&self, text: &str) {
-        let lines = [OutputLine {
-            date: SystemTime::now(),
-            source: OutputSource::Helper,
-            text: text.into(),
-        }];
+    fn output_of(&self, attempt: &AttemptId, text: &str) {
+        let batch = OutputBatch {
+            attempt_id: attempt.clone(),
+            lines: vec![OutputLine {
+                date: SystemTime::now(),
+                source: OutputSource::Helper,
+                text: text.into(),
+            }],
+        };
         self.send(ToRuntime::Event {
             event: SystemEvent::HelperOutput {
-                json: serde_json::to_string(&lines).unwrap(),
+                json: serde_json::to_string(&batch).unwrap(),
             },
+        });
+    }
+
+    fn helper_event(&self, attempt: &AttemptId, kind: HelperEventKind) {
+        let event = HelperEvent {
+            attempt_id: attempt.clone(),
+            kind,
+        };
+        self.send(ToRuntime::Event {
+            event: SystemEvent::HelperEvent {
+                json: serde_json::to_string(&event).unwrap(),
+            },
+        });
+    }
+
+    fn ask<T: Send + 'static>(
+        &self,
+        question: impl FnOnce(&mut Runtime) -> T + Send + 'static,
+    ) -> T {
+        let (answer, answered) = mpsc::channel();
+        self.inputs
+            .send(Input::Done(Box::new(move |runtime| {
+                answer.send(question(runtime)).unwrap();
+            })))
+            .unwrap();
+        answered.recv_timeout(PATIENCE).unwrap()
+    }
+
+    fn run_requests(&self) -> Vec<RunRequest> {
+        self.requests
+            .iter()
+            .filter_map(|request| match request {
+                PortRequest::CallHelper {
+                    call: HelperCall::Connect { json },
+                } => Some(serde_json::from_str(&json.0).unwrap()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn start_run(&mut self, command: Command) -> AttemptId {
+        let (reads, runs) = (self.held_gmail_reads, self.run_requests().len());
+        self.command(command);
+        self.settle_until("the OTP session's start", |app| {
+            app.held_gmail_reads > reads
+        });
+        let attempt = self
+            .ask(|runtime| runtime.cm.current_attempt().cloned())
+            .unwrap();
+        let ready = attempt.clone();
+        self.ask(move |runtime| {
+            runtime.feed(fvm_core::connection::Input::OtpSessionReady(ready));
+        });
+        self.settle_until("the run request", |app| app.run_requests().len() > runs);
+        attempt
+    }
+
+    fn bring_up(&mut self, attempt: &AttemptId, tunnel_ip: std::net::Ipv4Addr) {
+        for milestone in [Milestone::Spawned, Milestone::ConnectedToGateway] {
+            self.helper_event(
+                attempt,
+                HelperEventKind::Milestone {
+                    milestone,
+                    tunnel_ip: None,
+                },
+            );
+        }
+        self.helper_event(
+            attempt,
+            HelperEventKind::Milestone {
+                milestone: Milestone::TunnelUp,
+                tunnel_ip: Some(tunnel_ip),
+            },
+        );
+        self.settle_until("the tunnel", |app| {
+            matches!(
+                app.connection_status(),
+                Some(ConnectionStatus::Connected { tunnel_ip: Some(ip), .. }) if *ip == tunnel_ip
+            )
         });
     }
 
@@ -233,6 +320,14 @@ impl App {
             }
             FromRuntime::PortRequest { id, request } => {
                 self.requests.push(request.clone());
+                if let PortRequest::ReadSecret {
+                    item: SecretItem::GmailAppPassword { .. },
+                } = &request
+                    && self.holds_gmail_reads
+                {
+                    self.held_gmail_reads += 1;
+                    return;
+                }
                 if let PortRequest::CallHelper { call } = &request
                     && is_route_call(call)
                     && self.holds_route_calls
@@ -499,35 +594,76 @@ fn app_without_a_usable_gmail_credential(method: &str) -> App {
 fn log_marks(app: &App) -> Vec<(&str, bool)> {
     app.log
         .iter()
-        .map(|line| (line.text.as_str(), line.starts_attempt))
+        .map(|line| (line.text.split_once(' ').unwrap().1, line.starts_attempt))
         .collect()
 }
 
-/// Each attempt the core begins starts its block in the log with its first line, here the note
-/// that ends it; a line of no attempt starts none.
+fn log_sessions(app: &App) -> Vec<&str> {
+    app.log
+        .iter()
+        .map(|line| line.text.split_once(' ').unwrap().0)
+        .collect()
+}
+
 #[test]
 fn each_attempt_starts_its_block_with_its_first_log_line() {
     let mut app = app_without_a_usable_gmail_credential("gmail_api");
-    app.helper_line("‹before›");
-    for attempts in 1..=2 {
+    let mut attempts = Vec::new();
+    for count in 1..=2 {
         app.command(Command::Connect {});
+        attempts.push(
+            app.ask(|runtime| runtime.cm.current_attempt().cloned())
+                .unwrap(),
+        );
         app.settle_until("the attempt's note", |app| {
             app.log
                 .iter()
-                .filter(|line| line.text == NO_GMAIL_CREDENTIAL)
+                .filter(|line| line.text.ends_with(NO_GMAIL_CREDENTIAL))
                 .count()
-                == attempts
+                == count
         });
     }
-    app.helper_line("‹after›");
+    app.output_of(&attempts[0], "‹after›");
     app.settle();
     assert_eq!(
         log_marks(&app),
         [
-            ("‹before›", false),
             (NO_GMAIL_CREDENTIAL, true),
             (NO_GMAIL_CREDENTIAL, true),
             ("‹after›", false)
+        ]
+    );
+    let sessions = log_sessions(&app);
+    assert!(sessions[0] < sessions[1], "{sessions:?}");
+    assert_eq!(sessions[2], sessions[0]);
+}
+
+#[test]
+fn the_helpers_lines_of_another_attempt_start_no_block() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    app.holds_gmail_reads = true;
+    app.launch();
+    app.settle();
+    let other = app.start_run(Command::Connect {});
+    app.bring_up(&other, "10.212.134.5".parse().unwrap());
+    let attempt = app.start_run(Command::ReconnectNow {});
+    app.output_of(&other, "‹b›");
+    app.output_of(&attempt, "‹a›");
+    app.output_of(&other, "‹b again›");
+    app.output_of(&attempt, "‹a again›");
+    app.settle();
+    assert_eq!(
+        log_marks(&app),
+        [
+            ("‹b›", false),
+            ("‹a›", true),
+            ("‹b again›", false),
+            ("‹a again›", false)
         ]
     );
 }
@@ -536,13 +672,16 @@ fn each_attempt_starts_its_block_with_its_first_log_line() {
 fn an_attempt_that_ended_without_a_log_line_leaves_the_next_line_unmarked() {
     let mut app = app_without_a_usable_gmail_credential("imap");
     app.command(Command::Connect {});
+    let attempt = app
+        .ask(|runtime| runtime.cm.current_attempt().cloned())
+        .unwrap();
     app.settle_until("the failure", |app| {
         matches!(
             app.connection_status(),
             Some(ConnectionStatus::Failed { .. })
         )
     });
-    app.helper_line("‹after›");
+    app.output_of(&attempt, "‹after›");
     app.settle();
     assert_eq!(log_marks(&app), [("‹after›", false)]);
 }
@@ -1111,24 +1250,130 @@ fn the_helpers_output_reaches_the_log_file_as_it_came() {
     let marker = "FortiVPNManager: route script finished connecting";
     let mut app = App::new();
     app.write_config(ACCOUNT);
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    app.holds_gmail_reads = true;
     app.launch();
     app.settle();
-    let lines = vec![fvm_contract::app_helper::OutputLine {
-        date: std::time::SystemTime::now(),
-        source: fvm_contract::app_helper::OutputSource::Stdout,
-        text: marker.into(),
-    }];
+    let attempt = app.start_run(Command::Connect {});
+    let session = app.run_requests()[0].session_id;
+    let batch = OutputBatch {
+        attempt_id: attempt,
+        lines: vec![
+            fvm_contract::app_helper::OutputLine {
+                date: std::time::SystemTime::now(),
+                source: fvm_contract::app_helper::OutputSource::Helper,
+                text: "‹password sent›".into(),
+            },
+            fvm_contract::app_helper::OutputLine {
+                date: std::time::SystemTime::now(),
+                source: fvm_contract::app_helper::OutputSource::Stdout,
+                text: marker.into(),
+            },
+        ],
+    };
     app.send(ToRuntime::Event {
         event: fvm_contract::app_internal::event::SystemEvent::HelperOutput {
-            json: serde_json::to_string(&lines).unwrap(),
+            json: serde_json::to_string(&batch).unwrap(),
         },
     });
-    app.settle_until("the line in the log file", |app| {
-        fs::read_to_string(app.folder.join("logs/vpn_backend.log"))
-            .unwrap_or_default()
-            .lines()
-            .any(|line| line.ends_with(&format!(" [out] {marker}")))
+    let ends = [
+        format!(" [▸] {session} ‹password sent›"),
+        format!(" [out] {session} {marker}"),
+    ];
+    app.settle_until("the lines in the log file", |app| {
+        let file = fs::read_to_string(app.folder.join("logs/vpn_backend.log")).unwrap_or_default();
+        let lines: Vec<&str> = file.lines().collect();
+        lines.len() == 2
+            && lines
+                .iter()
+                .zip(&ends)
+                .all(|(line, end)| line.ends_with(end.as_str()))
     });
+}
+
+#[test]
+fn reconnect_now_runs_the_next_tunnel_beside_the_connected_one() {
+    let first_ip = "10.212.134.5".parse().unwrap();
+    let next_ip = "10.212.134.9".parse().unwrap();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    app.holds_gmail_reads = true;
+    app.launch();
+    app.settle();
+    let old = app.start_run(Command::Connect {});
+    assert_eq!(app.run_requests()[0].attempt_id, old);
+    assert_eq!(app.run_requests()[0].replacing, None);
+    let old_session = app.run_requests()[0].session_id;
+    app.bring_up(&old, first_ip);
+    app.output_of(&old, "‹old: up›");
+
+    let next = app.start_run(Command::ReconnectNow {});
+    assert_ne!(next, old);
+    let request = &app.run_requests()[1];
+    assert_eq!(request.attempt_id, next);
+    assert_eq!(request.replacing, Some(old.clone()));
+    let next_session = request.session_id;
+    assert!(next_session.0 > old_session.0);
+    assert_eq!(
+        app.connection_status(),
+        Some(&ConnectionStatus::Connecting {
+            reconnecting: true,
+            progress: ConnectProgress::ContactingServer,
+        })
+    );
+    app.output_of(&old, "‹old: still up›");
+    app.output_of(&next, "‹next: starting›");
+    app.output_of(&old, "‹old: rekey›");
+    app.output_of(&next, "‹next: logged in›");
+    app.bring_up(&next, next_ip);
+    app.helper_event(
+        &old,
+        HelperEventKind::Exited {
+            facts: ExitFacts {
+                furthest_milestone: Some(Milestone::TunnelUp),
+                stop_initiator: StopInitiator::Helper {
+                    reason: StopReason::Replaced,
+                },
+                cert_rejected_digests: Vec::new(),
+                cert_rejected_at: None,
+                tunnel_mode_rejected: false,
+                tunnel_address_in_use: false,
+                up_duration: Some(Duration::from_secs(30)),
+                exit_status: ProcessExitStatus::Exited { code: 0 },
+            },
+        },
+    );
+    app.output_of(&old, "‹old: exited›");
+    app.settle();
+    assert!(matches!(
+        app.connection_status(),
+        Some(ConnectionStatus::Connected { tunnel_ip: Some(ip), .. }) if *ip == next_ip
+    ));
+    assert_eq!(app.run_requests().len(), 2);
+    assert!(!app.asked_helper(|call| matches!(call, HelperCall::Disconnect { .. })));
+    assert_eq!(
+        log_marks(&app),
+        [
+            ("‹old: up›", true),
+            ("‹old: still up›", false),
+            ("‹next: starting›", true),
+            ("‹old: rekey›", false),
+            ("‹next: logged in›", false),
+            ("‹old: exited›", false),
+        ]
+    );
+    let (old_id, next_id) = (old_session.to_string(), next_session.to_string());
+    assert_eq!(
+        log_sessions(&app),
+        [&old_id, &old_id, &next_id, &old_id, &next_id, &old_id]
+    );
 }
 
 fn forticlient_connection(name: &str, server: &str) -> FortiClientConnection {

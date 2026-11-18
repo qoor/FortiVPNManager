@@ -34,7 +34,6 @@ import Foundation
 @objc protocol HelperClientXPCProtocol {
     /// Encoded `HelperEvent`.
     func event(_ data: Data)
-    /// Encoded `[OutputLine]` batch.
     func output(_ data: Data)
 }
 

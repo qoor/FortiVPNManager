@@ -82,6 +82,58 @@ import Testing
         #expect(!TunnelNetwork.tunnelRoutes(split).contains { route in table.contains(where: route.matches) })
     }
 
+    private var next: HelperInternal.NetworkSettings {
+        var settings = split
+        settings.tunnel = HelperInternal.TunnelDevice(name: "utun6", index: nil)
+        settings.ipv4 = HelperInternal.FamilySettings(
+            address: network("10.212.133.106", 32),
+            routes: .split(include: [network("10.30.0.0", 16), network("172.16.0.0", 12)])
+        )
+        return settings
+    }
+
+    private func switchSteps(_ netstat: String) -> [[String]] {
+        let table = RouteTable.parse(table: """
+            Routing tables
+
+            Internet:
+            Destination        Gateway            Flags               Netif Expire
+            \(netstat)
+
+            """, family: .inet)
+        return TunnelNetwork.switchSteps(
+            wanted: TunnelNetwork.tunnelRoutes(next), replaced: TunnelNetwork.tunnelRoutes(split), table: table
+        ).map(\.arguments)
+    }
+
+    @Test func theSwitchMovesTheSharedRoutesAddsTheNewOnesThenDeletesTheRest() {
+        #expect(switchSteps("""
+            10.30/16           10.212.133.105     UGSc                utun5
+            192.168.50         10.212.133.105     UGSc                utun5
+            """) == [
+            ["change", "-net", "10.30.0.0", "-netmask", "255.255.0.0", "10.212.133.106"],
+            ["add", "-net", "172.16.0.0", "-netmask", "255.240.0.0", "10.212.133.106"],
+            ["delete", "-net", "192.168.50.0", "-netmask", "255.255.255.0", "10.212.133.105"],
+        ])
+    }
+
+    @Test func aSwitchTriedAgainDoesOnlyWhatIsLeft() {
+        #expect(switchSteps("""
+            10.30/16           10.212.133.106     UGSc                utun6
+            192.168.50         10.212.133.105     UGSc                utun5
+            """) == [
+            ["add", "-net", "172.16.0.0", "-netmask", "255.240.0.0", "10.212.133.106"],
+            ["delete", "-net", "192.168.50.0", "-netmask", "255.255.255.0", "10.212.133.105"],
+        ])
+    }
+
+    @Test func withTheReplacedTunnelsRoutesGoneTheSwitchAddsEveryRoute() {
+        #expect(switchSteps("default            10.71.161.254      UGScg                 en0") == [
+            ["add", "-net", "10.30.0.0", "-netmask", "255.255.0.0", "10.212.133.106"],
+            ["add", "-net", "172.16.0.0", "-netmask", "255.240.0.0", "10.212.133.106"],
+        ])
+    }
+
     @Test func splitDNSAnswersItsDomainsWithoutMarkingTheTunnelPrimary() {
         let entries = TunnelNetwork.dnsEntries(split)
         #expect(entries.dns.map { $0 as NSDictionary } == [

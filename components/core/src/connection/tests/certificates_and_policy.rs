@@ -1,6 +1,6 @@
 //! Gateway certificate auto-trust, retry values and the failure ledger.
 
-use fvm_contract::app_helper::{Milestone, StopReason, VpnClient};
+use fvm_contract::app_helper::{Milestone, SessionId, StopReason, VpnClient};
 
 use super::super::certs::{gateway_change_drops_certs, merge_trusted_certs};
 use super::super::machine::{AttemptReason, Phase, RetryReason};
@@ -44,7 +44,10 @@ fn a_rejection_learns_the_value_and_retries_at_once_without_counting() {
     assert_eq!(
         effects,
         [
-            Effect::AttemptBegun(second.clone()),
+            Effect::AttemptBegun {
+                attempt: second.clone(),
+                session: SessionId(1_327_744_010)
+            },
             Effect::SaveTrustedCerts {
                 client: VpnClient::Openfortivpn,
                 certs: vec![digest('a'), pin_old()]
@@ -248,6 +251,28 @@ fn hand_edited_values_are_used_for_the_next_connect() {
     assert_eq!(started_certs(&h), [digest('c')]);
 }
 
+#[test]
+fn a_dtls_change_applies_from_the_next_connection() {
+    let mut h = Harness::new();
+    h.launch_connected();
+    let mut changed = account();
+    changed.dtls = true;
+    assert_eq!(
+        connection_effects(&h.send(Input::SettingsChanged(with_account(changed)))),
+        []
+    );
+    assert!(h.connected().is_some());
+    assert!(!h.cm.connection_section().account_applies_next_connection);
+    h.send(Input::ReconnectNow);
+    h.exit(
+        ended(Milestone::TunnelUp)
+            .by_helper(StopReason::Reconnect)
+            .up(50.0),
+    );
+    h.start_tunnel();
+    assert!(run_starts(&h.effects)[0].dtls);
+}
+
 /// A run started for the old gateway must not plant its certificate in the new gateway's values,
 /// and its rejection does not use up the new gateway's one immediate retry.
 #[test]
@@ -425,17 +450,35 @@ fn merging_puts_the_newest_first_and_keeps_four() {
 fn the_run_request_carries_the_values() {
     let mut account = account();
     account.trusted_certs = vec![digest('a'), pin_old()];
-    let request = account.run_request(id(1), "pw".into());
+    let request = account.run_request(id(1), SessionId(277_070_470), None, "pw".into());
     assert_eq!(request.attempt_id, id(1));
+    assert_eq!(request.session_id, SessionId(277_070_470));
+    assert_eq!(request.replacing, None);
     assert_eq!(request.host, "vpn.example.com");
     assert_eq!(request.port, 8443);
     assert_eq!(request.username, "alice");
     assert_eq!(request.realm, None);
     assert_eq!(request.trusted_certs, [digest('a'), pin_old()]);
+    assert!(!request.dtls);
+    account.dtls = true;
+    assert!(
+        account
+            .run_request(id(1), SessionId(277_070_470), None, "pw".into())
+            .dtls
+    );
     account.realm = "staff".into();
     assert_eq!(
-        account.run_request(id(1), "pw".into()).realm.as_deref(),
+        account
+            .run_request(id(1), SessionId(277_070_470), None, "pw".into())
+            .realm
+            .as_deref(),
         Some("staff")
+    );
+    assert_eq!(
+        account
+            .run_request(id(2), SessionId(277_070_471), Some(id(1)), "pw".into())
+            .replacing,
+        Some(id(1))
     );
     assert_eq!(account.ledger_key(), "alice@vpn.example.com");
 }

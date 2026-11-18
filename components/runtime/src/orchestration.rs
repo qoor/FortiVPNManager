@@ -3,12 +3,13 @@
 //! port answer or a network reply, comes back as another input.
 
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::SystemTime;
 
 use fvm_contract::app_helper::{
-    AttemptId, HelperError, HelperEvent, OutputLine, OutputSource, RunRequest,
+    AttemptId, HelperError, HelperEvent, OutputBatch, OutputSource, RunRequest, SessionId,
 };
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
@@ -116,6 +117,7 @@ pub(crate) struct Runtime {
     /// attempt's block in the log, so a note that started the attempt or the Helper's refusal of it
     /// belongs to the block; the Helper knows of neither.
     unmarked_attempt: Option<AttemptId>,
+    sessions: HashMap<AttemptId, SessionId>,
     sent: HashMap<&'static str, Section>,
     open_settings: bool,
     pub(crate) forms: crate::account_form::Forms,
@@ -194,6 +196,7 @@ impl Runtime {
             helper_queue: VecDeque::new(),
             pending_lines: Vec::new(),
             unmarked_attempt: None,
+            sessions: HashMap::new(),
             sent: HashMap::new(),
             open_settings: false,
             forms: crate::account_form::Forms::default(),
@@ -294,6 +297,11 @@ impl Runtime {
         self.log_line(log_file::note(text));
     }
 
+    pub(crate) fn attempt_note(&mut self, attempt: &AttemptId, text: impl Display) {
+        let text = format!("{} {text}", self.sessions[attempt]);
+        self.note(text);
+    }
+
     // MARK: Helper calls
 
     /// Calls the Helper. Tunnel calls wait for the previous one's answer;
@@ -356,7 +364,10 @@ impl Runtime {
 
     fn carry_out(&mut self, effect: Effect) {
         match effect {
-            Effect::AttemptBegun(attempt) => self.unmarked_attempt = Some(attempt),
+            Effect::AttemptBegun { attempt, session } => {
+                self.sessions.insert(attempt.clone(), session);
+                self.unmarked_attempt = Some(attempt);
+            }
             Effect::CheckReadiness => self.check_readiness(),
             Effect::OpenOtpSession { attempt } => self.open_otp_session(attempt),
             Effect::SearchOtp {
@@ -368,7 +379,12 @@ impl Runtime {
                 check_spam,
             } => self.close_otp_session(&attempt, check_spam),
             Effect::TrashStaleOtp { attempt, since } => self.trash_stale_otp(&attempt, since),
-            Effect::StartRun { attempt, account } => self.start_run(attempt, account),
+            Effect::StartRun {
+                attempt,
+                session,
+                account,
+                replacing,
+            } => self.start_run(attempt, session, account, replacing),
             Effect::SubmitOtp { attempt, code } => {
                 // The used mail go to the trash once the code is with the Helper.
                 self.finish_otp_session(&attempt);
@@ -430,7 +446,7 @@ impl Runtime {
                     });
                 })
             }
-            Effect::Note(note) => {
+            Effect::Note { attempt, note } => {
                 let text = match note {
                     Note::ScheduledHoursStarted => "‹schedule: scheduled hours started, connecting›".to_owned(),
                     Note::ReconnectHeldWhileAway => {
@@ -453,7 +469,10 @@ impl Runtime {
                         connection::STALE_OTP_WAIT.as_secs()
                     ),
                 };
-                self.note(text);
+                match attempt {
+                    Some(attempt) => self.attempt_note(&attempt, text),
+                    None => self.note(text),
+                }
             }
             Effect::OpenSettings => self.open_settings = true,
             Effect::ApproveQuit => self.quit_after_removing_bypass_routes(),
@@ -473,7 +492,9 @@ impl Runtime {
     fn start_run(
         &mut self,
         attempt: fvm_contract::app_helper::AttemptId,
+        session: SessionId,
         account: connection::VpnAccount,
+        replacing: Option<AttemptId>,
     ) {
         let item = SecretItem::VpnPassword {
             username: account.username.clone(),
@@ -504,11 +525,12 @@ impl Runtime {
                         return;
                     }
                 };
-                let request: RunRequest = account.run_request(attempt.clone(), password);
+                let request: RunRequest =
+                    account.run_request(attempt.clone(), session, replacing, password);
                 let json =
                     SecretText(serde_json::to_string(&request).expect("a run request encodes"));
                 runtime.call_helper(HelperCall::Connect { json }, move |runtime, response| {
-                    if let Some(code) = helper_failure(runtime, "connect", &response) {
+                    if let Some(code) = helper_failure(runtime, &attempt, "connect", &response) {
                         runtime.feed(connection::Input::RunRejected(attempt, code));
                     }
                 });
@@ -600,19 +622,27 @@ impl Runtime {
                 serde_json::from_str::<HelperEvent>(&json).expect("a Helper event of this build"),
             ),
             SystemEvent::HelperOutput { json } => {
-                let lines: Vec<OutputLine> =
+                let batch: OutputBatch =
                     serde_json::from_str(&json).expect("Helper output of this build");
-                for line in lines {
+                let session = self.sessions[&batch.attempt_id];
+                for line in batch.lines {
                     let source = match line.source {
                         OutputSource::Stdout => LogSource::Stdout,
                         OutputSource::Stderr => LogSource::Stderr,
                         OutputSource::Helper => LogSource::Note,
                     };
-                    self.log_line(LogLine {
+                    let starts_attempt =
+                        if self.unmarked_attempt.as_ref() == Some(&batch.attempt_id) {
+                            self.unmarked_attempt = None;
+                            self.cm.current_attempt() == Some(&batch.attempt_id)
+                        } else {
+                            false
+                        };
+                    self.pending_lines.push(LogLine {
                         time: line.date,
                         source,
-                        text: line.text,
-                        starts_attempt: false,
+                        text: format!("{session} {}", line.text),
+                        starts_attempt,
                     });
                 }
                 return;
@@ -717,6 +747,7 @@ fn section_key(section: &Section) -> &'static str {
 /// or is another build counts as an internal error, which the core retries like a network failure.
 pub(crate) fn helper_failure(
     runtime: &mut Runtime,
+    attempt: &AttemptId,
     what: &str,
     response: &PortResponse,
 ) -> Option<fvm_contract::app_helper::HelperErrorCode> {
@@ -726,7 +757,7 @@ pub(crate) fn helper_failure(
         PortResponse::HelperReply { json: Some(json) } => {
             match serde_json::from_str::<HelperError>(json) {
                 Ok(error) => {
-                    runtime.note(format!("‹{what} rejected: {}›", error.message));
+                    runtime.attempt_note(attempt, format!("‹{what} rejected: {}›", error.message));
                     Some(error.code)
                 }
                 Err(_) => Some(HelperErrorCode::InternalError),

@@ -15,7 +15,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, VpnClient,
+    ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, SessionId,
+    VpnClient,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
@@ -23,6 +24,7 @@ use fvm_contract::backend::{
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_helper_core::process::{Report, Run, StageLimits, Timing, Watchdog};
+use fvm_helper_core::recovery::RecordSlot;
 use zeroize::Zeroizing;
 
 pub const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -317,15 +319,18 @@ pub fn start_run(
     );
     let mut request = RunRequest {
         attempt_id: ATTEMPT.parse().unwrap(),
+        replacing: None,
+        session_id: SessionId(277_070_470),
         client: VpnClient::Openfortivpn,
         host: GATEWAY.to_owned(),
         port: 443,
         username: "alice".to_owned(),
         realm: None,
         trusted_certs: Vec::new(),
+        dtls: false,
         password: setup.password.clone(),
     };
-    match watchdog.start(&mut request, on_report) {
+    match watchdog.start(&mut request, RecordSlot::First, None, on_report) {
         Ok((run, _)) => run,
         Err(failure) => panic!("the run did not start: {failure:?}"),
     }

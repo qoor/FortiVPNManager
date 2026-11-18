@@ -236,8 +236,9 @@ struct LogTextView: NSViewRepresentable {
         }
 
         private static func color(forPrefixOf text: String) -> NSColor {
-            if text.hasPrefix("ERROR:") { return .systemRed }
-            if text.hasPrefix("WARN:") { return .systemOrange }
+            let message = text.prefixMatch(of: #/[0-9]{10} /#).map { text[$0.range.upperBound...] } ?? text[...]
+            if message.hasPrefix("ERROR:") { return .systemRed }
+            if message.hasPrefix("WARN:") { return .systemOrange }
             return .labelColor
         }
     }

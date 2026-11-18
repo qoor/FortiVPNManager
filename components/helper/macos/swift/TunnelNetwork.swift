@@ -12,7 +12,11 @@ enum TunnelNetwork {
         case .lookUp(_, let outside):
             return lookUp(outside)
         case .apply(let settings, let previous, let remove, let add):
-            return apply(settings, previous: previous, remove: remove, add: add)
+            return apply(settings, previous: previous, remove: remove, add: add, routesAndDNS: true)
+        case .prepare(let settings, let add):
+            return apply(settings, previous: nil, remove: [], add: add, routesAndDNS: false)
+        case .switch(let settings, let replaced):
+            return switchTraffic(to: settings, from: replaced)
         case .revert(let changes):
             return revert(changes)
         }
@@ -37,7 +41,7 @@ enum TunnelNetwork {
 
     private static func apply(
         _ settings: HelperInternal.NetworkSettings, previous: HelperInternal.NetworkSettings?,
-        remove: [HelperInternal.OutsideRoute], add: [HelperInternal.OutsideRoute]
+        remove: [HelperInternal.OutsideRoute], add: [HelperInternal.OutsideRoute], routesAndDNS: Bool
     ) -> HelperInternal.NetworkOutcome {
         guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil) else {
             return failed(.network, "the network configuration could not be read", left: remove)
@@ -51,7 +55,7 @@ enum TunnelNetwork {
                 return failed(.network, "the network changed since it was looked up; look it up again", left: remove)
             }
         }
-        let wanted = tunnelRoutes(settings)
+        let wanted = routesAndDNS ? tunnelRoutes(settings) : []
         let stale = previous.map { tunnelRoutes($0).filter { !wanted.contains($0) } } ?? []
         let families = Set((wanted + stale).map(\.family) + (remove + add).compactMap { systemRoute($0, store)?.family })
         guard let before = readTable(families) else {
@@ -109,7 +113,7 @@ enum TunnelNetwork {
                 return finish((.routes, "route -n \(route.addArguments.joined(separator: " ")) failed"), table: readTable(families))
             }
         }
-        guard writeDNS(settings, store) else {
+        guard !routesAndDNS || writeDNS(settings, store) else {
             return finish((.dns, "the DNS settings could not be written"), table: readTable(families))
         }
 
@@ -134,10 +138,79 @@ enum TunnelNetwork {
             let routes = wrong.map { "\($0.destination)/\($0.prefixLength) through \($0.gateway)" }
             return finish((.routes, "the routing table lacks or still has \(routes.joined(separator: ", "))"), table: after)
         }
-        guard hasDNS(settings, store) else {
+        guard !routesAndDNS || hasDNS(settings, store) else {
             return finish((.dns, "the DNS settings were not kept"), table: after)
         }
         return finish(nil, table: after)
+    }
+
+    private static func switchTraffic(
+        to settings: HelperInternal.NetworkSettings, from replaced: HelperInternal.NetworkSettings
+    ) -> HelperInternal.NetworkOutcome {
+        guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil) else {
+            return failed(.network, "the network configuration could not be read", left: [])
+        }
+        let wanted = tunnelRoutes(settings)
+        let old = tunnelRoutes(replaced)
+        let families = Set((wanted + old).map(\.family))
+        guard let before = readTable(families) else {
+            return failed(.routes, "the routing table could not be read", left: [])
+        }
+        for step in switchSteps(wanted: wanted, replaced: old, table: before) {
+            let done = switch step {
+            case .move(let route): RouteTable.change(route.changeArguments)
+            case .add(let route): RouteTable.add(route, replacingCopiesIn: before)
+            case .delete(let route): RouteTable.delete(route)
+            }
+            guard done else {
+                return failed(.routes, "route -n \(step.arguments.joined(separator: " ")) failed", left: [])
+            }
+        }
+        guard writeDNS(settings, store) else {
+            return failed(.dns, "the DNS settings could not be written", left: [])
+        }
+        guard let after = readTable(families) else {
+            return failed(.routes, "the routing table could not be read", left: [])
+        }
+        let wrong = wanted.filter { route in !after.contains(where: route.matches) }
+            + old.filter { route in !wanted.contains(route) && after.contains(where: route.matches) }
+        guard wrong.isEmpty else {
+            let routes = wrong.map { "\($0.destination)/\($0.prefixLength) through \($0.gateway)" }
+            return failed(.routes, "the routing table lacks or still has \(routes.joined(separator: ", "))", left: [])
+        }
+        guard hasDNS(settings, store) else {
+            return failed(.dns, "the DNS settings were not kept", left: [])
+        }
+        HelperLog.routes.notice("moved the VPN traffic from \(replaced.tunnel.name, privacy: .public) to \(settings.tunnel.name, privacy: .public)")
+        return .applied(added: [], left: [])
+    }
+
+    enum SwitchStep: Equatable {
+        case move(RouteTable.Route)
+        case add(RouteTable.Route)
+        case delete(RouteTable.Route)
+
+        var arguments: [String] {
+            switch self {
+            case .move(let route): route.changeArguments
+            case .add(let route): route.addArguments
+            case .delete(let route): route.deleteArguments
+            }
+        }
+    }
+
+    static func switchSteps(
+        wanted: [RouteTable.Route], replaced: [RouteTable.Route], table: [RouteTable.Row]
+    ) -> [SwitchStep] {
+        let sameDestination = { (one: RouteTable.Route, other: RouteTable.Route) in
+            one.family == other.family && one.destination == other.destination && one.prefixLength == other.prefixLength
+        }
+        let present = replaced.filter { route in table.contains(where: route.matches) }
+        let moves = wanted.filter { route in !table.contains(where: route.matches) }.map { route in
+            present.contains { sameDestination($0, route) } ? SwitchStep.move(route) : .add(route)
+        }
+        let deletes = present.filter { route in !wanted.contains { sameDestination($0, route) } }.map(SwitchStep.delete)
+        return moves + deletes
     }
 
     private static func revert(_ changes: HelperInternal.OutsideChanges) -> HelperInternal.NetworkOutcome {

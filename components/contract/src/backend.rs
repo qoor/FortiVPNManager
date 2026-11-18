@@ -173,6 +173,7 @@ pub enum Finding {
     Hidden,
     ScriptLeftRunning,
     GatewayRouteRequested,
+    TunnelAddressInUse,
 }
 
 /// Reads one run's output.

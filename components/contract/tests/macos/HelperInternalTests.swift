@@ -123,6 +123,8 @@ struct HelperInternalTests {
                 settings: splitTunnel, previous: nil, remove: [], add: [gatewayRoute, excludedRoute]
             )),
             .changeNetwork(change: .apply(settings: fullTunnel, previous: splitTunnel, remove: [excludedRoute], add: [])),
+            .changeNetwork(change: .prepare(settings: fullTunnel, add: [gatewayRoute])),
+            .changeNetwork(change: .switch(settings: fullTunnel, replaced: splitTunnel)),
             .changeNetwork(change: .revert(changes: .init(dnsServiceID: dnsService, routes: [gatewayRoute, excludedRoute]))),
             .exitAfterDraining,
             .exitNow,

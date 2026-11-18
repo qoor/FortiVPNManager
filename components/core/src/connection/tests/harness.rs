@@ -110,6 +110,7 @@ pub(super) fn account() -> VpnAccount {
         realm: String::new(),
         client: VpnClient::Openfortivpn,
         trusted_certs: vec![pin_old()],
+        dtls: false,
     }
 }
 
@@ -203,6 +204,7 @@ pub(super) struct Exit {
     cert_at: Option<Milestone>,
     status: Option<ProcessExitStatus>,
     tunnel_mode_rejected: bool,
+    address_in_use: bool,
 }
 
 /// The client exited on its own after reaching `furthest`.
@@ -215,6 +217,7 @@ pub(super) fn ended(furthest: Milestone) -> Exit {
         cert_at: None,
         status: None,
         tunnel_mode_rejected: false,
+        address_in_use: false,
     }
 }
 
@@ -257,6 +260,11 @@ impl Exit {
         self
     }
 
+    pub(super) fn address_in_use(mut self) -> Self {
+        self.address_in_use = true;
+        self
+    }
+
     pub(super) fn facts(self) -> ExitFacts {
         ExitFacts {
             furthest_milestone: self.furthest,
@@ -264,6 +272,7 @@ impl Exit {
             cert_rejected_digests: self.certs,
             cert_rejected_at: self.cert_at,
             tunnel_mode_rejected: self.tunnel_mode_rejected,
+            tunnel_address_in_use: self.address_in_use,
             up_duration: self.up,
             exit_status: self.status.unwrap_or(match self.furthest {
                 None => ProcessExitStatus::SpawnFailed { errno: 2 },

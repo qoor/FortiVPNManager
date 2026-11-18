@@ -110,6 +110,8 @@ nonisolated enum HelperInternal {
     enum NetworkChange: Decodable, Sendable {
         case lookUp(tunnel: TunnelDevice, outside: [IPNetwork])
         case apply(settings: NetworkSettings, previous: NetworkSettings?, remove: [OutsideRoute], add: [OutsideRoute])
+        case prepare(settings: NetworkSettings, add: [OutsideRoute])
+        case `switch`(settings: NetworkSettings, replaced: NetworkSettings)
         case revert(changes: OutsideChanges)
     }
 

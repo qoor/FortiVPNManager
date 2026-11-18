@@ -38,10 +38,10 @@ use fvm_contract::helper_internal::{
     AddedRoute, LogCategory, LogLevel, NetworkChange, NetworkOutcome, OutsideChanges,
 };
 
-pub use run::Run;
+pub use run::{NotReplaceable, Replaced, Run};
 
 use crate::recovery::run_directory::RunFiles;
-use crate::recovery::{self, Failure, RouteRepair};
+use crate::recovery::{self, Failure, RecordSlot, RouteRepair};
 
 /// The VPN clients the Helper can run, each with the adapter that describes it, and their runs'
 /// files in a directory only the Helper may use.
@@ -90,6 +90,8 @@ impl Watchdog {
     pub fn start(
         &mut self,
         request: &mut RunRequest,
+        slot: RecordSlot,
+        replaced: Option<Replaced>,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Result<(Run, ClientExecutable), StartFailure> {
         let backend = self
@@ -108,7 +110,7 @@ impl Watchdog {
                 StartFailure::ClientUnavailable(backend.describe_problem(&problem))
             })?;
         let number = self.runs_started + 1;
-        let files = RunFiles::new(&self.run_directory, number);
+        let files = RunFiles::new(&self.run_directory, number, slot);
         let launch = backend
             .launch_spec(&client, request, &files.config, &files.values)
             .map_err(StartFailure::InvalidRequest)?;
@@ -143,6 +145,7 @@ impl Watchdog {
             &launch,
             request,
             files,
+            replaced,
             self.timing,
             on_report,
         );
@@ -153,8 +156,8 @@ impl Watchdog {
     pub fn clean_up(
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
-        revert_network: impl FnOnce(OutsideChanges),
-        repair_routes: impl FnOnce(Option<Ipv4Addr>),
+        revert_network: impl FnMut(OutsideChanges),
+        repair_routes: impl FnMut(Option<Ipv4Addr>),
         remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
     ) -> Vec<AddedRoute> {
         recovery::clean_up(

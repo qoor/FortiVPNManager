@@ -17,19 +17,12 @@ use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
 /// How long the processes get to disappear after the forced stop.
 const KILL_LIMIT: Duration = Duration::from_secs(2);
 
-/// Cleans up after an earlier Helper in `directory`. If it died during a run, stops the processes
-/// its pidfile names that still run and belong to one of `clients`, calls `repair_routes` with the
-/// run's gateway, if it is known, and removes the files it left once that returns. The routes are
-/// repaired whenever a pidfile is left, even an unreadable one, since a run did not finish. Then
-/// `remove_bypass_routes` gets the exception routes it recorded and answers those still in the
-/// routing table, which stay recorded and are returned as this Helper's. `log` takes lines for the
-/// Helper's log.
 pub(crate) fn clean_up(
     clients: &[(VpnClient, Arc<dyn Backend>)],
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
-    revert_network: impl FnOnce(OutsideChanges),
-    repair_routes: impl FnOnce(Option<Ipv4Addr>),
+    mut revert_network: impl FnMut(OutsideChanges),
+    mut repair_routes: impl FnMut(Option<Ipv4Addr>),
     remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
 ) -> Vec<AddedRoute> {
     if let Err(failure) = os::prepare_run_directory(directory) {
@@ -40,16 +33,13 @@ pub(crate) fn clean_up(
         );
         return Vec::new();
     }
-    if let Some(record) = run_directory::read_record(directory) {
+    for (path, record) in run_directory::read_records(directory) {
         // An unreadable pidfile still means a run did not finish, so the routes are checked.
         let record = record.unwrap_or_else(|_| {
             log(
                 LogLevel::Error,
                 LogCategory::Helper,
-                format!(
-                    "ignoring unreadable pidfile {}",
-                    run_directory::record_path(directory).display()
-                ),
+                format!("ignoring unreadable pidfile {}", path.display()),
             );
             RunRecord::default()
         });

@@ -114,6 +114,7 @@ pub struct Vpn {
     /// Empty means none.
     pub realm: String,
     pub client: VpnClient,
+    pub dtls: bool,
     /// Gateway certificate digests to trust, newest first, in canonical form. Managed by the app.
     pub trusted_certs: Vec<String>,
     /// Gateway public key pins to trust, newest first, in canonical form. Managed by the app.
@@ -200,6 +201,7 @@ impl Default for Settings {
                 username: String::new(),
                 realm: String::new(),
                 client: VpnClient::Openconnect,
+                dtls: false,
                 trusted_certs: Vec::new(),
                 trusted_cert_pins: Vec::new(),
             },

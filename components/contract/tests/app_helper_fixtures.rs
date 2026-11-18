@@ -23,6 +23,7 @@ fn both_ways<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: T, text
 }
 
 const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
+const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 const DIGEST_A: &str = "4f7a0c2b9d1e8f3a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a";
 const DIGEST_B: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const CELLAR_PATH: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
@@ -40,6 +41,7 @@ fn full_facts() -> ExitFacts {
         cert_rejected_digests: vec![DIGEST_A.into()],
         cert_rejected_at: Some(Milestone::ConnectedToGateway),
         tunnel_mode_rejected: false,
+        tunnel_address_in_use: false,
         up_duration: Some(Duration::from_millis(10_498_750)),
         exit_status: ProcessExitStatus::Exited { code: 0 },
     }
@@ -54,12 +56,15 @@ fn run_request() {
     both_ways(
         RunRequest {
             attempt_id: attempt(),
+            replacing: None,
+            session_id: SessionId(277_070_470),
             client: VpnClient::Openfortivpn,
             host: "vpn.example.com".into(),
             port: 443,
             username: "alice".into(),
             realm: Some("staff".into()),
             trusted_certs: vec![DIGEST_A.into(), DIGEST_B.into()],
+            dtls: true,
             password: "p@ss/w\"rd\\ ‹ü›".into(),
         },
         include_str!("fixtures/app-helper/run_request.json"),
@@ -71,15 +76,38 @@ fn run_request_without_realm() {
     both_ways(
         RunRequest {
             attempt_id: attempt(),
+            replacing: None,
+            session_id: SessionId(277_070_471),
             client: VpnClient::Openconnect,
             host: "192.0.2.10".into(),
             port: 10443,
             username: "bob".into(),
             realm: None,
             trusted_certs: vec![],
+            dtls: false,
             password: "secret".into(),
         },
         include_str!("fixtures/app-helper/run_request_without_realm.json"),
+    );
+}
+
+#[test]
+fn run_request_replacing_a_run() {
+    both_ways(
+        RunRequest {
+            attempt_id: OTHER_ATTEMPT.parse().unwrap(),
+            replacing: Some(attempt()),
+            session_id: SessionId(277_070_472),
+            client: VpnClient::Openconnect,
+            host: "192.0.2.10".into(),
+            port: 10443,
+            username: "bob".into(),
+            realm: None,
+            trusted_certs: vec![],
+            dtls: false,
+            password: "secret".into(),
+        },
+        include_str!("fixtures/app-helper/run_request_replacing.json"),
     );
 }
 
@@ -117,6 +145,7 @@ fn stop_reasons() {
         Watchdog,
         NetworkSetupFailed,
         HelperShutdown,
+        Replaced,
     ];
     both_ways(
         reasons,
@@ -177,6 +206,7 @@ fn exit_facts_spawn_failed() {
         cert_rejected_digests: vec![],
         cert_rejected_at: None,
         tunnel_mode_rejected: false,
+        tunnel_address_in_use: false,
         up_duration: None,
         exit_status: ProcessExitStatus::SpawnFailed { errno: 2 },
     };
@@ -194,6 +224,7 @@ fn exit_facts_tunnel_mode_rejected() {
         cert_rejected_digests: vec![],
         cert_rejected_at: None,
         tunnel_mode_rejected: true,
+        tunnel_address_in_use: false,
         up_duration: None,
         exit_status: ProcessExitStatus::Signaled { signal: 15 },
     };
@@ -284,6 +315,26 @@ fn output_lines() {
         ),
     ];
     both_ways(lines, include_str!("fixtures/app-helper/output_lines.json"));
+}
+
+#[test]
+fn output_batch() {
+    let batch = OutputBatch {
+        attempt_id: attempt(),
+        lines: vec![
+            OutputLine {
+                date: at(1_762_412_345.25),
+                source: OutputSource::Stdout,
+                text: "INFO:   Connected to gateway.".into(),
+            },
+            OutputLine {
+                date: at(1_762_412_346.125),
+                source: OutputSource::Helper,
+                text: "‹exited: code 0›".into(),
+            },
+        ],
+    };
+    both_ways(batch, include_str!("fixtures/app-helper/output_batch.json"));
 }
 
 #[test]
@@ -401,6 +452,13 @@ fn attempt_id_keeps_the_apps_uppercase_form() {
     ] {
         assert!(bad.parse::<AttemptId>().is_err(), "{bad}");
     }
+}
+
+#[test]
+fn a_session_id_reads_as_ten_digits() {
+    assert_eq!(SessionId(277_070_470).to_string(), "0277070470");
+    assert_eq!(SessionId(0).to_string(), "0000000000");
+    assert_eq!(SessionId(9_999_999_999).to_string(), "9999999999");
 }
 
 #[test]

@@ -24,7 +24,6 @@ final class ClientLink: @unchecked Sendable {
         proxy()?.event(event)
     }
 
-    /// An encoded `[OutputLine]` batch.
     func send(output: Data) {
         proxy()?.output(output)
     }

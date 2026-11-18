@@ -74,6 +74,7 @@ pub(super) fn launch_spec(
                 .as_ref()
                 .map(|(argument, _)| format!("--script={argument}")),
         )
+        .chain((!request.dtls).then(|| "--no-dtls".to_owned()))
         .chain([
             "--reconnect-timeout=0".to_owned(),
             "--cookie-on-stdin".to_owned(),

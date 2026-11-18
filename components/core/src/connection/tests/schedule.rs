@@ -1,6 +1,6 @@
 //! Scheduled hours and time away.
 
-use fvm_contract::app_helper::{HelperErrorCode, Milestone, StopReason, VpnClient};
+use fvm_contract::app_helper::{HelperErrorCode, Milestone, SessionId, StopReason, VpnClient};
 use fvm_contract::app_internal::section::{ConnectionIcon, ScheduleOutlook};
 use fvm_contract::app_internal::{TimeOfDay, Weekday};
 use jiff::tz::TimeZone;
@@ -175,8 +175,14 @@ fn a_launch_outside_the_hours_waits_for_the_start() {
     assert_eq!(
         effects[..2],
         [
-            Effect::AttemptBegun(id(1)),
-            Effect::Note(Note::ScheduledHoursStarted)
+            Effect::AttemptBegun {
+                attempt: id(1),
+                session: SessionId(1_327_968_000)
+            },
+            Effect::Note {
+                attempt: Some(id(1)),
+                note: Note::ScheduledHoursStarted
+            }
         ]
     );
     assert!(h.cm.wants_connection);

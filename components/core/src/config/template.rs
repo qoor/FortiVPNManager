@@ -234,6 +234,8 @@ vpn:
   realm: {realm}
   # {client_comment}
   client: {client}
+  # When true, openconnect carries the tunnel over DTLS (UDP) if the gateway offers it; when false, over HTTPS (TLS) only.
+  dtls: {dtls}
   # Server certificate values the app trusts. It fills them in on the first connection and manages them; no need to edit by hand.
   # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries per list). A new server address or port clears both lists.
   # SHA-256 digests of the certificate, used by openfortivpn.
@@ -271,6 +273,7 @@ routes:
         username = quoted(&vpn.username),
         realm = quoted(&vpn.realm),
         client = quoted(client),
+        dtls = vpn.dtls,
         gmail_address = quoted(&otp.gmail_address),
         method = quoted(method),
         google_client_id = quoted(&otp.google_client_id),

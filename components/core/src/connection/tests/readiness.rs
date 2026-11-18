@@ -1,6 +1,6 @@
 //! The readiness gate, account changes and what the connection section shows.
 
-use fvm_contract::app_helper::Milestone;
+use fvm_contract::app_helper::{Milestone, SessionId};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus};
 
@@ -83,7 +83,10 @@ fn completing_the_setup_while_a_connection_is_wanted_connects() {
     assert_eq!(
         effects,
         [
-            Effect::AttemptBegun(id(2)),
+            Effect::AttemptBegun {
+                attempt: id(2),
+                session: SessionId(1_327_744_001)
+            },
             Effect::OpenOtpSession { attempt: id(2) },
             h.set(TimerKind::AttemptDeadline, h.now + secs(150.0)),
             Effect::HoldActivity(true),

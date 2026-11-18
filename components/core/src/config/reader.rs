@@ -207,6 +207,7 @@ impl<'t, 'a> Fields<'t, 'a> {
                     string(value, "vpn.realm")?.map(str::to_owned),
                 ),
                 "client" => set(&mut vpn.client, choice(value, "vpn.client", &VPN_CLIENTS)?),
+                "dtls" => set(&mut vpn.dtls, boolean(value, "vpn.dtls")?),
                 "trusted_certs" => {
                     vpn.trusted_certs = self.trusted(value, CertificateList::Digests)?;
                 }

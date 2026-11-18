@@ -501,7 +501,9 @@ impl Entry {
         match &mut job.change {
             NetworkChange::Apply { remove, .. } => self.keep_exception_routes(remove),
             NetworkChange::Revert { changes } => self.keep_exception_routes(&mut changes.routes),
-            NetworkChange::LookUp { .. } => {}
+            NetworkChange::LookUp { .. }
+            | NetworkChange::Prepare { .. }
+            | NetworkChange::Switch { .. } => {}
         }
         let change = job.change.clone();
         self.bypass_routes.jobs.push_front(Job::Network(job));

@@ -27,7 +27,7 @@ use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
 use fvm_contract::app_helper::{
-    AttemptId, HelperErrorCode, HelperEvent, RunRequest, StopReason, VpnClient,
+    AttemptId, HelperErrorCode, HelperEvent, RunRequest, SessionId, StopReason, VpnClient,
 };
 use fvm_contract::app_internal::event::PathInterface;
 use fvm_contract::app_internal::port::{InterfaceAddress, RegistrationError};
@@ -83,6 +83,7 @@ impl Settings {
                 realm: settings.vpn.realm.clone(),
                 client,
                 trusted_certs: settings.vpn.trusted(CertificateList::of(client)).to_vec(),
+                dtls: settings.vpn.dtls,
             },
             connection: ConnectionSettings {
                 session_max_minutes: minutes(connection.session_max_minutes),
@@ -113,6 +114,7 @@ pub struct VpnAccount {
     pub client: VpnClient,
     /// Newest first, at most [`crate::config::MAX_TRUSTED_CERTS`].
     pub trusted_certs: Vec<String>,
+    pub dtls: bool,
 }
 
 impl VpnAccount {
@@ -122,15 +124,24 @@ impl VpnAccount {
     }
 
     /// The Helper's run request for `attempt`, with the password from the secret storage.
-    pub fn run_request(&self, attempt: AttemptId, password: String) -> RunRequest {
+    pub fn run_request(
+        &self,
+        attempt: AttemptId,
+        session: SessionId,
+        replacing: Option<AttemptId>,
+        password: String,
+    ) -> RunRequest {
         RunRequest {
             attempt_id: attempt,
+            replacing,
+            session_id: session,
             client: self.client,
             host: self.host.clone(),
             port: i64::from(self.port),
             username: self.username.clone(),
             realm: (!self.realm.is_empty()).then(|| self.realm.clone()),
             trusted_certs: self.trusted_certs.clone(),
+            dtls: self.dtls,
             password,
         }
     }
@@ -297,7 +308,9 @@ pub enum Effect {
     /// ([`VpnAccount::run_request`]).
     StartRun {
         attempt: AttemptId,
+        session: SessionId,
         account: VpnAccount,
+        replacing: Option<AttemptId>,
     },
     /// Hand the code to the run, then move the session's OTP emails to the trash and close it.
     SubmitOtp {
@@ -333,11 +346,15 @@ pub enum Effect {
     ProbeNetwork(NetworkProbe),
     /// Answer with [`Input::ScreenState`].
     ReadScreenState,
-    /// Attempt `id` began: the next log line starts its block in the log. It comes first among its
-    /// input's effects, so a note that started the attempt is in the block.
-    AttemptBegun(AttemptId),
+    AttemptBegun {
+        attempt: AttemptId,
+        session: SessionId,
+    },
     /// A line for the Log pane.
-    Note(Note),
+    Note {
+        attempt: Option<AttemptId>,
+        note: Note,
+    },
     /// Show the settings window (`FromRuntime::OpenSettings`), after the sections of this input.
     OpenSettings,
     /// Finish writing the log file, then let the app quit. Always the last effect; the manager

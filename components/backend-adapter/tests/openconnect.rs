@@ -9,7 +9,9 @@ use std::path::Path;
 
 use common::Run;
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{AttemptId, Milestone, OutputSource, RunRequest, VpnClient};
+use fvm_contract::app_helper::{
+    AttemptId, Milestone, OutputSource, RunRequest, SessionId, VpnClient,
+};
 use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
@@ -29,12 +31,15 @@ fn request() -> RunRequest {
         attempt_id: "6B1D9B3E-2C1F-4E55-9C0B-3F0A2B4C5D6E"
             .parse::<AttemptId>()
             .unwrap(),
+        replacing: None,
+        session_id: SessionId(277_070_470),
         client: VpnClient::Openconnect,
         host: "203.0.113.10".into(),
         port: 8443,
         username: "alice".into(),
         realm: None,
         trusted_certs: vec![PIN.into()],
+        dtls: false,
         password: PASSWORD.into(),
     }
 }
@@ -97,6 +102,7 @@ mod launching {
         let mut tunnel = vec!["--protocol=fortinet", servercert.as_str()];
         tunnel.extend(SCRIPT.map(|(argument, _)| argument));
         tunnel.extend([
+            "--no-dtls",
             "--reconnect-timeout=0",
             "--cookie-on-stdin",
             "https://203.0.113.10:8443/",
@@ -123,6 +129,22 @@ mod launching {
                 .iter()
                 .any(|(name, _)| name == "FVM_VALUES_FILE")
         );
+    }
+
+    #[test]
+    fn only_the_tunnel_run_turns_dtls_off() {
+        let off = launch(&request()).unwrap();
+        let on = launch(&with(|r| r.dtls = true)).unwrap();
+        assert_eq!(on.args, off.args);
+        let (off, on) = (off.session.unwrap(), on.session.unwrap());
+        assert_eq!(on.logout, off.logout);
+        let mut tunnel = on.tunnel.args;
+        let position = tunnel
+            .iter()
+            .position(|arg| arg == "--reconnect-timeout=0")
+            .unwrap();
+        tunnel.insert(position, "--no-dtls".to_owned());
+        assert_eq!(off.tunnel.args, tunnel);
     }
 
     /// curl with the gateway's pins, the cookie as a header on stdin and only the status printed.
@@ -566,6 +588,20 @@ mod output {
             run.findings,
             [Finding::TunnelIp(Ipv4Addr::new(10, 10, 0, 5))]
         );
+    }
+
+    #[test]
+    fn another_adapter_up_with_the_tunnels_address_is_reported() {
+        let mut run = run();
+        replay(&mut run, &LOGIN_RUN);
+        replay(&mut run, &TUNNEL_RUN[..5]);
+        let mut conflict = b"0: Creating adapter\nAdapter \"".to_vec();
+        conflict.extend_from_slice(CP949_TEXT);
+        conflict.extend_from_slice(b"\" / 54 is UP and using our IPv4 address. Cannot resolve.\n");
+        assert_eq!(run.read(Stderr, &conflict), None);
+        let mut expected = logged_in();
+        expected.push(Finding::TunnelAddressInUse);
+        assert_eq!(run.findings, expected);
     }
 
     /// Text without a line break before the session line, such as a prompt, does not carry the

@@ -7,10 +7,11 @@
 use std::collections::BTreeMap;
 use std::mem;
 use std::net::Ipv4Addr;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
-    AttemptId, ExitFacts, HelperErrorCode, HelperEvent, HelperEventKind, Milestone, StopReason,
+    AttemptId, ExitFacts, HelperErrorCode, HelperEvent, HelperEventKind, Milestone, SessionId,
+    StopReason, VpnClient,
 };
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::port::RegistrationError;
@@ -27,10 +28,13 @@ use super::{
     TimerKind, VpnAccount,
 };
 
+const SECONDS_FROM_1970_TO_2026: u64 = 1_767_225_600;
+
 pub struct ConnectionManager {
     pub(super) app_build: String,
     attempt_seed: [u8; 16],
     attempts_issued: u64,
+    last_session: Option<SessionId>,
     pub(super) settings: Settings,
     pub(super) time_zone: TimeZone,
     kills_show_as_signals: bool,
@@ -135,6 +139,7 @@ pub(super) enum Stage {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) struct Attempt {
     pub(super) id: AttemptId,
+    session: SessionId,
     pub(super) reason: AttemptReason,
     cert_retry_used: bool,
     started_at: SystemTime,
@@ -155,6 +160,7 @@ pub(super) struct Attempt {
     stop_requested: Option<StopReason>,
     /// The account when the attempt began: its readiness check was for it and its run uses it.
     pub(super) account: VpnAccount,
+    pub(super) replacing: Option<Session>,
 }
 
 impl Attempt {
@@ -201,6 +207,16 @@ pub(super) struct Session {
     pub(super) planned_reconnect: Option<SystemTime>,
     /// The route to the gateway when the tunnel came up, or the first one known after.
     underlay: Option<Underlay>,
+    pub(super) renewal: Option<Renewal>,
+    pub(super) replaced: Option<(AttemptId, SystemTime)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct Renewal {
+    pub(super) reason: AttemptReason,
+    pub(super) tries: u32,
+    pub(super) later_failures: u32,
+    pub(super) next_try: Option<SystemTime>,
 }
 
 /// A stop the app asked for; it is complete at the run's exit event, not at the reply.
@@ -210,6 +226,7 @@ pub(super) struct Stop {
     pub(super) after: AfterStop,
     /// Set when the run had a tunnel up.
     connected_since: Option<SystemTime>,
+    replacement: Option<AttemptId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -301,6 +318,7 @@ impl ConnectionManager {
             app_build: startup.app_build,
             attempt_seed: startup.attempt_seed,
             attempts_issued: 0,
+            last_session: None,
             settings: startup.settings,
             time_zone: startup.time_zone,
             kills_show_as_signals: startup.kills_show_as_signals,
@@ -447,7 +465,10 @@ impl ConnectionManager {
         }
         let mut effects = match &self.phase {
             Phase::Connecting(attempt) if marks.attempt.as_ref() != Some(&attempt.id) => {
-                vec![Effect::AttemptBegun(attempt.id.clone())]
+                vec![Effect::AttemptBegun {
+                    attempt: attempt.id.clone(),
+                    session: attempt.session,
+                }]
             }
             _ => Vec::new(),
         };
@@ -481,15 +502,24 @@ impl ConnectionManager {
         let mut notes = Vec::new();
         if after.scheduled_attempt.is_some() && after.scheduled_attempt != before.scheduled_attempt
         {
-            notes.push(Effect::Note(Note::ScheduledHoursStarted));
+            notes.push(Effect::Note {
+                attempt: after.scheduled_attempt,
+                note: Note::ScheduledHoursStarted,
+            });
         }
         if after.holding && !before.holding {
-            notes.push(Effect::Note(Note::ReconnectHeldWhileAway));
+            notes.push(Effect::Note {
+                attempt: None,
+                note: Note::ReconnectHeldWhileAway,
+            });
         }
         if after.suspended && !before.suspended {
-            notes.push(Effect::Note(Note::ReconnectsSuspended {
-                away_minutes: schedule.away_minutes,
-            }));
+            notes.push(Effect::Note {
+                attempt: None,
+                note: Note::ReconnectsSuspended {
+                    away_minutes: schedule.away_minutes,
+                },
+            });
         }
         notes
     }
@@ -509,14 +539,20 @@ impl ConnectionManager {
                     wanted.insert(TimerKind::OtpDeadline, prompted + policy::OTP_DEADLINE);
                 }
             }
-            // Suspended while asleep and until the wake is judged; outside the scheduled hours
-            // also while the away user is away.
             Phase::Connected(session) if !self.sleeping && self.pending_wake.is_none() => {
-                if let Some(planned) = session.planned_reconnect
-                    && self.automatic_reconnect_allowed()
-                {
-                    wanted.insert(TimerKind::ProactiveReconnect, planned);
-                }
+                let next = match &session.renewal {
+                    None if self.automatic_reconnect_allowed() => session
+                        .planned_reconnect
+                        .map(|planned| (TimerKind::ProactiveReconnect, planned)),
+                    Some(renewal)
+                        if !renewal.reason.is_automatic_reconnect()
+                            || self.automatic_reconnect_allowed() =>
+                    {
+                        renewal.next_try.map(|at| (TimerKind::Retry, at))
+                    }
+                    _ => None,
+                };
+                wanted.extend(next);
             }
             Phase::WaitingRetry { until, .. } => {
                 wanted.insert(TimerKind::Retry, *until);
@@ -686,6 +722,12 @@ impl ConnectionManager {
         if replans && let Phase::Connected(session) = &mut self.phase {
             session.planned_reconnect =
                 policy::planned_reconnect(session.since, &self.settings.connection, self.now);
+            if session
+                .renewal
+                .is_some_and(|renewal| renewal.next_try.is_none())
+            {
+                session.renewal = None;
+            }
         }
     }
 
@@ -735,7 +777,7 @@ impl ConnectionManager {
                 self.abort_attempt(*attempt, StopReason::UserDisconnect, AfterStop::Idle);
             }
             Phase::Connected(session) => {
-                self.stop_session(session, StopReason::UserDisconnect, AfterStop::Idle);
+                self.stop_session(session, StopReason::UserDisconnect, AfterStop::Idle, None);
             }
             Phase::Disconnecting(mut stop) => {
                 if stop.after != AfterStop::Quit {
@@ -751,16 +793,27 @@ impl ConnectionManager {
         match self.take_phase() {
             Phase::Connected(session) => {
                 self.reset_for_user_action();
-                self.stop_session(
-                    session,
-                    StopReason::Reconnect,
-                    AfterStop::Reconnect(AttemptReason::ReconnectNow),
-                );
+                self.renew(session, AttemptReason::ReconnectNow);
             }
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } | Phase::Failed(_) => {
                 self.wants_connection = true;
                 self.reset_for_user_action();
                 self.begin_attempt(AttemptReason::ReconnectNow, false, false);
+            }
+            Phase::Connecting(mut attempt)
+                if attempt.replacing.is_some() && attempt.reason != AttemptReason::ReconnectNow =>
+            {
+                attempt.reason = AttemptReason::ReconnectNow;
+                let renewal = attempt
+                    .replacing
+                    .as_mut()
+                    .and_then(|session| session.renewal.as_mut())
+                    .expect("a replacement is prepared for a renewal");
+                renewal.reason = AttemptReason::ReconnectNow;
+                renewal.tries = 0;
+                renewal.later_failures = 0;
+                self.reset_for_user_action();
+                self.phase = Phase::Connecting(attempt);
             }
             // Restarting an attempt under way could waste an OTP or a login.
             phase => self.phase = phase,
@@ -775,7 +828,7 @@ impl ConnectionManager {
                 self.abort_attempt(*attempt, StopReason::AppQuit, AfterStop::Quit);
             }
             Phase::Connected(session) => {
-                self.stop_session(session, StopReason::AppQuit, AfterStop::Quit);
+                self.stop_session(session, StopReason::AppQuit, AfterStop::Quit, None);
             }
             Phase::Disconnecting(mut stop) => {
                 stop.after = AfterStop::Quit;
@@ -808,7 +861,12 @@ impl ConnectionManager {
         self.run_account = Some(attempt.account.clone());
         self.effects.push(Effect::StartRun {
             attempt: attempt.id.clone(),
+            session: attempt.session,
             account: attempt.account.clone(),
+            replacing: attempt
+                .replacing
+                .as_ref()
+                .map(|session| session.attempt.clone()),
         });
     }
 
@@ -832,9 +890,10 @@ impl ConnectionManager {
         attempt.otp_session_open = false;
         match attempt.stage {
             // The VPN client was never started: a Gmail credential problem costs no VPN login.
-            Stage::PreparingOtp => match failure {
-                OtpFailure::Authentication => self.fail(Failure::GmailRejected),
-                OtpFailure::Network => self.network_failure(RetryReason::Network),
+            Stage::PreparingOtp => match (attempt.replacing.take(), failure) {
+                (Some(session), _) => self.replacement_failed(session),
+                (None, OtpFailure::Authentication) => self.fail(Failure::GmailRejected),
+                (None, OtpFailure::Network) => self.network_failure(RetryReason::Network),
             },
             // No OTP can arrive any more: stop now instead of at the deadline; the exit classifies.
             Stage::Run => {
@@ -912,7 +971,10 @@ impl ConnectionManager {
             .is_some_and(|stale| self.now < stale.until)
         {
             attempt.stage = Stage::WaitingForStaleOtp { since: self.now };
-            self.effects.push(Effect::Note(Note::WaitingForStaleOtp));
+            self.effects.push(Effect::Note {
+                attempt: Some(attempt.id.clone()),
+                note: Note::WaitingForStaleOtp,
+            });
             return;
         }
         attempt.stage = Stage::PreparingOtp;
@@ -953,7 +1015,10 @@ impl ConnectionManager {
             return;
         };
         attempt.deadline += elapsed(since, self.now);
-        self.effects.push(Effect::Note(note));
+        self.effects.push(Effect::Note {
+            attempt: Some(attempt.id.clone()),
+            note,
+        });
         self.prepare_otp();
     }
 
@@ -1003,7 +1068,14 @@ impl ConnectionManager {
         {
             // The certificate check passed and the credentials go out: this counts toward the
             // attempt limit.
-            self.ledger.record_auth_attempt(self.now);
+            let counted = attempt
+                .replacing
+                .as_ref()
+                .and_then(|session| session.renewal)
+                .is_none_or(|renewal| renewal.tries < policy::MAX_COUNTED_PREPARATIONS);
+            if counted {
+                self.ledger.record_auth_attempt(self.now);
+            }
             attempt.credentials_sent_at = Some(self.now);
         }
         match milestone {
@@ -1041,6 +1113,10 @@ impl ConnectionManager {
                 self.now,
             ),
             underlay: self.path.as_ref().and_then(|path| path.underlay.clone()),
+            renewal: None,
+            replaced: attempt
+                .replacing
+                .map(|replaced| (replaced.attempt, replaced.since)),
         });
     }
 
@@ -1064,8 +1140,48 @@ impl ConnectionManager {
                 // the next login 90 s away, past the prompt's arrival tolerance.
                 let search = outcome != Outcome::AuthFailure(Failure::AuthenticationRejected);
                 self.push_otp_close(attempt.close_otp_session(false, search));
-                self.last_failure_attempt = Some(id.clone());
-                self.apply(outcome);
+                match attempt.replacing.take() {
+                    Some(session) if facts.tunnel_address_in_use => {
+                        self.restart_session(session, attempt.reason);
+                    }
+                    Some(session) => self.replacement_ended(session, outcome),
+                    None => {
+                        self.last_failure_attempt = Some(id.clone());
+                        self.apply(outcome);
+                    }
+                }
+            }
+            Phase::Connecting(mut attempt)
+                if attempt
+                    .replacing
+                    .as_ref()
+                    .is_some_and(|session| session.attempt == *id) =>
+            {
+                let session = attempt.replacing.take().expect("matched above");
+                let up = facts
+                    .up_duration
+                    .unwrap_or_else(|| elapsed(session.since, self.now));
+                if up >= policy::STABLE_SESSION {
+                    self.ledger.reset_consecutive_failures();
+                    self.forced_retry_used = false;
+                }
+                self.phase = Phase::Connecting(attempt);
+            }
+            Phase::Connected(mut session)
+                if session
+                    .replaced
+                    .as_ref()
+                    .is_some_and(|(replaced, _)| replaced == id) =>
+            {
+                let (_, since) = session.replaced.take().expect("matched above");
+                let up = facts
+                    .up_duration
+                    .unwrap_or_else(|| elapsed(since, self.now));
+                if up >= policy::STABLE_SESSION {
+                    self.ledger.reset_consecutive_failures();
+                    self.forced_retry_used = false;
+                }
+                self.phase = Phase::Connected(session);
             }
             Phase::Connected(session) if session.attempt == *id => {
                 self.learn_certificates(facts);
@@ -1091,9 +1207,19 @@ impl ConnectionManager {
                 });
                 self.apply(outcome);
             }
-            Phase::Disconnecting(stop) if stop.attempt == *id => {
+            Phase::Disconnecting(mut stop)
+                if stop.attempt == *id || stop.replacement.as_ref() == Some(id) =>
+            {
                 self.learn_certificates(facts);
-                self.finish_stop(stop, facts.up_duration);
+                match stop.replacement.take() {
+                    Some(replacement) => {
+                        if replacement != *id {
+                            stop.attempt = replacement;
+                        }
+                        self.phase = Phase::Disconnecting(stop);
+                    }
+                    None => self.finish_stop(stop, facts.up_duration),
+                }
             }
             // An attempt already finished with.
             phase => self.phase = phase,
@@ -1104,6 +1230,10 @@ impl ConnectionManager {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
                 self.push_otp_close(attempt.close_otp_session(false, true));
+                if let Some(session) = attempt.replacing.take() {
+                    self.replacement_failed(session);
+                    return;
+                }
                 match (attempt.otp_failure, code) {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
                     (Some(OtpFailure::Network), _) => self.network_failure(RetryReason::Network),
@@ -1125,7 +1255,19 @@ impl ConnectionManager {
                     ) => self.network_failure(RetryReason::Network),
                 }
             }
-            Phase::Disconnecting(stop) if stop.attempt == *id => self.finish_stop(stop, None),
+            Phase::Disconnecting(mut stop)
+                if stop.attempt == *id || stop.replacement.as_ref() == Some(id) =>
+            {
+                match stop.replacement.take() {
+                    Some(replacement) => {
+                        if replacement != *id {
+                            stop.attempt = replacement;
+                        }
+                        self.phase = Phase::Disconnecting(stop);
+                    }
+                    None => self.finish_stop(stop, None),
+                }
+            }
             phase => self.phase = phase,
         }
     }
@@ -1134,6 +1276,19 @@ impl ConnectionManager {
     /// or crashed, never because of the network.
     fn helper_connection_lost(&mut self) {
         match self.take_phase() {
+            Phase::Connecting(mut attempt) if attempt.replacing.is_some() => {
+                let session = attempt.replacing.take().expect("matched above");
+                if elapsed(session.since, self.now) >= policy::STABLE_SESSION {
+                    self.ledger.reset_consecutive_failures();
+                    self.forced_retry_used = false;
+                }
+                if attempt.stage == Stage::Run {
+                    self.push_otp_close(attempt.close_otp_session(false, true));
+                    self.forced_termination();
+                } else {
+                    self.phase = Phase::Connecting(attempt);
+                }
+            }
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run => {
                 self.push_otp_close(attempt.close_otp_session(false, true));
                 if attempt.otp_failure == Some(OtpFailure::Authentication) {
@@ -1209,7 +1364,9 @@ impl ConnectionManager {
     /// A run's events are taken now.
     pub(super) fn run_active(&self) -> bool {
         match &self.phase {
-            Phase::Connecting(attempt) => attempt.stage == Stage::Run,
+            Phase::Connecting(attempt) => {
+                attempt.stage == Stage::Run || attempt.replacing.is_some()
+            }
             Phase::Connected(_) | Phase::Disconnecting(_) => true,
             _ => false,
         }
@@ -1229,11 +1386,13 @@ impl ConnectionManager {
             TimerKind::AttemptDeadline => self.attempt_deadline_passed(),
             TimerKind::OtpDeadline => self.otp_deadline_passed(),
             TimerKind::StaleOtp => self.stale_otp_wait_ran_out(),
-            TimerKind::Retry => {
-                if let Phase::WaitingRetry { reason, .. } = self.phase {
+            TimerKind::Retry => match self.take_phase() {
+                Phase::WaitingRetry { reason, .. } => {
                     self.begin_attempt(AttemptReason::Retry(reason), false, false);
                 }
-            }
+                Phase::Connected(session) => self.prepare_replacement(session, false),
+                phase => self.phase = phase,
+            },
             TimerKind::ProactiveReconnect => self.proactive_reconnect_due(),
             TimerKind::QuitDeadline => self.terminated = true,
             TimerKind::Schedule => self.schedule_boundary_due(),
@@ -1255,8 +1414,12 @@ impl ConnectionManager {
         if attempt.stage != Stage::Run {
             // The readiness check or the Gmail login hung; nothing runs yet.
             let close = attempt.close_otp_session(false, true);
+            let replacing = attempt.replacing.take();
             self.push_otp_close(close);
-            self.network_failure(RetryReason::Network);
+            match replacing {
+                Some(session) => self.replacement_failed(session),
+                None => self.network_failure(RetryReason::Network),
+            }
             return;
         }
         attempt.stop_requested = Some(StopReason::AttemptTimeout);
@@ -1296,17 +1459,29 @@ impl ConnectionManager {
         let Phase::Connected(session) = self.take_phase() else {
             unreachable!("matched above");
         };
-        self.stop_session(
-            session,
-            StopReason::ProactiveReconnect,
-            AfterStop::Reconnect(AttemptReason::Proactive),
-        );
+        self.renew(session, AttemptReason::Proactive);
     }
 
     // MARK: Sleep, wake and the network path
 
     pub(super) fn will_sleep(&mut self) {
         match self.take_phase() {
+            Phase::Connecting(mut attempt) if attempt.replacing.is_some() => {
+                let mut session = attempt.replacing.take().expect("matched above");
+                if attempt.stage == Stage::Run && attempt.stop_requested.is_none() {
+                    self.effects.push(Effect::StopRun {
+                        attempt: attempt.id.clone(),
+                        reason: StopReason::Sleep,
+                    });
+                }
+                self.push_otp_close(attempt.close_otp_session(false, false));
+                let renewal = session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal");
+                renewal.next_try = Some(self.now);
+                self.phase = Phase::Connected(session);
+            }
             Phase::Connecting(attempt) => {
                 self.abort_attempt(*attempt, StopReason::Sleep, AfterStop::ResumeAfterSleep);
             }
@@ -1383,13 +1558,11 @@ impl ConnectionManager {
         }
         let min_sleep =
             Duration::from_secs(u64::from(self.settings.connection.min_sleep_minutes) * 60);
-        let reason = if may_reconnect
+        let planned_passed = may_reconnect
             && session
                 .planned_reconnect
-                .is_some_and(|planned| planned <= self.now)
-        {
-            Some(AttemptReason::Proactive)
-        } else if !observation.client_running || !observation.tunnel_up {
+                .is_some_and(|planned| planned <= self.now);
+        let reason = if !observation.client_running || !observation.tunnel_up {
             Some(AttemptReason::TunnelLost)
         } else if let (Some(old), Some(new)) = (&session.underlay, &observation.underlay)
             && old != new
@@ -1403,9 +1576,13 @@ impl ConnectionManager {
         } else {
             None
         };
-        match reason {
-            Some(reason) => self.restart_session(session, reason),
-            None => {
+        match (planned_passed, reason) {
+            (true, Some(_)) => self.restart_session(session, AttemptReason::Proactive),
+            (false, Some(reason)) => self.restart_session(session, reason),
+            (true, None) if session.renewal.is_none() => {
+                self.renew(session, AttemptReason::Proactive);
+            }
+            (_, None) => {
                 if session.underlay.is_none() {
                     session.underlay = observation.underlay.clone();
                 }
@@ -1420,33 +1597,42 @@ impl ConnectionManager {
         if self.sleeping {
             return;
         }
-        match &mut self.phase {
+        let session = match &mut self.phase {
             Phase::WaitingNetwork {
                 reason,
                 delay_after_path,
             } if snapshot.satisfied => {
                 let (reason, delay) = (*reason, *delay_after_path);
                 self.resume_from_network_wait(reason, delay);
+                return;
             }
             // While a wake is being judged, its observation decides instead.
-            Phase::Connected(session) if self.pending_wake.is_none() => {
-                let Some(underlay) = snapshot.underlay.filter(|_| snapshot.satisfied) else {
-                    return;
-                };
-                match &session.underlay {
-                    Some(old) if *old != underlay => {
-                        let Phase::Connected(session) = self.take_phase() else {
-                            unreachable!("matched above");
-                        };
-                        self.restart_session(session, AttemptReason::NetworkChanged);
-                    }
-                    Some(_) => {}
-                    None => session.underlay = Some(underlay),
-                }
-            }
+            Phase::Connected(session) if self.pending_wake.is_none() => session,
+            Phase::Connecting(attempt) => match &mut attempt.replacing {
+                Some(session) => session,
+                None => return,
+            },
             // An attempt under way or a stop ignores the path; the other phases act on the next
             // attempt.
-            _ => {}
+            _ => return,
+        };
+        let Some(underlay) = snapshot.underlay.filter(|_| snapshot.satisfied) else {
+            return;
+        };
+        match &session.underlay {
+            Some(old) if *old != underlay => match self.take_phase() {
+                Phase::Connected(session) => {
+                    self.restart_session(session, AttemptReason::NetworkChanged);
+                }
+                Phase::Connecting(attempt) => self.abort_attempt(
+                    *attempt,
+                    StopReason::Reconnect,
+                    AfterStop::Reconnect(AttemptReason::NetworkChanged),
+                ),
+                _ => unreachable!("matched above"),
+            },
+            Some(_) => {}
+            None => session.underlay = Some(underlay),
         }
     }
 
@@ -1669,6 +1855,7 @@ impl ConnectionManager {
         let id = self.next_attempt_id();
         let attempt = Attempt {
             id,
+            session: self.next_session_id(),
             reason,
             cert_retry_used,
             started_at: self.now,
@@ -1684,6 +1871,7 @@ impl ConnectionManager {
             path_changed: false,
             stop_requested: None,
             account: self.settings.account.clone(),
+            replacing: None,
         };
         self.phase = Phase::Connecting(Box::new(attempt));
         if readiness_verified {
@@ -1716,30 +1904,54 @@ impl ConnectionManager {
         .expect("a UUID")
     }
 
-    /// Ends an attempt the app no longer wants: the user's, the sleep's or the quit's.
+    fn next_session_id(&mut self) -> SessionId {
+        let since_2026 = elapsed(
+            UNIX_EPOCH + Duration::from_secs(SECONDS_FROM_1970_TO_2026),
+            self.now,
+        );
+        let from_clock = since_2026.as_secs() * 10;
+        let session = match self.last_session {
+            Some(SessionId(last)) if from_clock <= last => SessionId(last + 1),
+            _ => SessionId(from_clock),
+        };
+        self.last_session = Some(session);
+        session
+    }
+
     fn abort_attempt(&mut self, mut attempt: Attempt, stop: StopReason, after: AfterStop) {
         let search = !matches!(stop, StopReason::AppQuit | StopReason::Sleep);
-        if attempt.stage != Stage::Run {
-            self.push_otp_close(attempt.close_otp_session(false, search));
-            self.settle(after);
-            return;
-        }
-        if attempt.stop_requested.is_none() {
+        let running = attempt.stage == Stage::Run;
+        if running && attempt.stop_requested.is_none() {
             self.effects.push(Effect::StopRun {
                 attempt: attempt.id.clone(),
                 reason: stop,
             });
         }
         self.push_otp_close(attempt.close_otp_session(false, search));
-        self.phase = Phase::Disconnecting(Stop {
-            attempt: attempt.id,
-            after,
-            connected_since: None,
-        });
+        match attempt.replacing.take() {
+            Some(session) => {
+                self.stop_session(session, stop, after, running.then_some(attempt.id));
+            }
+            None if running => {
+                self.phase = Phase::Disconnecting(Stop {
+                    attempt: attempt.id,
+                    after,
+                    connected_since: None,
+                    replacement: None,
+                });
+            }
+            None => self.settle(after),
+        }
     }
 
     /// Break before make: stop the tunnel; `after` follows its exit.
-    fn stop_session(&mut self, session: Session, reason: StopReason, after: AfterStop) {
+    fn stop_session(
+        &mut self,
+        session: Session,
+        reason: StopReason,
+        after: AfterStop,
+        replacement: Option<AttemptId>,
+    ) {
         self.effects.push(Effect::StopRun {
             attempt: session.attempt.clone(),
             reason,
@@ -1748,6 +1960,7 @@ impl ConnectionManager {
             attempt: session.attempt,
             after,
             connected_since: Some(session.since),
+            replacement,
         });
     }
 
@@ -1757,7 +1970,134 @@ impl ConnectionManager {
         } else {
             StopReason::Reconnect
         };
-        self.stop_session(session, stop, AfterStop::Reconnect(reason));
+        self.stop_session(session, stop, AfterStop::Reconnect(reason), None);
+    }
+
+    fn renew(&mut self, mut session: Session, reason: AttemptReason) {
+        session.renewal = Some(Renewal {
+            reason,
+            tries: 0,
+            later_failures: 0,
+            next_try: None,
+        });
+        self.prepare_replacement(session, false);
+    }
+
+    fn prepare_replacement(&mut self, mut session: Session, cert_retry_used: bool) {
+        let renewal = session
+            .renewal
+            .as_mut()
+            .expect("a replacement is prepared for a renewal");
+        let reason = renewal.reason;
+        let session_end = session.since
+            + Duration::from_secs(u64::from(self.settings.connection.session_max_minutes) * 60);
+        let replaceable = self.settings.account.client == VpnClient::Openconnect
+            && self
+                .run_account
+                .as_ref()
+                .is_some_and(|run| run.client == VpnClient::Openconnect)
+            && self.path.as_ref().is_none_or(|path| path.satisfied)
+            && elapsed(self.now, session_end) >= policy::ATTEMPT_TIMEOUT;
+        if !replaceable {
+            self.restart_session(session, reason);
+            return;
+        }
+        self.ledger.prune(self.now);
+        if renewal.tries < policy::MAX_COUNTED_PREPARATIONS
+            && !reason.is_user_action()
+            && self.ledger.recent_auth_attempts.len() >= policy::MAX_AUTH_ATTEMPTS_PER_WINDOW
+        {
+            self.keep_session(session);
+            return;
+        }
+        if let Some(cooldown_end) = self.ledger.cooldown_end()
+            && self.now < cooldown_end
+        {
+            renewal.next_try = Some(cooldown_end);
+            self.phase = Phase::Connected(session);
+            return;
+        }
+        renewal.next_try = None;
+        let attempt = Attempt {
+            id: self.next_attempt_id(),
+            session: self.next_session_id(),
+            reason,
+            cert_retry_used,
+            started_at: self.now,
+            deadline: self.now + policy::ATTEMPT_TIMEOUT,
+            stage: Stage::CheckingReadiness,
+            milestone: None,
+            credentials_sent_at: None,
+            otp_prompted_at: None,
+            otp_submitted: false,
+            otp_session_open: false,
+            otp_failure: None,
+            otp_in_spam: false,
+            path_changed: false,
+            stop_requested: None,
+            account: self.settings.account.clone(),
+            replacing: Some(session),
+        };
+        self.phase = Phase::Connecting(Box::new(attempt));
+        self.check_readiness();
+    }
+
+    fn replacement_ended(&mut self, mut session: Session, outcome: Outcome) {
+        match outcome {
+            Outcome::CertificateRetry => {
+                let used = self.run_is_for_current_gateway();
+                self.prepare_replacement(session, used);
+            }
+            Outcome::AuthFailure(
+                failure @ (Failure::AuthenticationRejected | Failure::OtpRejected),
+            ) => {
+                self.ledger.record_auth_failure(failure, self.now);
+                let renewal = session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal");
+                renewal.tries = (renewal.tries + 1).min(policy::MAX_COUNTED_PREPARATIONS);
+                if renewal.tries < policy::MAX_COUNTED_PREPARATIONS {
+                    self.prepare_replacement(session, false);
+                } else {
+                    self.keep_session(session);
+                }
+            }
+            _ => self.replacement_failed(session),
+        }
+    }
+
+    pub(super) fn replacement_failed(&mut self, mut session: Session) {
+        let renewal = session
+            .renewal
+            .as_mut()
+            .expect("a replacement is prepared for a renewal");
+        if renewal.tries < policy::MAX_COUNTED_PREPARATIONS {
+            renewal.tries += 1;
+            if renewal.tries < policy::MAX_COUNTED_PREPARATIONS {
+                self.prepare_replacement(session, false);
+                return;
+            }
+        }
+        renewal.later_failures += 1;
+        renewal.next_try = Some(self.now + policy::network_backoff(renewal.later_failures));
+        self.phase = Phase::Connected(session);
+    }
+
+    fn keep_session(&mut self, mut session: Session) {
+        if session
+            .planned_reconnect
+            .is_some_and(|planned| planned > self.now)
+        {
+            session.renewal = None;
+        } else {
+            let renewal = session
+                .renewal
+                .as_mut()
+                .expect("a replacement is prepared for a renewal");
+            renewal.next_try = None;
+        }
+        self.phase = Phase::Connected(session);
     }
 
     fn finish_stop(&mut self, stop: Stop, up: Option<Duration>) {

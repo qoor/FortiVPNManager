@@ -114,6 +114,8 @@ impl ConnectionManager {
             Phase::Connecting(attempt) if attempt.stage == Stage::CheckingReadiness => {
                 if missing.is_empty() {
                     self.prepare_otp();
+                } else if let Some(session) = attempt.replacing.take() {
+                    self.replacement_failed(session);
                 } else {
                     self.phase = Phase::SetupRequired(missing);
                 }

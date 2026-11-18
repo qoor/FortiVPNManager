@@ -12,8 +12,8 @@ use std::{env, process, thread};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, StopInitiator, StopReason,
-    VpnClient,
+    ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, SessionId, StopInitiator,
+    StopReason, VpnClient,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, IpNetwork, LaunchSpec,
@@ -23,6 +23,7 @@ use fvm_contract::helper_internal::{
     NetworkChange, NetworkOutcome, NetworkStep, OutsideChanges, OutsideRoute,
 };
 use fvm_helper_core::process::{NetworkJob, Report, Run, StageLimits, Timing, Watchdog};
+use fvm_helper_core::recovery::RecordSlot;
 use serde_json::Value;
 
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
@@ -176,6 +177,8 @@ impl Session {
         );
         let mut request = RunRequest {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
+            replacing: None,
+            session_id: SessionId(277_070_470),
             client: VpnClient::Openconnect,
             host: "203.0.113.10".to_owned(),
             port: 443,
@@ -184,11 +187,12 @@ impl Session {
             trusted_certs: vec![
                 "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A=".to_owned(),
             ],
+            dtls: false,
             password: "secret".to_owned(),
         };
         let (sender, reports) = mpsc::channel();
         let (run, _) = watchdog
-            .start(&mut request, move |report| {
+            .start(&mut request, RecordSlot::First, None, move |report| {
                 let _ = sender.send(report);
             })
             .unwrap();
@@ -652,4 +656,17 @@ fn the_tunnel_is_up_only_once_the_script_has_exited() {
         applied_at.elapsed()
     );
     session.stop_and_revert(vec![gateway_route("192.0.2.1")]);
+}
+
+#[test]
+fn an_adapter_already_using_the_tunnels_address_is_told_in_the_exit() {
+    let mut session = Session::start(&format!(
+        "{CONFIGURED}\n>&2 echo 'Adapter \"Ethernet 2\" / 23 is UP and using our IPv4 address. \
+         Cannot resolve.'\nexit 1"
+    ));
+    let facts = session.wait_for_exit();
+    assert!(facts.tunnel_address_in_use, "{facts:?}");
+    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert!(session.jobs.is_empty());
 }

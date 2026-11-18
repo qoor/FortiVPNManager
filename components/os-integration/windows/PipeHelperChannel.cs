@@ -17,9 +17,6 @@ namespace FortiVPNManager.OsIntegration;
 /// </summary>
 internal sealed class PipeHelperChannel : IHelperChannel
 {
-    /// <summary>The service keeps the pipe ready; a missing one means it is not running.</summary>
-    private static readonly TimeSpan ConnectLimit = TimeSpan.FromSeconds(2);
-
     /// <summary>Answers normally arrive within milliseconds; this only guards against a hung Helper.</summary>
     private static readonly TimeSpan ReplyLimit = TimeSpan.FromSeconds(20);
 
@@ -38,12 +35,12 @@ internal sealed class PipeHelperChannel : IHelperChannel
         this.inbound = inbound;
     }
 
-    public static IHelperChannel Open(ulong id, HelperInbound inbound)
+    public static IHelperChannel Open(ulong id, HelperInbound inbound, TimeSpan limit)
     {
         var pipe = new NamedPipeClientStream(".", HelperPipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
-            pipe.Connect(ConnectLimit);
+            pipe.Connect(limit);
             var owner = pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
             if (owner is null || !owner.IsWellKnown(WellKnownSidType.LocalSystemSid))
             {

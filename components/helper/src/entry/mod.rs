@@ -1,15 +1,3 @@
-//! The Helper entry: the Helper's front, the same on every OS. It admits the app connections the OS
-//! side passes on, decides who may do what with the one run and with the exception routes, answers
-//! the app's requests from what the watchdog and the OS side tell it, and decides when the Helper
-//! exits. Everything about the VPN client, from checking it to stopping what an earlier Helper left,
-//! is `process`'s and `recovery`'s, which the OS's start hands over as a `Watchdog` with the backend
-//! adapters of the clients its OS can run and the run directory it chose. The entry uses no
-//! OS-specific API.
-//!
-//! The OS side's messages and the current run's reports arrive on one channel and are handled one at
-//! a time on one thread. So what reaches an app keeps the order in which it happened, and the run
-//! thread, which only forwards, never waits for this one.
-
 mod bypass_routes;
 
 use std::collections::HashMap;
@@ -21,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
-    HelperStatus, Milestone, RunRequest, StopReason,
+    HelperStatus, Milestone, OutputBatch, RunRequest, StopReason, VpnClient,
 };
 use fvm_contract::backend::{ClientCheckWait, ClientProblemKind};
 use fvm_contract::helper_internal::{
@@ -31,8 +19,8 @@ use fvm_contract::helper_internal::{
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::process::{Report, Run, StartFailure, Watchdog};
-use crate::recovery::RouteRepair;
+use crate::process::{NotReplaceable, Replaced, Report, Run, StartFailure, Watchdog};
+use crate::recovery::{RecordSlot, RouteRepair};
 
 use bypass_routes::{BypassRoutes, Job};
 
@@ -72,7 +60,7 @@ pub fn start(watchdog: Watchdog, send: impl Fn(&FromEntry) + Send + 'static) -> 
 
 enum Event {
     FromOs(ToEntry),
-    Run(Report),
+    Run(AttemptId, Report),
 }
 
 /// Where the entry's messages for the OS side go, in order.
@@ -102,7 +90,7 @@ fn serve(watchdog: Watchdog, os: OsSide, sender: Sender<Event>, events: Receiver
         events,
         sender,
         apps: HashMap::new(),
-        run: None,
+        runs: HashMap::new(),
         executable_replaced: false,
         lifecycle: Lifecycle::Serving,
         route_repair: None,
@@ -203,19 +191,19 @@ struct Entry {
     sender: Sender<Event>,
     /// Admitted app connections that are still open, with their uid.
     apps: HashMap<u64, u32>,
-    run: Option<CurrentRun>,
+    runs: HashMap<AttemptId, HeldRun>,
     executable_replaced: bool,
     lifecycle: Lifecycle,
-    /// The current run's route repair while the OS side carries it out.
     route_repair: Option<RouteRepair>,
     bypass_routes: BypassRoutes,
 }
 
-/// The one run at a time and who owns it.
-struct CurrentRun {
-    attempt: AttemptId,
+struct HeldRun {
     owner_app: u64,
     owner_uid: u32,
+    client: VpnClient,
+    replacing: Option<AttemptId>,
+    slot: RecordSlot,
     run: Run,
 }
 
@@ -225,8 +213,6 @@ enum Lifecycle {
     ExitingWhenIdle {
         at: Instant,
     },
-    /// The termination request came during a run; exiting once the run reports its exit, or at
-    /// `deadline` anyway.
     ShuttingDown {
         deadline: Instant,
     },
@@ -287,7 +273,7 @@ impl Entry {
                 self.bypass_routes_changed(outcome);
             }
             Event::FromOs(ToEntry::NetworkChanged { outcome }) => self.network_changed(outcome),
-            Event::Run(report) => self.run_report(report),
+            Event::Run(attempt, report) => self.run_report(attempt, report),
         }
     }
 
@@ -302,19 +288,19 @@ impl Entry {
     fn app_disconnected(&mut self, app: u64) {
         self.apps.remove(&app);
         self.app_gone_with_its_bypass_routes(app);
-        if let Some(current) = self.run.as_ref().filter(|run| run.owner_app == app) {
+        for held in self.runs.values().filter(|held| held.owner_app == app) {
             self.os.log(
                 LogLevel::Notice,
                 LogCategory::Helper,
-                format!("run {}: owning connection invalidated", current.attempt),
+                format!("{}: owning connection invalidated", held.run.name()),
             );
-            current.run.stop(StopReason::AppDisconnected);
+            held.run.stop(StopReason::AppDisconnected);
         }
     }
 
     fn executable_replaced(&mut self) {
         self.executable_replaced = true;
-        if matches!(self.lifecycle, Lifecycle::Serving) && self.run.is_none() {
+        if matches!(self.lifecycle, Lifecycle::Serving) && self.runs.is_empty() {
             self.exit_for_replacement();
         }
     }
@@ -336,15 +322,17 @@ impl Entry {
 
     fn termination_requested(&mut self) {
         match self.lifecycle {
-            Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } => match &self.run {
-                Some(current) => {
-                    current.run.stop(StopReason::HelperShutdown);
-                    self.lifecycle = Lifecycle::ShuttingDown {
-                        deadline: Instant::now() + SHUTDOWN_LIMIT,
-                    };
+            Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } if self.runs.is_empty() => {
+                self.exit(FromEntry::ExitAfterDraining {});
+            }
+            Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } => {
+                for held in self.runs.values() {
+                    held.run.stop(StopReason::HelperShutdown);
                 }
-                None => self.exit(FromEntry::ExitAfterDraining {}),
-            },
+                self.lifecycle = Lifecycle::ShuttingDown {
+                    deadline: Instant::now() + SHUTDOWN_LIMIT,
+                };
+            }
             // The request may come again; the first one decided already.
             Lifecycle::ShuttingDown { .. } | Lifecycle::Exiting => {}
         }
@@ -431,23 +419,38 @@ impl Entry {
                 "the Helper is shutting down; try again shortly",
             ));
         }
-        if let Some(current) = &self.run {
-            return Err(if current.owner_uid == uid {
-                error(
-                    HelperErrorCode::Busy,
-                    format!("{} is already running", current.run.client_name()),
-                )
-            } else {
-                error(
-                    HelperErrorCode::NotAuthorized,
-                    "a VPN run started by another user is active",
-                )
-            });
-        }
+        let replaced = match &request.replacing {
+            Some(replacing) => Some(self.replaceable(replacing, uid, request.client)?),
+            None => match self.runs.values().next() {
+                Some(held) if held.owner_uid == uid => {
+                    return Err(error(
+                        HelperErrorCode::Busy,
+                        format!("{} is already running", held.run.client_name()),
+                    ));
+                }
+                Some(_) => {
+                    return Err(error(
+                        HelperErrorCode::NotAuthorized,
+                        "a VPN run started by another user is active",
+                    ));
+                }
+                None => None,
+            },
+        };
+        let slot = if self
+            .runs
+            .values()
+            .any(|held| held.slot == RecordSlot::First)
+        {
+            RecordSlot::Second
+        } else {
+            RecordSlot::First
+        };
         let reports = self.sender.clone();
-        let started = self.watchdog.start(request, move |report| {
+        let attempt = request.attempt_id.clone();
+        let started = self.watchdog.start(request, slot, replaced, move |report| {
             reports
-                .send(Event::Run(report))
+                .send(Event::Run(attempt.clone(), report))
                 .expect("the event loop runs as long as the process");
         });
         let (run, client) = started.map_err(|failure| match failure {
@@ -470,35 +473,89 @@ impl Entry {
                 )
             }
         })?;
+        let replacing = match &request.replacing {
+            Some(replacing) => format!(", replacing {}", self.runs[replacing].run.name()),
+            None => String::new(),
+        };
         self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
-                "run {} started for uid {uid} with {} {}",
-                request.attempt_id,
+                "{} started for uid {uid} with {} {}{replacing}",
+                run.name(),
                 run.client_name(),
                 client.version
             ),
         );
-        self.run = Some(CurrentRun {
-            attempt: request.attempt_id.clone(),
-            owner_app: app,
-            owner_uid: uid,
-            run,
-        });
+        self.runs.insert(
+            request.attempt_id.clone(),
+            HeldRun {
+                owner_app: app,
+                owner_uid: uid,
+                client: request.client,
+                replacing: request.replacing.clone(),
+                slot,
+                run,
+            },
+        );
         Ok(())
+    }
+
+    fn replaceable(
+        &self,
+        replacing: &AttemptId,
+        uid: u32,
+        client: VpnClient,
+    ) -> Result<Replaced, HelperError> {
+        let held = self.runs.get(replacing).ok_or_else(|| {
+            error(
+                HelperErrorCode::UnknownAttempt,
+                "the connection to replace is not running",
+            )
+        })?;
+        if held.owner_uid != uid {
+            return Err(error(
+                HelperErrorCode::NotAuthorized,
+                "the VPN run belongs to another user",
+            ));
+        }
+        if self.runs.len() > 1 {
+            return Err(error(
+                HelperErrorCode::Busy,
+                "a replacement connection is already running",
+            ));
+        }
+        if held.client != client {
+            return Err(error(
+                HelperErrorCode::InvalidRequest,
+                "the replacement must use the same VPN client",
+            ));
+        }
+        held.run.replaceable().map_err(|reason| match reason {
+            NotReplaceable::NoNetwork => error(
+                HelperErrorCode::InvalidRequest,
+                format!(
+                    "{} cannot replace a connection without a break",
+                    held.run.client_name()
+                ),
+            ),
+            NotReplaceable::NotUp => error(
+                HelperErrorCode::WrongPhase,
+                "the connection to replace is not up",
+            ),
+        })
     }
 
     fn submit_otp(&self, app: u64, attempt: &str, code: String) -> Result<(), HelperError> {
         let mut code = Zeroizing::new(code);
         let uid = self.app_uid(app)?;
-        let current = self.controllable_run(attempt, uid)?;
-        current.run.submit_otp(mem::take(&mut *code))
+        let held = self.controllable_run(attempt, uid)?;
+        held.run.submit_otp(mem::take(&mut *code))
     }
 
     fn disconnect(&self, app: u64, attempt: &str, reason: &str) -> Result<(), HelperError> {
         let uid = self.app_uid(app)?;
-        let current = self.controllable_run(attempt, uid)?;
+        let held = self.controllable_run(attempt, uid)?;
         let reason = reason.parse().unwrap_or(StopReason::UserDisconnect);
         let raw = serde_json::to_value(reason).expect("a stop reason serializes");
         let raw = raw
@@ -507,42 +564,37 @@ impl Entry {
         self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
-            format!("run {}: stop requested ({raw})", current.attempt),
+            format!("{}: stop requested ({raw})", held.run.name()),
         );
-        current.run.stop(reason);
+        held.run.stop(reason);
         Ok(())
     }
 
-    /// The current run if `attempt` names it and `uid` owns it.
-    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&CurrentRun, HelperError> {
-        let current = self
-            .run
-            .as_ref()
-            .filter(|current| {
-                attempt
-                    .parse::<AttemptId>()
-                    .is_ok_and(|id| id == current.attempt)
-            })
+    fn controllable_run(&self, attempt: &str, uid: u32) -> Result<&HeldRun, HelperError> {
+        let held = attempt
+            .parse::<AttemptId>()
+            .ok()
+            .and_then(|id| self.runs.get(&id))
             .ok_or_else(|| {
                 error(
                     HelperErrorCode::UnknownAttempt,
                     "not the active connection attempt",
                 )
             })?;
-        if current.owner_uid != uid {
+        if held.owner_uid != uid {
             return Err(error(
                 HelperErrorCode::NotAuthorized,
                 "the VPN run belongs to another user",
             ));
         }
-        Ok(current)
+        Ok(held)
     }
 
     fn status(&self) -> HelperStatus {
         let client_running = self
-            .run
-            .as_ref()
-            .is_some_and(|current| current.run.process_id().is_some());
+            .runs
+            .values()
+            .any(|held| held.run.process_id().is_some());
         let clients = self
             .watchdog
             .find_clients(ClientCheckWait::Limited)
@@ -574,7 +626,7 @@ impl Entry {
     }
 
     fn exit_when_idle(&mut self) -> bool {
-        if self.run.is_some() {
+        if !self.runs.is_empty() {
             return false;
         }
         if matches!(self.lifecycle, Lifecycle::Serving) {
@@ -590,20 +642,24 @@ impl Entry {
         true
     }
 
-    fn run_report(&mut self, report: Report) {
-        let current = self
-            .run
-            .as_ref()
-            .expect("reports come from the current run");
-        let app = current.owner_app;
+    fn run_report(&mut self, attempt: AttemptId, report: Report) {
+        let app = self
+            .runs
+            .get(&attempt)
+            .expect("reports come from a held run")
+            .owner_app;
         match report {
             Report::Output(lines) => {
-                let json = to_json(&lines);
+                let batch = OutputBatch {
+                    attempt_id: attempt,
+                    lines,
+                };
+                let json = to_json(&batch);
                 self.os.send(&FromEntry::SendOutput { app, json });
             }
             Report::Event(kind) => {
                 let event = HelperEvent {
-                    attempt_id: current.attempt.clone(),
+                    attempt_id: attempt,
                     kind,
                 };
                 self.os.send(&FromEntry::SendEvent {
@@ -614,13 +670,18 @@ impl Entry {
                     HelperEventKind::Milestone {
                         milestone: Milestone::TunnelUp,
                         ..
-                    } => self.os.log(
-                        LogLevel::Notice,
-                        LogCategory::Helper,
-                        format!("run {}: tunnel up", event.attempt_id),
-                    ),
+                    } => {
+                        self.os.log(
+                            LogLevel::Notice,
+                            LogCategory::Helper,
+                            format!("{}: tunnel up", self.runs[&event.attempt_id].run.name()),
+                        );
+                        self.stop_replaced(&event.attempt_id);
+                    }
                     HelperEventKind::Milestone { .. } => {}
-                    HelperEventKind::Exited { facts } => self.run_exited(&facts),
+                    HelperEventKind::Exited { facts } => {
+                        self.run_exited(&event.attempt_id, &facts);
+                    }
                 }
             }
             Report::RepairRoutes(repair) => {
@@ -633,20 +694,61 @@ impl Entry {
         }
     }
 
-    fn run_exited(&mut self, facts: &ExitFacts) {
-        let finished = self.run.take().expect("the current run exited");
+    fn stop_replaced(&mut self, attempt: &AttemptId) {
+        let held = self
+            .runs
+            .get_mut(attempt)
+            .expect("reports come from a held run");
+        let Some(replaced) = held.replacing.take() else {
+            return;
+        };
+        let replaced_run = self
+            .runs
+            .get(&replaced)
+            .expect("a replaced run stays held until its exit");
         self.os.log(
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
-                "run {} exited: {:?}, initiator {:?}, furthest {:?}",
-                finished.attempt, facts.exit_status, facts.stop_initiator, facts.furthest_milestone
+                "{}: replaced by {}",
+                replaced_run.run.name(),
+                self.runs[attempt].run.name()
             ),
         );
+        replaced_run.run.stop(StopReason::Replaced);
+    }
+
+    fn run_exited(&mut self, attempt: &AttemptId, facts: &ExitFacts) {
+        let exited = self.runs.remove(attempt).expect("a held run exited");
+        for held in self.runs.values_mut() {
+            if held.replacing.as_ref() == Some(attempt) {
+                held.replacing = None;
+                held.run.replaced_run_exited();
+            }
+            if exited.slot == RecordSlot::First {
+                held.slot = RecordSlot::First;
+                held.run.first_slot_freed();
+            }
+        }
+        self.os.log(
+            LogLevel::Notice,
+            LogCategory::Helper,
+            format!(
+                "{} exited: {:?}, initiator {:?}, furthest {:?}",
+                exited.run.name(),
+                facts.exit_status,
+                facts.stop_initiator,
+                facts.furthest_milestone
+            ),
+        );
+        let idle = self.runs.is_empty();
         match self.lifecycle {
-            Lifecycle::ShuttingDown { .. } => self.exit(FromEntry::ExitAfterDraining {}),
-            Lifecycle::Serving if self.executable_replaced => self.exit_for_replacement(),
-            Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } | Lifecycle::Exiting => {}
+            Lifecycle::ShuttingDown { .. } if idle => self.exit(FromEntry::ExitAfterDraining {}),
+            Lifecycle::Serving if idle && self.executable_replaced => self.exit_for_replacement(),
+            Lifecycle::Serving
+            | Lifecycle::ShuttingDown { .. }
+            | Lifecycle::ExitingWhenIdle { .. }
+            | Lifecycle::Exiting => {}
         }
     }
 }

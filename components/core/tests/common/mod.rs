@@ -126,6 +126,7 @@ pub fn non_default() -> Settings {
     settings.vpn.username = "bob".into();
     settings.vpn.realm = "corp".into();
     settings.vpn.client = VpnClient::Openfortivpn;
+    settings.vpn.dtls = true;
     settings.vpn.trusted_certs = vec![digest_a(), digest_b()];
     settings.vpn.trusted_cert_pins = vec![pin_a()];
     settings.otp.gmail_address = "otp@example.com".into();

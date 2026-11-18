@@ -6,7 +6,9 @@ mod common;
 use common::*;
 use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::OtpMethod;
-use fvm_contract::app_internal::problem::{ConfigProblemKind, ConfigWarning, ConfigWarningKind};
+use fvm_contract::app_internal::problem::{
+    ConfigProblemKind, ConfigWarning, ConfigWarningKind, ValueKind,
+};
 use fvm_core::config::{self, Settings};
 
 fn kind(yaml: &str) -> ConfigProblemKind {
@@ -565,6 +567,61 @@ fn the_windows_app_keeps_the_macs_vpn_client() {
         panic!("the change is written");
     };
     assert!(text.contains("\n  client: \"openfortivpn\"\n"), "{text}");
+}
+
+// MARK: DTLS
+
+#[test]
+fn dtls_is_off_unless_the_file_turns_it_on() {
+    for (yaml, expected) in [
+        ("vpn:\n  host: vpn.example.com\n", false),
+        ("vpn:\n  dtls: true\n", true),
+        ("vpn:\n  dtls: false\n", false),
+        ("vpn:\n  dtls: ~\n", false),
+    ] {
+        let loaded = decode(yaml);
+        assert_eq!(loaded.settings.vpn.dtls, expected, "{yaml:?}");
+        assert!(loaded.warnings.is_empty(), "{yaml:?}");
+    }
+}
+
+#[test]
+fn a_dtls_value_that_is_not_a_boolean_is_an_error_at_the_value() {
+    let path = || "vpn.dtls".to_owned();
+    for (raw, expected) in [
+        (
+            "yes",
+            ConfigProblemKind::InvalidBoolean {
+                path: path(),
+                raw: "yes".into(),
+            },
+        ),
+        (
+            "1",
+            ConfigProblemKind::InvalidBoolean {
+                path: path(),
+                raw: "1".into(),
+            },
+        ),
+        (
+            "\"false\"",
+            ConfigProblemKind::QuotedBoolean {
+                path: path(),
+                raw: "false".into(),
+            },
+        ),
+        (
+            "[true]",
+            ConfigProblemKind::TypeMismatch {
+                path: path(),
+                expected: ValueKind::Boolean,
+            },
+        ),
+    ] {
+        let error = load_error(&format!("vpn:\n  host: vpn.example.com\n  dtls: {raw}\n")).unwrap();
+        assert_eq!(error.kind, expected, "{raw}");
+        assert_eq!(error.location, loc(3, 9), "{raw}");
+    }
 }
 
 // MARK: OTP method

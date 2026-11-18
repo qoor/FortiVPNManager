@@ -35,13 +35,61 @@ pub(super) struct Network {
     owned: Vec<OutsideRoute>,
     script_wait: bool,
     script_left: bool,
+    prepared: Option<NetworkSettings>,
+    dns_service_id: String,
+    switch: Switch,
+    pub(super) hand_over_to: Option<Sender<Input>>,
+    handing_over: bool,
+    handed_over: bool,
 }
 
 #[derive(Debug)]
 enum Asked {
     LookUp,
     Apply { remove: Vec<OutsideRoute> },
+    Prepare,
+    Switch,
     Revert,
+}
+
+pub struct Replaced {
+    inputs: Sender<Input>,
+    dns_service_id: String,
+    address: IpAddr,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NotReplaceable {
+    NoNetwork,
+    NotUp,
+}
+
+pub(crate) struct HandOver {
+    settings: Box<NetworkSettings>,
+    routes: Vec<OutsideRoute>,
+    dns_service_id: String,
+}
+
+pub(crate) enum SwitchEnd {
+    Released {
+        routes: Vec<OutsideRoute>,
+        dns: bool,
+    },
+    Kept,
+    Failed,
+}
+
+#[derive(Default)]
+enum Switch {
+    #[default]
+    Idle,
+    Asked,
+    Declined,
+    Switching {
+        replaced: Box<NetworkSettings>,
+        routes: Vec<OutsideRoute>,
+        dns: bool,
+    },
 }
 
 impl Network {
@@ -73,7 +121,8 @@ impl Network {
     }
 
     fn busy(&self) -> bool {
-        self.retry_at.is_some()
+        self.handing_over
+            || self.retry_at.is_some()
             || self
                 .asked
                 .iter()
@@ -108,7 +157,10 @@ pub(super) fn values_watcher(files: &RunFiles, inputs: &Sender<Input>) -> Recomm
 
 impl<R: FnMut(Report)> Watch<R> {
     fn changing_network(&self) -> bool {
-        self.script_runner.is_some() && self.running() && self.stop.is_none()
+        self.script_runner.is_some()
+            && self.running()
+            && self.stop.is_none()
+            && !self.network.handed_over
     }
 
     pub(super) fn watch_values(&mut self) {
@@ -268,6 +320,26 @@ impl<R: FnMut(Report)> Watch<R> {
                 self.own(&remove, &left, &added);
                 self.network_failed(format!("{step:?}: {error}"));
             }
+            (Asked::Prepare, NetworkOutcome::Applied { added, left }) => {
+                self.own(&[], &left, &added);
+                self.prepared();
+            }
+            (
+                Asked::Prepare,
+                NetworkOutcome::Failed {
+                    step,
+                    error,
+                    added,
+                    left,
+                },
+            ) => {
+                self.own(&[], &left, &added);
+                self.network_failed(format!("{step:?}: {error}"));
+            }
+            (Asked::Switch, NetworkOutcome::Applied { .. }) => self.switched(),
+            (Asked::Switch, NetworkOutcome::Failed { step, error, .. }) => {
+                self.network_failed(format!("{step:?}: {error}"));
+            }
             (Asked::Revert, NetworkOutcome::Reverted { left }) => self.reverted(&left),
             (
                 Asked::Revert,
@@ -295,6 +367,15 @@ impl<R: FnMut(Report)> Watch<R> {
             .wanted
             .clone()
             .expect("a look-up is for the settings wanted");
+        if self
+            .replaced
+            .as_ref()
+            .is_some_and(|replaced| replaced.address == settings.ipv4.address.address)
+        {
+            self.network.wanted = None;
+            self.address_in_use();
+            return;
+        }
         let outside = Self::outside(&settings);
         let remove: Vec<OutsideRoute> = self
             .network
@@ -315,14 +396,27 @@ impl<R: FnMut(Report)> Watch<R> {
                 .filter(|route| !self.network.owned.contains(route))
                 .cloned(),
         );
+        let recorded_dns = match &self.replaced {
+            Some(replaced) if replaced.dns_service_id == dns_service_id => String::new(),
+            _ => dns_service_id.clone(),
+        };
         self.record.outside_changes = Some(OutsideChanges {
-            dns_service_id,
+            dns_service_id: recorded_dns,
             routes,
         });
         if let Err(failure) = self.files.write_record(&self.record) {
             let message = format!("cannot write the pidfile: {failure}");
             self.log(LogLevel::Error, LogCategory::Helper, message.clone());
             self.network_failed(message);
+            return;
+        }
+        if self.replaced.is_some() {
+            self.network.dns_service_id = dns_service_id;
+            let change = NetworkChange::Prepare {
+                settings: Box::new(settings),
+                add: missing,
+            };
+            self.ask(change, Asked::Prepare);
             return;
         }
         let change = NetworkChange::Apply {
@@ -355,6 +449,7 @@ impl<R: FnMut(Report)> Watch<R> {
             .take()
             .expect("an apply is for the settings wanted");
         self.network.applied = Some(settings);
+        self.network.prepared = None;
         self.network.failures = 0;
         let resuming = self.furthest < Milestone::TunnelUp;
         if !resuming {
@@ -388,6 +483,10 @@ impl<R: FnMut(Report)> Watch<R> {
         if !self.changing_network() {
             return;
         }
+        if matches!(self.network.switch, Switch::Switching { .. }) {
+            self.switch_traffic();
+            return;
+        }
         let settings = match self.network.next.take() {
             Some(next) => next,
             None => self
@@ -419,8 +518,7 @@ impl<R: FnMut(Report)> Watch<R> {
             os::running_scripts(child.id(), runner)
         };
         if scripts.is_empty() {
-            self.meta(APPLIED);
-            self.advance(Milestone::TunnelUp);
+            self.network_ready();
             return;
         }
         self.network.script_wait = true;
@@ -438,8 +536,7 @@ impl<R: FnMut(Report)> Watch<R> {
 
     pub(super) fn script_exited(&mut self) {
         if mem::take(&mut self.network.script_wait) && self.changing_network() {
-            self.meta(APPLIED);
-            self.advance(Milestone::TunnelUp);
+            self.network_ready();
         }
     }
 
@@ -449,6 +546,11 @@ impl<R: FnMut(Report)> Watch<R> {
     }
 
     pub(super) fn revert_network_or_continue(&mut self, facts: ExitFacts) {
+        if self.hand_over_open() {
+            self.flush_batch();
+            self.phase = Phase::AwaitingSwitch(facts);
+            return;
+        }
         let Some(changes) = self.record.outside_changes.clone() else {
             self.repair_routes_or_report(facts);
             return;
@@ -456,6 +558,264 @@ impl<R: FnMut(Report)> Watch<R> {
         self.flush_batch();
         self.phase = Phase::RevertingNetwork(facts);
         self.ask(NetworkChange::Revert { changes }, Asked::Revert);
+    }
+
+    fn prepared(&mut self) {
+        self.network.prepared = self.network.wanted.take();
+        self.network.failures = 0;
+        if let Some(next) = self.network.next.take().filter(|_| self.changing_network()) {
+            self.look_up(next);
+        } else if self.changing_network() && !self.network.script_wait {
+            self.wait_for_script();
+        }
+    }
+
+    fn network_ready(&mut self) {
+        let Some(prepared) = self.network.prepared.clone() else {
+            self.meta(APPLIED);
+            self.advance(Milestone::TunnelUp);
+            return;
+        };
+        let Some(replaced) = &self.replaced else {
+            self.look_up(prepared);
+            return;
+        };
+        let asked = replaced
+            .inputs
+            .send(Input::HandOverAsked(self.inputs.clone()))
+            .is_ok();
+        self.network.switch = if asked {
+            Switch::Asked
+        } else {
+            Switch::Declined
+        };
+    }
+
+    pub(super) fn replaceable(&self) -> Result<Replaced, NotReplaceable> {
+        let applies_network = self.script_runner.is_some()
+            || self
+                .later_runs
+                .as_ref()
+                .is_some_and(|later| later.tunnel.script_runner.is_some());
+        if !applies_network {
+            return Err(NotReplaceable::NoNetwork);
+        }
+        if !self.changing_network() || self.furthest != Milestone::TunnelUp {
+            return Err(NotReplaceable::NotUp);
+        }
+        let changes = self
+            .record
+            .outside_changes
+            .as_ref()
+            .expect("a tunnel up with the Helper's network settings recorded them");
+        let applied = self
+            .network
+            .applied
+            .as_ref()
+            .expect("a tunnel is up once its network settings are applied");
+        Ok(Replaced {
+            inputs: self.inputs.clone(),
+            dns_service_id: changes.dns_service_id.clone(),
+            address: applied.ipv4.address.address,
+        })
+    }
+
+    pub(super) fn replaced_exited(&mut self) {
+        self.replaced = None;
+        if !matches!(self.network.switch, Switch::Asked | Switch::Declined) {
+            return;
+        }
+        self.network.switch = Switch::Idle;
+        if self.changing_network() {
+            let prepared = self
+                .network
+                .prepared
+                .clone()
+                .expect("a hand-over is asked for once the network is prepared");
+            self.look_up(prepared);
+        }
+    }
+
+    pub(super) fn handed_over(&mut self, hand_over: Option<HandOver>) {
+        let Some(hand_over) = hand_over else {
+            self.network.switch = Switch::Declined;
+            return;
+        };
+        self.network.switch = Switch::Idle;
+        let replaced = self
+            .replaced
+            .as_ref()
+            .expect("only a run that replaces another asks it to hand over");
+        let settings = self
+            .network
+            .prepared
+            .clone()
+            .expect("a hand-over is asked for once the network is prepared");
+        if !self.changing_network() {
+            let _ = replaced.inputs.send(Input::SwitchEnded(SwitchEnd::Kept));
+            return;
+        }
+        if hand_over.settings.ipv4.address.address == settings.ipv4.address.address {
+            let _ = replaced.inputs.send(Input::SwitchEnded(SwitchEnd::Kept));
+            self.address_in_use();
+            return;
+        }
+        let outside = Self::outside(&settings);
+        let routes = hand_over
+            .routes
+            .into_iter()
+            .filter(|route| outside.contains(&route.destination))
+            .collect();
+        self.network.switch = Switch::Switching {
+            replaced: hand_over.settings,
+            routes,
+            dns: hand_over.dns_service_id == self.network.dns_service_id,
+        };
+        self.switch_traffic();
+    }
+
+    fn switch_traffic(&mut self) {
+        let Switch::Switching {
+            replaced, routes, ..
+        } = &self.network.switch
+        else {
+            unreachable!("the traffic moves only during a hand-over")
+        };
+        let change = NetworkChange::Switch {
+            settings: Box::new(
+                self.network
+                    .prepared
+                    .clone()
+                    .expect("a hand-over is asked for once the network is prepared"),
+            ),
+            replaced: replaced.clone(),
+        };
+        for route in routes {
+            if !self.network.owned.contains(route) {
+                self.network.owned.push(route.clone());
+            }
+        }
+        self.record.outside_changes = Some(OutsideChanges {
+            dns_service_id: self.network.dns_service_id.clone(),
+            routes: self.network.owned.clone(),
+        });
+        if let Err(failure) = self.files.write_record(&self.record) {
+            let message = format!("cannot write the pidfile: {failure}");
+            self.log(LogLevel::Error, LogCategory::Helper, message.clone());
+            self.network_failed(message);
+            return;
+        }
+        self.ask(change, Asked::Switch);
+    }
+
+    fn switched(&mut self) {
+        if !self.changing_network() {
+            return;
+        }
+        let Switch::Switching { routes, dns, .. } =
+            mem::replace(&mut self.network.switch, Switch::Idle)
+        else {
+            unreachable!("a switch is answered only during a hand-over")
+        };
+        let replaced = self
+            .replaced
+            .take()
+            .expect("only a run that replaces another moves its traffic");
+        let _ = replaced
+            .inputs
+            .send(Input::SwitchEnded(SwitchEnd::Released { routes, dns }));
+        self.network.applied = self.network.prepared.take();
+        self.network.failures = 0;
+        self.meta(APPLIED);
+        self.advance(Milestone::TunnelUp);
+    }
+
+    fn address_in_use(&mut self) {
+        self.tunnel_address_in_use = true;
+        self.network_setup_failed(
+            "‹the connection to replace has the same tunnel address›".to_owned(),
+        );
+    }
+
+    pub(super) fn switch_ended(&mut self, end: SwitchEnd) {
+        self.network.handing_over = false;
+        match end {
+            SwitchEnd::Released { routes, dns } => {
+                self.network.handed_over = true;
+                self.network.next = None;
+                self.network.owned.retain(|route| !routes.contains(route));
+                if let Some(changes) = &mut self.record.outside_changes {
+                    changes.routes = self.network.owned.clone();
+                    if dns {
+                        changes.dns_service_id = String::new();
+                    }
+                }
+                self.save_record();
+                self.meta("‹network settings handed over to the new connection›");
+            }
+            SwitchEnd::Kept => {
+                if let Some(next) = self.network.next.take().filter(|_| self.changing_network()) {
+                    self.look_up(next);
+                }
+            }
+            SwitchEnd::Failed if self.changing_network() => self.network_setup_failed(
+                "‹the new connection could not take over the network settings›".to_owned(),
+            ),
+            SwitchEnd::Failed => {}
+        }
+    }
+
+    fn hand_over_open(&self) -> bool {
+        self.network.handing_over || matches!(self.network.switch, Switch::Asked)
+    }
+
+    pub(super) fn settle_hand_over(&mut self) {
+        if self.network.hand_over_to.is_some() && (!self.changing_network() || !self.network.busy())
+        {
+            let to = self.network.hand_over_to.take().expect("checked above");
+            let hand_over = self.changing_network().then(|| {
+                self.network.handing_over = true;
+                HandOver {
+                    settings: Box::new(
+                        self.network
+                            .applied
+                            .clone()
+                            .expect("a tunnel is up once its network settings are applied"),
+                    ),
+                    routes: self.network.owned.clone(),
+                    dns_service_id: self
+                        .record
+                        .outside_changes
+                        .as_ref()
+                        .expect("a tunnel up with the Helper's network settings recorded them")
+                        .dns_service_id
+                        .clone(),
+                }
+            });
+            to.send(Input::HandedOver(hand_over))
+                .expect("the replacing run waits for the hand-over it asked for");
+        }
+        let switch_in_flight = self
+            .network
+            .asked
+            .iter()
+            .any(|asked| matches!(asked, Asked::Switch));
+        if matches!(self.network.switch, Switch::Switching { .. })
+            && !self.changing_network()
+            && !switch_in_flight
+        {
+            self.network.switch = Switch::Idle;
+            if let Some(replaced) = self.replaced.take() {
+                let _ = replaced.inputs.send(Input::SwitchEnded(SwitchEnd::Failed));
+            }
+        }
+        if matches!(self.phase, Phase::AwaitingSwitch(_)) && !self.hand_over_open() {
+            let Phase::AwaitingSwitch(facts) = mem::replace(&mut self.phase, Phase::Reported)
+            else {
+                unreachable!("checked above")
+            };
+            self.revert_network_or_continue(facts);
+        }
     }
 
     fn reverted(&mut self, left: &[OutsideRoute]) {
@@ -484,6 +844,7 @@ mod tests {
     use std::{env, process};
 
     use super::*;
+    use crate::recovery::RecordSlot;
 
     #[test]
     fn a_value_file_renamed_into_the_value_folder_is_reported() {
@@ -491,7 +852,7 @@ mod tests {
         let _ = fs::remove_dir_all(&directory);
         let mut latencies = Vec::new();
         for run in 1..=20 {
-            let files = RunFiles::new(&directory, run);
+            let files = RunFiles::new(&directory, run, RecordSlot::First);
             fs::create_dir_all(&files.values_directory).unwrap();
             let (inputs, received) = mpsc::channel();
             let watcher = values_watcher(&files, &inputs);

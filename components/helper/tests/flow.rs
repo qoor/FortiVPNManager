@@ -19,6 +19,7 @@ fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
         cert_rejected_digests: Vec::new(),
         cert_rejected_at: None,
         tunnel_mode_rejected: false,
+        tunnel_address_in_use: false,
         up_duration: None,
         exit_status: ProcessExitStatus::Exited { code },
     }
@@ -302,6 +303,7 @@ fn spawn_failure_is_reported_as_the_exit() {
             cert_rejected_digests: Vec::new(),
             cert_rejected_at: None,
             tunnel_mode_rejected: false,
+            tunnel_address_in_use: false,
             up_duration: None,
             exit_status: ProcessExitStatus::SpawnFailed { errno: 2 },
         }

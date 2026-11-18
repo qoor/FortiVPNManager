@@ -25,7 +25,7 @@ internal interface IHelperChannel : IDisposable
 }
 
 /// <summary>Opens connection <paramref name="id"/>, whose events go to <paramref name="inbound"/>.</summary>
-internal delegate IHelperChannel OpenHelperChannel(ulong id, HelperInbound inbound);
+internal delegate IHelperChannel OpenHelperChannel(ulong id, HelperInbound inbound, TimeSpan limit);
 
 /// <summary>
 /// Carries the runtime's Helper calls over one connection and passes the Helper's messages back,
@@ -41,6 +41,11 @@ internal delegate IHelperChannel OpenHelperChannel(ulong id, HelperInbound inbou
 internal sealed class HelperRelay
 {
     private sealed record Link(IHelperChannel Channel, ulong Id);
+
+    /// <summary>The service keeps the pipe ready; a missing one means it is not running.</summary>
+    private static readonly TimeSpan ConnectLimit = TimeSpan.FromSeconds(2);
+
+    private static readonly TimeSpan RestartLimit = TimeSpan.FromSeconds(20);
 
     private readonly string appBuild;
     private readonly HelperInbound inbound;
@@ -65,7 +70,7 @@ internal sealed class HelperRelay
     {
         try
         {
-            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, Version)));
+            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, RestartLimit, Version)));
         }
         catch (HelperChannelException error)
         {
@@ -97,7 +102,7 @@ internal sealed class HelperRelay
     {
         try
         {
-            reply(await OnConnection<PortResponse>(retrying, async current =>
+            reply(await OnConnection<PortResponse>(retrying, ConnectLimit, async current =>
             {
                 if (verified && VerifiedLinkId != current.Id)
                 {
@@ -131,7 +136,7 @@ internal sealed class HelperRelay
         Link current;
         try
         {
-            current = CurrentLink();
+            current = CurrentLink(ConnectLimit);
             var answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id));
             var flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
             reply(new PortResponse.HelperReplyFlag(flag.Value));
@@ -164,12 +169,12 @@ internal sealed class HelperRelay
     /// <paramref name="retrying"/> and the connection failed. Opening it counts: the pipe is missing
     /// while Windows restarts the Helper.
     /// </summary>
-    private async Task<T> OnConnection<T>(bool retrying, Func<Link, Task<T>> body)
+    private async Task<T> OnConnection<T>(bool retrying, TimeSpan retryLimit, Func<Link, Task<T>> body)
     {
         Link? current = null;
         try
         {
-            current = CurrentLink();
+            current = CurrentLink(ConnectLimit);
             return await body(current);
         }
         catch (HelperChannelException error) when (retrying && IsConnectionFailure(error.Failure))
@@ -179,7 +184,7 @@ internal sealed class HelperRelay
                 Invalidate(current);
             }
             await Task.Delay(retryDelay);
-            return await body(CurrentLink());
+            return await body(CurrentLink(retryLimit));
         }
     }
 
@@ -195,7 +200,7 @@ internal sealed class HelperRelay
     }
 
     /// <summary>The live connection, or a new one when there is none or the last one was lost.</summary>
-    private Link CurrentLink()
+    private Link CurrentLink(TimeSpan limit)
     {
         lock (gate)
         {
@@ -208,7 +213,7 @@ internal sealed class HelperRelay
                 InvalidateLocked(current);
             }
             var id = ++lastLinkId;
-            var channel = open(id, inbound);
+            var channel = open(id, inbound, limit);
             // Active before anything is read, so a connection that ends at once is reported and dropped.
             inbound.Activate(id);
             channel.Start();

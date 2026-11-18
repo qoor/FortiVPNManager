@@ -47,7 +47,9 @@ pub(crate) fn change(change: &NetworkChange, log: &Log) -> NetworkOutcome {
             previous,
             remove,
             add,
-        } => apply(settings, previous.as_deref(), remove, add, log),
+        } => apply(settings, previous.as_deref(), remove, add, true, log),
+        NetworkChange::Prepare { settings, add } => apply(settings, None, &[], add, false, log),
+        NetworkChange::Switch { settings, replaced } => switch(settings, replaced, log),
         NetworkChange::Revert { changes } => revert(changes, log),
     };
     if let NetworkOutcome::Failed { step, error, .. } = &outcome {
@@ -179,6 +181,7 @@ fn apply(
     previous: Option<&NetworkSettings>,
     remove: &[OutsideRoute],
     add: &[OutsideRoute],
+    routes_and_dns: bool,
     log: &Log,
 ) -> NetworkOutcome {
     let mut added = Vec::new();
@@ -188,6 +191,7 @@ fn apply(
         previous,
         remove,
         add,
+        routes_and_dns,
         &mut added,
         &mut unchanged,
         log,
@@ -223,11 +227,13 @@ fn apply(
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn apply_steps(
     settings: &NetworkSettings,
     previous: Option<&NetworkSettings>,
     remove: &[OutsideRoute],
     add: &[OutsideRoute],
+    routes_and_dns: bool,
     added: &mut Vec<OutsideRoute>,
     unchanged: &mut Option<Vec<Route>>,
     log: &Log,
@@ -282,6 +288,10 @@ fn apply_steps(
             Err(error) => return Err(failure(NetworkStep::OutsideRoutes, error)),
         }
     }
+    if !routes_and_dns {
+        confirm(tunnel, settings, &physical, add, false)?;
+        return Ok(Vec::new());
+    }
     if matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
         os_api::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
             .map_err(|error| failure(NetworkStep::Routes, error))?;
@@ -308,7 +318,7 @@ fn apply_steps(
     if settings.wins_servers != previous_wins {
         set_wins_servers(tunnel, previous_wins, &settings.wins_servers)?;
     }
-    confirm(tunnel, settings, &physical, add)?;
+    confirm(tunnel, settings, &physical, add, true)?;
     let after = table(remove.iter().map(|route| route.destination.address))
         .map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
     Ok(remove
@@ -454,6 +464,7 @@ fn confirm(
     settings: &NetworkSettings,
     physical: &Physical,
     add: &[OutsideRoute],
+    routes_and_dns: bool,
 ) -> Result<(), Failure> {
     for address in addresses(settings) {
         let present = os_api::addresses(tunnel, Family::of(address.address))
@@ -484,7 +495,11 @@ fn confirm(
             ));
         }
     }
-    let wanted = tunnel_routes(tunnel, settings);
+    let wanted = if routes_and_dns {
+        tunnel_routes(tunnel, settings)
+    } else {
+        Vec::new()
+    };
     let tunnel_table = table(wanted.iter().map(|route| route.destination))
         .map_err(|error| failure(NetworkStep::Routes, error))?;
     for route in wanted {
@@ -511,7 +526,10 @@ fn confirm(
             ));
         }
     }
-    for family in [Family::Ipv4, Family::Ipv6] {
+    for family in [Family::Ipv4, Family::Ipv6]
+        .into_iter()
+        .filter(|_| routes_and_dns)
+    {
         let servers = dns_servers(settings, family);
         let read = os_api::dns_servers(tunnel, family)
             .map_err(|error| failure(NetworkStep::Dns, error))?;
@@ -523,6 +541,55 @@ fn confirm(
         }
     }
     Ok(())
+}
+
+fn switch(settings: &NetworkSettings, replaced: &NetworkSettings, log: &Log) -> NetworkOutcome {
+    let applied = apply(settings, None, &[], &[], true, log);
+    if !matches!(applied, NetworkOutcome::Applied { .. }) {
+        return applied;
+    }
+    match remove_replaced(replaced) {
+        Ok(()) => {
+            let message = format!(
+                "moved the VPN traffic from {} to {}",
+                replaced.tunnel.name, settings.tunnel.name
+            );
+            log(LogLevel::Notice, LogCategory::Routes, &message);
+            applied
+        }
+        Err(failure) => NetworkOutcome::Failed {
+            step: failure.step,
+            error: failure.error,
+            added: Vec::new(),
+            left: Vec::new(),
+        },
+    }
+}
+
+fn remove_replaced(replaced: &NetworkSettings) -> Result<(), Failure> {
+    let Ok(tunnel) = tunnel_interface(&replaced.tunnel) else {
+        return Ok(());
+    };
+    let routes = tunnel_routes(tunnel, replaced);
+    for route in &routes {
+        match os_api::delete_route(route) {
+            Ok(()) => {}
+            Err(error) if error.not_found() => {}
+            Err(error) => return Err(failure(NetworkStep::Routes, error)),
+        }
+    }
+    let table = table(routes.iter().map(|route| route.destination))
+        .map_err(|error| failure(NetworkStep::Routes, error))?;
+    match routes.iter().find(|route| routes::has(&table, route)) {
+        Some(route) => Err(failure(
+            NetworkStep::Routes,
+            format!(
+                "the route to {}/{} through {} is still in place",
+                route.destination, route.prefix_length, replaced.tunnel.name
+            ),
+        )),
+        None => Ok(()),
+    }
 }
 
 fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
@@ -801,6 +868,94 @@ mod tests {
         assert_eq!(
             os_api::dns_servers(loopback(), Family::Ipv4),
             Ok(Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_prepared_tunnel_takes_over_the_routes_and_dns_of_the_one_it_replaces() {
+        let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+        let _dns = put_back_loopback_dns();
+        let replaced_include = network("198.51.100.128", 25);
+        let include = network("198.51.100.0", 26);
+        let (_, gateway_route) = look_up_route(network("192.0.2.99", 32));
+        let physical = Physical::read(&quiet()).ok().unwrap();
+        let gateway_row = physical.os_route(&gateway_route);
+        let _undo = Undo(move || {
+            let _ = os_api::delete_route(&gateway_row);
+            let _ = os_api::delete_route(&on_loopback(replaced_include));
+            let _ = os_api::delete_route(&on_loopback(include));
+            for address in ["198.51.100.97", "198.51.100.98"] {
+                let _ = os_api::delete_address(loopback(), address.parse().unwrap());
+            }
+        });
+        let replaced = settings(replaced_include);
+        let applied = super::change(
+            &NetworkChange::Apply {
+                settings: Box::new(replaced.clone()),
+                previous: None,
+                remove: Vec::new(),
+                add: Vec::new(),
+            },
+            &quiet(),
+        );
+        assert!(
+            matches!(applied, NetworkOutcome::Applied { .. }),
+            "{applied:?}"
+        );
+        let mut next = settings(include);
+        next.ipv4.address = network("198.51.100.98", 32);
+        next.dns_servers = vec!["192.0.2.54".parse().unwrap()];
+
+        let prepared = super::change(
+            &NetworkChange::Prepare {
+                settings: Box::new(next.clone()),
+                add: vec![gateway_route.clone()],
+            },
+            &quiet(),
+        );
+        assert_eq!(
+            prepared,
+            NetworkOutcome::Applied {
+                added: vec![gateway_route],
+                left: Vec::new(),
+            }
+        );
+        let table = os_api::routes(Family::Ipv4).unwrap();
+        assert!(routes::has(&table, &gateway_row));
+        assert!(routes::has(&table, &on_loopback(replaced_include)));
+        assert!(!routes::has(&table, &on_loopback(include)));
+        let addresses = os_api::addresses(loopback(), Family::Ipv4).unwrap();
+        assert!(
+            addresses
+                .iter()
+                .any(|found| found.address == "198.51.100.98".parse::<IpAddr>().unwrap())
+        );
+        assert_eq!(
+            os_api::dns_servers(loopback(), Family::Ipv4),
+            Ok(replaced.dns_servers.clone())
+        );
+
+        let switched = super::change(
+            &NetworkChange::Switch {
+                settings: Box::new(next.clone()),
+                replaced: Box::new(replaced),
+            },
+            &quiet(),
+        );
+        assert_eq!(
+            switched,
+            NetworkOutcome::Applied {
+                added: Vec::new(),
+                left: Vec::new(),
+            }
+        );
+        let table = os_api::routes(Family::Ipv4).unwrap();
+        assert!(routes::has(&table, &on_loopback(include)));
+        assert!(!routes::has(&table, &on_loopback(replaced_include)));
+        assert!(routes::has(&table, &gateway_row));
+        assert_eq!(
+            os_api::dns_servers(loopback(), Family::Ipv4),
+            Ok(next.dns_servers)
         );
     }
 

@@ -29,6 +29,7 @@ vpn:
   username: ""
   realm: ""
   client: "openconnect"
+  dtls: false
   trusted_certs: []
   trusted_cert_pins: []
 otp:
@@ -60,6 +61,7 @@ fn every_key_has_a_comment() {
         "username:",
         "realm:",
         "client:",
+        "dtls:",
         "trusted_certs:",
         "trusted_cert_pins:",
         "gmail_address:",
@@ -290,6 +292,7 @@ fn random_valid_configs_round_trip() {
         settings.otp.gmail_address = string();
         settings.otp.google_client_id = string();
         settings.vpn.port = rng.range(1, 65535);
+        settings.vpn.dtls = rng.coin();
         for _ in 0..rng.range(0, 4) {
             let digest: String = (0..64)
                 .map(|_| b"0123456789abcdef"[rng.range(0, 15) as usize] as char)
@@ -374,6 +377,32 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "an existing openfortivpn config",
     ] {
         assert!(!windows.contains(wording), "{wording}");
+    }
+}
+
+#[test]
+fn the_dtls_key_is_written_with_its_comment_on_both_oses() {
+    const COMMENT: &str = "  # When true, openconnect carries the tunnel over DTLS (UDP) if the gateway offers it; when false, over HTTPS (TLS) only.\n";
+    for client in [client(), windows_client()] {
+        for dtls in [false, true] {
+            let mut settings = Settings::default();
+            settings.vpn.dtls = dtls;
+            let Ok(Update::Write { text, .. }) =
+                config::update(None, &client, |current| *current = settings.clone())
+            else {
+                panic!("the settings are written");
+            };
+            assert!(
+                text.contains(&format!(
+                    "  client: \"openconnect\"\n{COMMENT}  dtls: {dtls}\n  #"
+                )),
+                "{text}"
+            );
+            assert_eq!(
+                config::read(text.as_bytes(), &client).unwrap().settings,
+                settings
+            );
+        }
     }
 }
 

@@ -17,11 +17,18 @@ use super::readiness::{HelperFacts, SetupNeed};
 
 impl ConnectionManager {
     pub fn connection_section(&self) -> ConnectionSection {
-        let attention = matches!(self.phase, Phase::SetupRequired(_) | Phase::Failed(_));
+        let replaced = match &self.phase {
+            Phase::Connecting(attempt) if attempt.reason != AttemptReason::ReconnectNow => {
+                attempt.replacing.clone().map(Phase::Connected)
+            }
+            _ => None,
+        };
+        let phase = replaced.as_ref().unwrap_or(&self.phase);
+        let attention = matches!(phase, Phase::SetupRequired(_) | Phase::Failed(_));
         ConnectionSection {
-            icon: self.icon(),
-            status: self.status(),
-            wait_reason: match &self.phase {
+            icon: self.icon(phase),
+            status: self.status(phase),
+            wait_reason: match phase {
                 Phase::WaitingRetry { reason, .. } => Some(self.wait_reason(*reason)),
                 Phase::WaitingNetwork { reason, .. } if *reason != RetryReason::Network => {
                     Some(self.wait_reason(*reason))
@@ -30,8 +37,7 @@ impl ConnectionManager {
             },
             connect: shown(!self.wants_connection || attention),
             disconnect: shown(self.wants_connection),
-            reconnect_now: if matches!(self.phase, Phase::Connected(_) | Phase::WaitingRetry { .. })
-            {
+            reconnect_now: if matches!(phase, Phase::Connected(_) | Phase::WaitingRetry { .. }) {
                 ButtonState::Enabled
             } else {
                 ButtonState::Disabled
@@ -112,8 +118,8 @@ impl ConnectionManager {
         }
     }
 
-    fn icon(&self) -> ConnectionIcon {
-        match &self.phase {
+    fn icon(&self, phase: &Phase) -> ConnectionIcon {
+        match phase {
             Phase::Connected(_) => ConnectionIcon::Connected,
             // Waiting for an away user is not a reconnect under way.
             Phase::Idle => ConnectionIcon::Disconnected,
@@ -126,8 +132,8 @@ impl ConnectionManager {
         }
     }
 
-    fn status(&self) -> ConnectionStatus {
-        match &self.phase {
+    fn status(&self, phase: &Phase) -> ConnectionStatus {
+        match phase {
             Phase::Idle => ConnectionStatus::NotConnected {},
             Phase::SetupRequired(needs) => ConnectionStatus::SetupRequired {
                 items: needs.iter().map(|need| self.setup_item(*need)).collect(),

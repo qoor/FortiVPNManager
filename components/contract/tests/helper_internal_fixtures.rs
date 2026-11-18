@@ -347,6 +347,18 @@ fn messages_from_the_entry() {
             },
         },
         FromEntry::ChangeNetwork {
+            change: NetworkChange::Prepare {
+                settings: Box::new(full_tunnel()),
+                add: vec![gateway_route()],
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::Switch {
+                settings: Box::new(full_tunnel()),
+                replaced: Box::new(split_tunnel()),
+            },
+        },
+        FromEntry::ChangeNetwork {
             change: NetworkChange::Revert {
                 changes: OutsideChanges {
                     dns_service_id: DNS_SERVICE.into(),

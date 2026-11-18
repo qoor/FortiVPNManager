@@ -21,7 +21,9 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     assert_eq!(swift.reply(id), None);
     // Logged once the pidfile is written.
     swift.wait_until("the tunnel", |swift| {
-        swift.has_log(&format!("notice helper: run {ATTEMPT}: tunnel up"))
+        swift.has_log(&format!(
+            "notice helper: 0277070470 run {ATTEMPT}: tunnel up"
+        ))
     });
 
     // The config file and the pidfile live in the run directory for the run, readable only by
@@ -80,12 +82,14 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     });
     assert!(swift.scratch.run_directory_names().is_empty());
     for line in [
-        format!("notice helper: run {ATTEMPT} started for uid 501 with openfortivpn 1.24.1"),
-        format!("notice helper: run {ATTEMPT}: tunnel up"),
-        format!("notice helper: run {ATTEMPT}: stop requested (userDisconnect)"),
         format!(
-            "notice helper: run {ATTEMPT} exited: Exited {{ code: 0 }}, initiator Helper {{ \
-             reason: UserDisconnect }}, furthest Some(TunnelUp)"
+            "notice helper: 0277070470 run {ATTEMPT} started for uid 501 with openfortivpn 1.24.1"
+        ),
+        format!("notice helper: 0277070470 run {ATTEMPT}: tunnel up"),
+        format!("notice helper: 0277070470 run {ATTEMPT}: stop requested (userDisconnect)"),
+        format!(
+            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: 0 }}, initiator \
+             Helper {{ reason: UserDisconnect }}, furthest Some(TunnelUp)"
         ),
     ] {
         assert!(swift.has_log(&line), "{line} not in {:#?}", swift.logs());
@@ -118,12 +122,32 @@ fn a_failed_login_is_reported_as_the_client_ending_the_run() {
     assert_eq!(facts["exitStatus"], json!({"exited": {"code": 1}}));
     swift.wait_until("the exit log", |swift| {
         swift.has_log(&format!(
-            "notice helper: run {ATTEMPT} exited: Exited {{ code: 1 }}, initiator Client, furthest \
-             Some(ConnectedToGateway)"
+            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: 1 }}, initiator \
+             Client, furthest Some(ConnectedToGateway)"
         ))
     });
     assert!(swift.scratch.run_directory_names().is_empty());
     swift.assert_no_secret();
+}
+
+#[test]
+fn every_output_batch_names_its_attempt() {
+    let mut swift = Swift::start(Setup::fixture("auth-failed"));
+    assert!(swift.connect_app(1, 501));
+    assert_eq!(swift.connect(1, ATTEMPT), None);
+    swift.wait_for_exit(1);
+    let attempts: Vec<Value> = swift
+        .received
+        .iter()
+        .filter_map(|message| message.get("sendOutput"))
+        .map(|output| serde_json::from_str::<Value>(output["json"].as_str().unwrap()).unwrap())
+        .map(|batch| batch["attemptID"].clone())
+        .collect();
+    assert!(!attempts.is_empty());
+    assert!(
+        attempts.iter().all(|attempt| attempt == ATTEMPT),
+        "{attempts:?}"
+    );
 }
 
 #[test]
@@ -266,11 +290,13 @@ fn a_bad_connect_request_starts_nothing() {
         1,
         connect_request_with(json!({
             "attemptID": ATTEMPT,
+            "sessionID": 277_070_470,
             "client": "openfortivpn",
             "host": GATEWAY,
             "port": 0,
             "username": "alice",
             "trustedCerts": [],
+            "dtls": false,
             "password": PASSWORD,
         })),
     );
@@ -278,11 +304,13 @@ fn a_bad_connect_request_starts_nothing() {
         1,
         connect_request_with(json!({
             "attemptID": ATTEMPT,
+            "sessionID": 277_070_470,
             "client": "openconnect",
             "host": GATEWAY,
             "port": 443,
             "username": "alice",
             "trustedCerts": [],
+            "dtls": false,
             "password": PASSWORD,
         })),
     );
@@ -290,11 +318,13 @@ fn a_bad_connect_request_starts_nothing() {
         1,
         connect_request_with(json!({
             "attemptID": ATTEMPT,
+            "sessionID": 277_070_470,
             "client": "forticlient",
             "host": GATEWAY,
             "port": 443,
             "username": "alice",
             "trustedCerts": [],
+            "dtls": false,
             "password": PASSWORD,
         })),
     );
@@ -415,7 +445,7 @@ fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
         json!({"helper": {"_0": "clientInvalidated"}})
     );
     assert!(swift.has_log(&format!(
-        "notice helper: run {ATTEMPT}: owning connection invalidated"
+        "notice helper: 0277070470 run {ATTEMPT}: owning connection invalidated"
     )));
     swift.wait_until("the exit log", |swift| {
         swift.logs().iter().any(|line| line.contains(" exited: "))

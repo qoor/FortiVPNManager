@@ -1,7 +1,3 @@
-//! The Helper's root-only run directory: the config file of the current run, deleted after it, the
-//! pidfile, which tells a restarted Helper what an earlier one left running, and the record of the
-//! exception routes the Helper added, which tells it what an earlier one left in the routing table.
-
 use std::fmt;
 use std::fs;
 use std::io::{self, Write};
@@ -16,6 +12,8 @@ use crate::process::os;
 const RECORD: &str = "run.json";
 /// Written in full, then renamed over the pidfile.
 const RECORD_DRAFT: &str = "run.json.tmp";
+const SECOND_RECORD: &str = "run.json.2";
+const SECOND_RECORD_DRAFT: &str = "run.json.2.tmp";
 const CONFIG_PREFIX: &str = "config.";
 const VALUES_DIRECTORY: &str = "values";
 const VALUES_PREFIX: &str = "values.";
@@ -79,19 +77,33 @@ impl fmt::Display for Failure {
     }
 }
 
-/// Where one run keeps its files: its config file, if its launch has one, its value file, if its
-/// client writes one, and the pidfile.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RecordSlot {
+    First,
+    Second,
+}
+
+impl RecordSlot {
+    fn names(self) -> (&'static str, &'static str) {
+        match self {
+            Self::First => (RECORD, RECORD_DRAFT),
+            Self::Second => (SECOND_RECORD, SECOND_RECORD_DRAFT),
+        }
+    }
+}
+
 pub(crate) struct RunFiles {
     pub directory: PathBuf,
     pub config: PathBuf,
     pub values_directory: PathBuf,
     pub values: PathBuf,
     values_draft: PathBuf,
+    slot: RecordSlot,
 }
 
 impl RunFiles {
     /// The files of run number `run`.
-    pub fn new(directory: &Path, run: u64) -> Self {
+    pub fn new(directory: &Path, run: u64, slot: RecordSlot) -> Self {
         let values_directory = directory.join(VALUES_DIRECTORY);
         Self {
             directory: directory.to_owned(),
@@ -99,6 +111,7 @@ impl RunFiles {
             values: values_directory.join(format!("{VALUES_PREFIX}{run}")),
             values_draft: values_directory.join(format!("{VALUES_PREFIX}{run}.tmp")),
             values_directory,
+            slot,
         }
     }
 
@@ -117,7 +130,14 @@ impl RunFiles {
     /// Replaces the pidfile at once, so a Helper that dies meanwhile leaves the old or the new one.
     pub fn write_record(&self, record: &RunRecord) -> Result<(), Failure> {
         let json = serde_json::to_vec(record).expect("a run record serializes");
-        replace(&self.directory, RECORD, RECORD_DRAFT, &json)
+        let (name, draft) = self.slot.names();
+        replace(&self.directory, name, draft, &json)
+    }
+
+    pub fn take_first_slot(&mut self) -> Option<PathBuf> {
+        self.slot = RecordSlot::First;
+        let second = self.directory.join(SECOND_RECORD);
+        second.exists().then_some(second)
     }
 
     /// Deletes them once the run is over. The errors are lines for the Helper's log.
@@ -126,7 +146,7 @@ impl RunFiles {
             self.config.clone(),
             self.values.clone(),
             self.values_draft.clone(),
-            record_path(&self.directory),
+            self.directory.join(self.slot.names().0),
         ]
         .iter()
         .filter_map(|path| remove(path).err())
@@ -157,10 +177,6 @@ fn replace(directory: &Path, name: &str, draft: &str, bytes: &[u8]) -> Result<()
         let _ = fs::remove_file(&draft);
     }
     written
-}
-
-pub(crate) fn record_path(directory: &Path) -> PathBuf {
-    directory.join(RECORD)
 }
 
 /// The exception routes the Helper added, or is about to add, and has not removed. A Helper of
@@ -200,10 +216,17 @@ pub(crate) fn bypass_record_path(directory: &Path) -> PathBuf {
     directory.join(BYPASS_RECORD)
 }
 
-/// `None` without a pidfile; an error if it cannot be decoded.
-pub(crate) fn read_record(directory: &Path) -> Option<Result<RunRecord, serde_json::Error>> {
-    let bytes = fs::read(record_path(directory)).ok()?;
-    Some(serde_json::from_slice(&bytes))
+pub(crate) fn read_records(
+    directory: &Path,
+) -> Vec<(PathBuf, Result<RunRecord, serde_json::Error>)> {
+    [RECORD, SECOND_RECORD]
+        .into_iter()
+        .filter_map(|name| {
+            let path = directory.join(name);
+            let bytes = fs::read(&path).ok()?;
+            Some((path, serde_json::from_slice(&bytes)))
+        })
+        .collect()
 }
 
 /// Config files, value files and pidfiles, finished or not, and unfinished exception route records
@@ -233,5 +256,114 @@ pub(crate) fn remove(path: &Path) -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(format!("cannot delete {}: {error}", path.display())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, process};
+
+    use super::*;
+
+    #[test]
+    fn each_run_writes_and_removes_only_its_own_pidfile() {
+        let directory = env::temp_dir().join(format!("fvm-run-records-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let first = RunFiles::new(&directory, 1, RecordSlot::First);
+        let second = RunFiles::new(&directory, 2, RecordSlot::Second);
+        let record = |gateway| RunRecord {
+            processes: Vec::new(),
+            gateway: Some(gateway),
+            outside_changes: None,
+        };
+        let first_gateway = Ipv4Addr::new(192, 0, 2, 1);
+        let second_gateway = Ipv4Addr::new(192, 0, 2, 2);
+        first.write_record(&record(first_gateway)).unwrap();
+        second.write_record(&record(second_gateway)).unwrap();
+        let recorded = || {
+            read_records(&directory)
+                .into_iter()
+                .map(|(path, record)| (path, record.unwrap().gateway))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            recorded(),
+            [
+                (directory.join("run.json"), Some(first_gateway)),
+                (directory.join("run.json.2"), Some(second_gateway)),
+            ]
+        );
+
+        assert!(second.remove().is_empty());
+        assert_eq!(
+            recorded(),
+            [(directory.join("run.json"), Some(first_gateway))]
+        );
+        second.write_record(&record(second_gateway)).unwrap();
+        assert!(first.remove().is_empty());
+        assert_eq!(
+            recorded(),
+            [(directory.join("run.json.2"), Some(second_gateway))]
+        );
+        fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn the_second_run_writes_the_first_slot_once_the_first_ends() {
+        let directory = env::temp_dir().join(format!("fvm-run-record-move-{}", process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir(&directory).unwrap();
+        let first = RunFiles::new(&directory, 1, RecordSlot::First);
+        let mut second = RunFiles::new(&directory, 2, RecordSlot::Second);
+        let record = |gateway| RunRecord {
+            processes: Vec::new(),
+            gateway: Some(gateway),
+            outside_changes: None,
+        };
+        let recorded = || {
+            read_records(&directory)
+                .into_iter()
+                .map(|(path, record)| (path, record.unwrap().gateway))
+                .collect::<Vec<_>>()
+        };
+        let first_gateway = Ipv4Addr::new(192, 0, 2, 1);
+        let second_gateway = Ipv4Addr::new(192, 0, 2, 2);
+        first.write_record(&record(first_gateway)).unwrap();
+        second.write_record(&record(second_gateway)).unwrap();
+        assert!(first.remove().is_empty());
+        let second_record = second.take_first_slot().unwrap();
+        assert_eq!(second_record, directory.join("run.json.2"));
+        second.write_record(&record(second_gateway)).unwrap();
+        assert_eq!(
+            recorded(),
+            [
+                (directory.join("run.json"), Some(second_gateway)),
+                (directory.join("run.json.2"), Some(second_gateway)),
+            ]
+        );
+        remove(&second_record).unwrap();
+        assert_eq!(
+            recorded(),
+            [(directory.join("run.json"), Some(second_gateway))]
+        );
+        let later_gateway = Ipv4Addr::new(192, 0, 2, 3);
+        second.write_record(&record(later_gateway)).unwrap();
+        assert_eq!(
+            recorded(),
+            [(directory.join("run.json"), Some(later_gateway))]
+        );
+        assert!(second.remove().is_empty());
+        assert!(recorded().is_empty());
+
+        let mut unrecorded = RunFiles::new(&directory, 3, RecordSlot::Second);
+        assert_eq!(unrecorded.take_first_slot(), None);
+        unrecorded.write_record(&record(second_gateway)).unwrap();
+        assert_eq!(
+            recorded(),
+            [(directory.join("run.json"), Some(second_gateway))]
+        );
+        assert!(unrecorded.remove().is_empty());
+        fs::remove_dir_all(&directory).unwrap();
     }
 }

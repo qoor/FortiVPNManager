@@ -72,6 +72,7 @@ enum RouteTable {
         /// After `route -n`.
         var addArguments: [String] { ["add"] + destinationArguments + [gateway] }
         var deleteArguments: [String] { ["delete"] + destinationArguments + [gateway] }
+        var changeArguments: [String] { ["change"] + destinationArguments + [gateway] }
 
         /// Whether `row` is this route as `add` puts it in the table: static, for every interface,
         /// with this destination, prefix and gateway. Not a copy the system made of another route

@@ -250,6 +250,14 @@ pub enum NetworkChange {
         remove: Vec<OutsideRoute>,
         add: Vec<OutsideRoute>,
     },
+    Prepare {
+        settings: Box<NetworkSettings>,
+        add: Vec<OutsideRoute>,
+    },
+    Switch {
+        settings: Box<NetworkSettings>,
+        replaced: Box<NetworkSettings>,
+    },
     Revert {
         changes: OutsideChanges,
     },

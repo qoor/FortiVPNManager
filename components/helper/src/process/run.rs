@@ -20,8 +20,8 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    AttemptId, ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine,
-    OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
+    ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
+    ProcessExitStatus, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
     Backend, ClientExecutable, Finding, LaunchSpec, OutputInterpreter, Prompt, RouteRepairOutcome,
@@ -34,7 +34,9 @@ use crate::process::lines::{LineAssembler, MAX_LINE_BYTES};
 use crate::process::os::{self, Child, Spawned};
 use crate::process::{Report, Timing};
 use crate::recovery::RouteRepair;
-use crate::recovery::run_directory::{RunFiles, RunRecord};
+use crate::recovery::run_directory::{self, RunFiles, RunRecord};
+
+pub use network::{NotReplaceable, Replaced};
 
 /// Controls a started run. Dropping it does not stop the run.
 pub struct Run {
@@ -44,6 +46,7 @@ pub struct Run {
     process_id: Arc<AtomicU32>,
     /// The thread that calls `on_report`.
     run_thread: ThreadId,
+    name: String,
 }
 
 impl Run {
@@ -56,12 +59,14 @@ impl Run {
     /// The request's password goes to stdin at the client's first password prompt, if the
     /// interpreter expects one there, and is then zeroed. The process must ignore SIGPIPE (see the
     /// `process` documentation).
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn start(
         backend: Arc<dyn Backend>,
         client: &ClientExecutable,
         launch: &LaunchSpec,
         request: &mut RunRequest,
         files: RunFiles,
+        replaced: Option<Replaced>,
         timing: Timing,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Self {
@@ -71,6 +76,7 @@ impl Run {
         let mut password_line = Zeroizing::new(Vec::with_capacity(password.len() + 1));
         password_line.extend_from_slice(password.as_bytes());
         password_line.push(b'\n');
+        let name = format!("{} run {}", request.session_id, request.attempt_id);
 
         let client_line = OutputLine {
             date: SystemTime::now(),
@@ -104,6 +110,7 @@ impl Run {
                     inputs,
                     process_id: Arc::new(AtomicU32::new(0)),
                     run_thread: reporter.thread().id(),
+                    name,
                 };
             }
         };
@@ -115,11 +122,12 @@ impl Run {
         let watch = Watch {
             interpreter: backend.interpreter(),
             backend: Arc::clone(&backend),
-            attempt: request.attempt_id.clone(),
+            name: name.clone(),
             files,
             record: RunRecord::default(),
             script_runner: launch.script_runner.clone(),
             network: network::Network::new(values_watch),
+            replaced,
             timing,
             on_report,
             inputs: inputs.clone(),
@@ -139,6 +147,7 @@ impl Run {
             rejected_certificates: Vec::new(),
             certificate_rejected_at: None,
             tunnel_mode_rejected: false,
+            tunnel_address_in_use: false,
             stop: None,
             stdout: Stream::new(timing.line_idle_flush),
             stderr: Stream::new(timing.line_idle_flush),
@@ -157,6 +166,7 @@ impl Run {
             inputs,
             process_id,
             run_thread: watcher.thread().id(),
+            name,
         }
     }
 
@@ -199,9 +209,34 @@ impl Run {
         let _ = self.inputs.send(Input::Stop(reason));
     }
 
+    pub fn replaceable(&self) -> Result<Replaced, NotReplaceable> {
+        assert_ne!(
+            thread::current().id(),
+            self.run_thread,
+            "replaceable from on_report would wait for its own thread"
+        );
+        let (reply, answer) = mpsc::sync_channel(1);
+        if self.inputs.send(Input::Replaceable(reply)).is_err() {
+            return Err(NotReplaceable::NotUp);
+        }
+        answer.recv().unwrap_or(Err(NotReplaceable::NotUp))
+    }
+
+    pub fn replaced_run_exited(&self) {
+        let _ = self.inputs.send(Input::ReplacedExited);
+    }
+
+    pub fn first_slot_freed(&self) {
+        let _ = self.inputs.send(Input::FirstSlotFreed);
+    }
+
     /// The client's name as the Helper's English errors and log lines show it.
     pub fn client_name(&self) -> &'static str {
         self.backend.client_name()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// The client's process id until it exits and is reaped.
@@ -299,6 +334,12 @@ pub(crate) enum Input {
     NetworkChanged(NetworkOutcome),
     ValuesWritten,
     ScriptExited,
+    Replaceable(SyncSender<Result<Replaced, NotReplaceable>>),
+    ReplacedExited,
+    FirstSlotFreed,
+    HandOverAsked(Sender<Input>),
+    HandedOver(Option<network::HandOver>),
+    SwitchEnded(network::SwitchEnd),
 }
 
 fn report_spawn_failure(
@@ -326,6 +367,7 @@ fn report_spawn_failure(
             cert_rejected_digests: Vec::new(),
             cert_rejected_at: None,
             tunnel_mode_rejected: false,
+            tunnel_address_in_use: false,
             up_duration: None,
             exit_status: ProcessExitStatus::SpawnFailed { errno },
         },
@@ -336,12 +378,13 @@ struct Watch<R> {
     backend: Arc<dyn Backend>,
     interpreter: Box<dyn OutputInterpreter + Send>,
     /// Names the run in the Helper's log.
-    attempt: AttemptId,
+    name: String,
     files: RunFiles,
     /// What the pidfile holds once written.
     record: RunRecord,
     script_runner: Option<PathBuf>,
     network: network::Network,
+    replaced: Option<Replaced>,
     timing: Timing,
     on_report: R,
     /// For the route repair's answer.
@@ -372,6 +415,7 @@ struct Watch<R> {
     rejected_certificates: Vec<String>,
     certificate_rejected_at: Option<Milestone>,
     tunnel_mode_rejected: bool,
+    tunnel_address_in_use: bool,
     /// The first stop reason.
     stop: Option<StopReason>,
 
@@ -397,6 +441,7 @@ enum Phase {
     },
     /// The client could not log out; waiting for its logout request.
     LoggingOut(ExitFacts),
+    AwaitingSwitch(ExitFacts),
     RevertingNetwork(ExitFacts),
     RepairingRoutes(ExitFacts),
     Reported,
@@ -453,6 +498,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 self.handle(input);
             }
             self.deadlines_passed(Instant::now(), inputs);
+            self.settle_hand_over();
         }
     }
 
@@ -486,6 +532,14 @@ impl<R: FnMut(Report)> Watch<R> {
             Input::NetworkChanged(outcome) => self.network_changed(outcome),
             Input::ValuesWritten => self.values_written(),
             Input::ScriptExited => self.script_exited(),
+            Input::Replaceable(reply) => {
+                let _ = reply.send(self.replaceable());
+            }
+            Input::ReplacedExited => self.replaced_exited(),
+            Input::FirstSlotFreed => self.take_first_slot(),
+            Input::HandOverAsked(to) => self.network.hand_over_to = Some(to),
+            Input::HandedOver(hand_over) => self.handed_over(hand_over),
+            Input::SwitchEnded(end) => self.switch_ended(end),
         }
     }
 
@@ -592,6 +646,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 self.rejected_certificates.push(value);
             }
             Some(Finding::TunnelModeRejected) => self.tunnel_mode_rejected = true,
+            Some(Finding::TunnelAddressInUse) => self.tunnel_address_in_use = true,
             Some(Finding::Session(session)) => {
                 self.session = Some(session);
                 self.advance(Milestone::Authenticated);
@@ -882,6 +937,7 @@ impl<R: FnMut(Report)> Watch<R> {
             cert_rejected_digests: mem::take(&mut self.rejected_certificates),
             cert_rejected_at: self.certificate_rejected_at,
             tunnel_mode_rejected: self.tunnel_mode_rejected,
+            tunnel_address_in_use: self.tunnel_address_in_use,
             up_duration: self.tunnel_up_at.map(|up| exited_at.saturating_sub(up)),
             exit_status: status,
         };
@@ -970,8 +1026,8 @@ impl<R: FnMut(Report)> Watch<R> {
         self.record.processes = vec![client];
         self.save_record();
         let message = format!(
-            "run {}: {} running as pid {pid}",
-            self.attempt,
+            "{}: {} running as pid {pid}",
+            self.name,
             self.backend.client_name()
         );
         self.log(LogLevel::Notice, LogCategory::Helper, message);
@@ -1005,6 +1061,16 @@ impl<R: FnMut(Report)> Watch<R> {
         self.record.gateway = Some(gateway);
         if !self.record.processes.is_empty() {
             self.save_record();
+        }
+    }
+
+    fn take_first_slot(&mut self) {
+        let Some(second) = self.files.take_first_slot() else {
+            return;
+        };
+        self.save_record();
+        if let Err(line) = run_directory::remove(&second) {
+            self.log(LogLevel::Error, LogCategory::Helper, line);
         }
     }
 

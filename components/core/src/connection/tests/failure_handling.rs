@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason, VpnClient};
+use fvm_contract::app_helper::{
+    AttemptId, HelperErrorCode, Milestone, SessionId, StopReason, VpnClient,
+};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{
     ConnectionIcon, ConnectionStatus, FailureReason, WaitReason,
@@ -796,7 +798,10 @@ fn losing_the_helper_connection_ends_the_run() {
     assert_eq!(
         effects[..2],
         [
-            Effect::AttemptBegun(super::harness::id(2)),
+            Effect::AttemptBegun {
+                attempt: super::harness::id(2),
+                session: SessionId(1_327_744_001)
+            },
             Effect::CloseOtpSession {
                 attempt: id,
                 check_spam: false

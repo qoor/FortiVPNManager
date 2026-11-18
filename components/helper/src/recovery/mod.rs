@@ -11,7 +11,7 @@ use std::thread;
 
 use fvm_contract::backend::RouteRepairOutcome;
 
-pub use run_directory::Failure;
+pub use run_directory::{Failure, RecordSlot};
 
 pub(crate) use leftovers::clean_up;
 pub(crate) use run_directory::write_bypass_record;

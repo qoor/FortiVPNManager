@@ -1,6 +1,6 @@
 //! One attempt from start to tunnel.
 
-use fvm_contract::app_helper::{AttemptId, Milestone, StopReason};
+use fvm_contract::app_helper::{AttemptId, Milestone, SessionId, StopReason};
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::section::ConnectionIcon;
 
@@ -21,7 +21,10 @@ fn launch_runs_the_whole_sequence_in_order() {
     assert_eq!(
         effects,
         [
-            Effect::AttemptBegun(id1.clone()),
+            Effect::AttemptBegun {
+                attempt: id1.clone(),
+                session: SessionId(1_327_744_000)
+            },
             Effect::CheckReadiness,
             h.set(TimerKind::AttemptDeadline, t0 + secs(150.0)),
             Effect::HoldActivity(true)
@@ -40,7 +43,9 @@ fn launch_runs_the_whole_sequence_in_order() {
         connection_effects(&h.send(Input::OtpSessionReady(id1.clone()))),
         [Effect::StartRun {
             attempt: id1.clone(),
-            account: account()
+            session: SessionId(1_327_744_000),
+            account: account(),
+            replacing: None
         }]
     );
     assert_eq!(h.attempt().unwrap().stage, Stage::Run);
@@ -148,7 +153,13 @@ fn connecting_from_idle_needs_a_user_action() {
     let effects = connection_effects(&h.send(Input::Connect));
     assert_eq!(
         effects[..2],
-        [Effect::AttemptBegun(id(1)), Effect::CheckReadiness]
+        [
+            Effect::AttemptBegun {
+                attempt: id(1),
+                session: SessionId(1_327_744_000)
+            },
+            Effect::CheckReadiness
+        ]
     );
     assert!(effects.contains(&Effect::HoldActivity(true)));
     assert_eq!(h.attempt().unwrap().reason, AttemptReason::User);
@@ -392,7 +403,7 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
         h.effects
             .iter()
             .filter_map(|effect| match effect {
-                Effect::AttemptBegun(id) => Some(id.clone()),
+                Effect::AttemptBegun { attempt, .. } => Some(attempt.clone()),
                 _ => None,
             })
             .collect()
@@ -400,14 +411,22 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
     let mut h = Harness::new();
     assert_eq!(h.cm.current_attempt(), None);
     h.launch();
-    assert_eq!(h.effects[0], Effect::AttemptBegun(id(1)));
+    assert!(
+        matches!(&h.effects[0], Effect::AttemptBegun { attempt, .. } if *attempt == id(1)),
+        "{:?}",
+        h.effects
+    );
     assert_eq!(h.cm.current_attempt(), Some(&id(1)));
     // A certificate retry is an attempt of its own.
     h.start_tunnel();
     assert_eq!(announced(&h), []);
     h.exit(ended(Milestone::Spawned).certs(&[digest('a')], Some(Milestone::Spawned)));
     assert_eq!(h.attempt().unwrap().reason, AttemptReason::CertificateRetry);
-    assert_eq!(h.effects[0], Effect::AttemptBegun(id(2)));
+    assert!(
+        matches!(&h.effects[0], Effect::AttemptBegun { attempt, .. } if *attempt == id(2)),
+        "{:?}",
+        h.effects
+    );
     assert_eq!(h.cm.current_attempt(), Some(&id(2)));
     h.run_to_connected();
     assert_eq!(announced(&h), []);
@@ -418,7 +437,11 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
         h.attempt().unwrap().reason,
         AttemptReason::Retry(RetryReason::ForcedTermination)
     );
-    assert_eq!(h.effects[0], Effect::AttemptBegun(id(3)));
+    assert!(
+        matches!(&h.effects[0], Effect::AttemptBegun { attempt, .. } if *attempt == id(3)),
+        "{:?}",
+        h.effects
+    );
     assert_eq!(h.cm.current_attempt(), Some(&id(3)));
     h.run_to_connected();
     // A stop keeps its attempt until the run's exit.

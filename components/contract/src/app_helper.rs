@@ -70,6 +70,16 @@ impl fmt::Display for AttemptId {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SessionId(pub u64);
+
+impl fmt::Display for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:010}", self.0)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VpnClient {
@@ -83,6 +93,14 @@ pub enum VpnClient {
 pub struct RunRequest {
     #[serde(rename = "attemptID")]
     pub attempt_id: AttemptId,
+    #[serde(
+        rename = "replacingAttemptID",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub replacing: Option<AttemptId>,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionId,
     pub client: VpnClient,
     pub host: String,
     /// Not narrowed here: an out-of-range port is a validation error, not an unreadable request.
@@ -92,6 +110,7 @@ pub struct RunRequest {
     pub realm: Option<String>,
     /// Gateway certificate values to trust.
     pub trusted_certs: Vec<String>,
+    pub dtls: bool,
     pub password: String,
 }
 
@@ -100,12 +119,15 @@ impl fmt::Debug for RunRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunRequest")
             .field("attempt_id", &self.attempt_id)
+            .field("replacing", &self.replacing)
+            .field("session_id", &self.session_id)
             .field("client", &self.client)
             .field("host", &self.host)
             .field("port", &self.port)
             .field("username", &self.username)
             .field("realm", &self.realm)
             .field("trusted_certs", &self.trusted_certs)
+            .field("dtls", &self.dtls)
             .field("password", &format_args!("<redacted>"))
             .finish()
     }
@@ -181,6 +203,7 @@ pub enum StopReason {
     PromptRepeated,
     NetworkSetupFailed,
     HelperShutdown,
+    Replaced,
 }
 
 /// Parses the raw value the app sends with a disconnect request.
@@ -236,6 +259,7 @@ pub struct ExitFacts {
     pub cert_rejected_at: Option<Milestone>,
     /// The gateway refused tunnel mode after authentication.
     pub tunnel_mode_rejected: bool,
+    pub tunnel_address_in_use: bool,
     /// From tunnel up to exit, if the tunnel came up.
     #[serde(
         default,
@@ -280,7 +304,6 @@ pub enum OutputSource {
     Helper,
 }
 
-/// One line for the Log pane. The app receives them in batches (a JSON array).
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct OutputLine {
     #[serde(
@@ -290,6 +313,13 @@ pub struct OutputLine {
     pub date: SystemTime,
     pub source: OutputSource,
     pub text: String,
+}
+
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct OutputBatch {
+    #[serde(rename = "attemptID")]
+    pub attempt_id: AttemptId,
+    pub lines: Vec<OutputLine>,
 }
 
 /// Answer to the app's status request.

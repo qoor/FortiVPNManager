@@ -144,12 +144,15 @@ impl Runtime {
         let backend = match (api_available, method, app_password.is_some()) {
             (true, _, _) => Backend::GmailApi,
             (false, OtpMethod::GmailApi, true) => {
-                self.note("‹Gmail API selected but not signed in with Google; using IMAP›");
+                self.attempt_note(
+                    &attempt,
+                    "‹Gmail API selected but not signed in with Google; using IMAP›",
+                );
                 Backend::Imap
             }
             (false, OtpMethod::Imap, true) => Backend::Imap,
             (false, OtpMethod::GmailApi, false) => {
-                self.note("‹Gmail API selected but not signed in with Google, and no IMAP app password is stored›");
+                self.attempt_note(&attempt, "‹Gmail API selected but not signed in with Google, and no IMAP app password is stored›");
                 return self.feed(connection::Input::OtpSessionFailed(
                     attempt,
                     OtpFailure::Authentication,
@@ -227,9 +230,10 @@ impl Runtime {
                         LogCategory::Otp,
                         format!("Gmail API unavailable ({reason}); falling back to IMAP"),
                     );
-                    self.note(format!(
-                        "‹Gmail API unavailable ({reason}); falling back to IMAP›"
-                    ));
+                    self.attempt_note(
+                        &attempt,
+                        format!("‹Gmail API unavailable ({reason}); falling back to IMAP›"),
+                    );
                     let session = self.gmail.session.as_mut().expect("checked above");
                     let _ = session.control.send(Control::Close { check_spam: false });
                     let (control, controls) = mpsc::unbounded_channel();
@@ -239,7 +243,7 @@ impl Runtime {
                         (session.address.clone(), session.app_password.clone());
                     return self.spawn_session(attempt, Backend::Imap, address, password, controls);
                 }
-                self.note(format!("‹Gmail API session failed ({reason})›"));
+                self.attempt_note(&attempt, format!("‹Gmail API session failed ({reason})›"));
                 self.feed(connection::Input::OtpSessionFailed(attempt, failure));
             }
             Report::Failed { failure, reason } => {
@@ -251,15 +255,16 @@ impl Runtime {
                 self.feed(connection::Input::OtpSessionFailed(attempt, failure));
             }
             Report::CodeFound { code, note } => {
-                self.feed(connection::Input::OtpCodeFound(attempt, code));
-                self.note(note);
+                self.feed(connection::Input::OtpCodeFound(attempt.clone(), code));
+                self.attempt_note(&attempt, note);
             }
             Report::FoundInSpam => self.feed(connection::Input::OtpFoundInSpam(attempt)),
             Report::StaleCodeTrashed => self.feed(connection::Input::StaleOtpTrashed(attempt)),
             Report::StaleCodeNotTrashed { reason } => {
-                self.note(format!(
-                    "‹the stopped attempt's OTP email was not trashed: {reason}›"
-                ));
+                self.attempt_note(
+                    &attempt,
+                    format!("‹the stopped attempt's OTP email was not trashed: {reason}›"),
+                );
             }
             Report::SpamCheckFailed { reason } => self.system_log(
                 LogLevel::Notice,

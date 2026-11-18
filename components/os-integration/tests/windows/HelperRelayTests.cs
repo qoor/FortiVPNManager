@@ -55,6 +55,34 @@ public class HelperRelayTests
     }
 
     [Fact]
+    public async Task TheBuildCheckWaitsForAHelperThatWindowsRestarts()
+    {
+        var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(8) };
+        Assert.Equal(new PortResponse.HelperBuild(AppBuild), await harness.Build());
+        Assert.Equal(2, harness.Opened);
+    }
+
+    [Fact]
+    public async Task TheBuildCheckGivesUpOnAHelperThatStaysAway()
+    {
+        var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(21) };
+        Assert.Equal(
+            new PortResponse.HelperUnreachable(new HelperChannelFailure.Connection("no pipe")),
+            await harness.Build());
+        Assert.Equal(2, harness.Opened);
+    }
+
+    [Fact]
+    public async Task TheStatusDoesNotWaitForAHelperThatWindowsRestarts()
+    {
+        var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(8) };
+        Assert.Equal(
+            new PortResponse.HelperUnreachable(new HelperChannelFailure.Connection("no pipe")),
+            await harness.Call(new HelperCall.Status()));
+        Assert.Equal(2, harness.Opened);
+    }
+
+    [Fact]
     public async Task AConnectIsNeverRepeated()
     {
         var helper = new FakeHelper(AppBuild, failing: true);
@@ -90,8 +118,10 @@ public class HelperRelayTests
         {
             this.helpers = new Queue<FakeHelper?>(helpers);
             var inbound = new HelperInbound(systemEvent => Record(systemEvent.GetType().Name));
-            relay = new HelperRelay(AppBuild, inbound, (_, _) => Open(), TimeSpan.Zero);
+            relay = new HelperRelay(AppBuild, inbound, (_, _, limit) => Open(limit), TimeSpan.Zero);
         }
+
+        public TimeSpan PipeAppearsAfter { get; init; }
 
         public int Opened { get; private set; }
 
@@ -108,11 +138,23 @@ public class HelperRelayTests
             return answer!;
         }
 
-        private IHelperChannel Open()
+        public async Task<PortResponse> Build()
+        {
+            PortResponse? answer = null;
+            await relay.Build(response =>
+            {
+                answer = response;
+                Record("reply");
+            });
+            return answer!;
+        }
+
+        private IHelperChannel Open(TimeSpan limit)
         {
             Opened++;
-            return helpers.Dequeue()
-                ?? throw new HelperChannelException(new HelperChannelFailure.Connection("no pipe"));
+            return PipeAppearsAfter <= limit && helpers.Dequeue() is { } helper
+                ? helper
+                : throw new HelperChannelException(new HelperChannelFailure.Connection("no pipe"));
         }
 
         private void Record(string what)
