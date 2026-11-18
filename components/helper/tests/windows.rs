@@ -1,4 +1,4 @@
-//! The watchdog on Windows with openconnect's output reading: a client started without a window,
+//! The watchdog on Windows with openconnect's output reading: a client started in a new console,
 //! its output read, its process tree killed, and an attempt's two runs and logout request. The fake
 //! clients are cmd scripts, so the test executable starts nothing but cmd.exe and what the scripts
 //! start.

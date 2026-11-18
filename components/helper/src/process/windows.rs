@@ -21,6 +21,7 @@ use crate::recovery::run_directory::{Failure, ProcessIdentity};
 
 /// The process gets a console that has no window, so nothing shows on a desktop.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 /// Windows' own taskkill, which only administrators can change. It ends a process together with the
 /// processes it started.
 const TASKKILL: &str = r"C:\Windows\System32\taskkill.exe";
@@ -42,7 +43,7 @@ pub(crate) struct Spawned {
 }
 
 /// Starts the client without a shell, with the three pipes as stdin, stdout and stderr and only
-/// the launch's environment, without a window. The error is the Windows error code.
+/// the launch's environment, in a console of its own. The error is the Windows error code.
 pub(crate) fn spawn(launch: &LaunchSpec) -> Result<Spawned, i32> {
     let code = |error: io::Error| {
         error
@@ -62,7 +63,7 @@ pub(crate) fn spawn(launch: &LaunchSpec) -> Result<Spawned, i32> {
         .stdin(Stdio::from(stdin_read))
         .stdout(Stdio::from(stdout_write))
         .stderr(Stdio::from(stderr_write))
-        .creation_flags(CREATE_NO_WINDOW)
+        .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
         .map_err(code)?;
     let id = child.id();

@@ -44,7 +44,7 @@ paths:
 ### Windows
 - 스크립트
   - 10초가 지나면 스크립트를 둔 채 진행
-  - 스크립트 출력의 openconnect 출력 미포함
+  - 스크립트 출력의 openconnect 출력 포함
 - 종료 이벤트
   - Ctrl+C, console 닫힘, logoff, shutdown: logout 후 종료
   - Ctrl+Break: logout 없이 세션을 남긴 채 종료
