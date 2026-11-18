@@ -45,26 +45,28 @@ description: 실설치 점검 절차
   - 깨진 YAML의 마지막 정상 설정 유지
   - symlink 유지
 - 잠자기(짧은·긴·연결 중)·Wi-Fi 변경 후 연결 상태
+- 연결됨 상태에서 실제 통신 가능
+- 세션 종료마다 터널 장치 소멸, VPN 주소 보유 장치 하나
+- 중지 후 10초 초과 시 로그아웃 없이 종료
+
+## macOS
+- Wi-Fi·유선 전환 후 연결 상태
 
 ## Windows
 - [연결 해제]·사전 재연결 후
   - logout 요청 로그
   - 게이트웨이 host route 제거
-  - openconnect·route 스크립트 프로세스 잔류 부재
 - 예외 규칙: 유선·Wi-Fi별 직접 경로, VPN 재연결 후 유지
 
 # 5. 장애·복구
 - 잘못된 VPN 비밀번호·Gmail 인증, OTP 메일 차단: 멈춤 상태 진입
 
 ## macOS
-- openfortivpn SIGKILL 종료: route 복구 후 즉시 재연결
-- pppd 단독 종료: 서버 종료와 같은 대기 후 재연결
-- 연결 후 2분 안 종료: 더 긴 대기 후 재연결
-- 앱 강제·정상 종료: 프로세스 정리, route 복원
+- 앱 강제·정상 종료: 장치·route 정리
 - 연결 중 Helper 강제 종료(kill -9): 이전 실행 정리 후 즉시 재연결
 
 ## Windows
-- 작업 관리자로 openconnect 종료: 게이트웨이 host route 정리, 즉시 재연결
+- 세션 반복 종료 시 Helper 크래시 부재
 - Helper 서비스 강제 종료: 서비스 자동 재시작 후 재연결
 - 네트워크 일시 끊김: 복귀 후 재연결
 - Helper 서비스 사용 안 함 상태의 앱 실행: 오류 창 표시 후 앱 종료
@@ -74,7 +76,6 @@ description: 실설치 점검 절차
 - 프로세스 명령줄·로그의 비밀값 부재
 
 ## macOS
-- openfortivpn 임시 설정 파일: 권한 0600, 종료 후 삭제
 - config.yaml·state.json 권한 0600
 - make verify 통과
 
