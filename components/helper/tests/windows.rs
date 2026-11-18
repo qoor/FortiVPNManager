@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputSource, ProcessExitStatus, RunRequest, SessionId,
-    StopInitiator, StopReason, VpnClient,
+    StopInitiator, StopReason,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
@@ -228,7 +228,7 @@ struct Session {
 impl Session {
     fn start(scratch: &Scratch, launch: LaunchSpec) -> Self {
         let mut watchdog = Watchdog::new(
-            vec![(VpnClient::Openconnect, Arc::new(Scripted(launch)))],
+            Arc::new(Scripted(launch)),
             scratch.run_directory(),
             Timing::default(),
         );
@@ -236,7 +236,6 @@ impl Session {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
             replacing: None,
             session_id: SessionId(277_070_470),
-            client: VpnClient::Openconnect,
             host: "203.0.113.10".to_owned(),
             port: 443,
             username: "alice".to_owned(),

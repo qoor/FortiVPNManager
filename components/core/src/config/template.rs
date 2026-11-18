@@ -11,7 +11,7 @@ use super::text::disallowed_in_value;
 use super::{
     AWAY_MINUTES, ClientRules, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS,
     MIN_SLEEP_MINUTES, OTP_METHODS, PORTS, Platform, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings,
-    VPN_CLIENTS, WEEKDAYS, minutes, normalized_days,
+    WEEKDAYS, minutes, normalized_days,
 };
 use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, vpn_server_target};
 
@@ -135,7 +135,6 @@ struct Wording {
     network: &'static str,
     router: &'static str,
     port: String,
-    client: &'static str,
 }
 
 fn wording(client: &ClientRules<'_>) -> Wording {
@@ -150,7 +149,6 @@ fn wording(client: &ClientRules<'_>) -> Wording {
                 "Filled in on first launch from an existing {} config, if any (e.g. 8443). 443 is the default when the file has no value.",
                 client.name
             ),
-            client: r#"VPN client: "openconnect", which comes with the app (the app on Windows always uses openconnect), or "openfortivpn", installed with Homebrew (brew install openfortivpn)."#,
         },
         Platform::Windows => Wording {
             secret_store: "Credential Manager",
@@ -160,7 +158,6 @@ fn wording(client: &ClientRules<'_>) -> Wording {
             router: "gateway",
             port: "VPN gateway port (e.g. 8443). 443 is the default when the file has no value."
                 .to_owned(),
-            client: "VPN client the app on macOS runs. This PC always uses the openconnect that comes with the app and keeps this value as it is.",
         },
     }
 }
@@ -173,7 +170,6 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         network,
         router,
         port: port_comment,
-        client: client_comment,
     } = wording(client);
     let vpn = &settings.vpn;
     let otp = &settings.otp;
@@ -186,11 +182,6 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         .find(|&&(_, method)| method == otp.method)
         .map(|&(spelling, _)| spelling)
         .expect("every method has a spelling");
-    let client = VPN_CLIENTS
-        .iter()
-        .find(|&&(_, client)| client == vpn.client)
-        .map(|&(spelling, _)| spelling)
-        .expect("every client has a spelling");
     let days = normalized_days(&schedule.days)
         .iter()
         .map(|&day| {
@@ -204,11 +195,9 @@ fn render(settings: &Settings, client: &ClientRules<'_>) -> String {
         .join(", ");
     let time = |time: TimeOfDay| quoted(&format!("{:02}:{:02}", time.hour, time.minute));
     assert!(
-        vpn.trusted_certs.len() <= MAX_TRUSTED_CERTS
-            && vpn.trusted_cert_pins.len() <= MAX_TRUSTED_CERTS,
-        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values per list"
+        vpn.trusted_cert_pins.len() <= MAX_TRUSTED_CERTS,
+        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values"
     );
-    let trusted_certs = list(&vpn.trusted_certs);
     let trusted_cert_pins = list(&vpn.trusted_cert_pins);
     let networks = list(&settings.routes.networks);
     let bypass_vpn = list(&settings.routes.bypass_vpn);
@@ -232,14 +221,10 @@ vpn:
   username: {username}
   # Authentication realm. Leave it empty ("") if not needed.
   realm: {realm}
-  # {client_comment}
-  client: {client}
   # When true, openconnect carries the tunnel over DTLS (UDP) if the gateway offers it; when false, over HTTPS (TLS) only.
   dtls: {dtls}
   # Server certificate values the app trusts. It fills them in on the first connection and manages them; no need to edit by hand.
-  # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries per list). A new server address or port clears both lists.
-  # SHA-256 digests of the certificate, used by openfortivpn.
-  trusted_certs:{trusted_certs}
+  # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries). A new server address or port clears them.
   # Public key pins of the certificate (pin-sha256:...), used by openconnect.
   trusted_cert_pins:{trusted_cert_pins}
 otp:
@@ -272,7 +257,6 @@ routes:
         port = vpn.port,
         username = quoted(&vpn.username),
         realm = quoted(&vpn.realm),
-        client = quoted(client),
         dtls = vpn.dtls,
         gmail_address = quoted(&otp.gmail_address),
         method = quoted(method),

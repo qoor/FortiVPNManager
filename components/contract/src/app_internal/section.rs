@@ -12,7 +12,7 @@ use super::problem::{
     AccountValueProblem, AddressProblem, ConfigFileError, ConfigWarning, FileProblem,
 };
 use super::{ButtonState, MinutesSetting, OtpMethod, TimeOfDay, Weekday, millis};
-use crate::app_helper::{HelperErrorCode, VpnClient};
+use crate::app_helper::HelperErrorCode;
 use crate::backend::{ClientProblem, UntestedVersion};
 
 /// Boxed, as the sections differ much in size.
@@ -184,7 +184,6 @@ pub enum FailureReason {
     /// The Helper refused to start the VPN client.
     Helper {
         code: HelperErrorCode,
-        client: VpnClient,
     },
 }
 
@@ -690,9 +689,6 @@ pub struct ConfigSection {
     /// Why the last connection or schedule option was not saved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options_error: Option<ConfigFileError>,
-    pub vpn_client: VpnClient,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub vpn_client_error: Option<ConfigFileError>,
     pub open_at_login: OpenAtLogin,
     /// Where the log file is.
     pub log_file: String,

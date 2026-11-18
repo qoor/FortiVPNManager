@@ -4,10 +4,8 @@
 
 use std::net::Ipv4Addr;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::Backend;
 use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel, OutsideChanges};
 
@@ -18,7 +16,7 @@ use crate::recovery::run_directory::{self, ProcessIdentity, RunRecord};
 const KILL_LIMIT: Duration = Duration::from_secs(2);
 
 pub(crate) fn clean_up(
-    clients: &[(VpnClient, Arc<dyn Backend>)],
+    backend: &dyn Backend,
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
     mut revert_network: impl FnMut(OutsideChanges),
@@ -48,10 +46,7 @@ pub(crate) fn clean_up(
             .into_iter()
             .filter(|process| {
                 let path = Path::new(&process.path);
-                clients
-                    .iter()
-                    .any(|(_, backend)| backend.is_own_executable(path))
-                    && process.is_running()
+                backend.is_own_executable(path) && process.is_running()
             })
             .collect();
         if !orphans.is_empty() {
@@ -64,12 +59,7 @@ pub(crate) fn clean_up(
                     pids(&orphans)
                 ),
             );
-            let grace_period = clients
-                .iter()
-                .map(|(_, backend)| backend.stop_grace_period())
-                .max()
-                .unwrap_or_default();
-            terminate(&orphans, grace_period, &log);
+            terminate(&orphans, backend.stop_grace_period(), &log);
         }
         if let Some(changes) = record.outside_changes {
             revert_network(changes);

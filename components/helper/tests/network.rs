@@ -13,7 +13,7 @@ use std::{env, process, thread};
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputSource, RunRequest, SessionId, StopInitiator,
-    StopReason, VpnClient,
+    StopReason,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, IpNetwork, LaunchSpec,
@@ -170,16 +170,12 @@ impl Session {
             network_values: Duration::from_secs(1),
             network_retry: RETRY,
         };
-        let mut watchdog = Watchdog::new(
-            vec![(VpnClient::Openconnect, Arc::new(Scripted { client }))],
-            directory.join("run"),
-            timing,
-        );
+        let mut watchdog =
+            Watchdog::new(Arc::new(Scripted { client }), directory.join("run"), timing);
         let mut request = RunRequest {
             attempt_id: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F".parse().unwrap(),
             replacing: None,
             session_id: SessionId(277_070_470),
-            client: VpnClient::Openconnect,
             host: "203.0.113.10".to_owned(),
             port: 443,
             username: "alice".to_owned(),

@@ -9,7 +9,7 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, StopReason, VpnClient};
+use fvm_contract::app_helper::{AttemptId, HelperErrorCode, StopReason};
 use fvm_contract::app_internal::command::*;
 use fvm_contract::app_internal::event::*;
 use fvm_contract::app_internal::port::*;
@@ -310,31 +310,24 @@ fn connection_kinds() {
             FailureReason::Network {},
             FailureReason::Helper {
                 code: HelperErrorCode::Busy,
-                client: VpnClient::Openconnect,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::InvalidRequest,
-                client: VpnClient::Openconnect,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::UnknownAttempt,
-                client: VpnClient::Openconnect,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::WrongPhase,
-                client: VpnClient::Openconnect,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::ClientUnavailable,
-                client: VpnClient::Openfortivpn,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::NotAuthorized,
-                client: VpnClient::Openconnect,
             },
             FailureReason::Helper {
                 code: HelperErrorCode::InternalError,
-                client: VpnClient::Openconnect,
             },
         ],
     );
@@ -499,7 +492,6 @@ fn readiness_sections() {
         "client_problems.json",
         [
             problem(ClientProblemKind::NotFound {}),
-            problem(ClientProblemKind::OutsideAllowedLocation {}),
             problem(ClientProblemKind::NotRegularFile {}),
             problem(ClientProblemKind::WritableByOthers { mode: 0o775 }),
             problem(ClientProblemKind::NotExecutable {}),
@@ -955,8 +947,6 @@ fn config_section(
             min_sleep_minutes: minutes(30, 1, 1440),
         },
         options_error,
-        vpn_client: VpnClient::Openfortivpn,
-        vpn_client_error: None,
         open_at_login: OpenAtLogin {
             available: true,
             enabled: true,
@@ -1041,8 +1031,6 @@ fn config_sections() {
                     min_sleep_minutes: minutes(30, 1, 1440),
                 },
                 options_error: None,
-                vpn_client: VpnClient::Openconnect,
-                vpn_client_error: Some(unreadable_file()),
                 open_at_login: OpenAtLogin {
                     available: false,
                     enabled: false,
@@ -1636,12 +1624,6 @@ fn commands() {
                 end: time(18, 30),
             }),
             command(Command::SetOpenAtLogin { enabled: true }),
-            command(Command::SetVpnClient {
-                client: VpnClient::Openconnect,
-            }),
-            command(Command::SetVpnClient {
-                client: VpnClient::Openfortivpn,
-            }),
             command(Command::RegisterHelper {}),
             command(Command::OpenHelperApprovalSettings {}),
             command(Command::SetBypassRows {

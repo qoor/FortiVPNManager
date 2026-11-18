@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
-    HelperStatus, Milestone, OutputBatch, RunRequest, StopReason, VpnClient,
+    HelperStatus, Milestone, OutputBatch, RunRequest, StopReason,
 };
 use fvm_contract::backend::{ClientCheckWait, ClientProblemKind};
 use fvm_contract::helper_internal::{
@@ -201,7 +201,6 @@ struct Entry {
 struct HeldRun {
     owner_app: u64,
     owner_uid: u32,
-    client: VpnClient,
     replacing: Option<AttemptId>,
     slot: RecordSlot,
     run: Run,
@@ -420,7 +419,7 @@ impl Entry {
             ));
         }
         let replaced = match &request.replacing {
-            Some(replacing) => Some(self.replaceable(replacing, uid, request.client)?),
+            Some(replacing) => Some(self.replaceable(replacing, uid)?),
             None => match self.runs.values().next() {
                 Some(held) if held.owner_uid == uid => {
                     return Err(error(
@@ -492,7 +491,6 @@ impl Entry {
             HeldRun {
                 owner_app: app,
                 owner_uid: uid,
-                client: request.client,
                 replacing: request.replacing.clone(),
                 slot,
                 run,
@@ -501,12 +499,7 @@ impl Entry {
         Ok(())
     }
 
-    fn replaceable(
-        &self,
-        replacing: &AttemptId,
-        uid: u32,
-        client: VpnClient,
-    ) -> Result<Replaced, HelperError> {
+    fn replaceable(&self, replacing: &AttemptId, uid: u32) -> Result<Replaced, HelperError> {
         let held = self.runs.get(replacing).ok_or_else(|| {
             error(
                 HelperErrorCode::UnknownAttempt,
@@ -525,24 +518,11 @@ impl Entry {
                 "a replacement connection is already running",
             ));
         }
-        if held.client != client {
-            return Err(error(
-                HelperErrorCode::InvalidRequest,
-                "the replacement must use the same VPN client",
-            ));
-        }
-        held.run.replaceable().map_err(|reason| match reason {
-            NotReplaceable::NoNetwork => error(
-                HelperErrorCode::InvalidRequest,
-                format!(
-                    "{} cannot replace a connection without a break",
-                    held.run.client_name()
-                ),
-            ),
-            NotReplaceable::NotUp => error(
+        held.run.replaceable().map_err(|NotReplaceable::NotUp| {
+            error(
                 HelperErrorCode::WrongPhase,
                 "the connection to replace is not up",
-            ),
+            )
         })
     }
 
@@ -595,33 +575,25 @@ impl Entry {
             .runs
             .values()
             .any(|held| held.run.process_id().is_some());
-        let clients = self
-            .watchdog
-            .find_clients(ClientCheckWait::Limited)
-            .into_iter()
-            .map(|(client, found)| match found {
-                Ok((executable, untested_version)) => ClientStatus {
-                    client,
-                    path: Some(executable.path.display().to_string()),
-                    version: Some(executable.version),
-                    problem: None,
-                    untested_version,
-                },
-                Err(problem) => ClientStatus {
-                    client,
-                    // Nothing was found where the client is looked for, so there is no path to
-                    // show.
-                    path: (problem.kind != ClientProblemKind::NotFound {})
-                        .then(|| problem.path.display().to_string()),
-                    version: None,
-                    problem: Some(problem),
-                    untested_version: None,
-                },
-            })
-            .collect();
+        let client = match self.watchdog.find_client(ClientCheckWait::Limited) {
+            Ok((executable, untested_version)) => ClientStatus {
+                path: Some(executable.path.display().to_string()),
+                version: Some(executable.version),
+                problem: None,
+                untested_version,
+            },
+            Err(problem) => ClientStatus {
+                // Nothing was found where the client is looked for, so there is no path to show.
+                path: (problem.kind != ClientProblemKind::NotFound {})
+                    .then(|| problem.path.display().to_string()),
+                version: None,
+                problem: Some(problem),
+                untested_version: None,
+            },
+        };
         HelperStatus {
             client_running,
-            clients,
+            client,
         }
     }
 

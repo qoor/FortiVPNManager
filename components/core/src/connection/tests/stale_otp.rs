@@ -236,8 +236,8 @@ fn every_other_end_after_the_credentials_searches() {
 
 #[test]
 fn no_search_after_a_rejected_login() {
-    // The client asked for the password again (openconnect), or ended at the login (openfortivpn):
-    // the gateway sends no code email for a rejected password, and the next try is 90 s away.
+    // The client asked for the password again, or ended at the login: the gateway sends no code
+    // email for a rejected password, and the next try is 90 s away.
     for exit in [
         ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated),
         ended(Milestone::ConnectedToGateway),

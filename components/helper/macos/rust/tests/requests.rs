@@ -46,7 +46,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         swift.status(1),
         json!({
             "childAlive": true,
-            "clients": [{"client": "openfortivpn", "path": "/bin/sh", "version": "1.24.1"}],
+            "client": {"path": "/bin/sh", "version": "9.21"},
         })
     );
 
@@ -83,7 +83,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     assert!(swift.scratch.run_directory_names().is_empty());
     for line in [
         format!(
-            "notice helper: 0277070470 run {ATTEMPT} started for uid 501 with openfortivpn 1.24.1"
+            "notice helper: 0277070470 run {ATTEMPT} started for uid 501 with openconnect 9.21"
         ),
         format!("notice helper: 0277070470 run {ATTEMPT}: tunnel up"),
         format!("notice helper: 0277070470 run {ATTEMPT}: stop requested (userDisconnect)"),
@@ -199,7 +199,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
 
     assert_eq!(
         swift.connect(2, OTHER_ATTEMPT),
-        error("busy", "openfortivpn is already running")
+        error("busy", "openconnect is already running")
     );
     assert_eq!(
         swift.connect(3, OTHER_ATTEMPT),
@@ -291,37 +291,8 @@ fn a_bad_connect_request_starts_nothing() {
         connect_request_with(json!({
             "attemptID": ATTEMPT,
             "sessionID": 277_070_470,
-            "client": "openfortivpn",
             "host": GATEWAY,
             "port": 0,
-            "username": "alice",
-            "trustedCerts": [],
-            "dtls": false,
-            "password": PASSWORD,
-        })),
-    );
-    let other_client = swift.request(
-        1,
-        connect_request_with(json!({
-            "attemptID": ATTEMPT,
-            "sessionID": 277_070_470,
-            "client": "openconnect",
-            "host": GATEWAY,
-            "port": 443,
-            "username": "alice",
-            "trustedCerts": [],
-            "dtls": false,
-            "password": PASSWORD,
-        })),
-    );
-    let unknown_client = swift.request(
-        1,
-        connect_request_with(json!({
-            "attemptID": ATTEMPT,
-            "sessionID": 277_070_470,
-            "client": "forticlient",
-            "host": GATEWAY,
-            "port": 443,
             "username": "alice",
             "trustedCerts": [],
             "dtls": false,
@@ -336,17 +307,6 @@ fn a_bad_connect_request_starts_nothing() {
         swift.reply(invalid),
         error("invalidRequest", "port must be between 1 and 65535")
     );
-    assert_eq!(
-        swift.reply(other_client),
-        error(
-            "invalidRequest",
-            "this Helper does not run the requested VPN client"
-        )
-    );
-    assert_eq!(
-        swift.reply(unknown_client),
-        error("invalidRequest", "could not decode the connect request")
-    );
     assert_eq!(swift.status(1)["childAlive"], false);
     assert!(swift.events(1).is_empty());
     assert!(swift.scratch.run_directory_names().is_empty());
@@ -355,11 +315,14 @@ fn a_bad_connect_request_starts_nothing() {
 
 #[test]
 fn a_client_that_is_not_found_has_no_path_in_the_status() {
+    let path = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
     let not_found = ClientProblem {
         kind: ClientProblemKind::NotFound {},
-        path: PathBuf::from("/opt/homebrew/bin/openfortivpn"),
+        path: PathBuf::from(path),
     };
-    let message = "openfortivpn not found at /opt/homebrew/bin/openfortivpn; install it with: brew install openfortivpn";
+    let message = format!(
+        "openconnect not found at {path}; it comes with FortiVPNManager, so reinstall FortiVPNManager"
+    );
     let mut swift = Swift::start(Setup {
         client: Err(not_found),
         ..Setup::fixture("success")
@@ -369,21 +332,18 @@ fn a_client_that_is_not_found_has_no_path_in_the_status() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "clients": [{
-                "client": "openfortivpn",
-                "problem": {"kind": {"notFound": {}}, "path": "/opt/homebrew/bin/openfortivpn"},
-            }],
+            "client": {"problem": {"kind": {"notFound": {}}, "path": path}},
         })
     );
     assert_eq!(
         swift.connect(1, ATTEMPT),
-        error("binaryUnavailable", message)
+        error("binaryUnavailable", &message)
     );
 }
 
 #[test]
 fn a_client_with_another_problem_keeps_its_path_in_the_status() {
-    let path = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
+    let path = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
     let mut swift = Swift::start(Setup {
         client: Err(ClientProblem {
             kind: ClientProblemKind::NotExecutable {},
@@ -396,11 +356,10 @@ fn a_client_with_another_problem_keeps_its_path_in_the_status() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "clients": [{
-                "client": "openfortivpn",
+            "client": {
                 "path": path,
                 "problem": {"kind": {"notExecutable": {}}, "path": path},
-            }],
+            },
         })
     );
 }
@@ -410,7 +369,7 @@ fn the_status_carries_the_adapters_version_judgment() {
     let mut swift = Swift::start(Setup {
         client: Ok(ClientExecutable {
             path: PathBuf::from("/bin/sh"),
-            version: "1.25.0".to_owned(),
+            version: "9.22".to_owned(),
         }),
         ..Setup::fixture("success")
     });
@@ -419,12 +378,11 @@ fn the_status_carries_the_adapters_version_judgment() {
         swift.status(1),
         json!({
             "childAlive": false,
-            "clients": [{
-                "client": "openfortivpn",
+            "client": {
                 "path": "/bin/sh",
-                "version": "1.25.0",
-                "untestedVersion": {"testedSeries": "1.24"},
-            }],
+                "version": "9.22",
+                "untestedVersion": {"testedSeries": "9.21"},
+            },
         })
     );
 }

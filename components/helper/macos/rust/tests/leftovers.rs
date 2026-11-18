@@ -319,7 +319,7 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     // A connect then fails the same way, before anything starts.
     assert!(swift.connect_app(1, 501));
     let message = format!(
-        "could not create the openfortivpn config file: {} is not a directory owned by the \
+        "could not create the openconnect config file: {} is not a directory owned by the \
          helper: Operation not permitted (os error 1)",
         path.display()
     );
@@ -328,7 +328,7 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
         swift
             .logs()
             .iter()
-            .any(|line| line.starts_with("error helper: cannot write the openfortivpn config: "))
+            .any(|line| line.starts_with("error helper: cannot write the openconnect config: "))
     );
     assert!(swift.events(1).is_empty());
 }

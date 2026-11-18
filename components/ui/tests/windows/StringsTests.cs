@@ -100,7 +100,7 @@ public class StringsTests
         Assert.Equal("Waiting to reconnect (1:12)", waiting.StatusLine(null, time));
         var refused = connected with
         {
-            Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.ClientUnavailable, VpnClient.Openconnect)),
+            Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.ClientUnavailable)),
         };
         Assert.Equal("Error: openconnect not found", refused.StatusLine(null, time));
     }

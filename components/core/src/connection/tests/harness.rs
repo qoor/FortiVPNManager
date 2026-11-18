@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
-    ProcessExitStatus, StopInitiator, StopReason, VpnClient,
+    ProcessExitStatus, StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
 use fvm_contract::app_internal::port::InterfaceAddress;
@@ -108,7 +108,6 @@ pub(super) fn account() -> VpnAccount {
         port: 8443,
         username: "alice".to_owned(),
         realm: String::new(),
-        client: VpnClient::Openfortivpn,
         trusted_certs: vec![pin_old()],
         dtls: false,
     }
@@ -182,13 +181,12 @@ pub(super) fn ready() -> ReadinessFacts {
             build: APP_BUILD.to_owned(),
             status: Some(HelperStatus {
                 client_running: false,
-                clients: vec![ClientStatus {
-                    client: VpnClient::Openfortivpn,
+                client: ClientStatus {
                     path: Some("/opt/homebrew/Cellar/vpn/1.24.1/bin/vpn".to_owned()),
                     version: Some("1.24.1".to_owned()),
                     problem: None,
                     untested_version: None,
-                }],
+                },
             }),
         },
     }

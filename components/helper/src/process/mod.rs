@@ -3,8 +3,8 @@
 //! output lines, stage time limits, stopping, the logout, the exit report). The run record its
 //! processes go into, and stopping what an earlier Helper left, are `recovery`'s. Everything that
 //! depends on the client, its name, options, prompts, output wording and how it is stopped, comes
-//! from the `Backend` of the client each run request names, out of those the Helper's OS start
-//! hands over; only this module and `recovery`, which gets them from here, use them.
+//! from the client's `Backend`, which the Helper's OS start hands over; only this module and
+//! `recovery`, which gets it from here, use it.
 //!
 //! On Unix the process this runs in must ignore SIGPIPE. The password and the OTP go to the client's stdin
 //! pipe, and a write after the client exited must fail with EPIPE instead of killing the process.
@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest, VpnClient};
+use fvm_contract::app_helper::{HelperEventKind, Milestone, OutputLine, RunRequest};
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, UntestedVersion,
 };
@@ -43,10 +43,10 @@ pub use run::{NotReplaceable, Replaced, Run};
 use crate::recovery::run_directory::RunFiles;
 use crate::recovery::{self, Failure, RecordSlot, RouteRepair};
 
-/// The VPN clients the Helper can run, each with the adapter that describes it, and their runs'
-/// files in a directory only the Helper may use.
+/// The VPN client the Helper runs, with the adapter that describes it, and its runs' files in a
+/// directory only the Helper may use.
 pub struct Watchdog {
-    clients: Vec<(VpnClient, Arc<dyn Backend>)>,
+    backend: Arc<dyn Backend>,
     run_directory: PathBuf,
     timing: Timing,
     /// Numbers the runs' config files.
@@ -56,32 +56,22 @@ pub struct Watchdog {
 pub type FoundClient = Result<(ClientExecutable, Option<UntestedVersion>), ClientProblem>;
 
 impl Watchdog {
-    pub fn new(
-        clients: Vec<(VpnClient, Arc<dyn Backend>)>,
-        run_directory: PathBuf,
-        timing: Timing,
-    ) -> Self {
+    pub fn new(backend: Arc<dyn Backend>, run_directory: PathBuf, timing: Timing) -> Self {
         Self {
-            clients,
+            backend,
             run_directory,
             timing,
             runs_started: 0,
         }
     }
 
-    /// Each client's executable the Helper would run now. Where finding one runs the client, such
-    /// as to read its version, `wait` says how long that run may take.
-    pub fn find_clients(&self, wait: ClientCheckWait) -> Vec<(VpnClient, FoundClient)> {
-        self.clients
-            .iter()
-            .map(|(client, backend)| {
-                let found = backend.locate_client(wait).map(|executable| {
-                    let untested = backend.untested_version(&executable.version);
-                    (executable, untested)
-                });
-                (*client, found)
-            })
-            .collect()
+    /// The client executable the Helper would run now. Where finding it runs the client, such as
+    /// to read its version, `wait` says how long that run may take.
+    pub fn find_client(&self, wait: ClientCheckWait) -> FoundClient {
+        self.backend.locate_client(wait).map(|executable| {
+            let untested = self.backend.untested_version(&executable.version);
+            (executable, untested)
+        })
     }
 
     /// Starts a run for `request`, which the backend adapter checks again, since the Helper does
@@ -94,16 +84,7 @@ impl Watchdog {
         replaced: Option<Replaced>,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Result<(Run, ClientExecutable), StartFailure> {
-        let backend = self
-            .clients
-            .iter()
-            .find(|(client, _)| *client == request.client)
-            .map(|(_, backend)| Arc::clone(backend))
-            .ok_or_else(|| {
-                StartFailure::InvalidRequest(
-                    "this Helper does not run the requested VPN client".to_owned(),
-                )
-            })?;
+        let backend = Arc::clone(&self.backend);
         let client = backend
             .locate_client(ClientCheckWait::Limited)
             .map_err(|problem| {
@@ -152,7 +133,7 @@ impl Watchdog {
         Ok((run, client))
     }
 
-    /// Runs `recovery::clean_up` with these clients and run directory, which `entry` cannot reach.
+    /// Runs `recovery::clean_up` with this client and run directory, which `entry` cannot reach.
     pub fn clean_up(
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
@@ -161,7 +142,7 @@ impl Watchdog {
         remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
     ) -> Vec<AddedRoute> {
         recovery::clean_up(
-            &self.clients,
+            self.backend.as_ref(),
             &self.run_directory,
             log,
             revert_network,

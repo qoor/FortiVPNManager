@@ -1,1 +1,1 @@
-{"childAlive":true,"clients":[{"version":"1.24.1","client":"openfortivpn","path":"\/opt\/homebrew\/Cellar\/openfortivpn\/1.24.1\/bin\/openfortivpn"},{"client":"openconnect","path":"\/opt\/homebrew\/Cellar\/openconnect\/9.21\/bin\/openconnect","version":"9.21"}]}
+{"childAlive":true,"client":{"path":"\/Applications\/FortiVPNManager.app\/Contents\/MacOS\/openconnect","version":"9.21"}}

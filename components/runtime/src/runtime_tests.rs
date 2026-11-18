@@ -10,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime};
 use fvm_contract::app_helper::{
     AttemptId, BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
     ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone, OutputBatch,
-    OutputLine, OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason, VpnClient,
+    OutputLine, OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
@@ -41,7 +41,7 @@ vpn:
   port: 443
   username: "alice"
   realm: ""
-  trusted_certs: []
+  trusted_cert_pins: []
 otp:
   gmail_address: "alice@example.com"
   method: "imap"
@@ -435,25 +435,15 @@ impl App {
             HelperCall::Status {} => {
                 let status = HelperStatus {
                     client_running: false,
-                    clients: vec![
-                        ClientStatus {
-                            client: VpnClient::Openfortivpn,
-                            path: Some("/opt/homebrew/bin/openfortivpn".into()),
-                            version: Some("1.23.1".into()),
-                            problem: None,
-                            untested_version: None,
-                        },
-                        ClientStatus {
-                            client: VpnClient::Openconnect,
-                            path: None,
-                            version: None,
-                            problem: Some(ClientProblem {
-                                kind: ClientProblemKind::NotFound {},
-                                path: "/opt/homebrew/bin/openconnect".into(),
-                            }),
-                            untested_version: None,
-                        },
-                    ],
+                    client: ClientStatus {
+                        path: None,
+                        version: None,
+                        problem: Some(ClientProblem {
+                            kind: ClientProblemKind::NotFound {},
+                            path: "/opt/homebrew/bin/openconnect".into(),
+                        }),
+                        untested_version: None,
+                    },
                 };
                 reply(serde_json::to_value(status).unwrap())
             }
@@ -718,15 +708,13 @@ fn a_hand_edit_that_breaks_or_fixes_the_file_updates_the_setup_list() {
     });
 }
 
-/// Both certificate lists belong to the gateway: a hand edit of the server address empties them,
-/// the other OS's list included.
+/// The certificate list belongs to the gateway: a hand edit of the server address empties it.
 #[test]
-fn a_new_server_address_empties_both_certificate_lists() {
-    let digest = "a".repeat(64);
+fn a_new_server_address_empties_the_certificate_list() {
     let pin = format!("pin-sha256:{}=", "A".repeat(43));
     let with_values = ACCOUNT.replace(
-        "  trusted_certs: []\n",
-        &format!("  trusted_certs: [\"{digest}\"]\n  trusted_cert_pins: [\"{pin}\"]\n"),
+        "  trusted_cert_pins: []\n",
+        &format!("  trusted_cert_pins: [\"{pin}\"]\n"),
     );
     let mut app = App::new();
     app.write_config(&with_values);
@@ -734,33 +722,20 @@ fn a_new_server_address_empties_both_certificate_lists() {
     app.settle();
     assert!(app.config_text().contains(&pin));
     app.write_config(&with_values.replace("vpn.example.com", "vpn2.example.com"));
-    app.settle_until("the emptied lists", |app| {
-        let text = app.config_text();
-        text.contains("  trusted_certs: []\n") && text.contains("  trusted_cert_pins: []\n")
+    app.settle_until("the emptied list", |app| {
+        app.config_text().contains("  trusted_cert_pins: []\n")
     });
     assert!(app.config_text().contains("vpn2.example.com"));
 }
 
 #[cfg(not(windows))]
 #[test]
-fn choosing_the_vpn_client_writes_it_and_shows_its_status() {
+fn the_helper_status_shows_the_vpn_client() {
     let mut app = App::new();
     app.write_config(ACCOUNT);
     app.launch();
     app.settle_until("the Helper's status", |app| app.vpn_client_info().is_some());
-    assert_eq!(app.config_section().vpn_client, VpnClient::Openconnect);
     assert!(app.vpn_client_info().unwrap().problem.is_some());
-    app.command(Command::SetVpnClient {
-        client: VpnClient::Openfortivpn,
-    });
-    app.settle_until("openfortivpn's status", |app| {
-        app.vpn_client_info()
-            .is_some_and(|info| info.version.as_deref() == Some("1.23.1"))
-    });
-    app.settle();
-    assert_eq!(app.config_section().vpn_client, VpnClient::Openfortivpn);
-    assert_eq!(app.config_section().vpn_client_error, None);
-    assert!(app.config_text().contains("\n  client: \"openfortivpn\"\n"));
 }
 
 #[test]

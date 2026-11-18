@@ -1,6 +1,6 @@
 //! What a backend adapter provides for one VPN client. The Helper's OS start hands the watchdog the
-//! adapter of every client its OS can run, and the watchdog runs the client each run request names
-//! with what its adapter returns, so neither hard-codes a client's name, options or output wording.
+//! client's adapter, and the watchdog runs the client with what the adapter returns, so neither
+//! hard-codes a client's name, options or output wording.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
@@ -97,8 +97,6 @@ pub enum ClientProblemKind {
     /// Nothing usable at `path`, where the client is looked for. The Helper status leaves the
     /// client path empty for it.
     NotFound {},
-    /// `path`, where the client resolves to, is outside the place it may be installed.
-    OutsideAllowedLocation {},
     NotRegularFile {},
     /// Other users may modify it; `mode` holds the permission bits.
     WritableByOthers {

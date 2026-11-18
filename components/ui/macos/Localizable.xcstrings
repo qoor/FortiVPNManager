@@ -491,16 +491,6 @@
         }
       }
     },
-    "Applies from the next connection.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "다음 연결부터 적용됩니다."
-          }
-        }
-      }
-    },
     "Apply": {
       "localizations": {
         "ko": {
@@ -2531,22 +2521,6 @@
         }
       }
     },
-    "Not found at %@. Install with: brew install %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "Not found at %1$@. Install with: brew install %2$@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@에 없습니다. 설치: brew install %@"
-          }
-        }
-      }
-    },
     "Not registered": {
       "localizations": {
         "ko": {
@@ -2773,16 +2747,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "스케줄로 보류"
-          }
-        }
-      }
-    },
-    "Points outside the Homebrew Cellar: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Homebrew Cellar 밖을 가리킵니다: %@"
           }
         }
       }
@@ -4549,16 +4513,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "openconnect"
-          }
-        }
-      }
-    },
-    "openfortivpn": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openfortivpn"
           }
         }
       }

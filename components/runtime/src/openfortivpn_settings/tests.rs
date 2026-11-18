@@ -1,16 +1,17 @@
-//! Importing an existing openfortivpn config file, and the account checks the
-//! app's runtime uses.
-
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::openfortivpn::{ImportedSettings, OpenFortiVpn};
+use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::SecretText;
+
+use super::{ImportedSettings, default_files, is_digest, lines, strtol_port};
 
 const DIGEST_A: &str = "4d1b72371c42a69bd949048883897aa673059f2e7b1cc992a650584132aae8f3";
 const DIGEST_B: &str = "e0ef56d6eb603d9ffe87e74c28b8210b0ea93839e2ea4fb64f1fc2c66e95e391";
+const PIN_A: &str = "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A=";
+const PIN_B: &str = "pin-sha256:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
 
 fn read(text: &str) -> ImportedSettings {
-    OpenFortiVpn.read_settings(text.as_bytes())
+    super::read(text.as_bytes())
 }
 
 fn empty() -> ImportedSettings {
@@ -20,7 +21,7 @@ fn empty() -> ImportedSettings {
         username: None,
         password: None,
         realm: None,
-        trusted_certs: vec![],
+        trusted_cert_pins: vec![],
         unknown_keys: vec![],
         ignored_keys: vec![],
         unreadable_lines: vec![],
@@ -44,12 +45,12 @@ fn user_file_shape() -> String {
 }
 
 #[test]
-fn the_fixture_digests_are_certificate_values() {
+fn the_fixture_values_are_digests_and_pins() {
     for digest in [DIGEST_A, DIGEST_B] {
-        assert_eq!(
-            OpenFortiVpn.certificate_value(digest),
-            Some(digest.to_owned())
-        );
+        assert!(is_digest(digest), "{digest}");
+    }
+    for pin in [PIN_A, PIN_B] {
+        assert_eq!(OpenConnect.certificate_value(pin), Some(pin.to_owned()));
     }
 }
 
@@ -62,7 +63,6 @@ fn every_value_of_the_user_file_shape_is_imported() {
             port: 8443,
             username: some("alice"),
             password: Some(SecretText("s3cr3t".into())),
-            trusted_certs: vec![DIGEST_A.into()],
             unknown_keys: vec!["insecure-cert".into()],
             ..empty()
         }
@@ -72,13 +72,13 @@ fn every_value_of_the_user_file_shape_is_imported() {
 #[test]
 fn an_unknown_key_before_other_keys_does_not_stop_reading() {
     let settings = read(&format!(
-        "insecure-cert = 1\nhost = 203.0.113.10\nport = 8443\nusername = alice\npassword = s3cr3t\ntrusted-cert = {DIGEST_A}"
+        "insecure-cert = 1\nhost = 203.0.113.10\nport = 8443\nusername = alice\npassword = s3cr3t\ntrusted-cert = {PIN_A}"
     ));
     assert_eq!(settings.host, some("203.0.113.10"));
     assert_eq!(settings.port, 8443);
     assert_eq!(settings.username, some("alice"));
     assert_eq!(password(&settings), Some("s3cr3t"));
-    assert_eq!(settings.trusted_certs, [DIGEST_A]);
+    assert_eq!(settings.trusted_cert_pins, [PIN_A]);
     assert_eq!(settings.unknown_keys, ["insecure-cert"]);
 }
 
@@ -100,25 +100,30 @@ fn a_missing_port_is_443() {
 }
 
 #[test]
-fn an_uppercase_digest_is_lowercased() {
-    let settings = read(&format!("trusted-cert = {}\n", DIGEST_A.to_uppercase()));
-    assert_eq!(settings.trusted_certs, [DIGEST_A]);
+fn digests_of_either_case_are_skipped_without_a_report() {
+    let settings = read(&format!(
+        "trusted-cert = {DIGEST_A}\ntrusted-cert = {}\n",
+        DIGEST_B.to_uppercase()
+    ));
+    assert!(settings.trusted_cert_pins.is_empty());
     assert!(settings.unreadable_lines.is_empty());
 }
 
 #[test]
-fn digests_are_kept_in_order_once_and_invalid_ones_reported() {
+fn pins_are_kept_in_order_once_and_invalid_values_reported() {
     let settings = read(&format!(
-        "trusted-cert = {b}\ntrusted-cert = {a}\ntrusted-cert = {upper_b}\ntrusted-cert = {short}\n\
-         trusted-cert = {a}0\ntrusted-cert = {short}g\ntrusted-cert = {head} {tail}\ntrusted-cert =",
+        "trusted-cert = {pin_b}\ntrusted-cert = {pin_a}\ntrusted-cert = {b}\ntrusted-cert = {short}\n\
+         trusted-cert = {a}0\ntrusted-cert = {short}g\ntrusted-cert = {head} {tail}\ntrusted-cert =\n\
+         trusted-cert = {pin_a}",
         a = DIGEST_A,
         b = DIGEST_B,
-        upper_b = DIGEST_B.to_uppercase(),
+        pin_a = PIN_A,
+        pin_b = PIN_B,
         short = &DIGEST_A[..63],
         head = &DIGEST_A[..32],
         tail = &DIGEST_A[33..],
     ));
-    assert_eq!(settings.trusted_certs, [DIGEST_B, DIGEST_A]);
+    assert_eq!(settings.trusted_cert_pins, [PIN_B, PIN_A]);
     assert_eq!(settings.unreadable_lines, [4, 5, 6, 7, 8]);
 }
 
@@ -291,7 +296,7 @@ fn invalid_utf8_is_reported_per_line_instead_of_decoded_lossily() {
     bytes.extend("\n\u{FF}key = 1\n".as_bytes());
     bytes.extend([0xFF, 0x3D, 0x31, 0x0A]); // "\xFF=1"
     bytes.extend(b"username = alice\n");
-    let settings = OpenFortiVpn.read_settings(&bytes);
+    let settings = super::read(&bytes);
     assert_eq!(settings.host, some("vpn.example.com"));
     assert_eq!(settings.password, None);
     assert_eq!(settings.username, some("alice"));
@@ -324,7 +329,7 @@ fn debug_output_redacts_the_password() {
 #[test]
 fn the_default_files_are_the_users_then_homebrews() {
     assert_eq!(
-        OpenFortiVpn.default_settings_files(Path::new("/Users/alice")),
+        default_files(Path::new("/Users/alice")),
         [
             PathBuf::from("/Users/alice/.config/openfortivpn/config"),
             PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
@@ -332,74 +337,32 @@ fn the_default_files_are_the_users_then_homebrews() {
     );
 }
 
-mod account_checks {
-    use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-    use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
-    use fvm_contract::app_internal::section::AccountSaveError;
+#[test]
+fn lines_follow_getline() {
+    assert_eq!(lines(b"a\n\nb"), [b"a".as_slice(), b"", b"b"]);
+    assert_eq!(lines(b"a\n").len(), 1);
+    assert!(lines(b"").is_empty());
+    assert_eq!(lines(b"\n"), [b"".as_slice()]);
+}
 
-    #[test]
-    fn an_account_not_set_up_yet_passes() {
-        assert_eq!(OpenFortiVpn.check_account("", "", ""), Ok(()));
-        assert_eq!(
-            OpenFortiVpn.check_account("vpn.example.com", "alice", ""),
-            Ok(())
-        );
-        assert_eq!(
-            OpenFortiVpn.check_account("203.0.113.10", "alice", "staff"),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn the_first_refused_value_is_reported() {
-        assert_eq!(
-            OpenFortiVpn.check_account("https://vpn.example.com", "alice", ""),
-            Err(AccountValueProblem::InvalidHost {})
-        );
-        assert_eq!(
-            OpenFortiVpn.check_account("vpn.example.com:443", "alice", ""),
-            Err(AccountValueProblem::InvalidHost {})
-        );
-        assert_eq!(
-            OpenFortiVpn.check_account("vpn.example.com", " alice", ""),
-            Err(AccountValueProblem::LeadingOrTrailingSpace {
-                field: AccountField::Username
-            })
-        );
-        assert_eq!(
-            OpenFortiVpn.check_account("vpn.example.com", "ali\nce", "st\0aff"),
-            Err(AccountValueProblem::DisallowedCharacters {
-                field: AccountField::Username
-            })
-        );
-        assert_eq!(
-            OpenFortiVpn.check_account("vpn.example.com", "alice", "st\0aff"),
-            Err(AccountValueProblem::DisallowedCharacters {
-                field: AccountField::Realm
-            })
-        );
-        assert!(matches!(
-            OpenFortiVpn.check_account(&"a".repeat(1000), "alice", ""),
-            Err(AccountValueProblem::TooLong {
-                field: AccountField::Host,
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn typed_vpn_passwords() {
-        assert_eq!(OpenFortiVpn.check_vpn_password(""), Ok(()));
-        assert_eq!(OpenFortiVpn.check_vpn_password("p@ss w#rd"), Ok(()));
-        for refused in [
-            "line\nbreak".to_owned(),
-            "nul\0".to_owned(),
-            "x".repeat(1000),
-        ] {
-            assert!(matches!(
-                OpenFortiVpn.check_vpn_password(&refused),
-                Err(AccountSaveError::InvalidVpnPassword { .. })
-            ));
-        }
+#[test]
+fn ports_follow_strtol() {
+    for (value, expected) in [
+        ("443", Some(443)),
+        ("  443", Some(443)),
+        ("-0", None),
+        ("0x1BB", Some(443)),
+        ("0x1bbz", Some(443)),
+        ("0xg", None),
+        ("00", None),
+        ("0", None),
+        ("077", Some(63)),
+        ("09", None),
+        ("65535", Some(65_535)),
+        ("65536", None),
+        ("", None),
+        ("+", None),
+    ] {
+        assert_eq!(strtol_port(value.as_bytes()), expected, "{value:?}");
     }
 }

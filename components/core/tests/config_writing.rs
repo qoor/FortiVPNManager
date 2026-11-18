@@ -28,9 +28,7 @@ vpn:
   port: 443
   username: ""
   realm: ""
-  client: "openconnect"
   dtls: false
-  trusted_certs: []
   trusted_cert_pins: []
 otp:
   gmail_address: ""
@@ -60,9 +58,7 @@ fn every_key_has_a_comment() {
         "port:",
         "username:",
         "realm:",
-        "client:",
         "dtls:",
-        "trusted_certs:",
         "trusted_cert_pins:",
         "gmail_address:",
         "method:",
@@ -87,13 +83,9 @@ fn every_key_has_a_comment() {
 fn certificate_values_are_a_block_list() {
     let text = render(&non_default());
     assert!(text.contains(&format!(
-        "  trusted_certs:\n    - \"{}\"\n    - \"{}\"\n  #",
-        digest_a(),
-        digest_b()
-    )));
-    assert!(text.contains(&format!(
-        "  trusted_cert_pins:\n    - \"{}\"\notp:\n",
-        pin_a()
+        "  trusted_cert_pins:\n    - \"{}\"\n    - \"{}\"\notp:\n",
+        pin_a(),
+        pin_b()
     )));
     let loaded = decode(&text);
     assert_eq!(loaded.settings, non_default());
@@ -294,11 +286,15 @@ fn random_valid_configs_round_trip() {
         settings.vpn.port = rng.range(1, 65535);
         settings.vpn.dtls = rng.coin();
         for _ in 0..rng.range(0, 4) {
-            let digest: String = (0..64)
-                .map(|_| b"0123456789abcdef"[rng.range(0, 15) as usize] as char)
+            let encoded: String = (0..43)
+                .map(|_| {
+                    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+                        [rng.range(0, 63) as usize] as char
+                })
                 .collect();
-            if !settings.vpn.trusted_certs.contains(&digest) {
-                settings.vpn.trusted_certs.push(digest);
+            let pin = format!("pin-sha256:{encoded}=");
+            if !settings.vpn.trusted_cert_pins.contains(&pin) {
+                settings.vpn.trusted_cert_pins.push(pin);
             }
         }
         settings.otp.method = if rng.coin() {
@@ -354,8 +350,6 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "an existing openfortivpn config",
         "the Mac asleep",
         "router of the active network service",
-        "\"openconnect\", which comes with the app (the app on Windows always uses openconnect)",
-        "\"openfortivpn\", installed with Homebrew (brew install openfortivpn)",
         "pin-sha256:...), used by openconnect",
     ] {
         assert!(macos.contains(wording), "{wording}");
@@ -366,7 +360,6 @@ fn the_comments_describe_the_os_that_wrote_the_file() {
         "in Credential Manager per 'username@server address'",
         "the PC asleep",
         "gateway of the active network interface",
-        "always uses the openconnect that comes with the app",
     ] {
         assert!(windows.contains(wording), "{wording}");
     }
@@ -393,9 +386,7 @@ fn the_dtls_key_is_written_with_its_comment_on_both_oses() {
                 panic!("the settings are written");
             };
             assert!(
-                text.contains(&format!(
-                    "  client: \"openconnect\"\n{COMMENT}  dtls: {dtls}\n  #"
-                )),
+                text.contains(&format!("  realm: \"\"\n{COMMENT}  dtls: {dtls}\n  #")),
                 "{text}"
             );
             assert_eq!(

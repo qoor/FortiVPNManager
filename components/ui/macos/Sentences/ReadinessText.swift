@@ -63,14 +63,10 @@ extension AppInternal.UntestedVersion {
 }
 
 extension AppInternal.ClientProblem {
-    func message(installing client: AppInternal.VpnClient) -> String {
+    var message: String {
         switch kind {
-        case .notFound where client == .openconnect:
-            String(localized: "OpenConnect is not at \(path). Reinstall FortiVPNManager.")
         case .notFound:
-            String(localized: "Not found at \(path). Install with: brew install \(client.rawValue)")
-        case .outsideAllowedLocation:
-            String(localized: "Points outside the Homebrew Cellar: \(path)")
+            String(localized: "OpenConnect is not at \(path). Reinstall FortiVPNManager.")
         case .notRegularFile:
             String(localized: "Not a regular file: \(path)")
         case let .writableByOthers(mode):

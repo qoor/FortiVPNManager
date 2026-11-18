@@ -8,7 +8,6 @@ use std::thread;
 use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::VpnClient;
 use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
@@ -103,7 +102,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         0,
     );
     let watchdog = Watchdog::new(
-        vec![(VpnClient::Openconnect, Arc::new(OpenConnect))],
+        Arc::new(OpenConnect),
         PathBuf::from(RUN_DIRECTORY),
         Timing::default(),
     );
@@ -160,7 +159,7 @@ fn run_client_once(handle: &service_control_handler::ServiceStatusHandle, watchd
         thread::Builder::new()
             .name("fvm-helper-client-run".into())
             .spawn_scoped(scope, move || {
-                let _ = watchdog.find_clients(ClientCheckWait::UntilExit);
+                let _ = watchdog.find_client(ClientCheckWait::UntilExit);
                 let _ = done.send(());
             })
             .expect("starting the client run thread");

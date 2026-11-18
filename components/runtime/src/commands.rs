@@ -1,7 +1,6 @@
 //! The UI's commands and the settings they change directly: the connection
 //! options and the schedule, the OTP method, the login item and the Helper's registration.
 
-use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::TimeOfDay;
 use fvm_contract::app_internal::command::{Command, ConnectionOption};
 use fvm_contract::app_internal::port::{
@@ -18,7 +17,6 @@ use crate::orchestration::Runtime;
 pub(crate) struct Options {
     pub(crate) options_error: Option<ConfigFileError>,
     pub(crate) hours_error: Option<ScheduleHoursError>,
-    pub(crate) vpn_client_error: Option<ConfigFileError>,
     pub(crate) open_at_login: OpenAtLogin,
 }
 
@@ -27,7 +25,6 @@ impl Options {
         Self {
             options_error: None,
             hours_error: None,
-            vpn_client_error: None,
             open_at_login: OpenAtLogin {
                 available: installed_copy,
                 enabled: false,
@@ -68,7 +65,6 @@ impl Runtime {
             Command::UseBuiltInOAuthClient {} => self.use_built_in_oauth_client(),
             Command::SetConnectionOption { option } => self.set_connection_option(option),
             Command::SetScheduleHours { start, end } => self.set_schedule_hours(start, end),
-            Command::SetVpnClient { client } => self.set_vpn_client(client),
             Command::SetOpenAtLogin { enabled } => self.set_open_at_login(enabled),
             Command::RegisterHelper {} => {
                 self.request(PortRequest::RegisterHelper {}, |runtime, response| {
@@ -164,11 +160,6 @@ impl Runtime {
         self.gmail.method_error = result.err();
         self.google.error = None;
         self.reset_gmail_test();
-    }
-
-    fn set_vpn_client(&mut self, client: VpnClient) {
-        let result = self.change_settings(|settings| settings.vpn.client = client);
-        self.options.vpn_client_error = result.err();
     }
 
     // MARK: Login item

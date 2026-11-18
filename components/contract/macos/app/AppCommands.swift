@@ -28,7 +28,6 @@ extension AppInternal {
         /// On every change of either time picker.
         case setScheduleHours(start: TimeOfDay, end: TimeOfDay)
         case setOpenAtLogin(enabled: Bool)
-        case setVpnClient(client: VpnClient)
         case registerHelper
         case openHelperApprovalSettings
 

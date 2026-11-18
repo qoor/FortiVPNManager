@@ -19,7 +19,7 @@ use fvm_contract::app_internal::section::Section;
 use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, LogSource, SecretText, ToRuntime,
 };
-use fvm_core::config::{self, CertificateList};
+use fvm_core::config;
 use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup, TimerId};
 use jiff::tz::TimeZone;
 
@@ -159,8 +159,7 @@ impl Runtime {
         let (state, state_problem) = StateFile::open(paths.state);
         let mut attempt_seed = [0u8; 16];
         getrandom::fill(&mut attempt_seed).expect("random bytes from the OS");
-        let settings =
-            connection::Settings::new(config.settings(), client::chosen(config.settings()));
+        let settings = connection::Settings::new(config.settings());
         let cm = ConnectionManager::new(Startup {
             app_build: facts.app_build.clone(),
             attempt_seed,
@@ -403,13 +402,12 @@ impl Runtime {
                     },
                 );
             }
-            Effect::SaveTrustedCerts { client, certs } => {
+            Effect::SaveTrustedCerts { certs } => {
                 self.save_trusted_certs(move |settings| {
-                    *settings.vpn.trusted_mut(CertificateList::of(client)) = certs.clone();
+                    settings.vpn.trusted_cert_pins.clone_from(&certs);
                 });
             }
             Effect::ClearTrustedCerts => self.save_trusted_certs(|settings| {
-                settings.vpn.trusted_certs.clear();
                 settings.vpn.trusted_cert_pins.clear();
             }),
             Effect::SaveLedger(ledger) => {
@@ -573,10 +571,7 @@ impl Runtime {
 
     /// Hands the settings in use to the core after the file changed.
     pub(crate) fn settings_changed(&mut self) {
-        let settings = connection::Settings::new(
-            self.config.settings(),
-            client::chosen(self.config.settings()),
-        );
+        let settings = connection::Settings::new(self.config.settings());
         self.feed(connection::Input::SettingsChanged(settings));
     }
 

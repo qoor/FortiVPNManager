@@ -89,23 +89,6 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openconnect",
-    "vpnClientError": {
-      "unreadableFile": {
-        "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-        "problem": {
-          "kind": {
-            "duplicateKey": {
-              "key": "vpn"
-            }
-          },
-          "location": {
-            "column": 1,
-            "line": 7
-          }
-        }
-      }
     }
   },
   {
@@ -172,8 +155,7 @@
           }
         }
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -227,8 +209,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -282,8 +263,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -344,8 +324,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -405,8 +384,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -466,8 +444,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -523,8 +500,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -595,8 +571,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -654,8 +629,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -727,8 +701,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -800,8 +773,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -877,8 +849,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -947,8 +918,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1004,8 +974,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1064,8 +1033,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1121,8 +1089,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1193,8 +1160,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1248,8 +1214,7 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   },
   {
     "account": {
@@ -1305,7 +1270,6 @@
         "minimum": 10,
         "value": 180
       }
-    },
-    "vpnClient": "openfortivpn"
+    }
   }
 ]

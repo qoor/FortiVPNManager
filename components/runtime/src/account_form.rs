@@ -6,7 +6,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
+use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::command::AccountForm;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
@@ -18,11 +18,11 @@ use fvm_contract::app_internal::section::{
     ImportReport, ImportedPassword,
 };
 use fvm_contract::app_internal::{ButtonState, SecretText};
-use fvm_core::config::{CertificateList, Settings};
+use fvm_core::config::Settings;
 use fvm_core::connection;
 
-use crate::client;
 use crate::files;
+use crate::openfortivpn_settings;
 use crate::orchestration::{ClientSettings, Runtime};
 
 /// An openfortivpn config file is small; anything larger is not one.
@@ -173,13 +173,9 @@ impl Forms {
             app_password_entered: !self.app_password.0.is_empty(),
             vpn_password_stored: self.vpn_password_stored,
             app_password_stored: self.app_password_stored,
-            saved_account_problem: client::check_account(
-                client::chosen(settings),
-                &vpn.host,
-                &vpn.username,
-                &vpn.realm,
-            )
-            .err(),
+            saved_account_problem: OpenConnect
+                .check_account(&vpn.host, &vpn.username, &vpn.realm)
+                .err(),
             feedback: self.feedback.clone(),
             save: enabled(self.has_changes()),
             revert: enabled(self.has_changes()),
@@ -258,7 +254,6 @@ impl Runtime {
     /// "Save": checks the draft, writes the changed fields, then the passwords under the account
     /// that was saved.
     pub(crate) fn save_account(&mut self) {
-        let client = client::chosen(self.config.settings());
         let forms = &mut self.forms;
         forms.feedback = None;
         let fail = |forms: &mut Forms, error: AccountSaveError| {
@@ -283,11 +278,11 @@ impl Runtime {
         if !app_password.is_empty() && address.is_empty() {
             return fail(forms, AccountSaveError::AppPasswordNeedsAddress {});
         }
-        if let Err(problem) = client::check_account(client, &host, &username, &realm) {
+        if let Err(problem) = OpenConnect.check_account(&host, &username, &realm) {
             return fail(forms, AccountSaveError::AccountValue { problem });
         }
         if !vpn_password.is_empty()
-            && let Err(error) = client::check_vpn_password(client, &vpn_password)
+            && let Err(error) = OpenConnect.check_vpn_password(&vpn_password)
         {
             return fail(forms, error);
         }
@@ -385,8 +380,7 @@ impl Runtime {
     /// connection has no file; it is read when imported.
     pub(crate) fn find_default_import_file(&mut self) {
         self.forms.default_import_file = match &self.client_settings {
-            ClientSettings::OpenFortiVpn { home } => OpenFortiVpn
-                .default_settings_files(home)
+            ClientSettings::OpenFortiVpn { home } => openfortivpn_settings::default_files(home)
                 .into_iter()
                 .find(|path| path.exists())
                 .map(|path| path.display().to_string()),
@@ -410,8 +404,7 @@ impl Runtime {
         match self.client_settings.clone() {
             ClientSettings::OpenFortiVpn { home } => {
                 let source = file.map(PathBuf::from).or_else(|| {
-                    OpenFortiVpn
-                        .default_settings_files(&home)
+                    openfortivpn_settings::default_files(&home)
                         .into_iter()
                         .find(|path| path.exists())
                 });
@@ -445,8 +438,7 @@ impl Runtime {
         }
         match self.client_settings.clone() {
             ClientSettings::OpenFortiVpn { home } => {
-                let source = OpenFortiVpn
-                    .default_settings_files(&home)
+                let source = openfortivpn_settings::default_files(&home)
                     .into_iter()
                     .find(|path| path.exists());
                 match source {
@@ -492,7 +484,6 @@ impl Runtime {
         let port = i64::from(port);
         let written = self.config.update(|settings| {
             if settings.vpn.host != host || settings.vpn.port != port {
-                settings.vpn.trusted_certs.clear();
                 settings.vpn.trusted_cert_pins.clear();
             }
             settings.vpn.host.clone_from(&host);
@@ -508,10 +499,7 @@ impl Runtime {
         }
         self.config_reloaded();
         let saved = self.config.settings().clone();
-        let trusted = saved
-            .vpn
-            .trusted(CertificateList::of(client::chosen(&saved)))
-            .len();
+        let trusted = saved.vpn.trusted_cert_pins.len();
         let report = ImportReport {
             source: connection.name.clone(),
             host: saved.vpn.host.clone(),
@@ -560,7 +548,7 @@ impl Runtime {
                 );
             }
         };
-        let imported = OpenFortiVpn.read_settings(&bytes);
+        let imported = openfortivpn_settings::read(&bytes);
         let Some(host) = imported.host.clone() else {
             return self.finish_import(
                 ClientSettingsImport::Failed {
@@ -579,16 +567,12 @@ impl Runtime {
             }
             settings.vpn.realm = imported.realm.clone().unwrap_or_default();
             let kept: &[String] = if same_gateway {
-                &settings.vpn.trusted_certs
+                &settings.vpn.trusted_cert_pins
             } else {
                 &[]
             };
-            settings.vpn.trusted_certs =
-                connection::merge_trusted_certs(&imported.trusted_certs, kept);
-            if !same_gateway {
-                // The other OS's values belong to the old gateway too.
-                settings.vpn.trusted_cert_pins.clear();
-            }
+            settings.vpn.trusted_cert_pins =
+                connection::merge_trusted_certs(&imported.trusted_cert_pins, kept);
         });
         if let Err(error) = written {
             return self.finish_import(
@@ -606,7 +590,7 @@ impl Runtime {
             port: u16::try_from(saved.vpn.port).expect("the settings file checks the port range"),
             username: saved.vpn.username.clone(),
             realm: saved.vpn.realm.clone(),
-            trusted_certs: u32::try_from(saved.vpn.trusted_certs.len())
+            trusted_certs: u32::try_from(saved.vpn.trusted_cert_pins.len())
                 .expect("at most four values"),
             password: None,
             unknown_keys: imported.unknown_keys.clone(),

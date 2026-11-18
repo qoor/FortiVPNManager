@@ -312,34 +312,6 @@ fn a_quit_during_a_user_disconnect_waits_for_the_same_exit() {
 }
 
 #[test]
-fn reconnect_now_while_connected_is_break_before_make() {
-    let mut h = Harness::new();
-    h.launch_connected();
-    let id = h.connected().unwrap().attempt.clone();
-    assert_eq!(
-        h.cm.connection_section().reconnect_now,
-        ButtonState::Enabled
-    );
-    assert_eq!(
-        connection_effects(&h.send(Input::ReconnectNow)),
-        [
-            Effect::StopRun {
-                attempt: id,
-                reason: StopReason::Reconnect
-            },
-            Effect::CancelTimer(TimerKind::ProactiveReconnect),
-            Effect::SaveLedger(empty_ledger()),
-        ]
-    );
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(50.0),
-    );
-    assert_eq!(reason(&h), Some(AttemptReason::ReconnectNow));
-}
-
-#[test]
 fn reconnect_now_soon_after_an_auth_failure_waits_until_ninety_seconds() {
     let mut h = Harness::new();
     h.launch();
@@ -430,7 +402,9 @@ fn reconnect_now_is_ignored_when_nothing_is_wanted() {
 
 #[test]
 fn the_proactive_timer_reconnects_right_after_the_exit() {
-    let mut h = Harness::new();
+    let mut settings = settings();
+    settings.connection.proactive_margin_minutes = 2;
+    let mut h = Harness::with_settings(settings);
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
     let planned = h.connected().unwrap().planned_reconnect.unwrap();
@@ -458,7 +432,9 @@ fn the_proactive_timer_reconnects_right_after_the_exit() {
 
 #[test]
 fn the_proactive_timer_firing_first_then_a_server_cut_gives_one_reconnect() {
-    let mut h = Harness::new();
+    let mut settings = settings();
+    settings.connection.proactive_margin_minutes = 2;
+    let mut h = Harness::with_settings(settings);
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
     h.fire(TimerKind::ProactiveReconnect);
@@ -703,14 +679,16 @@ fn timers_fire_once_per_generation() {
 /// it stopped for good, nor while it holds a reconnect for an away user.
 #[test]
 fn the_vpn_is_wanted_while_connecting_connected_or_about_to_retry() {
-    let mut h = Harness::new();
+    let mut settings = settings();
+    settings.connection.proactive_margin_minutes = 2;
+    let mut h = Harness::with_settings(settings);
     assert!(!h.cm.wants_vpn());
     h.launch_connected();
     assert!(h.cm.wants_vpn());
-    h.send(Input::ReconnectNow);
+    h.fire(TimerKind::ProactiveReconnect);
     assert_eq!(
         after(&h),
-        Some(AfterStop::Reconnect(AttemptReason::ReconnectNow))
+        Some(AfterStop::Reconnect(AttemptReason::Proactive))
     );
     assert!(h.cm.wants_vpn());
 

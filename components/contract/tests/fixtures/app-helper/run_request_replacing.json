@@ -1,1 +1,1 @@
-{"attemptID":"0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F","replacingAttemptID":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","sessionID":277070472,"client":"openconnect","host":"192.0.2.10","port":10443,"username":"bob","trustedCerts":[],"dtls":false,"password":"secret"}
+{"attemptID":"0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F","replacingAttemptID":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","sessionID":277070472,"host":"192.0.2.10","port":10443,"username":"bob","trustedCerts":[],"dtls":false,"password":"secret"}

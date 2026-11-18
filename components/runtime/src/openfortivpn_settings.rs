@@ -15,10 +15,9 @@
 
 use std::path::{Path, PathBuf};
 
+use fvm_backend_adapter::is_forbidden;
+use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::SecretText;
-
-use super::account::certificate_value;
-use crate::values::is_forbidden;
 
 /// The port openfortivpn uses when the file sets none.
 const DEFAULT_PORT: u16 = 443;
@@ -74,44 +73,43 @@ const OTHER_KNOWN_KEYS: [&str; 34] = [
 /// What an openfortivpn config file holds for the app. A later line overrides an earlier one, as
 /// in openfortivpn, and an empty value clears the field.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ImportedSettings {
-    pub host: Option<String>,
+pub(crate) struct ImportedSettings {
+    pub(crate) host: Option<String>,
     /// 443 when the file has no usable `port` line.
-    pub port: u16,
-    pub username: Option<String>,
+    pub(crate) port: u16,
+    pub(crate) username: Option<String>,
     /// Written in the file in plain text, to go to the secret storage.
-    pub password: Option<SecretText>,
-    pub realm: Option<String>,
-    /// Valid certificate values, lowercased (openfortivpn compares lowercase, so an uppercase one
-    /// never matched there), each once, in file order.
-    pub trusted_certs: Vec<String>,
+    pub(crate) password: Option<SecretText>,
+    pub(crate) realm: Option<String>,
+    /// Valid pins, each once, in file order.
+    pub(crate) trusted_cert_pins: Vec<String>,
     /// Keys openfortivpn does not know, such as `insecure-cert`, each once, in file order;
     /// openfortivpn stops reading at the first one.
-    pub unknown_keys: Vec<String>,
+    pub(crate) unknown_keys: Vec<String>,
     /// openfortivpn options the app does not carry over, such as `set-dns`.
-    pub ignored_keys: Vec<String>,
+    pub(crate) ignored_keys: Vec<String>,
     /// 1-based numbers of lines that could not be used: without `=`, with an empty key, with bytes
     /// that are not UTF-8, with a control character or NUL, with a port openfortivpn refuses, or
     /// with an invalid certificate value.
-    pub unreadable_lines: Vec<u32>,
+    pub(crate) unreadable_lines: Vec<u32>,
 }
 
 /// The files openfortivpn reads by default, in the order to try: the user's, then Homebrew's.
-pub(super) fn default_files(home: &Path) -> Vec<PathBuf> {
+pub(crate) fn default_files(home: &Path) -> Vec<PathBuf> {
     vec![
         home.join(".config/openfortivpn/config"),
         PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
     ]
 }
 
-pub(super) fn read(bytes: &[u8]) -> ImportedSettings {
+pub(crate) fn read(bytes: &[u8]) -> ImportedSettings {
     let mut settings = ImportedSettings {
         host: None,
         port: DEFAULT_PORT,
         username: None,
         password: None,
         realm: None,
-        trusted_certs: Vec::new(),
+        trusted_cert_pins: Vec::new(),
         unknown_keys: Vec::new(),
         ignored_keys: Vec::new(),
         unreadable_lines: Vec::new(),
@@ -160,9 +158,10 @@ pub(super) fn read(bytes: &[u8]) -> ImportedSettings {
                 None => settings.unreadable_lines.push(number),
             },
             "trusted-cert" => {
-                if let Some(value) = certificate_value(&text.unwrap_or_default()) {
-                    push_once(&mut settings.trusted_certs, value);
-                } else {
+                let text = text.unwrap_or_default();
+                if let Some(pin) = OpenConnect.certificate_value(&text) {
+                    push_once(&mut settings.trusted_cert_pins, pin);
+                } else if !is_digest(&text) {
                     settings.unreadable_lines.push(number);
                 }
             }
@@ -171,6 +170,10 @@ pub(super) fn read(bytes: &[u8]) -> ImportedSettings {
     }
     settings.port = port.unwrap_or(DEFAULT_PORT);
     settings
+}
+
+fn is_digest(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn push_once(list: &mut Vec<String>, item: String) {
@@ -248,36 +251,4 @@ fn strtol_port(value: &[u8]) -> Option<u16> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{lines, strtol_port};
-
-    #[test]
-    fn lines_follow_getline() {
-        assert_eq!(lines(b"a\n\nb"), [b"a".as_slice(), b"", b"b"]);
-        assert_eq!(lines(b"a\n").len(), 1);
-        assert!(lines(b"").is_empty());
-        assert_eq!(lines(b"\n"), [b"".as_slice()]);
-    }
-
-    #[test]
-    fn ports_follow_strtol() {
-        for (value, expected) in [
-            ("443", Some(443)),
-            ("  443", Some(443)),
-            ("-0", None),
-            ("0x1BB", Some(443)),
-            ("0x1bbz", Some(443)),
-            ("0xg", None),
-            ("00", None),
-            ("0", None),
-            ("077", Some(63)),
-            ("09", None),
-            ("65535", Some(65_535)),
-            ("65536", None),
-            ("", None),
-            ("+", None),
-        ] {
-            assert_eq!(strtol_port(value.as_bytes()), expected, "{value:?}");
-        }
-    }
-}
+mod tests;

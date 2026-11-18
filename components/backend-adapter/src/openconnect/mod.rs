@@ -1,9 +1,9 @@
 //! openconnect 9.21 with its fortinet protocol; on Windows with the Wintun driver its installer
 //! brings. Its options, prompts and output wording are only known here, and are the same on every
-//! OS; what differs per OS is in `platform`. Unlike openfortivpn it takes everything as arguments,
-//! asks for the password only after it verified the gateway, and runs its own route script. An
-//! attempt logs in and opens the tunnel in separate runs, so the Helper holds the session cookie
-//! and can log out when it has to end the tunnel by force.
+//! OS; what differs per OS is in `platform`. It takes everything as arguments, asks for the
+//! password only after it verified the gateway, and runs its own route script. An attempt logs in
+//! and opens the tunnel in separate runs, so the Helper holds the session cookie and can log out
+//! when it has to end the tunnel by force.
 
 mod client;
 mod network;

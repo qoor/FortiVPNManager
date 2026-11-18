@@ -43,7 +43,7 @@ public class AppInternalTests
             RoundTrip<AfterDisconnect>("after_disconnect.json"));
         var reasons = RoundTrip<FailureReason>("failure_reasons.json");
         // The Rust name of the Helper's code is older than the C# one.
-        Assert.Contains(new FailureReason.Helper(HelperErrorCode.ClientUnavailable, VpnClient.Openfortivpn), reasons);
+        Assert.Contains(new FailureReason.Helper(HelperErrorCode.ClientUnavailable), reasons);
         RoundTrip<WaitReason>("wait_reasons.json");
         RoundTrip<SetupItem>("setup_items.json");
     }

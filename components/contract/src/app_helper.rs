@@ -80,13 +80,6 @@ impl fmt::Display for SessionId {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum VpnClient {
-    Openfortivpn,
-    Openconnect,
-}
-
 /// Everything the Helper needs for one run. The Helper checks every value again before use.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +94,6 @@ pub struct RunRequest {
     pub replacing: Option<AttemptId>,
     #[serde(rename = "sessionID")]
     pub session_id: SessionId,
-    pub client: VpnClient,
     pub host: String,
     /// Not narrowed here: an out-of-range port is a validation error, not an unreadable request.
     pub port: i64,
@@ -121,7 +113,6 @@ impl fmt::Debug for RunRequest {
             .field("attempt_id", &self.attempt_id)
             .field("replacing", &self.replacing)
             .field("session_id", &self.session_id)
-            .field("client", &self.client)
             .field("host", &self.host)
             .field("port", &self.port)
             .field("username", &self.username)
@@ -327,13 +318,12 @@ pub struct OutputBatch {
 pub struct HelperStatus {
     #[serde(rename = "childAlive")]
     pub client_running: bool,
-    pub clients: Vec<ClientStatus>,
+    pub client: ClientStatus,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientStatus {
-    pub client: VpnClient,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

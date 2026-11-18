@@ -9,9 +9,7 @@ use std::path::Path;
 
 use common::Run;
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{
-    AttemptId, Milestone, OutputSource, RunRequest, SessionId, VpnClient,
-};
+use fvm_contract::app_helper::{AttemptId, Milestone, OutputSource, RunRequest, SessionId};
 use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
 use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
@@ -33,7 +31,6 @@ fn request() -> RunRequest {
             .unwrap(),
         replacing: None,
         session_id: SessionId(277_070_470),
-        client: VpnClient::Openconnect,
         host: "203.0.113.10".into(),
         port: 8443,
         username: "alice".into(),

@@ -98,16 +98,12 @@ impl ConnectionManager {
             Some(HelperFacts::Answered {
                 build,
                 status: Some(status),
-            }) if *build == self.app_build => status
-                .clients
-                .iter()
-                .find(|found| found.client == self.settings.account.client)
-                .map(|found| VpnClientInfo {
-                    path: found.path.clone(),
-                    version: found.version.clone(),
-                    untested_version: found.untested_version.clone(),
-                    problem: found.problem.clone(),
-                }),
+            }) if *build == self.app_build => Some(VpnClientInfo {
+                path: status.client.path.clone(),
+                version: status.client.version.clone(),
+                untested_version: status.client.untested_version.clone(),
+                problem: status.client.problem.clone(),
+            }),
             _ => None,
         };
         ReadinessSection {
@@ -240,7 +236,7 @@ impl ConnectionManager {
                 window_seconds: policy::AUTH_ATTEMPT_WINDOW.as_secs(),
             },
             Failure::Network => FailureReason::Network {},
-            Failure::Helper { code, client } => FailureReason::Helper { code, client },
+            Failure::Helper { code } => FailureReason::Helper { code },
         }
     }
 

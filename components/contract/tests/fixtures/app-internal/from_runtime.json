@@ -169,8 +169,7 @@
                 "minimum": 10,
                 "value": 180
               }
-            },
-            "vpnClient": "openfortivpn"
+            }
           }
         }
       }

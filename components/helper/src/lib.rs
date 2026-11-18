@@ -7,9 +7,9 @@
 //! - `recovery`, what a run leaves for a later Helper: the run record, stopping what an earlier
 //!   Helper left, and the route repair requests.
 //!
-//! Only `process` and `recovery` use the backend adapters of the clients the OS can run, which the
-//! OS's start hands over in a `Watchdog` with the run directory it chose; `entry` gets the
-//! `Watchdog` but cannot reach the adapters in it. The OS side, the Helper's Swift side on macOS
+//! Only `process` and `recovery` use the client's backend adapter, which the OS's start hands over
+//! in a `Watchdog` with the run directory it chose; `entry` gets the `Watchdog` but cannot reach the
+//! adapter in it. The OS side, the Helper's Swift side on macOS
 //! and the service's own part on Windows, takes the app connections and does what the entry asks of
 //! it; the two exchange the messages in `fvm_contract::helper_internal`. OS-specific code is only
 //! in `process`: running, finding and stopping processes, and the run directory's permissions.

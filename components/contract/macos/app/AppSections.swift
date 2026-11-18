@@ -83,7 +83,7 @@ extension AppInternal {
         case gmailRejected(method: OtpMethod)
         case tooManyReconnects(windowSeconds: Int)
         case network
-        case helper(code: HelperErrorCode, client: VpnClient)
+        case helper(code: HelperErrorCode)
     }
 
     /// The Helper's error codes (components/contract/src/app_helper.rs).
@@ -182,7 +182,6 @@ extension AppInternal {
 
     enum ClientProblemKind: Decodable, Equatable, Sendable {
         case notFound
-        case outsideAllowedLocation
         case notRegularFile
         case writableByOthers(mode: UInt32)
         case notExecutable
@@ -366,8 +365,6 @@ extension AppInternal {
         var account: AccountFormState
         var options: ConnectionOptions
         var optionsError: ConfigFileError?
-        var vpnClient: VpnClient
-        var vpnClientError: ConfigFileError?
         var openAtLogin: OpenAtLogin
         var logFile: String
     }

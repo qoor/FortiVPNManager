@@ -27,6 +27,7 @@ const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 const DIGEST_A: &str = "4f7a0c2b9d1e8f3a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a";
 const DIGEST_B: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const CELLAR_PATH: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
+const OPENCONNECT_PATH: &str = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
 
 fn attempt() -> AttemptId {
     ATTEMPT.parse().unwrap()
@@ -58,7 +59,6 @@ fn run_request() {
             attempt_id: attempt(),
             replacing: None,
             session_id: SessionId(277_070_470),
-            client: VpnClient::Openfortivpn,
             host: "vpn.example.com".into(),
             port: 443,
             username: "alice".into(),
@@ -78,7 +78,6 @@ fn run_request_without_realm() {
             attempt_id: attempt(),
             replacing: None,
             session_id: SessionId(277_070_471),
-            client: VpnClient::Openconnect,
             host: "192.0.2.10".into(),
             port: 10443,
             username: "bob".into(),
@@ -98,7 +97,6 @@ fn run_request_replacing_a_run() {
             attempt_id: OTHER_ATTEMPT.parse().unwrap(),
             replacing: Some(attempt()),
             session_id: SessionId(277_070_472),
-            client: VpnClient::Openconnect,
             host: "192.0.2.10".into(),
             port: 10443,
             username: "bob".into(),
@@ -339,8 +337,7 @@ fn output_batch() {
 
 #[test]
 fn helper_statuses() {
-    let found = |client, path: &str, version: &str| ClientStatus {
-        client,
+    let found = |path: &str, version: &str| ClientStatus {
         path: Some(path.into()),
         version: Some(version.into()),
         problem: None,
@@ -348,14 +345,7 @@ fn helper_statuses() {
     };
     let running = HelperStatus {
         client_running: true,
-        clients: vec![
-            found(VpnClient::Openfortivpn, CELLAR_PATH, "1.24.1"),
-            found(
-                VpnClient::Openconnect,
-                "/opt/homebrew/Cellar/openconnect/9.21/bin/openconnect",
-                "9.21",
-            ),
-        ],
+        client: found(OPENCONNECT_PATH, "9.21"),
     };
     both_ways(
         running,
@@ -364,50 +354,46 @@ fn helper_statuses() {
 
     let untested = HelperStatus {
         client_running: false,
-        clients: vec![ClientStatus {
+        client: ClientStatus {
             untested_version: Some(UntestedVersion {
-                tested_series: "1.24".into(),
+                tested_series: "9.21".into(),
             }),
-            ..found(
-                VpnClient::Openfortivpn,
-                "/opt/homebrew/Cellar/openfortivpn/1.25.0/bin/openfortivpn",
-                "1.25.0",
-            )
-        }],
+            ..found(OPENCONNECT_PATH, "9.22")
+        },
     };
     both_ways(
         untested,
         include_str!("fixtures/app-helper/helper_status_untested.json"),
     );
 
-    let script = "/opt/homebrew/etc/vpnc/vpnc-script";
-    let missing = HelperStatus {
-        client_running: false,
-        clients: vec![
-            ClientStatus {
-                client: VpnClient::Openfortivpn,
+    let problems = [
+        HelperStatus {
+            client_running: false,
+            client: ClientStatus {
                 path: None,
                 version: None,
                 problem: Some(ClientProblem {
                     kind: ClientProblemKind::NotFound {},
-                    path: "/opt/homebrew/bin/openfortivpn".into(),
+                    path: OPENCONNECT_PATH.into(),
                 }),
                 untested_version: None,
             },
-            ClientStatus {
-                client: VpnClient::Openconnect,
-                path: Some(script.into()),
+        },
+        HelperStatus {
+            client_running: false,
+            client: ClientStatus {
+                path: Some(OPENCONNECT_PATH.into()),
                 version: None,
                 problem: Some(ClientProblem {
                     kind: ClientProblemKind::WritableByOthers { mode: 0o775 },
-                    path: script.into(),
+                    path: OPENCONNECT_PATH.into(),
                 }),
                 untested_version: None,
             },
-        ],
-    };
+        },
+    ];
     both_ways(
-        missing,
+        problems,
         include_str!("fixtures/app-helper/helper_status_problem.json"),
     );
 }

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use common::*;
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{RunRequest, VpnClient};
+use fvm_contract::app_helper::RunRequest;
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
     OutputInterpreter, UntestedVersion,
@@ -117,10 +117,7 @@ fn start(new_address: &str) -> Swift {
     .into_iter()
     .map(|(attempt, script)| (attempt.to_owned(), script))
     .collect();
-    Swift::start_with(vec![(
-        VpnClient::Openconnect,
-        Arc::new(Scripted { clients }),
-    )])
+    Swift::start_with(Arc::new(Scripted { clients }))
 }
 
 fn connect(attempt: &str, replacing: Option<&str>) -> Value {
@@ -132,7 +129,6 @@ fn connect(attempt: &str, replacing: Option<&str>) -> Value {
     let mut request = json!({
         "attemptID": attempt,
         "sessionID": session,
-        "client": "openconnect",
         "host": GATEWAY,
         "port": 443,
         "username": "alice",
@@ -472,20 +468,6 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
         swift.reply(id),
         error("notAuthorized", "the VPN run belongs to another user")
     );
-    let json = connect(NEW, Some(ATTEMPT))["connect"]["json"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let mut request: Value = serde_json::from_str(&json).unwrap();
-    request["client"] = json!("openfortivpn");
-    let id = swift.request(1, connect_request_with(request));
-    assert_eq!(
-        swift.reply(id),
-        error(
-            "invalidRequest",
-            "the replacement must use the same VPN client"
-        )
-    );
     let id = swift.request(1, connect(NEW, Some(ATTEMPT)));
     assert_eq!(swift.reply(id), None);
     let id = swift.request(1, connect(THIRD, Some(ATTEMPT)));
@@ -513,32 +495,4 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
             ))
         });
     }
-}
-
-#[test]
-fn openfortivpn_cannot_replace_a_run() {
-    let mut swift = Swift::start(Setup::fixture("success"));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let id = swift.request(1, submit_otp(ATTEMPT, OTP));
-    assert_eq!(swift.reply(id), None);
-    swift.wait_for_milestone(1, TUNNEL_UP);
-    let json = connect_request(NEW)["connect"]["json"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let mut request: Value = serde_json::from_str(&json).unwrap();
-    request["replacingAttemptID"] = json!(ATTEMPT);
-    let id = swift.request(1, connect_request_with(request));
-    assert_eq!(
-        swift.reply(id),
-        error(
-            "invalidRequest",
-            "openfortivpn cannot replace a connection without a break"
-        )
-    );
-    let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
-    assert_eq!(swift.reply(id), None);
-    swift.wait_for_exit(1);
 }

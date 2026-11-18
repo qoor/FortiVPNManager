@@ -1,10 +1,11 @@
-//! A test backend that runs the process tests' fake openfortivpn scripts with the openfortivpn adapter's
-//! checks and output reading, and a fake Swift side that drives the entry through the
-//! Helper-internal protocol and records everything it sends.
+//! A test backend that runs the process tests' fake openfortivpn scripts with the openconnect
+//! adapter's checks, and a fake Swift side that drives the entry through the Helper-internal
+//! protocol and records everything it sends.
 
 #![allow(dead_code)] // Each test file uses a different part.
 
 use std::io::{self, BufRead, BufReader};
+use std::net::Ipv4Addr;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,11 +14,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use std::{env, fs, process};
 
-use fvm_backend_adapter::openfortivpn::OpenFortiVpn;
-use fvm_contract::app_helper::{RunRequest, VpnClient};
+use fvm_backend_adapter::openconnect::OpenConnect;
+use fvm_contract::app_helper::{Milestone, OutputSource, RunRequest};
 use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
-    OutputInterpreter, UntestedVersion,
+    Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
+    NetworkSettings, OutputInterpreter, Prompt, UntestedVersion,
 };
 use fvm_contract::stream;
 use serde_json::{Value, json};
@@ -26,8 +27,8 @@ pub const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
 pub const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 /// An IPv4 literal, so the gateway lookup needs no DNS.
 pub const GATEWAY: &str = "203.0.113.10";
-/// Leading and trailing spaces and non-ASCII must reach the client byte for byte.
-pub const PASSWORD: &str = " pässwörd 🔑 ";
+/// Leading and trailing spaces must reach the client byte for byte.
+pub const PASSWORD: &str = " p@ssw0rd #1 ";
 pub const OTP: &str = "042137";
 pub const REJECTED_DIGEST: &str =
     "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11";
@@ -40,8 +41,8 @@ pub const TUNNEL_UP: u64 = 5;
 /// Generous, so a broken test fails instead of hanging.
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
 
-/// openfortivpn as far as the entry can tell: the adapter checks the request, builds the config file
-/// and reads the output, but the client is a fixture script run by /bin/sh.
+/// openconnect as far as the entry can tell: the adapter checks the request, but the client is a
+/// fixture script run by /bin/sh.
 pub struct TestBackend {
     client: Result<ClientExecutable, ClientProblem>,
     fixture: PathBuf,
@@ -52,7 +53,7 @@ pub struct TestBackend {
 
 impl Backend for TestBackend {
     fn client_name(&self) -> &'static str {
-        OpenFortiVpn.client_name()
+        OpenConnect.client_name()
     }
 
     fn locate_client(&self, _: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
@@ -60,11 +61,11 @@ impl Backend for TestBackend {
     }
 
     fn describe_problem(&self, problem: &ClientProblem) -> String {
-        OpenFortiVpn.describe_problem(problem)
+        OpenConnect.describe_problem(problem)
     }
 
     fn untested_version(&self, version: &str) -> Option<UntestedVersion> {
-        OpenFortiVpn.untested_version(version)
+        OpenConnect.untested_version(version)
     }
 
     fn launch_spec(
@@ -74,7 +75,7 @@ impl Backend for TestBackend {
         config_path: &Path,
         values_path: &Path,
     ) -> Result<LaunchSpec, String> {
-        let checked = OpenFortiVpn.launch_spec(client, request, config_path, values_path)?;
+        let checked = OpenConnect.launch_spec(client, request, config_path, values_path)?;
         let mut args = vec![
             self.fixture.display().to_string(),
             self.record.display().to_string(),
@@ -83,20 +84,23 @@ impl Backend for TestBackend {
         Ok(LaunchSpec {
             program: PathBuf::from("/bin/sh"),
             args,
+            config_file: Some(format!("host = {}\n", request.host)),
+            session: None,
+            script_runner: None,
             ..checked
         })
     }
 
     fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String> {
-        OpenFortiVpn.network_settings(values)
+        OpenConnect.network_settings(values)
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {
-        OpenFortiVpn.check_otp(code)
+        OpenConnect.check_otp(code)
     }
 
     fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
-        OpenFortiVpn.interpreter()
+        Box::new(FixtureInterpreter::default())
     }
 
     fn stop_grace_period(&self) -> Duration {
@@ -106,6 +110,82 @@ impl Backend for TestBackend {
     /// Every path, so that only the process identity keeps a leftover alive.
     fn is_own_executable(&self, _: &Path) -> bool {
         true
+    }
+}
+
+#[derive(Default)]
+struct FixtureInterpreter {
+    certificates: Vec<String>,
+    routes: Routes,
+}
+
+#[derive(Default, PartialEq)]
+enum Routes {
+    #[default]
+    Unchanged,
+    Changed,
+    Restoring,
+    Restored,
+}
+
+impl OutputInterpreter for FixtureInterpreter {
+    fn prompt(&mut self, source: OutputSource, partial_line: &[u8]) -> Option<Prompt> {
+        if source != OutputSource::Stdout {
+            None
+        } else if partial_line.ends_with(b"VPN account password: ") {
+            Some(Prompt::Password)
+        } else if partial_line.ends_with(b"Two-factor authentication token: ") {
+            Some(Prompt::Otp)
+        } else {
+            None
+        }
+    }
+
+    fn password_expected(&self, milestone: Milestone) -> bool {
+        milestone < Milestone::ConnectedToGateway
+    }
+
+    fn line(&mut self, source: OutputSource, text: &str) -> Option<Finding> {
+        if source != OutputSource::Stdout {
+            return None;
+        }
+        let (level, message) = ["INFO:   ", "WARN:   ", "ERROR:  ", "DEBUG:  "]
+            .into_iter()
+            .find_map(|prefix| Some((prefix, text.strip_prefix(prefix)?)))?;
+        if self.routes == Routes::Restoring && matches!(level, "INFO:   " | "ERROR:  ") {
+            self.routes = Routes::Restored;
+        }
+        match message {
+            "Connected to gateway." => Some(Finding::Milestone(Milestone::ConnectedToGateway)),
+            "Authenticated." => Some(Finding::Milestone(Milestone::Authenticated)),
+            "Tunnel is up and running." => Some(Finding::Milestone(Milestone::TunnelUp)),
+            "Setting new routes..." => {
+                self.routes = Routes::Changed;
+                None
+            }
+            "Restoring routes..." => {
+                if self.routes == Routes::Changed {
+                    self.routes = Routes::Restoring;
+                }
+                None
+            }
+            _ => {
+                if let Some(addresses) = message.strip_prefix("Got addresses: [") {
+                    let (ip, _) = addresses.split_once(']')?;
+                    return ip.parse::<Ipv4Addr>().ok().map(Finding::TunnelIp);
+                }
+                let value = message.strip_prefix("    trusted-cert = ")?;
+                if self.certificates.iter().any(|known| known == value) {
+                    return None;
+                }
+                self.certificates.push(value.to_owned());
+                Some(Finding::CertificateRejected(value.to_owned()))
+            }
+        }
+    }
+
+    fn routes_left_unrestored(&self) -> bool {
+        matches!(self.routes, Routes::Changed | Routes::Restoring)
     }
 }
 
@@ -123,9 +203,9 @@ impl Setup {
             args: Vec::new(),
             client: Ok(ClientExecutable {
                 path: PathBuf::from("/bin/sh"),
-                version: "1.24.1".to_owned(),
+                version: "9.21".to_owned(),
             }),
-            grace_period: OpenFortiVpn.stop_grace_period(),
+            grace_period: OpenConnect.stop_grace_period(),
         }
     }
 
@@ -209,17 +289,17 @@ impl Swift {
             record: scratch.root.join("record.txt"),
             grace_period: setup.grace_period,
         };
-        Self::launch_with(scratch, vec![(VpnClient::Openfortivpn, Arc::new(backend))])
+        Self::launch_with(scratch, Arc::new(backend))
     }
 
-    pub fn start_with(clients: Vec<(VpnClient, Arc<dyn Backend>)>) -> Self {
-        let mut swift = Self::launch_with(Scratch::new(), clients);
+    pub fn start_with(backend: Arc<dyn Backend>) -> Self {
+        let mut swift = Self::launch_with(Scratch::new(), backend);
         swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
         swift
     }
 
-    fn launch_with(scratch: Scratch, clients: Vec<(VpnClient, Arc<dyn Backend>)>) -> Self {
-        let stream = fvm_helper_macos::start(clients, scratch.run_directory());
+    fn launch_with(scratch: Scratch, backend: Arc<dyn Backend>) -> Self {
+        let stream = fvm_helper_macos::start(backend, scratch.run_directory());
         let reader = BufReader::new(stream.try_clone().unwrap());
         Self {
             stream,
@@ -473,7 +553,6 @@ pub fn connect_request(attempt: &str) -> Value {
     connect_request_with(json!({
         "attemptID": attempt,
         "sessionID": 277_070_470,
-        "client": "openfortivpn",
         "host": GATEWAY,
         "port": 443,
         "username": "alice",

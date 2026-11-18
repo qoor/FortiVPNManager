@@ -44,9 +44,6 @@ pub(super) fn describe(problem: &ClientProblem) -> String {
         ClientProblemKind::NotFound {} => {
             format!("openconnect not found at {path}; {INSTALL_HINT}")
         }
-        ClientProblemKind::OutsideAllowedLocation {} => {
-            format!("openconnect is outside its allowed location: {path}")
-        }
         ClientProblemKind::NotRegularFile {} => {
             format!("openconnect is not a regular file: {path}")
         }

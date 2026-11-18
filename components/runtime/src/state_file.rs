@@ -4,7 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use fvm_contract::app_helper::{HelperErrorCode, VpnClient};
+use fvm_contract::app_helper::HelperErrorCode;
 use fvm_core::connection::{Failure, FailureLedger};
 use serde::{Deserialize, Serialize};
 
@@ -123,7 +123,6 @@ enum WireFailure {
     Helper {
         #[serde(rename = "_0")]
         code: HelperErrorCode,
-        client: VpnClient,
     },
 }
 
@@ -170,7 +169,7 @@ impl WireFailure {
             Self::GmailAppPassword {} => Failure::GmailRejected,
             Self::TooManyReconnects {} => Failure::TooManyReconnects,
             Self::Network {} => Failure::Network,
-            Self::Helper { code, client } => Failure::Helper { code, client },
+            Self::Helper { code } => Failure::Helper { code },
         }
     }
 
@@ -186,7 +185,7 @@ impl WireFailure {
             Failure::GmailRejected => Self::GmailAppPassword {},
             Failure::TooManyReconnects => Self::TooManyReconnects {},
             Failure::Network => Self::Network {},
-            Failure::Helper { code, client } => Self::Helper { code, client },
+            Failure::Helper { code } => Self::Helper { code },
         }
     }
 }
@@ -338,9 +337,8 @@ mod tests {
             (
                 Failure::Helper {
                     code: HelperErrorCode::ClientUnavailable,
-                    client: VpnClient::Openconnect,
                 },
-                r#"{"helper":{"_0":"binaryUnavailable","client":"openconnect"}}"#,
+                r#"{"helper":{"_0":"binaryUnavailable"}}"#,
             ),
             (
                 Failure::OtpNotReceived { in_spam: true },
@@ -358,6 +356,19 @@ mod tests {
                 failure
             );
         }
+    }
+
+    #[test]
+    fn a_helper_failure_of_an_earlier_build_reads_without_its_client() {
+        let json = r#"{"helper":{"_0":"binaryUnavailable","client":"openfortivpn"}}"#;
+        assert_eq!(
+            serde_json::from_str::<WireFailure>(json)
+                .unwrap()
+                .into_failure(),
+            Failure::Helper {
+                code: HelperErrorCode::ClientUnavailable
+            }
+        );
     }
 
     #[test]

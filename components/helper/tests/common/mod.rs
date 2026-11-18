@@ -16,7 +16,6 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
     ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, SessionId,
-    VpnClient,
 };
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
@@ -312,16 +311,11 @@ pub fn start_run(
         launch,
         grace_period: setup.grace_period,
     };
-    let mut watchdog = Watchdog::new(
-        vec![(VpnClient::Openfortivpn, Arc::new(backend))],
-        directory.path.clone(),
-        setup.timing,
-    );
+    let mut watchdog = Watchdog::new(Arc::new(backend), directory.path.clone(), setup.timing);
     let mut request = RunRequest {
         attempt_id: ATTEMPT.parse().unwrap(),
         replacing: None,
         session_id: SessionId(277_070_470),
-        client: VpnClient::Openfortivpn,
         host: GATEWAY.to_owned(),
         port: 443,
         username: "alice".to_owned(),

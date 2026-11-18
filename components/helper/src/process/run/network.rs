@@ -60,7 +60,6 @@ pub struct Replaced {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NotReplaceable {
-    NoNetwork,
     NotUp,
 }
 
@@ -592,14 +591,6 @@ impl<R: FnMut(Report)> Watch<R> {
     }
 
     pub(super) fn replaceable(&self) -> Result<Replaced, NotReplaceable> {
-        let applies_network = self.script_runner.is_some()
-            || self
-                .later_runs
-                .as_ref()
-                .is_some_and(|later| later.tunnel.script_runner.is_some());
-        if !applies_network {
-            return Err(NotReplaceable::NoNetwork);
-        }
         if !self.changing_network() || self.furthest != Milestone::TunnelUp {
             return Err(NotReplaceable::NotUp);
         }

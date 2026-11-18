@@ -121,7 +121,7 @@ public static partial class AppInternal
         public sealed record GmailRejected(OtpMethod Method) : FailureReason;
         public sealed record TooManyReconnects(ulong WindowSeconds) : FailureReason;
         public sealed record Network : FailureReason;
-        public sealed record Helper(HelperErrorCode Code, VpnClient Client) : FailureReason;
+        public sealed record Helper(HelperErrorCode Code) : FailureReason;
     }
 
     /// <summary>The Helper's error codes (components/contract/src/app_helper.rs).</summary>
@@ -241,7 +241,6 @@ public static partial class AppInternal
         private ClientProblemKind() { }
 
         public sealed record NotFound : ClientProblemKind;
-        public sealed record OutsideAllowedLocation : ClientProblemKind;
         public sealed record NotRegularFile : ClientProblemKind;
         public sealed record WritableByOthers(uint Mode) : ClientProblemKind;
         public sealed record NotExecutable : ClientProblemKind;
@@ -474,11 +473,9 @@ public static partial class AppInternal
         ConfigFileState File,
         AccountFormState Account,
         ConnectionOptions Options,
-        VpnClient VpnClient,
         OpenAtLogin OpenAtLogin,
         string LogFile,
-        ConfigFileError? OptionsError = null,
-        ConfigFileError? VpnClientError = null);
+        ConfigFileError? OptionsError = null);
 
     public sealed record ConfigFileState(
         string Path,

@@ -1,6 +1,6 @@
 //! Scheduled hours and time away.
 
-use fvm_contract::app_helper::{HelperErrorCode, Milestone, SessionId, StopReason, VpnClient};
+use fvm_contract::app_helper::{HelperErrorCode, Milestone, SessionId, StopReason};
 use fvm_contract::app_internal::section::{ConnectionIcon, ScheduleOutlook};
 use fvm_contract::app_internal::{TimeOfDay, Weekday};
 use jiff::tz::TimeZone;
@@ -209,7 +209,6 @@ fn the_start_clears_a_failure_like_connect() {
         h.cm.phase,
         Phase::Failed(Failure::Helper {
             code: HelperErrorCode::ClientUnavailable,
-            client: VpnClient::Openfortivpn,
         })
     );
     h.fire(TimerKind::Schedule);
@@ -238,17 +237,7 @@ fn a_manual_connect_outside_the_hours_keeps_reconnecting() {
     assert_eq!(h.cm.phase, Phase::Idle);
     h.send(Input::Connect);
     h.run_to_connected();
-    let id = h.connected().unwrap().attempt.clone();
-    assert_eq!(
-        stop_reasons(&h.fire(TimerKind::ProactiveReconnect)),
-        [StopReason::ProactiveReconnect]
-    );
-    h.exit_for(
-        &id,
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::ProactiveReconnect)
-            .up(175.0 * 60.0),
-    );
+    assert_eq!(stop_reasons(&h.fire(TimerKind::ProactiveReconnect)), []);
     assert_eq!(reason(&h), Some(AttemptReason::Proactive));
 }
 

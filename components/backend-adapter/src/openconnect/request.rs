@@ -13,7 +13,7 @@ use fvm_contract::backend::{ClientExecutable, LaunchSpec, SessionLaunch};
 use super::platform::{self, CURL, NULL_DEVICE, SYSTEM_VARIABLES};
 use crate::values;
 
-// openfortivpn's limits, so that one config.yaml and one password work with both clients.
+// openfortivpn's limits.
 const MAX_HOST_BYTES: usize = 253;
 const MAX_USERNAME_BYTES: usize = 64;
 const MAX_REALM_BYTES: usize = 63;

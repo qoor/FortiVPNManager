@@ -43,13 +43,10 @@ vpn:
   port: 8443
   username: bob
   realm: corp
-  client: openfortivpn
   dtls: true
-  trusted_certs:
+  trusted_cert_pins:
     - {a}
     - \"{b}\"
-  trusted_cert_pins:
-    - {pin}
 otp:
   gmail_address: otp@example.com
   method: gmail_api
@@ -78,9 +75,8 @@ routes:
   bypass_vpn:
     - 10.30.161.16
     - \"10.30.170.0/24\"",
-        a = digest_a(),
-        b = digest_b(),
-        pin = pin_a()
+        a = pin_a(),
+        b = pin_b()
     );
     let loaded = decode(&yaml);
     assert_eq!(loaded.settings, non_default());
@@ -91,16 +87,15 @@ routes:
 fn a_full_document_in_flow_style() {
     let yaml = format!(
         "{{schema_version: 1, vpn: {{host: vpn.example.com, port: 8443, username: bob, realm: corp,
- client: \"openfortivpn\", dtls: true, trusted_certs: [{a}, '{b}'], trusted_cert_pins: [\"{pin}\"]}},
+ dtls: true, trusted_cert_pins: [\"{a}\", '{b}']}},
  otp: {{gmail_address: otp@example.com, method: \"gmail_api\", google_client_id: '{GOOGLE_CLIENT_ID}'}},
  connection: {{auto_connect_on_launch: false, session_max_minutes: 175,
  proactive_reconnect: {{enabled: false, margin_minutes: 7}},
  reconnect_after_sleep: {{enabled: true, min_sleep_minutes: 45}},
  schedule: {{enabled: true, days: [mon, wed, sat, wed], start: 8:30, end: '19:05', away_minutes: 90}}}},
  routes: {{networks: [\"10.20.161.0/24\"], bypass_vpn: [10.30.161.16/32, '10.30.170.0/24']}}}}",
-        a = digest_a(),
-        b = digest_b(),
-        pin = pin_a()
+        a = pin_a(),
+        b = pin_b()
     );
     assert_eq!(decode(&yaml).settings, non_default());
 }
@@ -129,7 +124,7 @@ fn null_values_and_sections_fall_back_to_defaults() {
         "connection:\n  proactive_reconnect:\n",
         "connection:\n  auto_connect_on_launch: Null\n",
         "schema_version:\n",
-        "vpn:\n  trusted_certs:\n",
+        "vpn:\n  trusted_cert_pins:\n",
     ] {
         assert_eq!(decode(yaml).settings, Settings::default(), "{yaml:?}");
     }
@@ -471,8 +466,8 @@ fn anchors_and_aliases_are_refused_at_the_anchor() {
             loc(2, 9),
         ),
         (
-            format!("vpn:\n  trusted_certs: [&d {}]\n", "a".repeat(64)),
-            loc(2, 19),
+            format!("vpn:\n  trusted_cert_pins: [&d {}]\n", "a".repeat(64)),
+            loc(2, 23),
         ),
         ("&root\nvpn: {}\n".to_owned(), loc(1, 1)),
     ] {
@@ -538,9 +533,9 @@ fn explicit_tags_are_refused() {
             loc(1, 6),
         ),
         (
-            "vpn:\n  trusted_certs: !!seq []\n",
+            "vpn:\n  trusted_cert_pins: !!seq []\n",
             "tag:yaml.org,2002:seq",
-            loc(2, 18),
+            loc(2, 22),
         ),
         (
             "vpn:\n  port: !!int \"443\"\n",
@@ -634,16 +629,16 @@ fn wrong_node_kinds() {
             loc(2, 27),
         ),
         (
-            format!("vpn:\n  trusted_certs: {a64}\n"),
-            "vpn.trusted_certs",
+            format!("vpn:\n  trusted_cert_pins: {a64}\n"),
+            "vpn.trusted_cert_pins",
             ValueKind::Sequence,
-            loc(2, 18),
+            loc(2, 22),
         ),
         (
-            "vpn:\n  trusted_certs: { a: b }\n".to_owned(),
-            "vpn.trusted_certs",
+            "vpn:\n  trusted_cert_pins: { a: b }\n".to_owned(),
+            "vpn.trusted_cert_pins",
             ValueKind::Sequence,
-            loc(2, 18),
+            loc(2, 22),
         ),
         (
             "schema_version: [1]\n".to_owned(),

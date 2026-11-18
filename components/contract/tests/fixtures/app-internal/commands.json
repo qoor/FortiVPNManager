@@ -311,24 +311,6 @@
   {
     "command": {
       "_0": {
-        "setVpnClient": {
-          "client": "openconnect"
-        }
-      }
-    }
-  },
-  {
-    "command": {
-      "_0": {
-        "setVpnClient": {
-          "client": "openfortivpn"
-        }
-      }
-    }
-  },
-  {
-    "command": {
-      "_0": {
         "registerHelper": {}
       }
     }

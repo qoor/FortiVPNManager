@@ -2,7 +2,7 @@
 
 use std::time::SystemTime;
 
-use fvm_contract::app_helper::{HelperErrorCode, VpnClient};
+use fvm_contract::app_helper::HelperErrorCode;
 
 use super::policy;
 
@@ -33,7 +33,6 @@ pub enum Failure {
     /// The Helper refused to start the VPN client.
     Helper {
         code: HelperErrorCode,
-        client: VpnClient,
     },
 }
 

@@ -16,9 +16,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{
-    BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus, VpnClient,
-};
+use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus};
 use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
 use fvm_helper_core::process::{Timing, Watchdog};
@@ -48,7 +46,7 @@ fn start() -> Test {
             pipe_name: pipe.clone(),
             security: "D:P(A;;GA;;;SY)(A;;0x12019f;;;AU)".to_owned(),
             watchdog: Watchdog::new(
-                vec![(VpnClient::Openconnect, Arc::new(OpenConnect))],
+                Arc::new(OpenConnect),
                 env::temp_dir().join(name),
                 Timing::default(),
             ),

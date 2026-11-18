@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{
-    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, VpnClient,
+    BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
 };
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, BypassRoutesChange, BypassRoutesOutcome, FromEntry, NetworkCheck,
@@ -65,11 +65,7 @@ impl OsSide {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&folder).unwrap();
-        let watchdog = Watchdog::new(
-            vec![(VpnClient::Openconnect, Arc::new(OpenConnect))],
-            folder.join("run"),
-            Timing::default(),
-        );
+        let watchdog = Watchdog::new(Arc::new(OpenConnect), folder.join("run"), Timing::default());
         let (sender, messages) = mpsc::channel();
         let inbox = entry::start(watchdog, move |message| {
             let _ = sender.send(message.clone());

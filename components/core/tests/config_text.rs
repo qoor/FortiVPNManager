@@ -4,7 +4,6 @@
 mod common;
 
 use common::*;
-use fvm_contract::app_helper::VpnClient;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::problem::{
     ConfigProblemKind, ConfigWarning, ConfigWarningKind, ValueKind,
@@ -105,6 +104,30 @@ fn values_of_unknown_keys_are_not_type_checked() {
             .collect::<Vec<_>>(),
         [unknown("future")]
     );
+}
+
+#[test]
+fn the_vpn_client_and_the_digests_are_unknown_keys_on_both_oses() {
+    let yaml = format!(
+        "vpn:\n  client: openfortivpn\n  trusted_certs:\n    - {}\n  trusted_cert_pins:\n    - {}\n",
+        "a".repeat(64),
+        pin_a(),
+    );
+    for loaded in [
+        decode(&yaml),
+        config::read(yaml.as_bytes(), &windows_client()).unwrap(),
+    ] {
+        let mut expected = Settings::default();
+        expected.vpn.trusted_cert_pins = vec![pin_a()];
+        assert_eq!(loaded.settings, expected);
+        assert_eq!(
+            loaded.warnings,
+            [
+                warning(unknown("vpn.client"), 2, 3),
+                warning(unknown("vpn.trusted_certs"), 3, 3),
+            ]
+        );
+    }
 }
 
 // MARK: Text
@@ -271,7 +294,7 @@ fn a_newer_version_wins_over_everything_else() {
     // A future file may use keys, values or ranges this version refuses.
     assert_eq!(
         kind(
-            "vpn:\n  port: 0443\n  trusted_certs: { primary: x }\nschema_version: 3\nconnection:\n  session_max_minutes: \"forever\"\n"
+            "vpn:\n  port: 0443\n  trusted_cert_pins: { primary: x }\nschema_version: 3\nconnection:\n  session_max_minutes: \"forever\"\n"
         ),
         ConfigProblemKind::NewerSchemaVersion { version: 3 }
     );
@@ -311,30 +334,17 @@ fn invalid_versions() {
 // MARK: Certificate values
 
 #[test]
-fn an_uppercase_certificate_value_is_lowercased() {
-    let settings = decode(&format!(
-        "vpn:\n  trusted_certs:\n    - {}\n",
-        digest_b().to_uppercase()
-    ))
-    .settings;
-    assert_eq!(settings.vpn.trusted_certs, [digest_b()]);
-}
-
-#[test]
 fn invalid_certificate_values_are_dropped_with_warnings() {
     let yaml = format!(
-        "vpn:\n  trusted_certs:\n    - {a}\n    - not-a-digest\n    - {a63}\n    - {f65}\n    - \"{b} \"\n    - ~\n    - {{ sha: {c} }}\n    - [{c}]\n    - {upper_c}\n    - \"{upper_a}\"\n    - \u{FF10}{zeros}\n",
-        a = digest_a(),
-        a63 = "a".repeat(63),
-        f65 = "f".repeat(65),
-        b = digest_b(),
-        c = digest_c(),
-        upper_c = digest_c().to_uppercase(),
-        upper_a = digest_a().to_uppercase(),
-        zeros = "0".repeat(63),
+        "vpn:\n  trusted_cert_pins:\n    - {a}\n    - not-a-pin\n    - pin-sha256:{short}=\n    - pin-sha256:{long}=\n    - \"{b} \"\n    - ~\n    - {{ sha: \"{c}\" }}\n    - [\"{c}\"]\n    - {c}\n    - \"{a}\"\n    - \u{FF10}{c}\n",
+        a = pin_a(),
+        short = "A".repeat(42),
+        long = "A".repeat(44),
+        b = pin_b(),
+        c = pin_c(),
     );
     let loaded = decode(&yaml);
-    assert_eq!(loaded.settings.vpn.trusted_certs, [digest_a(), digest_c()]);
+    assert_eq!(loaded.settings.vpn.trusted_cert_pins, [pin_a(), pin_c()]);
     let invalid = |index| ConfigWarningKind::InvalidTrustedCert { index };
     assert_eq!(
         loaded.warnings,
@@ -354,8 +364,9 @@ fn invalid_certificate_values_are_dropped_with_warnings() {
 
 #[test]
 fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
-    let values: Vec<String> = ('a'..='f')
-        .map(|fill| fill.to_string().repeat(64))
+    let values: Vec<String> = ['A', 'B', 'C', 'D', 'E', 'F']
+        .iter()
+        .map(|fill| format!("pin-sha256:{}=", fill.to_string().repeat(43)))
         .collect();
     // A repeat after the limit is still a repeat.
     let items: String = [&values[..4], &values[..1], &values[4..]]
@@ -363,8 +374,8 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
         .iter()
         .map(|value| format!("    - {value}\n"))
         .collect();
-    let loaded = decode(&format!("vpn:\n  trusted_certs:\n{items}"));
-    assert_eq!(loaded.settings.vpn.trusted_certs, values[..4]);
+    let loaded = decode(&format!("vpn:\n  trusted_cert_pins:\n{items}"));
+    assert_eq!(loaded.settings.vpn.trusted_cert_pins, values[..4]);
     assert_eq!(
         loaded.warnings,
         [
@@ -372,39 +383,6 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
             warning(ConfigWarningKind::TooManyTrustedCerts { limit: 4 }, 8, 7),
         ]
     );
-}
-
-/// The app on each OS warns only about the lists of the clients it can run, both on macOS; the other
-/// is kept for the app on the other OS, without the values that list cannot use.
-#[test]
-fn only_the_lists_of_the_oss_clients_warn() {
-    let yaml = format!(
-        "vpn:\n  trusted_certs:\n    - {a}\n    - not-a-digest\n    - {a}\n  trusted_cert_pins:\n    - {pin}\n    - not-a-pin\n    - {pin}\n",
-        a = digest_a(),
-        pin = pin_a(),
-    );
-    let on_macos = decode(&yaml);
-    let on_windows = config::read(yaml.as_bytes(), &windows_client()).unwrap();
-    for loaded in [&on_macos, &on_windows] {
-        assert_eq!(loaded.settings.vpn.trusted_certs, [digest_a()]);
-        assert_eq!(loaded.settings.vpn.trusted_cert_pins, [pin_a()]);
-    }
-    let expected = |first_line| {
-        vec![
-            warning(
-                ConfigWarningKind::InvalidTrustedCert { index: 1 },
-                first_line,
-                7,
-            ),
-            warning(
-                ConfigWarningKind::DuplicateTrustedCert { index: 2 },
-                first_line + 1,
-                7,
-            ),
-        ]
-    };
-    assert_eq!(on_macos.warnings, [expected(4), expected(8)].concat());
-    assert_eq!(on_windows.warnings, expected(8));
 }
 
 #[test]
@@ -430,31 +408,19 @@ fn pins_past_the_limit_are_dropped() {
 }
 
 #[test]
-fn an_all_digit_certificate_value_stays_text() {
-    let digits = "0123456789".repeat(6) + "0123";
-    assert_eq!(
-        decode(&format!("vpn:\n  trusted_certs: [{digits}]\n"))
-            .settings
-            .vpn
-            .trusted_certs,
-        [digits]
-    );
-}
-
-#[test]
 fn empty_certificate_lists() {
     assert!(
-        decode("vpn:\n  trusted_certs: []\n")
+        decode("vpn:\n  trusted_cert_pins: []\n")
             .settings
             .vpn
-            .trusted_certs
+            .trusted_cert_pins
             .is_empty()
     );
     assert!(
-        decode("vpn:\n  trusted_certs:\n")
+        decode("vpn:\n  trusted_cert_pins:\n")
             .settings
             .vpn
-            .trusted_certs
+            .trusted_cert_pins
             .is_empty()
     );
 }
@@ -510,63 +476,6 @@ fn deep_block_sequences_read_too() {
             .collect::<Vec<_>>(),
         [unknown("notes")]
     );
-}
-
-// MARK: VPN client
-
-#[test]
-fn accepted_vpn_clients() {
-    for (raw, expected) in [
-        ("openfortivpn", VpnClient::Openfortivpn),
-        ("\"openconnect\"", VpnClient::Openconnect),
-        ("'openconnect'", VpnClient::Openconnect),
-        ("~", VpnClient::Openconnect),
-        ("", VpnClient::Openconnect),
-    ] {
-        let loaded = decode(&format!("vpn:\n  client: {raw}\n"));
-        assert_eq!(loaded.settings.vpn.client, expected, "{raw}");
-        assert!(loaded.warnings.is_empty());
-    }
-}
-
-#[test]
-fn a_missing_vpn_client_is_openconnect() {
-    let vpn = decode("vpn:\n  host: vpn.example.com\n").settings.vpn;
-    assert_eq!(vpn.client, VpnClient::Openconnect);
-}
-
-#[test]
-fn other_vpn_clients_are_errors_at_the_value() {
-    for raw in ["OpenConnect", "forticlient", "\"\"", "true"] {
-        let error =
-            load_error(&format!("vpn:\n  host: vpn.example.com\n  client: {raw}\n")).unwrap();
-        let text = if raw == "\"\"" { "" } else { raw };
-        assert_eq!(
-            error.kind,
-            ConfigProblemKind::InvalidChoice {
-                path: "vpn.client".into(),
-                raw: text.into(),
-                allowed: vec!["openfortivpn".into(), "openconnect".into()],
-            },
-            "{raw}"
-        );
-        assert_eq!(error.location, loc(3, 11), "{raw}");
-    }
-}
-
-#[test]
-fn the_windows_app_keeps_the_macs_vpn_client() {
-    let yaml = "vpn:\n  host: vpn.example.com\n  client: openfortivpn\n";
-    let loaded = config::read(yaml.as_bytes(), &windows_client()).unwrap();
-    assert_eq!(loaded.settings.vpn.client, VpnClient::Openfortivpn);
-    let Ok(config::Update::Write { text, .. }) =
-        config::update(Some(yaml.as_bytes()), &windows_client(), |settings| {
-            settings.vpn.port = 8443;
-        })
-    else {
-        panic!("the change is written");
-    };
-    assert!(text.contains("\n  client: \"openfortivpn\"\n"), "{text}");
 }
 
 // MARK: DTLS

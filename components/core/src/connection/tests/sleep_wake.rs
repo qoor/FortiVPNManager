@@ -377,7 +377,9 @@ fn a_tunnel_that_dies_during_sleep_reconnects_after_the_wake() {
 
 #[test]
 fn sleep_during_a_planned_reconnect_waits_for_the_wake() {
-    let mut h = Harness::new();
+    let mut settings = settings();
+    settings.connection.proactive_margin_minutes = 2;
+    let mut h = Harness::with_settings(settings);
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
     h.fire(TimerKind::ProactiveReconnect);

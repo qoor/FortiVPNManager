@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason, VpnClient};
+use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{
     ConnectProgress, ConnectionIcon, ConnectionStatus, ProactiveReconnect,
@@ -14,12 +14,6 @@ use super::harness::*;
 
 const NEXT_TUNNEL_IP: Ipv4Addr = Ipv4Addr::new(10, 212, 134, 9);
 
-fn openconnect() -> Settings {
-    let mut settings = settings();
-    settings.account.client = VpnClient::Openconnect;
-    settings
-}
-
 fn connected_with(settings: Settings) -> (Harness, Session) {
     let mut h = Harness::with_settings(settings);
     h.launch_connected();
@@ -28,7 +22,7 @@ fn connected_with(settings: Settings) -> (Harness, Session) {
 }
 
 fn connected() -> (Harness, Session) {
-    connected_with(openconnect())
+    connected_with(settings())
 }
 
 fn replaced(h: &Harness) -> Option<&Session> {
@@ -167,38 +161,6 @@ fn reconnect_now_while_connected_brings_up_the_next_tunnel_first() {
 }
 
 #[test]
-fn openfortivpn_and_a_session_of_another_client_stop_the_tunnel_first() {
-    let (mut h, old) = connected_with(settings());
-    assert_eq!(
-        stop_reasons(&h.fire(TimerKind::ProactiveReconnect)),
-        [StopReason::ProactiveReconnect]
-    );
-    assert_eq!(h.cm.current_attempt(), Some(&old.attempt));
-
-    let (mut h, _) = connected_with(settings());
-    h.send(Input::SettingsChanged(openconnect()));
-    assert_eq!(
-        stop_reasons(&h.fire(TimerKind::ProactiveReconnect)),
-        [StopReason::ProactiveReconnect]
-    );
-    assert_eq!(
-        after(&h),
-        Some(AfterStop::Reconnect(AttemptReason::Proactive))
-    );
-
-    let (mut h, _) = connected();
-    h.send(Input::SettingsChanged(settings()));
-    assert_eq!(
-        stop_reasons(&h.send(Input::ReconnectNow)),
-        [StopReason::Reconnect]
-    );
-    assert_eq!(
-        after(&h),
-        Some(AfterStop::Reconnect(AttemptReason::ReconnectNow))
-    );
-}
-
-#[test]
 fn a_wake_past_the_planned_time_keeping_the_tunnel_prepares_the_next_one() {
     let (mut h, old) = connected();
     h.sleep();
@@ -243,7 +205,7 @@ fn without_a_network_the_old_tunnel_is_stopped_first() {
 
 #[test]
 fn a_session_too_close_to_its_end_stops_first() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.proactive_margin_minutes = 2;
     let (mut h, _) = connected_with(settings);
     assert_eq!(
@@ -263,7 +225,7 @@ fn a_session_too_close_to_its_end_stops_first() {
 
 #[test]
 fn a_retry_too_close_to_the_session_end_stops_first() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.proactive_margin_minutes = 4;
     let (mut h, old) = connected_with(settings);
     h.fire(TimerKind::ProactiveReconnect);
@@ -495,7 +457,7 @@ fn a_certificate_change_prepares_again_at_once_uncounted() {
 
 #[test]
 fn the_hourly_limit_keeps_the_tunnel() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.session_max_minutes = 60;
     settings.connection.proactive_margin_minutes = 50;
     let mut ledger = empty_ledger();
@@ -688,7 +650,7 @@ fn a_given_up_reconnect_now_leaves_the_planned_reconnect() {
 
 #[test]
 fn a_renewal_started_by_reconnect_now_retries_while_the_user_is_away_outside_the_hours() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.schedule = Some(weekday_hours());
     let mut h = Harness::with_settings(settings);
     h.now = at(18, 17, 0, 0);
@@ -708,7 +670,7 @@ fn a_renewal_started_by_reconnect_now_retries_while_the_user_is_away_outside_the
 
 #[test]
 fn a_proactive_renewal_waits_for_the_user_away_outside_the_hours() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.schedule = Some(weekday_hours());
     let mut h = Harness::with_settings(settings);
     h.now = at(18, 17, 0, 0);
@@ -730,7 +692,7 @@ fn a_proactive_renewal_waits_for_the_user_away_outside_the_hours() {
 
 #[test]
 fn reconnect_now_during_a_proactive_preparation_keeps_retrying_while_away_outside_the_hours() {
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.schedule = Some(weekday_hours());
     let mut h = Harness::with_settings(settings);
     h.now = at(18, 17, 0, 0);
@@ -814,7 +776,7 @@ fn disconnect_and_quit_stop_both_tunnels_and_wait_for_both() {
 
 #[test]
 fn the_old_tunnel_ending_during_the_preparation_leaves_the_next_as_the_attempt() {
-    let mut h = Harness::with_settings(openconnect());
+    let mut h = Harness::with_settings(settings());
     h.launch();
     let first = h.start_tunnel();
     reject_login(&mut h, &first);
@@ -862,7 +824,7 @@ fn the_old_tunnel_ending_during_the_preparation_leaves_the_next_as_the_attempt()
 
 #[test]
 fn a_stable_replaced_tunnel_clears_the_failure_count() {
-    let mut h = Harness::with_settings(openconnect());
+    let mut h = Harness::with_settings(settings());
     h.launch();
     let first = h.start_tunnel();
     reject_login(&mut h, &first);
@@ -980,7 +942,7 @@ fn a_new_plan_after_giving_up_reconnects_at_its_time() {
         reject_login(&mut h, &id);
     }
     assert_eq!(h.connection_timers(), []);
-    let mut settings = openconnect();
+    let mut settings = settings();
     settings.connection.session_max_minutes = 240;
     h.send(Input::SettingsChanged(settings));
     assert_eq!(renewal(&h), None);

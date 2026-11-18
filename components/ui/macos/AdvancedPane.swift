@@ -9,7 +9,9 @@ struct AdvancedPane: View {
         SettingsForm(navigation: navigation) {
             if let readiness = ui.readiness, let config = ui.config {
                 helperSection(readiness)
-                clientSection(config, found: readiness.client)
+                if let found = readiness.client {
+                    clientSection(found)
+                }
                 settingsFileSection(config.file)
             }
         }
@@ -40,48 +42,28 @@ struct AdvancedPane: View {
     }
 
     /// The VPN client the Helper runs.
-    private func clientSection(_ config: AppInternal.ConfigSection, found: AppInternal.VpnClientInfo?) -> some View {
+    private func clientSection(_ found: AppInternal.VpnClientInfo) -> some View {
         Section("VPN client") {
-            Picker(selection: vpnClient(config)) {
-                ForEach([AppInternal.VpnClient.openconnect, .openfortivpn], id: \.self) { client in
-                    Text(verbatim: client.rawValue).tag(client)
+            LabeledContent("Type", value: "openconnect")
+                .searchAnchor("Type", navigation)
+            LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
+                .searchAnchor("Version", navigation)
+            LabeledContent("Path") {
+                if let path = found.path {
+                    Button("Show in Finder") { revealInFinder(path) }
+                        .help(path)
+                } else {
+                    Text("Not found")
                 }
-            } label: {
-                RowTitle("Type", detail: Text("Applies from the next connection."))
             }
-            .searchAnchor("Type", navigation)
-            if let error = config.vpnClientError {
-                NoticeRow(text: error.message, style: .error)
+            .searchAnchor("Path", navigation)
+            if let untested = found.untestedVersion {
+                NoticeRow(text: untested.message, style: .warning)
             }
-            if let found {
-                LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
-                    .searchAnchor("Version", navigation)
-                LabeledContent("Path") {
-                    if let path = found.path {
-                        Button("Show in Finder") { revealInFinder(path) }
-                            .help(path)
-                    } else {
-                        Text("Not found")
-                    }
-                }
-                .searchAnchor("Path", navigation)
-                if let untested = found.untestedVersion {
-                    NoticeRow(text: untested.message, style: .warning)
-                }
-                if let problem = found.problem {
-                    NoticeRow(text: problem.message(installing: config.vpnClient), style: .error)
-                }
+            if let problem = found.problem {
+                NoticeRow(text: problem.message, style: .error)
             }
         }
-    }
-
-    private func vpnClient(_ config: AppInternal.ConfigSection) -> Binding<AppInternal.VpnClient> {
-        Binding(
-            get: { config.vpnClient },
-            set: { client in
-                if client != config.vpnClient { ui.send(.setVpnClient(client: client)) }
-            }
-        )
     }
 
     private func settingsFileSection(_ file: AppInternal.ConfigFileState) -> some View {

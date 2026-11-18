@@ -1,6 +1,6 @@
-//! Checks of the values both VPN clients take: the gateway's host, text fields, the password and
-//! the OTP. Each client adds its own limits on top. Error texts name the field but never its value,
-//! and reach the app as they are.
+//! Checks of the values the VPN client takes: the gateway's host, text fields and the OTP. The
+//! client adds its own limits on top. Error texts name the field but never its value, and reach the
+//! app as they are.
 
 use std::net::Ipv4Addr;
 
@@ -88,7 +88,7 @@ fn text_problem(
 
 /// A line break would end the value where a client reads it line by line. The other controls (NEL
 /// included), the Unicode line and paragraph separators and the BOM are never part of a real value.
-pub(crate) fn is_forbidden(c: char) -> bool {
+pub fn is_forbidden(c: char) -> bool {
     c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{FEFF}')
 }
 
@@ -139,11 +139,4 @@ pub(crate) fn account_value(
             Err(AccountValueProblem::LeadingOrTrailingSpace { field })
         }
     }
-}
-
-/// The password goes to stdin, followed by '\n', so spaces at either end are kept. '\n' ends the
-/// client's read early, '\r' would become part of the password (a pipe has no tty translation),
-/// and '\0' ends the C string.
-pub(crate) fn forbidden_in_password(password: &str) -> Option<char> {
-    password.chars().find(|c| matches!(c, '\n' | '\r' | '\0'))
 }

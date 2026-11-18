@@ -2,9 +2,9 @@
 //! all inputs in one queue (UI commands, port responses, system events, Helper messages, timers),
 //! asks the judgment core what to do and carries it out: Helper requests in order, timers on the
 //! wall clock, OTP sessions, the Google account, config.yaml, state.json and the log file, syncing
-//! the exception routes, and the sections and log lines the UI shows. It uses the backend adapters
-//! only to import openfortivpn's settings and to check certificate and account values. Whatever
-//! differs per OS goes through ports; how each OS starts the runtime lives in that OS's module.
+//! the exception routes, and the sections and log lines the UI shows. It uses the backend adapter
+//! only to check certificate and account values. Whatever differs per OS goes through ports; how
+//! each OS starts the runtime lives in that OS's module.
 
 mod account_form;
 mod bypass_sync;
@@ -19,6 +19,7 @@ mod log_file;
 pub mod macos;
 mod net;
 mod network;
+mod openfortivpn_settings;
 mod orchestration;
 mod otp_session;
 mod readiness;

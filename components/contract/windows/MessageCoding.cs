@@ -62,7 +62,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Command.SetConnectionOption), TypeInfoPropertyName = "CommandSetConnectionOption")]
 [JsonSerializable(typeof(AppInternal.Command.SetScheduleHours), TypeInfoPropertyName = "CommandSetScheduleHours")]
 [JsonSerializable(typeof(AppInternal.Command.SetOpenAtLogin), TypeInfoPropertyName = "CommandSetOpenAtLogin")]
-[JsonSerializable(typeof(AppInternal.Command.SetVpnClient), TypeInfoPropertyName = "CommandSetVpnClient")]
 [JsonSerializable(typeof(AppInternal.Command.RegisterHelper), TypeInfoPropertyName = "CommandRegisterHelper")]
 [JsonSerializable(typeof(AppInternal.Command.OpenHelperApprovalSettings), TypeInfoPropertyName = "CommandOpenHelperApprovalSettings")]
 [JsonSerializable(typeof(AppInternal.Command.SetBypassRows), TypeInfoPropertyName = "CommandSetBypassRows")]
@@ -147,7 +146,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.HelperState.Unreachable), TypeInfoPropertyName = "HelperStateUnreachable")]
 
 [JsonSerializable(typeof(AppInternal.ClientProblemKind.NotFound), TypeInfoPropertyName = "ClientProblemKindNotFound")]
-[JsonSerializable(typeof(AppInternal.ClientProblemKind.OutsideAllowedLocation), TypeInfoPropertyName = "ClientProblemKindOutsideAllowedLocation")]
 [JsonSerializable(typeof(AppInternal.ClientProblemKind.NotRegularFile), TypeInfoPropertyName = "ClientProblemKindNotRegularFile")]
 [JsonSerializable(typeof(AppInternal.ClientProblemKind.WritableByOthers), TypeInfoPropertyName = "ClientProblemKindWritableByOthers")]
 [JsonSerializable(typeof(AppInternal.ClientProblemKind.NotExecutable), TypeInfoPropertyName = "ClientProblemKindNotExecutable")]
