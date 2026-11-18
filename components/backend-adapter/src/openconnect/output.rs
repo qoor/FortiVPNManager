@@ -8,9 +8,8 @@ use std::net::Ipv4Addr;
 
 use fvm_contract::app_helper::{Milestone, OutputSource};
 use fvm_contract::backend::{Finding, OutputInterpreter, Prompt, SessionInputs};
+use fvm_contract::validation::certificate_value;
 use zeroize::Zeroizing;
-
-use super::request::certificate_value;
 
 // The fortinet login form's fields, each printed alone on a line without a line break.
 const PASSWORD_PROMPT: &[u8] = b"Password: ";

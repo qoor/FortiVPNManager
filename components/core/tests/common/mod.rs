@@ -7,23 +7,11 @@ use fvm_core::config::{
     self, ClientRules, Ipv4Network, Loaded, Platform, Settings, Update, UpdateError,
 };
 
-/// The openconnect adapter's rule, shortened: `pin-sha256:` and 44 base64 characters.
-fn pin_value(text: &str) -> Option<String> {
-    let encoded = text.strip_prefix("pin-sha256:")?;
-    (encoded.len() == 44
-        && encoded.ends_with('=')
-        && encoded[..43]
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/'))
-    .then(|| text.to_owned())
-}
-
 /// The macOS app's rules.
 pub fn client() -> ClientRules<'static> {
     ClientRules {
         name: "openfortivpn",
         platform: Platform::MacOs,
-        pin_value: &pin_value,
     }
 }
 
@@ -32,12 +20,11 @@ pub fn windows_client() -> ClientRules<'static> {
     ClientRules {
         name: "openconnect",
         platform: Platform::Windows,
-        pin_value: &pin_value,
     }
 }
 
 pub fn read(yaml: &str) -> Result<Loaded, ConfigProblem> {
-    config::read(yaml.as_bytes(), &client())
+    config::read(yaml.as_bytes())
 }
 
 pub fn decode(yaml: &str) -> Loaded {
@@ -87,11 +74,11 @@ pub fn pin_a() -> String {
 }
 
 pub fn pin_b() -> String {
-    format!("pin-sha256:{}=", "B".repeat(43))
+    format!("pin-sha256:{}=", "E".repeat(43))
 }
 
 pub fn pin_c() -> String {
-    format!("pin-sha256:{}=", "C".repeat(43))
+    format!("pin-sha256:{}=", "I".repeat(43))
 }
 pub const GOOGLE_CLIENT_ID: &str =
     "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com";

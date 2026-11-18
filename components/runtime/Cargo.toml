@@ -8,7 +8,6 @@ publish.workspace = true
 crate-type = ["staticlib", "lib"]
 
 [dependencies]
-fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
 fvm-core.workspace = true
 getrandom.workspace = true

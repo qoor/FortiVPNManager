@@ -104,7 +104,7 @@ impl ConfigFile {
             }
             Ok(Some((bytes, file_warnings))) => {
                 self.exists = true;
-                match config::read(&bytes, &client::rules()) {
+                match config::read(&bytes) {
                     Ok(loaded) => {
                         self.settings = loaded.settings;
                         self.load_error = None;

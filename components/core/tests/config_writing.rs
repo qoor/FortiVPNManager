@@ -286,12 +286,13 @@ fn random_valid_configs_round_trip() {
         settings.vpn.port = rng.range(1, 65535);
         settings.vpn.dtls = rng.coin();
         for _ in 0..rng.range(0, 4) {
-            let encoded: String = (0..43)
+            let mut encoded: String = (0..42)
                 .map(|_| {
                     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
                         [rng.range(0, 63) as usize] as char
                 })
                 .collect();
+            encoded.push(b"AEIMQUYcgkosw048"[rng.range(0, 15) as usize] as char);
             let pin = format!("pin-sha256:{encoded}=");
             if !settings.vpn.trusted_cert_pins.contains(&pin) {
                 settings.vpn.trusted_cert_pins.push(pin);
@@ -389,18 +390,7 @@ fn the_dtls_key_is_written_with_its_comment_on_both_oses() {
                 text.contains(&format!("  realm: \"\"\n{COMMENT}  dtls: {dtls}\n  #")),
                 "{text}"
             );
-            assert_eq!(
-                config::read(text.as_bytes(), &client).unwrap().settings,
-                settings
-            );
+            assert_eq!(config::read(text.as_bytes()).unwrap().settings, settings);
         }
     }
-}
-
-#[test]
-fn a_file_written_on_one_os_reads_the_same_on_the_other() {
-    let text = render(&non_default());
-    let on_windows = config::read(text.as_bytes(), &windows_client()).unwrap();
-    assert_eq!(on_windows.settings, non_default());
-    assert!(on_windows.warnings.is_empty());
 }

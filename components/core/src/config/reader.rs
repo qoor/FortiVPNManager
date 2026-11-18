@@ -9,12 +9,13 @@ use fvm_contract::app_internal::problem::{
     ConfigProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind, LineColumn, ValueKind,
 };
 use fvm_contract::app_internal::{TimeOfDay, Weekday};
+use fvm_contract::validation::certificate_value;
 use saphyr_parser::ScalarStyle;
 
 use super::text::disallowed_in_value;
 use super::tree::{Kind, Node, Tree, scalar_text};
 use super::{
-    AWAY_MINUTES, ClientRules, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_TRUSTED_CERTS,
+    AWAY_MINUTES, Connection, Ipv4Network, Loaded, MARGIN_MINUTES, MAX_TRUSTED_CERTS,
     MIN_SLEEP_MINUTES, OTP_METHODS, Otp, PORTS, ProactiveReconnect, ReconnectAfterSleep, Routes,
     SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn, WEEKDAYS, minutes,
     normalized_days,
@@ -23,7 +24,7 @@ use crate::bypass_rules::{MAX_ENTRIES, vpn_server_target};
 
 type Pairs = [(usize, usize)];
 
-pub(super) fn read(tree: &Tree<'_>, client: &ClientRules<'_>) -> Result<Loaded, ConfigProblem> {
+pub(super) fn read(tree: &Tree<'_>) -> Result<Loaded, ConfigProblem> {
     let Some(root) = tree.root().filter(|root| !is_null(root)) else {
         return Ok(Loaded {
             settings: Settings::default(),
@@ -47,7 +48,6 @@ pub(super) fn read(tree: &Tree<'_>, client: &ClientRules<'_>) -> Result<Loaded, 
     check_structure(tree, root)?;
     let mut fields = Fields {
         tree,
-        client,
         warnings: Vec::new(),
         session_location: None,
         margin_location: None,
@@ -135,7 +135,6 @@ fn check_structure(tree: &Tree<'_>, root: &Node<'_>) -> Result<(), ConfigProblem
 /// are no anchors, aliases or tags.
 struct Fields<'t, 'a> {
     tree: &'t Tree<'a>,
-    client: &'t ClientRules<'t>,
     warnings: Vec<ConfigWarning>,
     session_location: Option<LineColumn>,
     margin_location: Option<LineColumn>,
@@ -394,7 +393,7 @@ impl<'t, 'a> Fields<'t, 'a> {
             let item = self.tree.node(item);
             let value = scalar_text(item)
                 .filter(|_| !is_null(item))
-                .and_then(self.client.pin_value);
+                .and_then(certificate_value);
             let kind = match value {
                 Some(value) if values.contains(&value) => ConfigWarningKind::DuplicateTrustedCert {
                     index: index as u32,

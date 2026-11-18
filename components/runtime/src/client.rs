@@ -1,8 +1,7 @@
-//! The VPN client the app runs: openconnect; Linux comes later. The runtime uses its adapter for
-//! the account checks. Importing settings reads openfortivpn's settings file on macOS and the
-//! official FortiClient's connection on Windows: openconnect has no settings file of its own.
+//! The VPN client the app runs: openconnect; Linux comes later. Importing settings reads
+//! openfortivpn's settings file on macOS and the official FortiClient's connection on Windows:
+//! openconnect has no settings file of its own.
 
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_core::config::{ClientRules, Platform};
 
 #[cfg(not(windows))]
@@ -23,6 +22,5 @@ pub(crate) fn rules() -> ClientRules<'static> {
     ClientRules {
         name: IMPORTED_CLIENT,
         platform: PLATFORM,
-        pin_value: &|text| OpenConnect.certificate_value(text),
     }
 }

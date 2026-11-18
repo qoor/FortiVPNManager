@@ -6,7 +6,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::command::AccountForm;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
@@ -18,6 +17,7 @@ use fvm_contract::app_internal::section::{
     ImportReport, ImportedPassword,
 };
 use fvm_contract::app_internal::{ButtonState, SecretText};
+use fvm_contract::validation;
 use fvm_core::config::Settings;
 use fvm_core::connection;
 
@@ -173,8 +173,7 @@ impl Forms {
             app_password_entered: !self.app_password.0.is_empty(),
             vpn_password_stored: self.vpn_password_stored,
             app_password_stored: self.app_password_stored,
-            saved_account_problem: OpenConnect
-                .check_account(&vpn.host, &vpn.username, &vpn.realm)
+            saved_account_problem: validation::check_account(&vpn.host, &vpn.username, &vpn.realm)
                 .err(),
             feedback: self.feedback.clone(),
             save: enabled(self.has_changes()),
@@ -278,11 +277,11 @@ impl Runtime {
         if !app_password.is_empty() && address.is_empty() {
             return fail(forms, AccountSaveError::AppPasswordNeedsAddress {});
         }
-        if let Err(problem) = OpenConnect.check_account(&host, &username, &realm) {
+        if let Err(problem) = validation::check_account(&host, &username, &realm) {
             return fail(forms, AccountSaveError::AccountValue { problem });
         }
         if !vpn_password.is_empty()
-            && let Err(error) = OpenConnect.check_vpn_password(&vpn_password)
+            && let Err(error) = validation::check_vpn_password(&vpn_password)
         {
             return fail(forms, error);
         }

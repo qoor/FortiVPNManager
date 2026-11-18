@@ -15,43 +15,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use fvm_contract::app_helper::RunRequest;
-use fvm_contract::app_internal::problem::AccountValueProblem;
-use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
     Backend, ClientCheckWait, ClientExecutable, ClientProblem, LaunchSpec, NetworkSettings,
     OutputInterpreter, UntestedVersion,
 };
+use fvm_contract::validation;
 
 pub use output::Interpreter;
 
 pub struct OpenConnect;
-
-/// What the app's runtime uses: the certificate value format and the account checks.
-impl OpenConnect {
-    /// `text` as a gateway certificate value openconnect compares, `pin-sha256:` and the base64
-    /// of a SHA-256 hash, or `None` when it is no such value.
-    pub fn certificate_value(&self, text: &str) -> Option<String> {
-        request::certificate_value(text)
-    }
-
-    /// Why openconnect would refuse the account's server address, username or realm, the first of
-    /// them, by the rules the Helper applies when connecting. An empty server address or username
-    /// passes, as an account not set up yet; an empty realm means none.
-    pub fn check_account(
-        &self,
-        host: &str,
-        username: &str,
-        realm: &str,
-    ) -> Result<(), AccountValueProblem> {
-        request::check_account(host, username, realm)
-    }
-
-    /// Why openconnect would refuse a typed VPN password: a character outside printable ASCII, or
-    /// too many bytes. An empty one passes, as it keeps the stored password.
-    pub fn check_vpn_password(&self, password: &str) -> Result<(), AccountSaveError> {
-        request::check_vpn_password(password)
-    }
-}
 
 impl Backend for OpenConnect {
     fn client_name(&self) -> &'static str {
@@ -86,7 +58,7 @@ impl Backend for OpenConnect {
     }
 
     fn check_otp(&self, code: &str) -> Result<(), String> {
-        crate::values::check_otp(code)
+        validation::check_otp(code)
     }
 
     fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {

@@ -4,12 +4,12 @@
 
 use std::time::Duration;
 
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::HelperStatus;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::port::{
     HelperCall, LogCategory, LogLevel, PortRequest, PortResponse, RegistrationStatus, SecretItem,
 };
+use fvm_contract::validation;
 use fvm_core::connection::{self, HelperFacts, ReadinessFacts};
 
 use crate::orchestration::Runtime;
@@ -100,9 +100,7 @@ impl Runtime {
         let address = settings.otp.gmail_address.clone();
         let account_values_usable = !vpn.host.is_empty()
             && !vpn.username.is_empty()
-            && OpenConnect
-                .check_account(&vpn.host, &vpn.username, &vpn.realm)
-                .is_ok();
+            && validation::check_account(&vpn.host, &vpn.username, &vpn.realm).is_ok();
         let mut facts = ReadinessFacts {
             config_valid: self.config.is_valid(),
             account_complete: account_values_usable && !address.is_empty(),

@@ -15,9 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::is_forbidden;
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::SecretText;
+use fvm_contract::validation::{certificate_value, is_forbidden};
 
 /// The port openfortivpn uses when the file sets none.
 const DEFAULT_PORT: u16 = 443;
@@ -159,7 +158,7 @@ pub(crate) fn read(bytes: &[u8]) -> ImportedSettings {
             },
             "trusted-cert" => {
                 let text = text.unwrap_or_default();
-                if let Some(pin) = OpenConnect.certificate_value(&text) {
+                if let Some(pin) = certificate_value(&text) {
                     push_once(&mut settings.trusted_cert_pins, pin);
                 } else if !is_digest(&text) {
                     settings.unreadable_lines.push(number);

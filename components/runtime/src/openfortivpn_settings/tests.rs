@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_internal::SecretText;
+use fvm_contract::validation::certificate_value;
 
 use super::{ImportedSettings, default_files, is_digest, lines, strtol_port};
 
@@ -50,7 +50,7 @@ fn the_fixture_values_are_digests_and_pins() {
         assert!(is_digest(digest), "{digest}");
     }
     for pin in [PIN_A, PIN_B] {
-        assert_eq!(OpenConnect.certificate_value(pin), Some(pin.to_owned()));
+        assert_eq!(certificate_value(pin), Some(pin.to_owned()));
     }
 }
 

@@ -107,27 +107,23 @@ fn values_of_unknown_keys_are_not_type_checked() {
 }
 
 #[test]
-fn the_vpn_client_and_the_digests_are_unknown_keys_on_both_oses() {
+fn the_vpn_client_and_the_digests_are_unknown_keys() {
     let yaml = format!(
         "vpn:\n  client: openfortivpn\n  trusted_certs:\n    - {}\n  trusted_cert_pins:\n    - {}\n",
         "a".repeat(64),
         pin_a(),
     );
-    for loaded in [
-        decode(&yaml),
-        config::read(yaml.as_bytes(), &windows_client()).unwrap(),
-    ] {
-        let mut expected = Settings::default();
-        expected.vpn.trusted_cert_pins = vec![pin_a()];
-        assert_eq!(loaded.settings, expected);
-        assert_eq!(
-            loaded.warnings,
-            [
-                warning(unknown("vpn.client"), 2, 3),
-                warning(unknown("vpn.trusted_certs"), 3, 3),
-            ]
-        );
-    }
+    let loaded = decode(&yaml);
+    let mut expected = Settings::default();
+    expected.vpn.trusted_cert_pins = vec![pin_a()];
+    assert_eq!(loaded.settings, expected);
+    assert_eq!(
+        loaded.warnings,
+        [
+            warning(unknown("vpn.client"), 2, 3),
+            warning(unknown("vpn.trusted_certs"), 3, 3),
+        ]
+    );
 }
 
 // MARK: Text
@@ -158,19 +154,16 @@ fn invalid_utf8_is_located() {
     let mut bytes = b"vpn:\n  host: \"a".to_vec();
     bytes.push(0xFF);
     bytes.extend(b"b\"\n");
-    let error = config::read(&bytes, &client()).unwrap_err();
+    let error = config::read(&bytes).unwrap_err();
     assert_eq!(error.kind, ConfigProblemKind::InvalidUtf8 {});
     assert_eq!(error.location, loc(2, 11));
     // A truncated multi-byte sequence after non-ASCII text on the first line.
     let mut truncated = "# \u{D55C}\u{AE00}".as_bytes().to_vec();
     truncated.extend([0xED, 0x95]);
-    assert_eq!(
-        config::read(&truncated, &client()).unwrap_err().location,
-        loc(1, 5)
-    );
+    assert_eq!(config::read(&truncated).unwrap_err().location, loc(1, 5));
     // An encoded surrogate (invalid in UTF-8).
     assert_eq!(
-        config::read(&[0x61, 0x3A, 0x20, 0xED, 0xA0, 0x80], &client())
+        config::read(&[0x61, 0x3A, 0x20, 0xED, 0xA0, 0x80])
             .unwrap_err()
             .kind,
         ConfigProblemKind::InvalidUtf8 {}
@@ -364,7 +357,7 @@ fn invalid_certificate_values_are_dropped_with_warnings() {
 
 #[test]
 fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
-    let values: Vec<String> = ['A', 'B', 'C', 'D', 'E', 'F']
+    let values: Vec<String> = ['A', 'E', 'I', 'M', 'Q', 'U']
         .iter()
         .map(|fill| format!("pin-sha256:{}=", fill.to_string().repeat(43)))
         .collect();
@@ -387,7 +380,7 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
 
 #[test]
 fn pins_past_the_limit_are_dropped() {
-    let pins: Vec<String> = ['A', 'B', 'C', 'D', 'E']
+    let pins: Vec<String> = ['A', 'E', 'I', 'M', 'Q']
         .iter()
         .map(|fill| format!("pin-sha256:{}=", fill.to_string().repeat(43)))
         .collect();
@@ -398,13 +391,9 @@ fn pins_past_the_limit_are_dropped() {
         7,
         7,
     )];
-    for loaded in [
-        config::read(yaml.as_bytes(), &windows_client()).unwrap(),
-        decode(&yaml),
-    ] {
-        assert_eq!(loaded.settings.vpn.trusted_cert_pins, pins[..4]);
-        assert_eq!(loaded.warnings, too_many);
-    }
+    let loaded = decode(&yaml);
+    assert_eq!(loaded.settings.vpn.trusted_cert_pins, pins[..4]);
+    assert_eq!(loaded.warnings, too_many);
 }
 
 #[test]

@@ -4,8 +4,6 @@
 //! only valid values. `update` decides what a write puts in the file. The runtime does the file
 //! work: reading the latest bytes, the atomic write that keeps a symbolic link, and trying again
 //! when the file changes in between.
-//!
-//! The VPN client's own rules come in as `ClientRules`, since the core does not know the client.
 
 mod reader;
 mod template;
@@ -48,15 +46,13 @@ const WEEKDAYS: [(&str, Weekday); 7] = [
     ("sun", Weekday::Sun),
 ];
 
-/// What the file needs from the VPN client's backend adapter and from the OS the app runs on.
+/// What the file needs from the OS the app runs on.
 pub struct ClientRules<'a> {
     /// The client whose settings file the first launch imports, as the comments of a written file
     /// show it.
     pub name: &'a str,
     /// The OS the comments of a written file describe.
     pub platform: Platform,
-    /// The canonical form of a pin (`vpn.trusted_cert_pins`), or `None` when the text is not one.
-    pub pin_value: &'a dyn Fn(&str) -> Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -223,10 +219,10 @@ pub enum UpdateError {
 
 /// Reads the file's bytes. An empty file, or one with only comments or a null document, holds
 /// the defaults; a missing file is the caller's to treat the same way.
-pub fn read(bytes: &[u8], client: &ClientRules<'_>) -> Result<Loaded, ConfigProblem> {
+pub fn read(bytes: &[u8]) -> Result<Loaded, ConfigProblem> {
     let text = text::check(bytes)?;
     let tree = tree::build(text)?;
-    reader::read(&tree, client)
+    reader::read(&tree)
 }
 
 /// Applies `change` to the settings in `current`, the file's latest bytes (`None` when there is no
@@ -238,7 +234,7 @@ pub fn update(
     change: impl FnOnce(&mut Settings),
 ) -> Result<Update, UpdateError> {
     let base = match current {
-        Some(bytes) => Some(read(bytes, client).map_err(UpdateError::File)?.settings),
+        Some(bytes) => Some(read(bytes).map_err(UpdateError::File)?.settings),
         None => None,
     };
     let mut settings = base.clone().unwrap_or_default();

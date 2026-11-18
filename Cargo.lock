@@ -455,7 +455,6 @@ dependencies = [
 name = "fvm-runtime"
 version = "0.0.0"
 dependencies = [
- "fvm-backend-adapter",
  "fvm-contract",
  "fvm-core",
  "getrandom 0.3.4",

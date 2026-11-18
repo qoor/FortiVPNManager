@@ -10,8 +10,6 @@ use std::path::Path;
 use common::Run;
 use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_contract::app_helper::{AttemptId, Milestone, OutputSource, RunRequest, SessionId};
-use fvm_contract::app_internal::problem::{AccountField, AccountValueProblem};
-use fvm_contract::app_internal::section::AccountSaveError;
 use fvm_contract::backend::{
     Backend, ClientExecutable, Finding, LaunchSpec, Prompt, SessionInputs,
 };
@@ -292,85 +290,10 @@ mod launching {
         }
         assert!(launch(&with(|r| r.password = "p".repeat(255))).is_ok());
     }
-
-    #[test]
-    fn otp_is_six_to_eight_digits() {
-        for code in ["008056", "1234567", "12345678"] {
-            assert_eq!(OpenConnect.check_otp(code), Ok(()), "{code}");
-        }
-        for code in ["12345", "123456789", "12345a", "١٢٣٤٥٦"] {
-            assert!(OpenConnect.check_otp(code).is_err(), "{code}");
-        }
-    }
 }
 
-mod values {
+mod client {
     use super::*;
-
-    #[test]
-    fn certificate_values_are_canonical_sha256_pins() {
-        for pin in [PIN, OTHER_PIN, PLACEHOLDER_PIN] {
-            assert_eq!(OpenConnect.certificate_value(pin), Some(pin.to_owned()));
-        }
-        for text in [
-            "",
-            "VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx34=",
-            "PIN-SHA256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx34=",
-            "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx34",
-            "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A==",
-            "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A= ",
-            "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu-T+caKs4wthkccwXx3A=",
-            // The last character carries bits past the 32 bytes.
-            "pin-sha256:VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx35=",
-            "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11",
-        ] {
-            assert_eq!(OpenConnect.certificate_value(text), None, "{text}");
-        }
-    }
-
-    #[test]
-    fn account_values_follow_the_launch_rules() {
-        assert_eq!(OpenConnect.check_account("", "", ""), Ok(()));
-        assert_eq!(
-            OpenConnect.check_account("203.0.113.10", "alice", "staff-1.a_b~c"),
-            Ok(())
-        );
-        assert_eq!(
-            OpenConnect.check_account("vpn.example.com:8443", "alice", ""),
-            Err(AccountValueProblem::InvalidHost {})
-        );
-        assert_eq!(
-            OpenConnect.check_account("vpn.example.com", "alicë", ""),
-            Err(AccountValueProblem::DisallowedCharacters {
-                field: AccountField::Username
-            })
-        );
-        assert_eq!(
-            OpenConnect.check_account("vpn.example.com", "alice", "a/b"),
-            Err(AccountValueProblem::DisallowedCharacters {
-                field: AccountField::Realm
-            })
-        );
-        assert_eq!(
-            OpenConnect.check_account("vpn.example.com", " alice", ""),
-            Err(AccountValueProblem::LeadingOrTrailingSpace {
-                field: AccountField::Username
-            })
-        );
-    }
-
-    #[test]
-    fn a_typed_password_must_be_printable_ascii() {
-        assert_eq!(OpenConnect.check_vpn_password(""), Ok(()));
-        assert_eq!(OpenConnect.check_vpn_password(PASSWORD), Ok(()));
-        for refused in ["pässword".to_owned(), "a\nb".to_owned(), "p".repeat(256)] {
-            assert_eq!(
-                OpenConnect.check_vpn_password(&refused),
-                Err(AccountSaveError::InvalidVpnPassword { max_bytes: 255 }),
-                "{refused:?}"
-            );
-        }
-    }
 
     #[cfg(windows)]
     #[test]

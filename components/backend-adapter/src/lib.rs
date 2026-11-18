@@ -4,6 +4,3 @@
 #[cfg(unix)]
 mod homebrew;
 pub mod openconnect;
-mod values;
-
-pub use values::is_forbidden;
