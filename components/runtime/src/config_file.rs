@@ -16,7 +16,7 @@ use fvm_contract::app_internal::problem::{
 };
 use fvm_core::config::{self, Settings, Update, UpdateError};
 
-use crate::{client, files};
+use crate::files;
 
 /// How often the file is looked at for edits made elsewhere; also on app activation.
 pub(crate) const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
@@ -151,11 +151,8 @@ impl ConfigFile {
             // Taken before reading: a change in between then fails the write instead of being lost.
             let before = fingerprint(&self.path)?;
             let current = read(&self.path)?;
-            let result = config::update(
-                current.as_ref().map(|(bytes, _)| bytes.as_slice()),
-                &client::rules(),
-                &change,
-            );
+            let result =
+                config::update(current.as_ref().map(|(bytes, _)| bytes.as_slice()), &change);
             let (settings, text) = match result {
                 Ok(Update::Unchanged(_)) => return Ok(false),
                 Ok(Update::Write { settings, text }) => (settings, text),

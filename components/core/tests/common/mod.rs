@@ -3,25 +3,7 @@
 
 use fvm_contract::app_internal::problem::{ConfigProblem, ConfigProblemKind, LineColumn};
 use fvm_contract::app_internal::{OtpMethod, TimeOfDay, Weekday};
-use fvm_core::config::{
-    self, ClientRules, Ipv4Network, Loaded, Platform, Settings, Update, UpdateError,
-};
-
-/// The macOS app's rules.
-pub fn client() -> ClientRules<'static> {
-    ClientRules {
-        name: "openfortivpn",
-        platform: Platform::MacOs,
-    }
-}
-
-/// The Windows app's rules.
-pub fn windows_client() -> ClientRules<'static> {
-    ClientRules {
-        name: "openconnect",
-        platform: Platform::Windows,
-    }
-}
+use fvm_core::config::{self, Ipv4Network, Loaded, Settings, Update, UpdateError};
 
 pub fn read(yaml: &str) -> Result<Loaded, ConfigProblem> {
     config::read(yaml.as_bytes())
@@ -37,7 +19,7 @@ pub fn load_error(yaml: &str) -> Option<ConfigProblem> {
 
 /// What a file written from `settings` holds; with no file yet, a change is always written.
 pub fn render(settings: &Settings) -> String {
-    match config::update(None, &client(), |current| *current = settings.clone()) {
+    match config::update(None, |current| *current = settings.clone()) {
         Ok(Update::Write { text, .. }) => text,
         other => panic!("{settings:?} did not render: {other:?}"),
     }
@@ -45,7 +27,7 @@ pub fn render(settings: &Settings) -> String {
 
 /// Why `settings` cannot be written.
 pub fn validation_error(settings: &Settings) -> Option<ConfigProblemKind> {
-    match config::update(Some(b"vpn: { port: 2 }\n"), &client(), |current| {
+    match config::update(Some(b"vpn: { port: 2 }\n"), |current| {
         *current = settings.clone()
     }) {
         Err(UpdateError::Settings(problem)) => {

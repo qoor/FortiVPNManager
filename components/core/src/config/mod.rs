@@ -46,21 +46,6 @@ const WEEKDAYS: [(&str, Weekday); 7] = [
     ("sun", Weekday::Sun),
 ];
 
-/// What the file needs from the OS the app runs on.
-pub struct ClientRules<'a> {
-    /// The client whose settings file the first launch imports, as the comments of a written file
-    /// show it.
-    pub name: &'a str,
-    /// The OS the comments of a written file describe.
-    pub platform: Platform,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Platform {
-    MacOs,
-    Windows,
-}
-
 /// Everything config.yaml holds. Passwords are never part of it. Missing keys and null values
 /// read as the defaults.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -230,7 +215,6 @@ pub fn read(bytes: &[u8]) -> Result<Loaded, ConfigProblem> {
 /// app's file stays as it is.
 pub fn update(
     current: Option<&[u8]>,
-    client: &ClientRules<'_>,
     change: impl FnOnce(&mut Settings),
 ) -> Result<Update, UpdateError> {
     let base = match current {
@@ -242,7 +226,7 @@ pub fn update(
     if base.as_ref() == Some(&settings) {
         return Ok(Update::Unchanged(settings));
     }
-    match template::write(&settings, client) {
+    match template::write(&settings) {
         Ok(text) => Ok(Update::Write { settings, text }),
         Err(kind) => Err(UpdateError::Settings(ConfigProblem {
             kind,

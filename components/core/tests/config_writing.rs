@@ -199,9 +199,9 @@ fn double_quoted_escapes() {
 #[test]
 fn an_unchanged_file_is_not_written() {
     let text = render(&non_default());
-    let update = config::update(Some(text.as_bytes()), &client(), |_| {}).unwrap();
+    let update = config::update(Some(text.as_bytes()), |_| {}).unwrap();
     assert_eq!(update, Update::Unchanged(non_default()));
-    let update = config::update(Some(text.as_bytes()), &client(), |s| s.vpn.port = 10443).unwrap();
+    let update = config::update(Some(text.as_bytes()), |s| s.vpn.port = 10443).unwrap();
     let Update::Write { settings, text } = update else {
         panic!("expected a write")
     };
@@ -213,7 +213,7 @@ fn an_unchanged_file_is_not_written() {
 fn a_file_that_does_not_pass_is_never_written_over() {
     let newer = b"schema_version: 2\nvpn: { port: 1 }\n";
     assert!(matches!(
-        config::update(Some(newer), &client(), |s| s.vpn.port = 10443),
+        config::update(Some(newer), |s| s.vpn.port = 10443),
         Err(config::UpdateError::File(_))
     ));
 }
@@ -332,65 +332,49 @@ fn random_valid_configs_round_trip() {
     }
 }
 
-/// One file serves both OSes; the comments describe the OS of the app that wrote it.
 #[test]
-fn the_comments_describe_the_os_that_wrote_the_file() {
-    let comments = |client| -> String {
-        match config::update(None, &client, |current| *current = Settings::default()) {
-            Ok(Update::Write { text, .. }) => text
-                .lines()
-                .filter(|line| line.trim_start().starts_with('#'))
-                .collect::<Vec<_>>()
-                .join("\n"),
-            other => panic!("did not render: {other:?}"),
-        }
-    };
-    let macos = comments(client());
+fn the_comments_are_the_same_for_every_os() {
+    let comments = render(&Settings::default())
+        .lines()
+        .filter(|line| line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
     for wording in [
-        "macOS login Keychain",
-        "an existing openfortivpn config",
-        "the Mac asleep",
-        "router of the active network service",
+        "the OS credential store (macOS Keychain, Windows Credential Manager)",
+        "in the credential store per 'username@server address'",
+        "VPN gateway port (e.g. 8443). 443 is the default when the file has no value.",
+        "the computer asleep",
+        "default gateway of the active network",
         "pin-sha256:...), used by openconnect",
     ] {
-        assert!(macos.contains(wording), "{wording}");
-    }
-    let windows = comments(windows_client());
-    for wording in [
-        "Windows Credential Manager",
-        "in Credential Manager per 'username@server address'",
-        "the PC asleep",
-        "gateway of the active network interface",
-    ] {
-        assert!(windows.contains(wording), "{wording}");
+        assert!(comments.contains(wording), "{wording}");
     }
     for wording in [
-        "Keychain",
-        "Mac",
-        "network service",
         "an existing openfortivpn config",
+        "network service",
+        "network interface",
+        "the Mac",
+        "the PC",
     ] {
-        assert!(!windows.contains(wording), "{wording}");
+        assert!(!comments.contains(wording), "{wording}");
     }
 }
 
 #[test]
-fn the_dtls_key_is_written_with_its_comment_on_both_oses() {
+fn the_dtls_key_is_written_with_its_comment() {
     const COMMENT: &str = "  # When true, openconnect carries the tunnel over DTLS (UDP) if the gateway offers it; when false, over HTTPS (TLS) only.\n";
-    for client in [client(), windows_client()] {
-        for dtls in [false, true] {
-            let mut settings = Settings::default();
-            settings.vpn.dtls = dtls;
-            let Ok(Update::Write { text, .. }) =
-                config::update(None, &client, |current| *current = settings.clone())
-            else {
-                panic!("the settings are written");
-            };
-            assert!(
-                text.contains(&format!("  realm: \"\"\n{COMMENT}  dtls: {dtls}\n  #")),
-                "{text}"
-            );
-            assert_eq!(config::read(text.as_bytes()).unwrap().settings, settings);
-        }
+    for dtls in [false, true] {
+        let mut settings = Settings::default();
+        settings.vpn.dtls = dtls;
+        let Ok(Update::Write { text, .. }) =
+            config::update(None, |current| *current = settings.clone())
+        else {
+            panic!("the settings are written");
+        };
+        assert!(
+            text.contains(&format!("  realm: \"\"\n{COMMENT}  dtls: {dtls}\n  #")),
+            "{text}"
+        );
+        assert_eq!(config::read(text.as_bytes()).unwrap().settings, settings);
     }
 }
