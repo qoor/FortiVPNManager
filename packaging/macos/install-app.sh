@@ -44,7 +44,7 @@ swap() {
     quit_app
     rm -rf "$previous"
     if [ -e "$installed" ]; then
-        mv "$installed" "$previous" || { echo failed >"$done_file"; return; }
+        mv "$installed" "$previous" || { open "$installed"; echo failed >"$done_file"; return; }
     fi
     start=$(date +%Y-%m-%dT%H:%M:%S)
     # The old helper exits by itself once its binary is replaced (components/helper/macos/swift/SelfUpdateWatcher.swift).
@@ -65,6 +65,10 @@ swap() {
     fi
 }
 
+if [ -e "$installed" ] && { [ ! -w "$installed" ] || [ ! -w "$(dirname "$installed")" ]; }; then
+    echo "install: no permission to replace $installed" >&2
+    exit 1
+fi
 rm -f "$done_file"
 # macOS has no setsid(1). `set -m` puts the background job in its own process group, and the job
 # outlives this subshell, so launchd adopts it: killing our process group or process tree misses it.
