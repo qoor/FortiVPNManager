@@ -34,8 +34,6 @@ enum EntryRelay {
     /// `stream` then wait until the initialization has finished.
     private static let stream = HelperEntry.start { receive($0) }
     private static let ready = DispatchSemaphore(value: 0)
-    /// A slow `/sbin/route` must not hold up the entry's other messages.
-    private static let routeRepairQueue = DispatchQueue(label: "com.qoor.FortiVPNManager.Helper.route-repair")
     /// How long exiting waits for an app that stops reading.
     private static let drainLimit: DispatchTimeInterval = .seconds(1)
 
@@ -134,10 +132,6 @@ enum EntryRelay {
             client(app)?.send(event: Data(json.utf8))
         case .sendOutput(let app, let json):
             client(app)?.send(output: Data(json.utf8))
-        case .repairRoutes(let gateway):
-            routeRepairQueue.async {
-                stream.send(.routesRepaired(outcome: RouteRepair.repair(gatewayIP: gateway)))
-            }
         case .changeBypassRoutes(let change):
             BypassRoutes.queue.async {
                 stream.send(.bypassRoutesChanged(outcome: BypassRoutes.change(change)))

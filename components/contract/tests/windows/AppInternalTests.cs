@@ -55,7 +55,6 @@ public class AppInternalTests
     public void ReadinessSections()
     {
         RoundTrip<ReadinessSection>("readiness_sections.json");
-        RoundTrip<ClientProblem>("client_problems.json");
         RoundTrip<HelperChannelFailure>("helper_channel_failures.json");
     }
 

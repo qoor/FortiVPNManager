@@ -1,62 +1,22 @@
-Licenses of OpenConnect 9.21 and of the libraries and the script FortiVPNManager ships with it, in
+Licenses of OpenConnect 9.21 and of the libraries FortiVPNManager ships with it, in
 FortiVPNManager.app/Contents. Each text is the upstream project's own file, or the notice at the top
 of the source files it covers, named <project>-<upstream name>.
 
-MacOS/openconnect, static
+MacOS/FortiVPNManagerHelper, static
     OpenConnect: GNU LGPL 2.1 - openconnect-COPYING.LGPL.txt
     with these copies from OpenConnect's source tree:
     FFmpeg (lzo.c, lzo.h): GNU LGPL 2.1 or later - openconnect-COPYING.LGPL.txt
     json-parser (json/json.c, json/json.h): as its notice states - openconnect-json-LICENSE.txt,
     openconnect-json-json.c.txt
     jsondump.c: as its notice states - openconnect-jsondump.c.txt
-Resources/vpnc-script
-    vpnc-scripts: GNU GPL 2 or later - vpnc-scripts-COPYING.txt
-MacOS/openconnect, static
-    GnuTLS 3.8.13: GNU LGPL 2.1 or later - gnutls-COPYING.LESSERv2.txt
-    with these copies from GnuTLS's source tree:
-    GNU Libtasn1 4.20.0 (lib/minitasn1): GNU LGPL 2.1 or later - gnutls-COPYING.LESSERv2.txt
-    GNU libunistring (lib/unistring): as each file states, GNU LGPL 3 or later (which adds to GNU
-    GPL 3) or GNU GPL 2 or later, or GNU LGPL 2.1 or later - nettle-COPYING.LESSERv3.txt,
-    nettle-COPYINGv3.txt, nettle-COPYINGv2.txt, gnutls-COPYING.LESSERv2.txt
-    lib/accelerated/aarch64/macosx (aes-aarch64.s, ghash-aarch64.s, sha1-armv8.s, sha256-armv8.s,
-    sha512-armv8.s): as their notice states - gnutls-accelerated-aarch64-macosx.txt
-    crau (lib/crau: crau.h, macros.h): MIT or Unlicense - gnutls-crau-LICENSE.txt,
-    gnutls-crau-UNLICENSE.txt, gnutls-crau-crau.h.txt
-    lib/extras/hex.c: CC0 - gnutls-extras-CC0.txt
-    lib/extras/randomart.c: as its notice states - gnutls-extras-randomart.c.txt
-    inih (lib/inih): New BSD license - gnutls-inih-LICENSE.txt
-    GNU Nettle (lib/nettle/gost: acpkm.c, bignum-le.c, gostdsa-mask.c, kuznyechik.c, write-le32.c;
-    lib/nettle/int/mpn-base256.c): GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or
-    later - nettle-COPYING.LESSERv3.txt, nettle-COPYINGv3.txt, nettle-COPYINGv2.txt
-    lib/nettle/gost (cmac-kuznyechik.c, cmac-magma.c, gost-wrap.c, gost28147.c, magma.c): as their
-    notices state - gnutls-nettle-gost-cmac-kuznyechik.c.txt, gnutls-nettle-gost-cmac-magma.c.txt,
-    gnutls-nettle-gost-gost-wrap.c.txt, gnutls-nettle-gost-gost28147.c.txt,
-    gnutls-nettle-gost-magma.c.txt
-MacOS/openconnect, static
-    Nettle 4.0: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
-    nettle-COPYING.LESSERv3.txt, nettle-COPYINGv3.txt, nettle-COPYINGv2.txt
-    with these copies from Nettle's source tree:
-    gost28147.c: as its notice states - nettle-gost28147.c.txt
-    gosthash94.c, gosthash94.h: as their notices state - nettle-gosthash94.c.txt,
-    nettle-gosthash94.h.txt
-    poly1305-internal.c: as its notice states - nettle-poly1305-internal.c.txt
-    DES (des.c, des.h, desCode.h): GNU Library General Public License 2 or later -
-    nettle-descore.README.txt
-MacOS/openconnect, static
-    GNU MP 6.3.0: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
-    gmp-COPYING.LESSERv3.txt, gmp-COPYINGv3.txt, gmp-COPYINGv2.txt
+MacOS/FortiVPNManagerHelper, static
+    OpenSSL 3.5.9: Apache License 2.0 - openssl-LICENSE.txt
 
-Source code. These files were built by packaging/openconnect/build.sh of FortiVPNManager
+Source code. These libraries were built by packaging/openconnect/build.sh of FortiVPNManager
 (https://github.com/qoor/FortiVPNManager) from the OpenConnect commit below, and from the upstream
-release archives and the file below, each checked against its SHA-256 in that script.
+release archives below, each checked against its SHA-256 in that script.
 
 OpenConnect 9.21 with one change by FortiVPNManager
     https://github.com/qoor/openconnect/commit/0cffe05a9e9ab4fad415fca341474381c824a89c
-vpnc-script (the file is its own source)
-    https://gitlab.com/openconnect/vpnc-scripts/-/blob/ce9e961bd0f6b867e1c7c35f78f6fb973f6ff101/vpnc-script
-GnuTLS 3.8.13, with its copies of GNU Libtasn1 and GNU libunistring
-    https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz
-Nettle 4.0
-    https://ftpmirror.gnu.org/nettle/nettle-4.0.tar.gz
-GNU MP 6.3.0
-    https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+OpenSSL 3.5.9
+    https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz

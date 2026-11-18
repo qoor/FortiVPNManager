@@ -4,83 +4,100 @@ mod common;
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::*;
-use fvm_contract::backend::{ClientExecutable, ClientProblem, ClientProblemKind};
+use fvm_helper_core::session::backend::SessionEvent;
 use serde_json::{Value, json};
+
+fn up() -> Script {
+    common::up(settings("utun9", "10.10.0.5"))
+}
+
+fn failed_login() -> Script {
+    script(|_, link| {
+        trust_gateway(link);
+        error_line(link, "Failed to complete authentication");
+        ended(-EPERM, false)
+    })
+}
 
 #[test]
 fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let received = Arc::new(Mutex::new(None));
+    let script = {
+        let received = Arc::clone(&received);
+        script(move |request, link| {
+            *received.lock().unwrap() = Some(request.password.to_string());
+            trust_gateway(link);
+            let otp = ask_otp(link).unwrap();
+            assert_eq!(otp.as_str(), OTP);
+            open(link);
+            tunnel_ready(link, settings("utun9", "10.10.0.5"));
+            wait_for_cancel(link);
+            ended(-EINTR, true)
+        })
+    };
+    let mut swift = Swift::start(Setup::with([script]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
     let id = swift.request(1, submit_otp(ATTEMPT, OTP));
     assert_eq!(swift.reply(id), None);
-    // Logged once the pidfile is written.
-    swift.wait_until("the tunnel", |swift| {
+    swift.bring_up(1);
+    swift.wait_until("the tunnel log", |swift| {
         swift.has_log(&format!(
             "notice helper: 0277070470 run {ATTEMPT}: tunnel up"
         ))
     });
+    assert_eq!(received.lock().unwrap().as_deref(), Some(PASSWORD));
 
-    // The config file and the pidfile live in the run directory for the run, readable only by
-    // their owner. The test's client is not root, so the pidfile records no process.
+    // The run record lives in the run directory for the run, readable only by its owner.
+    assert_eq!(swift.scratch.run_directory_names(), ["run.json"]);
+    let file = swift.scratch.run_directory().join("run.json");
+    let mode = fs::metadata(&file).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let record: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
     assert_eq!(
-        swift.scratch.run_directory_names(),
-        ["config.1", "run.json"]
+        record,
+        json!({"outsideChanges": {"dnsServiceID": "svc", "routes": outside_routes()}})
     );
-    let file = |name: &str| swift.scratch.run_directory().join(name);
-    for name in ["config.1", "run.json"] {
-        let mode = fs::metadata(file(name)).unwrap().permissions().mode();
-        assert_eq!(mode & 0o777, 0o600, "{name}");
-    }
-    let config = fs::read_to_string(file("config.1")).unwrap();
-    assert!(config.contains(&format!("host = {GATEWAY}\n")), "{config}");
-    assert!(!config.contains(PASSWORD.trim()), "{config}");
-    let record: Value = serde_json::from_slice(&fs::read(file("run.json")).unwrap()).unwrap();
-    assert_eq!(record, json!({"processes": [], "gatewayIP": GATEWAY}));
     assert_eq!(
         swift.status(1),
         json!({
             "childAlive": true,
-            "client": {"version": "9.21"},
+            "client": {"version": VERSION},
         })
     );
 
     let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(swift.reply(id), None);
+    swift.answer_network("revert", reverted());
     let facts = swift.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], TUNNEL_UP);
     assert_eq!(
         facts["stopInitiator"],
         json!({"helper": {"_0": "userDisconnect"}})
     );
-    assert_eq!(facts["exitStatus"], json!({"exited": {"code": 0}}));
+    assert_eq!(facts["exitStatus"], json!({"exited": {"code": -EINTR}}));
     assert!(facts["upDuration"].is_number(), "{facts}");
 
     assert_eq!(swift.milestones(1), [0, 1, 2, 3, 4, 5]);
     let tunnel_up = swift.events(1)[5].clone();
     assert_eq!(tunnel_up["attemptID"], ATTEMPT);
-    assert_eq!(tunnel_up["kind"]["milestone"]["tunnelIP"], "10.212.134.200");
-    assert!(swift.output(1).contains(&"‹password sent›".to_owned()));
+    assert_eq!(tunnel_up["kind"]["milestone"]["tunnelIP"], "10.10.0.5");
+    assert_eq!(swift.output(1)[0], "‹VPN client: openconnect 9.21›");
     assert!(
         swift
             .output(1)
-            .contains(&"‹sent SIGTERM (reason: userDisconnect)›".to_owned())
+            .contains(&"‹session cancelled (reason: userDisconnect)›".to_owned())
     );
-    assert_eq!(
-        swift.scratch.record_value("password_sha256"),
-        Some(sha256(PASSWORD))
-    );
-    assert_eq!(swift.scratch.record_value("otp_sha256"), Some(sha256(OTP)));
-    // Logged once the run's files are removed.
     swift.wait_until("the exit log", |swift| {
         swift.logs().iter().any(|line| line.contains(" exited: "))
     });
     assert!(swift.scratch.run_directory_names().is_empty());
+    assert_eq!(swift.secrets.deletes(), [ATTEMPT]);
     for line in [
         format!(
             "notice helper: 0277070470 run {ATTEMPT} started for uid 501 with openconnect 9.21"
@@ -88,13 +105,13 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         format!("notice helper: 0277070470 run {ATTEMPT}: tunnel up"),
         format!("notice helper: 0277070470 run {ATTEMPT}: stop requested (userDisconnect)"),
         format!(
-            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: 0 }}, initiator \
+            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: -4 }}, initiator \
              Helper {{ reason: UserDisconnect }}, furthest Some(TunnelUp)"
         ),
     ] {
         assert!(swift.has_log(&line), "{line} not in {:#?}", swift.logs());
     }
-    // The exit is the run's last message to the app, and its exit line is the last Log tab line.
+    // The exit is the run's last message to the app, and its revert line is the last Log tab line.
     let exit = swift.position(|message| {
         message["sendEvent"]["json"]
             .as_str()
@@ -107,32 +124,36 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
             .is_some()
     });
     assert_eq!(exit, last_to_app);
-    assert_eq!(swift.output(1).last().unwrap(), "‹exited: code 0›");
+    assert_eq!(
+        swift.output(1).last().unwrap(),
+        "‹network settings reverted›"
+    );
     swift.assert_no_secret();
 }
 
 #[test]
-fn a_failed_login_is_reported_as_the_client_ending_the_run() {
-    let mut swift = Swift::start(Setup::fixture("auth-failed"));
+fn a_failed_login_is_reported_as_the_session_ending_the_run() {
+    let mut swift = Swift::start(Setup::with([failed_login()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     let facts = swift.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], CONNECTED_TO_GATEWAY);
     assert_eq!(facts["stopInitiator"], json!({"none": {}}));
-    assert_eq!(facts["exitStatus"], json!({"exited": {"code": 1}}));
+    assert_eq!(facts["exitStatus"], json!({"exited": {"code": -EPERM}}));
     swift.wait_until("the exit log", |swift| {
         swift.has_log(&format!(
-            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: 1 }}, initiator \
+            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: -1 }}, initiator \
              Client, furthest Some(ConnectedToGateway)"
         ))
     });
     assert!(swift.scratch.run_directory_names().is_empty());
+    assert!(swift.secrets.saves().is_empty());
     swift.assert_no_secret();
 }
 
 #[test]
 fn every_output_batch_names_its_attempt() {
-    let mut swift = Swift::start(Setup::fixture("auth-failed"));
+    let mut swift = Swift::start(Setup::with([failed_login()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_exit(1);
@@ -152,45 +173,23 @@ fn every_output_batch_names_its_attempt() {
 
 #[test]
 fn a_rejected_certificate_is_reported_with_its_value() {
-    let mut swift = Swift::start(Setup::fixture("cert-rejected"));
+    let script = script(|_, link| {
+        link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
+        ended(-EIO, false)
+    });
+    let mut swift = Swift::start(Setup::with([script]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     let facts = swift.wait_for_exit(1);
-    assert_eq!(facts["certRejectedDigests"], json!([REJECTED_DIGEST]));
+    assert_eq!(facts["certRejectedDigests"], json!([OTHER_PIN]));
     assert_eq!(facts["certRejectedAt"], SPAWNED);
     assert_eq!(facts["furthestMilestone"], SPAWNED);
     assert_eq!(facts["stopInitiator"], json!({"none": {}}));
 }
 
 #[test]
-fn a_run_whose_client_left_the_routes_broken_waits_for_the_route_repair() {
-    let mut swift = Swift::start(Setup::fixture("server-cut").args(&["crash"]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let id = swift.request(1, submit_otp(ATTEMPT, OTP));
-    assert_eq!(swift.reply(id), None);
-    swift.wait_until("the route repair", |swift| {
-        swift.position(is("repairRoutes")).is_some()
-    });
-    let repair = swift.position(is("repairRoutes")).unwrap();
-    assert_eq!(
-        swift.received[repair],
-        json!({"repairRoutes": {"gateway": GATEWAY}})
-    );
-    assert_eq!(swift.exit_facts(1), None);
-    let meanwhile = swift.received_within(Duration::from_millis(300));
-    assert!(meanwhile.is_empty(), "{meanwhile:#?}");
-
-    swift.send(json!({"routesRepaired": {"outcome": "repaired"}}));
-    let facts = swift.wait_for_exit(1);
-    assert_eq!(facts["exitStatus"], json!({"signaled": {"signal": 9}}));
-    assert!(swift.output(1).contains(&"‹routes repaired›".to_owned()));
-}
-
-#[test]
 fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::with([up()]));
     assert!(swift.connect_app(1, 501));
     assert!(swift.connect_app(2, 501));
     assert!(swift.connect_app(3, 502));
@@ -251,7 +250,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
             "an OTP was already submitted for this attempt"
         )
     );
-    swift.wait_for_milestone(1, TUNNEL_UP);
+    swift.bring_up(1);
     // A stop names the run it is for.
     let id = swift.request(2, disconnect("", "userDisconnect"));
     assert_eq!(
@@ -260,6 +259,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     );
     let id = swift.request(2, disconnect(ATTEMPT, "notAReason"));
     assert_eq!(swift.reply(id), None);
+    swift.answer_network("revert", reverted());
     let facts = swift.wait_for_exit(1);
     // An unknown reason counts as the user's.
     assert_eq!(
@@ -283,7 +283,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
 
 #[test]
 fn a_bad_connect_request_starts_nothing() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     let undecodable = swift.request(1, json!({"connect": {"json": "{\"host\": 1}"}}));
     let invalid = swift.request(
@@ -305,7 +305,7 @@ fn a_bad_connect_request_starts_nothing() {
     );
     assert_eq!(
         swift.reply(invalid),
-        error("invalidRequest", "port must be between 1 and 65535")
+        error("invalidRequest", "port 0 is refused")
     );
     assert_eq!(swift.status(1)["childAlive"], false);
     assert!(swift.events(1).is_empty());
@@ -314,58 +314,21 @@ fn a_bad_connect_request_starts_nothing() {
 }
 
 #[test]
-fn a_client_that_is_not_found_has_no_path_in_the_status() {
-    let path = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
-    let not_found = ClientProblem {
-        kind: ClientProblemKind::NotFound {},
-        path: PathBuf::from(path),
-    };
-    let message = format!(
-        "openconnect not found at {path}; it comes with FortiVPNManager, so reinstall FortiVPNManager"
-    );
-    let mut swift = Swift::start(Setup {
-        client: Err(not_found),
-        ..Setup::fixture("success")
-    });
+fn the_status_carries_the_clients_version() {
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     assert_eq!(
         swift.status(1),
         json!({
             "childAlive": false,
-            "client": {"problem": {"kind": {"notFound": {}}, "path": path}},
-        })
-    );
-    assert_eq!(
-        swift.connect(1, ATTEMPT),
-        error("binaryUnavailable", &message)
-    );
-}
-
-#[test]
-fn the_status_carries_the_adapters_version_judgment() {
-    let mut swift = Swift::start(Setup {
-        client: Ok(ClientExecutable {
-            path: PathBuf::from("/bin/sh"),
-            version: "9.22".to_owned(),
-        }),
-        ..Setup::fixture("success")
-    });
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(
-        swift.status(1),
-        json!({
-            "childAlive": false,
-            "client": {
-                "version": "9.22",
-                "untestedVersion": {"testedSeries": "9.21"},
-            },
+            "client": {"version": VERSION},
         })
     );
 }
 
 #[test]
 fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::with([up()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
@@ -389,7 +352,7 @@ fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
 
 #[test]
 fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     swift.disconnect_app(1);
     let gone = error("notAuthorized", "the app connection is closed");
@@ -408,13 +371,12 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
         assert_eq!(swift.replies(id).len(), 1, "request {id}");
     }
     assert!(swift.events(1).is_empty());
-    assert_eq!(swift.scratch.record_value("password_len"), None);
     assert!(swift.scratch.run_directory_names().is_empty());
 }
 
 #[test]
 fn replies_carry_the_request_id_they_answer() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     let ids: Vec<u64> = (0..5)
         .map(|_| swift.request(1, json!({"status": {}})))

@@ -16,7 +16,6 @@ use fvm_contract::app_internal::port::*;
 use fvm_contract::app_internal::problem::*;
 use fvm_contract::app_internal::section::*;
 use fvm_contract::app_internal::*;
-use fvm_contract::backend::{ClientProblem, ClientProblemKind, UntestedVersion};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -441,11 +440,7 @@ fn readiness_sections() {
                 register_helper: ButtonState::Hidden,
                 register_error: None,
                 client: Some(VpnClientInfo {
-                    version: Some("1.25.0".into()),
-                    untested_version: Some(UntestedVersion {
-                        tested_series: "1.24".into(),
-                    }),
-                    problem: None,
+                    version: Some("9.21-unknown".into()),
                 }),
             },
             ReadinessSection {
@@ -462,14 +457,7 @@ fn readiness_sections() {
                 register_error: Some(RegistrationError::Failed {
                     description: "Operation not permitted".into(),
                 }),
-                client: Some(VpnClientInfo {
-                    version: None,
-                    untested_version: None,
-                    problem: Some(ClientProblem {
-                        kind: ClientProblemKind::NotFound {},
-                        path: "/opt/homebrew/bin/openfortivpn".into(),
-                    }),
-                }),
+                client: Some(VpnClientInfo { version: None }),
             },
             readiness_section(HelperState::RequiresApproval {}),
             readiness_section(HelperState::VersionMismatch {
@@ -479,20 +467,6 @@ fn readiness_sections() {
             readiness_section(HelperState::Unreachable {
                 failure: HelperChannelFailure::NoReply {},
             }),
-        ],
-    );
-    let cellar = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
-    let problem = |kind| ClientProblem {
-        kind,
-        path: cellar.into(),
-    };
-    pin(
-        "client_problems.json",
-        [
-            problem(ClientProblemKind::NotFound {}),
-            problem(ClientProblemKind::NotRegularFile {}),
-            problem(ClientProblemKind::WritableByOthers { mode: 0o775 }),
-            problem(ClientProblemKind::NotExecutable {}),
         ],
     );
     pin(

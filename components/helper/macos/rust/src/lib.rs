@@ -1,6 +1,9 @@
 //! The macOS Helper's Rust start. Swift reaches the Helper's Rust side only through the socket
 //! returned by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`, and
-//! the shared Helper entry has the session manager run the VPN client with its backend adapter.
+//! the shared Helper entry has the session manager run the VPN client with its backend adapter,
+//! keeping the session secrets in the System keychain.
+
+mod keychain;
 
 use std::io::{self, BufReader};
 use std::os::fd::IntoRawFd;
@@ -10,27 +13,38 @@ use std::sync::Arc;
 use std::thread;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::backend::Backend;
 use fvm_contract::stream;
+use fvm_helper_core::secrets::SecretStore;
+use fvm_helper_core::session::backend::Backend;
 use fvm_helper_core::session::{SessionManager, Timing};
+use keychain::Keychain;
 
-/// Root-only: it holds the pidfile.
+/// Root-only: it holds the run record.
 const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
 
 /// Starts the Helper entry and returns Swift's end of its socketpair, which Swift then owns.
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
 #[unsafe(no_mangle)]
 pub extern "C" fn fvm_helper_entry_start() -> i32 {
-    start(Arc::new(OpenConnect), PathBuf::from(RUN_DIRECTORY)).into_raw_fd()
+    start(
+        Arc::new(OpenConnect::default()),
+        Arc::new(Keychain),
+        PathBuf::from(RUN_DIRECTORY),
+    )
+    .into_raw_fd()
 }
 
-/// Starts the Helper entry for the client of `backend`, keeping its files in `run_directory`, and
-/// returns Swift's end of the stream. The entry says "ready" once it has cleaned up after an
-/// earlier Helper.
-pub fn start(backend: Arc<dyn Backend>, run_directory: PathBuf) -> UnixStream {
+/// Starts the Helper entry for the client of `backend`, keeping its session secrets in `secrets`
+/// and its files in `run_directory`, and returns Swift's end of the stream. The entry says "ready"
+/// once it has cleaned up after an earlier Helper.
+pub fn start(
+    backend: Arc<dyn Backend>,
+    secrets: Arc<dyn SecretStore>,
+    run_directory: PathBuf,
+) -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
     let writer = ours.try_clone().expect("cloning the socket to Swift");
-    let sessions = SessionManager::new(backend, run_directory, Timing::default());
+    let sessions = SessionManager::new(backend, secrets, run_directory, Timing::default());
     let inbox = fvm_helper_core::entry::start(sessions, move |message| {
         stream::send(&mut &writer, message).expect("writing a message to Swift");
     });

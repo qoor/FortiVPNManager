@@ -96,22 +96,6 @@ import Testing
         #expect(RouteTable.parse(table: "Routing tables\n\nInternet:\n", family: .inet).isEmpty)
     }
 
-    @Test func aLookupIsReadFromItsKeyValueLines() throws {
-        let output = """
-               route to: 10.30.161.16
-            destination: 10.30.161.16
-                gateway: 10.20.161.254
-              interface: en0
-                  flags: <UP,GATEWAY,HOST,DONE,STATIC>
-
-            """
-        let entry = try #require(RouteTable.parse(lookup: output))
-        #expect(entry.destination == "10.30.161.16")
-        #expect(entry.interface == "en0")
-        #expect(entry.flags == ["UP", "GATEWAY", "HOST", "DONE", "STATIC"])
-        #expect(RouteTable.parse(lookup: "route: writing to routing socket: not in table\n") == nil)
-    }
-
     private let ipv6Table = """
         Routing tables
 

@@ -7,7 +7,6 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::*;
-use fvm_contract::backend::{ClientProblem, ClientProblemKind, UntestedVersion};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, to_value};
@@ -27,7 +26,6 @@ const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 const DIGEST_A: &str = "4f7a0c2b9d1e8f3a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a";
 const DIGEST_B: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const CELLAR_PATH: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
-const OPENCONNECT_PATH: &str = "/Applications/FortiVPNManager.app/Contents/MacOS/openconnect";
 
 fn attempt() -> AttemptId {
     ATTEMPT.parse().unwrap()
@@ -337,61 +335,15 @@ fn output_batch() {
 
 #[test]
 fn helper_statuses() {
-    let found = |version: &str| ClientStatus {
-        version: Some(version.into()),
-        problem: None,
-        untested_version: None,
-    };
     let running = HelperStatus {
         client_running: true,
-        client: found("9.21"),
+        client: ClientStatus {
+            version: Some("9.21".into()),
+        },
     };
     both_ways(
         running,
         include_str!("fixtures/app-helper/helper_status.json"),
-    );
-
-    let untested = HelperStatus {
-        client_running: false,
-        client: ClientStatus {
-            untested_version: Some(UntestedVersion {
-                tested_series: "9.21".into(),
-            }),
-            ..found("9.22")
-        },
-    };
-    both_ways(
-        untested,
-        include_str!("fixtures/app-helper/helper_status_untested.json"),
-    );
-
-    let problems = [
-        HelperStatus {
-            client_running: false,
-            client: ClientStatus {
-                version: None,
-                problem: Some(ClientProblem {
-                    kind: ClientProblemKind::NotFound {},
-                    path: OPENCONNECT_PATH.into(),
-                }),
-                untested_version: None,
-            },
-        },
-        HelperStatus {
-            client_running: false,
-            client: ClientStatus {
-                version: None,
-                problem: Some(ClientProblem {
-                    kind: ClientProblemKind::WritableByOthers { mode: 0o775 },
-                    path: OPENCONNECT_PATH.into(),
-                }),
-                untested_version: None,
-            },
-        },
-    ];
-    both_ways(
-        problems,
-        include_str!("fixtures/app-helper/helper_status_problem.json"),
     );
 }
 

@@ -13,7 +13,6 @@ use super::problem::{
 };
 use super::{ButtonState, MinutesSetting, OtpMethod, TimeOfDay, Weekday, millis};
 use crate::app_helper::HelperErrorCode;
-use crate::backend::{ClientProblem, UntestedVersion};
 
 /// Boxed, as the sections differ much in size.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -313,10 +312,6 @@ pub enum HelperState {
 pub struct VpnClientInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub untested_version: Option<UntestedVersion>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub problem: Option<ClientProblem>,
 }
 
 // MARK: Gmail and Google account

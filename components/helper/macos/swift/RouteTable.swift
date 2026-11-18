@@ -183,21 +183,6 @@ enum RouteTable {
         }
     }
 
-    struct Entry: Sendable {
-        var destination: String
-        var interface: String?
-        /// `UP`, `GATEWAY`, `HOST`, `STATIC`, ...
-        var flags: Set<String>
-    }
-
-    /// The route `route -n get` reports for `destination`, or `nil` if there is none. A missing
-    /// route ("not in table") still exits with status 0, so the output decides.
-    static func lookup(_ destination: String) -> Entry? {
-        let result = SystemCommand.run(routePath, ["-n", "get", destination])
-        guard result.succeeded else { return nil }
-        return parse(lookup: result.output)
-    }
-
     @discardableResult
     static func add(_ route: Route) -> Bool {
         change(route.addArguments)
@@ -234,20 +219,5 @@ enum RouteTable {
             HelperLog.routes.error("route -n \(command, privacy: .public) failed (\(String(describing: result.status), privacy: .public)): \(message, privacy: .public)")
         }
         return succeeded
-    }
-
-    /// Parses the `key: value` lines of `route -n get`.
-    static func parse(lookup output: String) -> Entry? {
-        var fields: [String: String] = [:]
-        for line in output.split(whereSeparator: \.isNewline) {
-            guard let colon = line.firstIndex(of: ":") else { continue }
-            let key = line[..<colon].trimmingCharacters(in: .whitespaces)
-            fields[key] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-        }
-        guard let destination = fields["destination"], !destination.isEmpty else { return nil }
-        let flags = fields["flags"].map { value in
-            Set(value.trimmingCharacters(in: CharacterSet(charactersIn: "<>")).split(separator: ",").map(String.init))
-        } ?? []
-        return Entry(destination: destination, interface: fields["interface"], flags: flags)
     }
 }

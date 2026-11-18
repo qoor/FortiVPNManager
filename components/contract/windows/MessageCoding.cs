@@ -145,11 +145,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.HelperState.VersionMismatch), TypeInfoPropertyName = "HelperStateVersionMismatch")]
 [JsonSerializable(typeof(AppInternal.HelperState.Unreachable), TypeInfoPropertyName = "HelperStateUnreachable")]
 
-[JsonSerializable(typeof(AppInternal.ClientProblemKind.NotFound), TypeInfoPropertyName = "ClientProblemKindNotFound")]
-[JsonSerializable(typeof(AppInternal.ClientProblemKind.NotRegularFile), TypeInfoPropertyName = "ClientProblemKindNotRegularFile")]
-[JsonSerializable(typeof(AppInternal.ClientProblemKind.WritableByOthers), TypeInfoPropertyName = "ClientProblemKindWritableByOthers")]
-[JsonSerializable(typeof(AppInternal.ClientProblemKind.NotExecutable), TypeInfoPropertyName = "ClientProblemKindNotExecutable")]
-
 [JsonSerializable(typeof(AppInternal.GoogleAccountStatus.NotConnected), TypeInfoPropertyName = "GoogleAccountStatusNotConnected")]
 [JsonSerializable(typeof(AppInternal.GoogleAccountStatus.SigningIn), TypeInfoPropertyName = "GoogleAccountStatusSigningIn")]
 [JsonSerializable(typeof(AppInternal.GoogleAccountStatus.Disconnecting), TypeInfoPropertyName = "GoogleAccountStatusDisconnecting")]

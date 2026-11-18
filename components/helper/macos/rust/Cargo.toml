@@ -12,7 +12,9 @@ crate-type = ["staticlib", "lib"]
 fvm-backend-adapter.workspace = true
 fvm-contract.workspace = true
 fvm-helper-core.workspace = true
+security-framework.workspace = true
 socket2.workspace = true
+zeroize.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

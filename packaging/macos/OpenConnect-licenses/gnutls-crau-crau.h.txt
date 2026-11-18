@@ -1,2 +1,0 @@
-/* SPDX-License-Identifier: MIT OR Unlicense */
-/* Copyright (C) 2022-2025 The crypto-auditing developers. */

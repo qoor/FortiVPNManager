@@ -1,12 +1,14 @@
 //! Helper service (Windows): the Windows Helper, a service of the system account written in Rust
-//! alone. It runs the shared Helper entry with a session manager for openconnect, and does itself
-//! what the Helper's Swift side does on macOS: it takes the app's connections over a named pipe,
-//! answers the build check, repairs routes and changes the exception routes as the entry asks.
+//! alone. It runs the shared Helper entry with a session manager for openconnect, keeping the
+//! session secrets in files only the system account can decrypt, and does itself what the Helper's
+//! Swift side does on macOS: it takes the app's connections over a named pipe, answers the build
+//! check, and changes the network settings and the exception routes as the entry asks.
 #![cfg(windows)]
 
 mod network;
 mod pipe;
 mod routes;
+mod secrets;
 mod service;
 
 use std::sync::Arc;

@@ -1,27 +1,30 @@
 #![allow(unsafe_code)]
 
+use std::ffi::OsString;
 use std::fmt;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
-use std::time::Duration;
-use std::{ptr, slice};
+use std::os::windows::ffi::OsStrExt;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::{iter, mem, ptr, slice};
 
 use widestring::{U16CStr, U16CString};
 use windows_sys::Win32::Foundation::{
     ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER, ERROR_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS,
-    NO_ERROR, WAIT_OBJECT_0, WAIT_TIMEOUT, WIN32_ERROR,
+    HANDLE_FLAG_INHERIT, LocalFree, NO_ERROR, SetHandleInformation, TRUE, WAIT_OBJECT_0,
+    WIN32_ERROR,
 };
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToGuid, ConvertInterfaceLuidToIndex,
-    CreateIpForwardEntry2, CreateUnicastIpAddressEntry, DNS_INTERFACE_SETTINGS,
-    DNS_INTERFACE_SETTINGS_VERSION1, DNS_SETTING_IPV6, DNS_SETTING_NAMESERVER,
-    DeleteIpForwardEntry2, DeleteUnicastIpAddressEntry, FreeInterfaceDnsSettings, FreeMibTable,
-    GetBestRoute2, GetIfEntry2, GetInterfaceDnsSettings, GetIpForwardTable2, GetIpInterfaceEntry,
-    GetUnicastIpAddressTable, IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211, InitializeIpForwardEntry,
-    InitializeIpInterfaceEntry, InitializeUnicastIpAddressEntry, MIB_IF_ROW2, MIB_IPFORWARD_ROW2,
-    MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
-    MIB_UNICASTIPADDRESS_TABLE, SetInterfaceDnsSettings, SetIpInterfaceEntry,
+    ConvertInterfaceAliasToLuid, ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToGuid,
+    ConvertInterfaceLuidToIndex, CreateIpForwardEntry2, CreateUnicastIpAddressEntry,
+    DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1, DNS_SETTING_IPV6,
+    DNS_SETTING_NAMESERVER, DeleteIpForwardEntry2, DeleteUnicastIpAddressEntry,
+    FreeInterfaceDnsSettings, FreeMibTable, GetBestRoute2, GetIfEntry2, GetInterfaceDnsSettings,
+    GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, IF_TYPE_ETHERNET_CSMACD,
+    IF_TYPE_IEEE80211, InitializeIpForwardEntry, InitializeIpInterfaceEntry,
+    InitializeUnicastIpAddressEntry, MIB_IF_ROW2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2,
+    MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE,
+    SetInterfaceDnsSettings, SetIpInterfaceEntry,
 };
 use windows_sys::Win32::NetworkManagement::Ndis::{IfOperStatusUp, NET_LUID_LH};
 use windows_sys::Win32::Networking::WinSock::{
@@ -29,12 +32,19 @@ use windows_sys::Win32::Networking::WinSock::{
     IpDadStateDeprecated, IpDadStateDuplicate, IpDadStatePreferred, IpDadStateTentative,
     NL_DAD_STATE, SOCKADDR_IN, SOCKADDR_IN6, SOCKADDR_INET,
 };
+use windows_sys::Win32::Security::Cryptography::{
+    CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
+};
 use windows_sys::Win32::System::Registry::{
     HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_MULTI_SZ, RegCloseKey, RegOpenKeyExW,
     RegQueryValueExW, RegSetValueExW,
 };
 use windows_sys::Win32::System::Threading::{
-    INFINITE, OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
+    EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
+    LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess, UpdateProcThreadAttribute,
+    WaitForSingleObject,
 };
 use windows_sys::core::GUID;
 
@@ -111,12 +121,21 @@ impl Family {
 pub struct Luid(u64);
 
 impl Luid {
-    /// The interface with this index, such as the one openconnect gives its script.
     pub fn from_index(index: u32) -> Result<Self, Error> {
         let mut luid = NET_LUID_LH { Value: 0 };
         // SAFETY: `luid` is live for the call, which writes it.
         let code = unsafe { ConvertInterfaceIndexToLuid(index, &mut luid) };
         check("ConvertInterfaceIndexToLuid", code)?;
+        Ok(Self::from_raw(luid))
+    }
+
+    pub fn from_alias(alias: &str) -> Result<Self, Error> {
+        let alias = U16CString::from_str(alias).expect("an interface alias has no NUL");
+        let mut luid = NET_LUID_LH { Value: 0 };
+        // SAFETY: `alias` is NUL-terminated and `luid` is live for the call, which reads the first
+        // and writes the second.
+        let code = unsafe { ConvertInterfaceAliasToLuid(alias.as_ptr(), &mut luid) };
+        check("ConvertInterfaceAliasToLuid", code)?;
         Ok(Self::from_raw(luid))
     }
 
@@ -579,33 +598,255 @@ pub fn clear_wins_servers(interface: &str) -> Result<(), Error> {
     cleared
 }
 
-pub fn open_process(pid: u32) -> Result<OwnedHandle, Error> {
-    // SAFETY: The call takes only values.
-    let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
-    if handle.is_null() {
-        let code = io::Error::last_os_error()
-            .raw_os_error()
-            .expect("a failed OpenProcess leaves an error code");
-        return Err(Error {
-            operation: "OpenProcess",
-            code: code as u32,
-        });
+pub fn protect(data: &[u8]) -> Result<Vec<u8>, Error> {
+    let input = blob(data);
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: `input` points to `data`, which the call only reads, and `output` is live for it; the
+    // other pointers may be null.
+    let done = unsafe {
+        CryptProtectData(
+            &input,
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if done == 0 {
+        return Err(last_error("CryptProtectData"));
     }
-    // SAFETY: A handle OpenProcess returned is open, and nothing else owns or closes it.
-    Ok(unsafe { OwnedHandle::from_raw_handle(handle) })
+    Ok(take(output))
 }
 
-pub fn wait_for_exit(process: BorrowedHandle<'_>, limit: Option<Duration>) -> bool {
-    let milliseconds = limit.map_or(INFINITE, |limit| {
-        u32::try_from(limit.as_nanos().div_ceil(1_000_000))
-            .unwrap_or(INFINITE - 1)
-            .min(INFINITE - 1)
-    });
-    // SAFETY: `process` is an open handle for the call.
-    match unsafe { WaitForSingleObject(process.as_raw_handle(), milliseconds) } {
-        WAIT_OBJECT_0 => true,
-        WAIT_TIMEOUT => false,
-        other => panic!("WaitForSingleObject on a process returned {other}"),
+pub fn unprotect(data: &[u8]) -> Result<Vec<u8>, Error> {
+    let input = blob(data);
+    let mut output = CRYPT_INTEGER_BLOB::default();
+    // SAFETY: As in `protect`; the description pointer may be null too.
+    let done = unsafe {
+        CryptUnprotectData(
+            &input,
+            ptr::null_mut(),
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if done == 0 {
+        return Err(last_error("CryptUnprotectData"));
+    }
+    Ok(take(output))
+}
+
+fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
+    CRYPT_INTEGER_BLOB {
+        cbData: u32::try_from(data.len()).expect("a secret is far smaller than 4 GiB"),
+        pbData: data.as_ptr().cast_mut(),
+    }
+}
+
+fn take(output: CRYPT_INTEGER_BLOB) -> Vec<u8> {
+    let length = output.cbData as usize;
+    // SAFETY: DPAPI's buffer holds `cbData` bytes and is this function's alone.
+    let bytes = unsafe { slice::from_raw_parts_mut(output.pbData, length) };
+    let copy = bytes.to_vec();
+    for byte in bytes.iter_mut() {
+        // SAFETY: `byte` is a valid byte of the buffer.
+        unsafe { ptr::write_volatile(byte, 0) };
+    }
+    // SAFETY: DPAPI allocated the buffer with LocalAlloc, and it is freed once, after its last use.
+    unsafe { LocalFree(output.pbData.cast()) };
+    copy
+}
+
+pub struct Process(OwnedHandle);
+
+impl Process {
+    pub fn kill(&self) -> Result<(), Error> {
+        // SAFETY: The handle is the process's own and open.
+        if unsafe { TerminateProcess(self.0.as_raw_handle(), 1) } == 0 {
+            return Err(last_error("TerminateProcess"));
+        }
+        Ok(())
+    }
+
+    pub fn wait(&self) -> Result<u32, Error> {
+        // SAFETY: As in `kill`.
+        if unsafe { WaitForSingleObject(self.0.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
+            return Err(last_error("WaitForSingleObject"));
+        }
+        let mut code = 0;
+        // SAFETY: As in `kill`; `code` is live for the call.
+        if unsafe { GetExitCodeProcess(self.0.as_raw_handle(), &mut code) } == 0 {
+            return Err(last_error("GetExitCodeProcess"));
+        }
+        Ok(code)
+    }
+}
+
+pub fn spawn(
+    program: &str,
+    args: &[&str],
+    environment: &[(&str, OsString)],
+    stdio: [OwnedHandle; 3],
+) -> Result<Process, Error> {
+    for handle in &stdio {
+        // SAFETY: The handle is open and this process's own.
+        let marked = unsafe {
+            SetHandleInformation(
+                handle.as_raw_handle(),
+                HANDLE_FLAG_INHERIT,
+                HANDLE_FLAG_INHERIT,
+            )
+        };
+        if marked == 0 {
+            return Err(last_error("SetHandleInformation"));
+        }
+    }
+    let handles = stdio.each_ref().map(AsRawHandle::as_raw_handle);
+    let mut size = 0;
+    // SAFETY: Without a list the call only writes the size a list for one attribute needs.
+    unsafe { InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut size) };
+    let mut list = vec![0_usize; size.div_ceil(mem::size_of::<usize>())];
+    let attributes: LPPROC_THREAD_ATTRIBUTE_LIST = list.as_mut_ptr().cast();
+    // SAFETY: `list` holds `size` bytes, aligned for the pointers it keeps.
+    if unsafe { InitializeProcThreadAttributeList(attributes, 1, 0, &mut size) } == 0 {
+        return Err(last_error("InitializeProcThreadAttributeList"));
+    }
+    // SAFETY: The list was initialized above for one attribute and is deleted only after this.
+    let started = unsafe { start(program, args, environment, &handles, attributes) };
+    // SAFETY: The list was initialized above, and no call uses it after this.
+    unsafe { DeleteProcThreadAttributeList(attributes) };
+    started
+}
+
+/// # Safety
+///
+/// `attributes` points to a list that InitializeProcThreadAttributeList initialized for one
+/// attribute, and the list is not deleted before this returns.
+unsafe fn start(
+    program: &str,
+    args: &[&str],
+    environment: &[(&str, OsString)],
+    handles: &[RawHandle; 3],
+    attributes: LPPROC_THREAD_ATTRIBUTE_LIST,
+) -> Result<Process, Error> {
+    // SAFETY: The caller passes a list initialized for one attribute, and `handles` outlives its
+    // use by CreateProcessW.
+    let listed = unsafe {
+        UpdateProcThreadAttribute(
+            attributes,
+            0,
+            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+            handles.as_ptr().cast(),
+            mem::size_of_val(handles),
+            ptr::null_mut(),
+            ptr::null(),
+        )
+    };
+    if listed == 0 {
+        return Err(last_error("UpdateProcThreadAttribute"));
+    }
+    let mut startup = STARTUPINFOEXW::default();
+    startup.StartupInfo.cb = mem::size_of::<STARTUPINFOEXW>() as u32;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    [
+        startup.StartupInfo.hStdInput,
+        startup.StartupInfo.hStdOutput,
+        startup.StartupInfo.hStdError,
+    ] = *handles;
+    startup.lpAttributeList = attributes;
+    let application: Vec<u16> = program.encode_utf16().chain([0]).collect();
+    let mut command_line = command_line(program, args);
+    let environment = environment_block(environment);
+    let mut information = PROCESS_INFORMATION::default();
+    // SAFETY: The application name and command line are NUL-terminated and the command line
+    // writable, the environment is a UTF-16 block ending in two NULs, and `startup` and
+    // `information` are live for the call.
+    let created = unsafe {
+        CreateProcessW(
+            application.as_ptr(),
+            command_line.as_mut_ptr(),
+            ptr::null(),
+            ptr::null(),
+            TRUE,
+            EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+            environment.as_ptr().cast(),
+            ptr::null(),
+            ptr::from_ref(&startup).cast(),
+            &mut information,
+        )
+    };
+    if created == 0 {
+        return Err(last_error("CreateProcessW"));
+    }
+    // SAFETY: CreateProcessW opened both handles for this process, and only these close them.
+    let (process, _thread) = unsafe {
+        (
+            OwnedHandle::from_raw_handle(information.hProcess),
+            OwnedHandle::from_raw_handle(information.hThread),
+        )
+    };
+    Ok(Process(process))
+}
+
+fn command_line(program: &str, args: &[&str]) -> Vec<u16> {
+    let mut line = String::new();
+    for (index, argument) in iter::once(program).chain(args.iter().copied()).enumerate() {
+        if index > 0 {
+            line.push(' ');
+        }
+        let quoted = argument.is_empty() || argument.contains([' ', '\t']);
+        if quoted {
+            line.push('"');
+        }
+        let mut backslashes = 0;
+        for character in argument.chars() {
+            if character == '\\' {
+                backslashes += 1;
+            } else {
+                if character == '"' {
+                    line.extend(iter::repeat_n('\\', backslashes + 1));
+                }
+                backslashes = 0;
+            }
+            line.push(character);
+        }
+        if quoted {
+            line.extend(iter::repeat_n('\\', backslashes));
+            line.push('"');
+        }
+    }
+    line.encode_utf16().chain([0]).collect()
+}
+
+fn environment_block(environment: &[(&str, OsString)]) -> Vec<u16> {
+    let mut sorted: Vec<_> = environment.iter().collect();
+    sorted.sort_by_key(|(name, _)| name.to_uppercase());
+    let mut block = Vec::new();
+    for (name, value) in sorted {
+        block.extend(name.encode_utf16());
+        block.push(u16::from(b'='));
+        block.extend(value.encode_wide());
+        block.push(0);
+    }
+    if environment.is_empty() {
+        block.push(0);
+    }
+    block.push(0);
+    block
+}
+
+fn last_error(operation: &'static str) -> Error {
+    let code = io::Error::last_os_error()
+        .raw_os_error()
+        .expect("a failed call leaves an error code");
+    Error {
+        operation,
+        code: code as u32,
     }
 }
 
@@ -657,10 +898,12 @@ mod tests {
     //! through, and routes to TEST-NET addresses (192.0.2.0/24, 2001:db8::/32), which nothing uses,
     //! through the primary interface. Each puts back what it changed, also when it fails.
 
-    use std::os::windows::io::AsHandle;
-    use std::process::{Command, Stdio};
-    use std::sync::{Mutex, PoisonError};
-    use std::time::Instant;
+    use std::env;
+    use std::io::{Read, Write};
+    use std::process::Command;
+    use std::sync::{Mutex, PoisonError, mpsc};
+    use std::thread;
+    use std::time::Duration;
 
     use super::*;
 
@@ -697,29 +940,23 @@ mod tests {
     }
 
     #[test]
-    fn a_process_is_waited_for_until_it_exits_or_the_limit_passes() {
-        let mut child = Command::new(r"C:\Windows\System32\cmd.exe")
-            .args(["/d", "/c", "ping -n 30 127.0.0.1 >nul"])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
-        let process = open_process(child.id()).unwrap();
-        let started = Instant::now();
-        assert!(!wait_for_exit(
-            process.as_handle(),
-            Some(Duration::from_millis(300))
-        ));
-        let waited = started.elapsed();
+    fn protected_data_is_unprotected_to_the_same_bytes() {
+        let secret = br#"{"cookie":"SVPNCOOKIE=Ab12"}"#;
+        let protected = protect(secret).unwrap();
         assert!(
-            waited >= Duration::from_millis(300 - 16) && waited < Duration::from_secs(2),
-            "{waited:?}"
+            !protected
+                .windows(secret.len())
+                .any(|window| window == secret),
+            "the protected bytes hold the secret"
         );
-        child.kill().unwrap();
-        assert!(wait_for_exit(process.as_handle(), None));
-        assert!(wait_for_exit(child.as_handle(), Some(Duration::ZERO)));
-        child.wait().unwrap();
-        let error = open_process(0).unwrap_err();
-        assert_eq!(error.operation, "OpenProcess");
+        assert_eq!(unprotect(&protected).unwrap(), secret);
+        let mut damaged = protected;
+        let last = damaged.len() - 1;
+        damaged[last] ^= 0xff;
+        assert_eq!(
+            unprotect(&damaged).unwrap_err().operation,
+            "CryptUnprotectData"
+        );
     }
 
     #[test]
@@ -727,6 +964,11 @@ mod tests {
         let loopback = loopback();
         assert_eq!(Luid::from_index(loopback.index().unwrap()), Ok(loopback));
         let interface = interface(loopback).unwrap();
+        assert_eq!(Luid::from_alias(&interface.alias), Ok(loopback));
+        assert_eq!(
+            Luid::from_alias("no such interface").unwrap_err().operation,
+            "ConvertInterfaceAliasToLuid"
+        );
         assert_eq!(interface.medium, Medium::Other, "{interface:?}");
         assert!(!interface.hardware && interface.up, "{interface:?}");
         assert!(interface.guid.starts_with('{') && interface.guid.len() == 38);
@@ -934,5 +1176,48 @@ mod tests {
             drop(undo);
             assert_eq!(registered_servers(&key, "NameServer", "REG_SZ"), before);
         }
+    }
+
+    #[test]
+    fn a_spawned_process_inherits_only_its_standard_handles() {
+        let (stdin_read, mut stdin) = io::pipe().unwrap();
+        let (mut stdout, stdout_write) = io::pipe().unwrap();
+        let stderr = stdout_write.try_clone().unwrap();
+        let (mut other, other_write) = io::pipe().unwrap();
+        // SAFETY: The handle is open and this process's own.
+        let marked = unsafe {
+            SetHandleInformation(
+                other_write.as_raw_handle(),
+                HANDLE_FLAG_INHERIT,
+                HANDLE_FLAG_INHERIT,
+            )
+        };
+        assert_ne!(marked, 0);
+        let process = spawn(
+            r"C:\Windows\System32\sort.exe",
+            &[],
+            &[("SystemRoot", env::var_os("SystemRoot").unwrap())],
+            [stdin_read.into(), stdout_write.into(), stderr.into()],
+        )
+        .unwrap();
+        drop(other_write);
+        let (sender, other_ended) = mpsc::channel();
+        thread::spawn(move || {
+            let mut rest = Vec::new();
+            let _ = other.read_to_end(&mut rest);
+            let _ = sender.send(rest);
+        });
+        let other_ended = other_ended.recv_timeout(Duration::from_secs(5));
+        stdin.write_all(b"b\r\na\r\n").unwrap();
+        drop(stdin);
+        let mut output = String::new();
+        stdout.read_to_string(&mut output).unwrap();
+        assert_eq!(process.wait(), Ok(0));
+        assert_eq!(output.lines().collect::<Vec<_>>(), ["a", "b"]);
+        assert_eq!(
+            other_ended,
+            Ok(Vec::new()),
+            "the child held the other pipe open"
+        );
     }
 }

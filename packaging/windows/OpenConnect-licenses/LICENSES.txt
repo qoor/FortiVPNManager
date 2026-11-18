@@ -1,8 +1,8 @@
-Licenses of OpenConnect 9.21 and of the libraries FortiVPNManager ships with it, in this folder. Each
-text is the upstream project's own file, or the notice at the top of the source files it covers,
-named <project>-<upstream name>.
+Licenses of OpenConnect 9.21 and of the libraries FortiVPNManager ships with it, next to
+fvm-helper.exe, which loads them. Each text is the upstream project's own file, or the notice at the
+top of the source files it covers, named <project>-<upstream name>.
 
-openconnect.exe, libopenconnect-5.dll
+libopenconnect-5.dll
     OpenConnect: GNU LGPL 2.1 - openconnect-COPYING.LGPL.txt
     with these copies from OpenConnect's source tree:
     FFmpeg (lzo.c, lzo.h): GNU LGPL 2.1 or later - openconnect-COPYING.LGPL.txt
@@ -10,84 +10,32 @@ openconnect.exe, libopenconnect-5.dll
     openconnect-json-json.c.txt
     jsondump.c: as its notice states - openconnect-jsondump.c.txt
     Wintun (wintun.h): GNU GPL 2 or MIT, as its notice states - openconnect-wintun.h.txt
-libgnutls-30.dll
-    GnuTLS 3.8.13: GNU LGPL 2.1 or later - gnutls-COPYING.LESSERv2.txt
-    with these copies from GnuTLS's source tree:
-    GNU Libtasn1 4.20.0 (lib/minitasn1): GNU LGPL 2.1 or later - gnutls-COPYING.LESSERv2.txt
-    GNU libunistring (lib/unistring): as each file states, GNU LGPL 3 or later (which adds to GNU
-    GPL 3) or GNU GPL 2 or later, or GNU LGPL 2.1 or later - nettle-COPYING.LESSERv3.txt,
-    nettle-COPYINGv3.txt, nettle-COPYINGv2.txt, gnutls-COPYING.LESSERv2.txt
-    lib/accelerated/x86/coff (aesni-x86_64.s, aesni-gcm-x86_64.s, ghash-x86_64.s,
-    sha1-ssse3-x86_64.s, sha256-ssse3-x86_64.s, sha512-ssse3-x86_64.s): as their notice states -
-    gnutls-accelerated-x86-coff.txt
-    lib/accelerated/x86/coff/e_padlock-x86_64.s: as its notice states -
-    gnutls-accelerated-x86-coff-e_padlock-x86_64.s.txt
-    lib/accelerated/x86/coff/aes-ssse3-x86_64.s: public domain, as its notice states -
-    gnutls-accelerated-x86-coff-aes-ssse3-x86_64.s.txt
-    crau (lib/crau: crau.h, macros.h): MIT or Unlicense - gnutls-crau-LICENSE.txt,
-    gnutls-crau-UNLICENSE.txt, gnutls-crau-crau.h.txt
-    lib/extras/hex.c: CC0 - gnutls-extras-CC0.txt
-    lib/extras/randomart.c: as its notice states - gnutls-extras-randomart.c.txt
-    inih (lib/inih): New BSD license - gnutls-inih-LICENSE.txt
-    GNU Nettle (lib/nettle/gost: acpkm.c, bignum-le.c, gostdsa-mask.c, kuznyechik.c, write-le32.c;
-    lib/nettle/int/mpn-base256.c): GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or
-    later - nettle-COPYING.LESSERv3.txt, nettle-COPYINGv3.txt, nettle-COPYINGv2.txt
-    lib/nettle/gost (cmac-kuznyechik.c, cmac-magma.c, gost-wrap.c, gost28147.c, magma.c): as their
-    notices state - gnutls-nettle-gost-cmac-kuznyechik.c.txt, gnutls-nettle-gost-cmac-magma.c.txt,
-    gnutls-nettle-gost-gost-wrap.c.txt, gnutls-nettle-gost-gost28147.c.txt,
-    gnutls-nettle-gost-magma.c.txt
-libnettle-9.dll, libhogweed-7.dll
-    Nettle 4.0: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
-    nettle-COPYING.LESSERv3.txt, nettle-COPYINGv3.txt, nettle-COPYINGv2.txt
-    with these copies from Nettle's source tree:
-    gost28147.c: as its notice states - nettle-gost28147.c.txt
-    gosthash94.c, gosthash94.h: as their notices state - nettle-gosthash94.c.txt,
-    nettle-gosthash94.h.txt
-    poly1305-internal.c: as its notice states - nettle-poly1305-internal.c.txt
-    DES (des.c, des.h, desCode.h): GNU Library General Public License 2 or later -
-    nettle-descore.README.txt
-libgmp-10.dll
-    GNU MP 6.3.0: GNU LGPL 3 or later (which adds to GNU GPL 3), or GNU GPL 2 or later -
-    gmp-COPYING.LESSERv3.txt, gmp-COPYINGv3.txt, gmp-COPYINGv2.txt
+libssl-3-x64.dll, libcrypto-3-x64.dll
+    OpenSSL 3.5.9: Apache License 2.0 - openssl-LICENSE.txt
 libiconv-2.dll
     GNU libiconv 1.19.1: GNU LGPL 2.1 or later - libiconv-COPYING.LIB.txt
 libxml2-16.dll
     libxml2 2.15.4: MIT License - libxml2-Copyright.txt
 zlib1.dll
     zlib 1.4: zlib License - zlib-LICENSE.txt
-libgcc_s_seh-1.dll
-    GCC 16.2.0 runtime library: GNU GPL 3 with the GCC Runtime Library Exception 3.1 -
-    gcc-COPYING3.txt, gcc-COPYING.RUNTIME.txt
-libwinpthread-1.dll
-    mingw-w64 14.0.0 winpthreads: MIT License, with parts under a BSD license -
-    winpthreads-COPYING.txt
 wintun.dll
     Wintun 0.14.1: WireGuard LLC's Prebuilt Binaries License - wintun-LICENSE.txt
 
 Source code. These files were built by packaging/openconnect/build.sh of FortiVPNManager
 (https://github.com/qoor/FortiVPNManager) with Homebrew's MinGW-w64 toolchain (mingw-w64 14.0.0, GCC
 16.2.0) from the OpenConnect commit below, and from the upstream release archives below, each checked
-against its SHA-256 in that script. libgcc_s_seh-1.dll and libwinpthread-1.dll come from that
-toolchain, and wintun.dll comes unchanged from the Wintun archive below.
+against its SHA-256 in that script. wintun.dll comes unchanged from the Wintun archive below.
 
 OpenConnect 9.21 with one change by FortiVPNManager
     https://github.com/qoor/openconnect/commit/0cffe05a9e9ab4fad415fca341474381c824a89c
-GnuTLS 3.8.13, with its copies of GNU Libtasn1 and GNU libunistring
-    https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.13.tar.xz
-Nettle 4.0
-    https://ftpmirror.gnu.org/nettle/nettle-4.0.tar.gz
-GNU MP 6.3.0
-    https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+OpenSSL 3.5.9
+    https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz
 GNU libiconv 1.19.1
     https://ftpmirror.gnu.org/libiconv/libiconv-1.19.1.tar.gz
 libxml2 2.15.4
     https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz
 zlib 1.4
     https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.xz
-GCC 16.2.0 runtime library
-    https://ftpmirror.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz
-mingw-w64 14.0.0 winpthreads
-    https://downloads.sourceforge.net/project/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v14.0.0.tar.bz2
 Wintun 0.14.1
     https://www.wintun.net/builds/wintun-0.14.1.zip
     https://git.zx2c4.com/wintun/tag/?h=0.14.1

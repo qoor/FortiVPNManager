@@ -6,9 +6,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
-use fvm_contract::backend::{
-    FamilySettings, IpNetwork, NetworkSettings, RouteRepairOutcome, TunnelDevice, TunnelRoutes,
-};
 use fvm_contract::helper_internal::*;
 use serde_json::Value;
 
@@ -173,15 +170,6 @@ fn messages_to_the_entry() {
             ToEntry::AppDisconnected { app: 1 },
             ToEntry::ExecutableReplaced {},
             ToEntry::TerminationRequested {},
-            ToEntry::RoutesRepaired {
-                outcome: RouteRepairOutcome::Repaired
-            },
-            ToEntry::RoutesRepaired {
-                outcome: RouteRepairOutcome::NotNeeded
-            },
-            ToEntry::RoutesRepaired {
-                outcome: RouteRepairOutcome::Failed
-            },
             ToEntry::BypassRoutesChanged {
                 outcome: BypassRoutesOutcome::Changed {
                     network: Some(ethernet()),
@@ -294,10 +282,6 @@ fn messages_from_the_entry() {
             json: r#"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#
                 .into(),
         },
-        FromEntry::RepairRoutes {
-            gateway: Some(Ipv4Addr::new(10, 30, 161, 16)),
-        },
-        FromEntry::RepairRoutes { gateway: None },
         FromEntry::ChangeBypassRoutes {
             change: BypassRoutesChange {
                 network: NetworkCheck::Expect {

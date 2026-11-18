@@ -9,13 +9,17 @@
 //! checks that only the install-time user gets in, with those rights alone.
 #![cfg(windows)]
 
+#[allow(dead_code)]
+#[path = "../../tests/common/fake.rs"]
+mod fake;
+
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
+use fake::{FakeBackend, FakeSecrets, VERSION};
 use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus};
 use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
@@ -46,7 +50,8 @@ fn start() -> Test {
             pipe_name: pipe.clone(),
             security: "D:P(A;;GA;;;SY)(A;;0x12019f;;;AU)".to_owned(),
             sessions: SessionManager::new(
-                Arc::new(OpenConnect),
+                Arc::new(FakeBackend::default()),
+                Arc::new(FakeSecrets::default()),
                 env::temp_dir().join(name),
                 Timing::default(),
             ),
@@ -127,6 +132,7 @@ fn each_connection_gets_the_answers_to_its_own_requests() {
         let answer: Value = stream::receive(&mut &*connection).unwrap();
         let status: HelperStatus = reply(&answer, 1);
         assert!(!status.client_running);
+        assert_eq!(status.client.version.as_deref(), Some(VERSION));
     }
 }
 

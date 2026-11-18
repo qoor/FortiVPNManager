@@ -71,9 +71,6 @@ struct HelperInternalTests {
             .appDisconnected(app: 1),
             .executableReplaced,
             .terminationRequested,
-            .routesRepaired(outcome: .repaired),
-            .routesRepaired(outcome: .notNeeded),
-            .routesRepaired(outcome: .failed),
             .bypassRoutesChanged(outcome: .changed(network: ethernet, added: [lan], found: [host, lan], left: [])),
             .bypassRoutesChanged(outcome: .changed(network: nil, added: [], found: [], left: [stale])),
             .bypassRoutesChanged(outcome: .refused(error: HelperError(.wrongPhase, "no active network service"))),
@@ -111,8 +108,6 @@ struct HelperInternalTests {
                 app: 1,
                 json: #"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#
             ),
-            .repairRoutes(gateway: "10.30.161.16"),
-            .repairRoutes(gateway: nil),
             .changeBypassRoutes(change: .init(
                 network: .expect(network: ethernet), remove: [stale], add: [host, lan], lookUp: [host, lan]
             )),

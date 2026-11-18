@@ -1,6 +1,3 @@
-//! Misuse that would leave a run waiting forever fails at once.
-#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
-
 mod common;
 
 use std::panic::{self, AssertUnwindSafe};
@@ -9,22 +6,34 @@ use std::time::Duration;
 
 use common::*;
 use fvm_contract::app_helper::StopReason;
-use fvm_helper_core::session::{Report, Run};
+use fvm_helper_core::recovery::RecordSlot;
+use fvm_helper_core::session::{Report, Run, SessionManager};
+
+fn start(script: Script, on_report: impl FnMut(Report) + Send + 'static) -> (Run, RunDirectory) {
+    let directory = RunDirectory::new();
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::new([script])),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        timing(),
+    );
+    let run = sessions
+        .start(&mut request(ATTEMPT), RecordSlot::First, None, on_report)
+        .unwrap();
+    (run, directory)
+}
 
 #[test]
 fn submit_otp_and_stop_from_on_report_panic() {
-    let directory = RunDirectory::new();
     let cell: Arc<OnceLock<Run>> = Arc::new(OnceLock::new());
     let shared = Arc::clone(&cell);
     let (results, received) = mpsc::channel();
-    let launch = shell(
-        "/bin/sh",
-        vec![
-            "-c".to_owned(),
-            "/bin/sleep 0.2; echo late; exit 0".to_owned(),
-        ],
-    );
-    let run = start_run(launch, &directory, &Setup::default(), move |report| {
+    let script = script(|_, link| {
+        std::thread::sleep(Duration::from_millis(200));
+        line(link, "late");
+        ended(-EIO, false)
+    });
+    let (run, _directory) = start(script, move |report| {
         if let (Report::Output(_), Some(run)) = (&report, shared.get()) {
             let stop =
                 panic::catch_unwind(AssertUnwindSafe(|| run.stop(StopReason::UserDisconnect)));
@@ -40,23 +49,18 @@ fn submit_otp_and_stop_from_on_report_panic() {
 }
 
 #[test]
-#[should_panic(expected = "a route repair was dropped unfinished")]
-fn dropping_an_unfinished_route_repair_panics() {
-    let launch = shell(
-        "/bin/sh",
-        vec![
-            "-c".to_owned(),
-            "echo 'INFO:   Setting new routes...'; exit 1".to_owned(),
-        ],
-    );
-    let directory = RunDirectory::new();
+#[should_panic(expected = "a network change was dropped unanswered")]
+fn dropping_an_unanswered_network_change_panics() {
     let (sender, reports) = mpsc::channel();
-    let _run = start_run(launch, &directory, &Setup::default(), move |report| {
-        let _ = sender.send(report);
-    });
+    let (_run, _directory) = start(
+        up_without_otp(settings("utun9", "10.10.0.5")),
+        move |report| {
+            let _ = sender.send(report);
+        },
+    );
     while let Ok(report) = reports.recv_timeout(Duration::from_secs(5)) {
-        if let Report::RepairRoutes(repair) = report {
-            drop(repair);
+        if let Report::ChangeNetwork(job) = report {
+            drop(job);
         }
     }
 }

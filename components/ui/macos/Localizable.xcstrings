@@ -2421,26 +2421,6 @@
         }
       }
     },
-    "Not a regular file: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "일반 파일이 아닙니다: %@"
-          }
-        }
-      }
-    },
-    "Not a tested version (%@.x), so connecting may fail.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "검증된 버전(%@.x)이 아니어서 연결이 실패할 수 있습니다."
-          }
-        }
-      }
-    },
     "Not an IPv4 address or CIDR block.": {
       "localizations": {
         "ko": {
@@ -2497,16 +2477,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "아직 없습니다. 계정을 저장하면 만들어집니다."
-          }
-        }
-      }
-    },
-    "Not executable, or it did not report its version: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "실행할 수 없거나 버전을 알려 주지 않았습니다: %@"
           }
         }
       }
@@ -2627,16 +2597,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "로그인 시 열기"
-          }
-        }
-      }
-    },
-    "OpenConnect is not at %@. Reinstall FortiVPNManager.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenConnect가 %@ 경로에 없습니다. FortiVPNManager를 다시 설치하세요."
           }
         }
       }
@@ -4337,22 +4297,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "현재 연결이 끝나면 재연결 안 함"
-          }
-        }
-      }
-    },
-    "Writable by other users (mode %@); not run: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "new",
-            "value": "Writable by other users (mode %1$@); not run: %2$@"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "다른 사용자도 수정할 수 있어(mode %@) 실행하지 않습니다: %@"
           }
         }
       }

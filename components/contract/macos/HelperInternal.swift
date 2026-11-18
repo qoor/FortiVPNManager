@@ -14,8 +14,6 @@ nonisolated enum HelperInternal {
         /// any new app connection, so Rust can refuse that connection.
         case executableReplaced
         case terminationRequested
-        /// Answers `FromEntry.repairRoutes`.
-        case routesRepaired(outcome: RouteRepairOutcome)
         /// Answers `FromEntry.changeBypassRoutes`.
         case bypassRoutesChanged(outcome: BypassRoutesOutcome)
         case networkChanged(outcome: NetworkOutcome)
@@ -32,12 +30,6 @@ nonisolated enum HelperInternal {
         case readBypassRoutes
         /// `json` is the app's exception-route request.
         case writeBypassRoutes(json: String)
-    }
-
-    enum RouteRepairOutcome: String, Encodable, Sendable {
-        case repaired
-        case notNeeded
-        case failed
     }
 
     /// What came of a `BypassRoutesChange`.
@@ -72,8 +64,6 @@ nonisolated enum HelperInternal {
         case replyFlag(id: UInt64, value: Bool)
         case sendEvent(app: UInt64, json: String)
         case sendOutput(app: UInt64, json: String)
-        /// Check and repair the routing table; `gateway` is the VPN gateway's IPv4 address, if known.
-        case repairRoutes(gateway: String?)
         /// Change the exception routes in the routing table.
         case changeBypassRoutes(change: BypassRoutesChange)
         case changeNetwork(change: NetworkChange)

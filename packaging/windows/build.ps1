@@ -1,6 +1,6 @@
 # Builds the Windows app (with its own .NET) for release into .build\windows\FortiVPNManager, with the
-# Helper and the runtime DLL built beforehand and the built-in Google OAuth client when there is one,
-# and from that folder and OpenConnect the installer, .build\windows\FortiVPNManager-<version>.msi.
+# Helper, the runtime DLL and the OpenConnect libraries built beforehand and the built-in Google OAuth
+# client when there is one, and from that folder the installer, .build\windows\FortiVPNManager-<version>.msi.
 # OpenConnect comes as a zip that packaging/openconnect/build.sh builds on a Mac.
 # It runs no cargo: scripts/msi-windows.sh builds the Rust parts on a Mac, as the build PC's security
 # software holds every new executable, build scripts included, for minutes on its first run.
@@ -20,10 +20,6 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $out = Join-Path $root '.build\windows\FortiVPNManager'
 $msiBuild = Join-Path $root '.build\windows\msi'
-# The MSI takes every file in this folder (OpenConnectFolder in FortiVPNManager.Installer.wixproj).
-$openConnectFolder = Join-Path $root '.build\windows\OpenConnect'
-if (Test-Path $openConnectFolder) { Remove-Item $openConnectFolder -Recurse -Force }
-Expand-Archive -Path $OpenConnect -DestinationPath $openConnectFolder
 # The app's version, which the app and the installer carry and which names the installer
 # (docs\DESIGN.md 4.4).
 $version = (Get-Content (Join-Path $root 'VERSION') -TotalCount 1).Trim()
@@ -88,6 +84,15 @@ $app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.Ap
 Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:Version=$version", "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
 Copy-Item (Join-Path $RustOutput 'fvm-helper.exe') $out
 Copy-Item (Join-Path $RustOutput 'fvm_runtime.dll') $out
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead((Convert-Path -LiteralPath $OpenConnect))
+try {
+    $taken = @($archive.Entries.FullName | Where-Object { Test-Path -LiteralPath (Join-Path $out $_) })
+} finally {
+    $archive.Dispose()
+}
+if ($taken.Count -gt 0) { throw "the OpenConnect zip has files the app folder has already: $($taken -join ', ')" }
+Expand-Archive -Path $OpenConnect -DestinationPath $out
 # The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
 # gitignored as it has the client secret. Without it the app still works; users then import a client
 # JSON in Settings.

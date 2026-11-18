@@ -24,7 +24,7 @@ enum SystemCommand {
         process.standardInput = FileHandle.nullDevice
         let output = Pipe()
         let errorOutput = Pipe()
-        // Foundation leaves pipes inheritable; a VPN client the Helper entry spawns meanwhile must
+        // Foundation leaves pipes inheritable; a curl the Helper entry spawns meanwhile must
         // not hold them open. The tool still gets its ends, which Process duplicates onto 1 and 2.
         for pipe in [output, errorOutput] {
             for end in [pipe.fileHandleForReading, pipe.fileHandleForWriting] {

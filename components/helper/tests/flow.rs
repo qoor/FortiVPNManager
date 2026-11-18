@@ -1,16 +1,18 @@
-//! Whole runs against the fake openfortivpn scripts.
-#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
-
 mod common;
 
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread;
+use std::time::Duration;
 
 use common::*;
 use fvm_contract::app_helper::{
-    ExitFacts, HelperErrorCode, HelperEventKind, Milestone, OutputSource, ProcessExitStatus,
-    StopInitiator, StopReason,
+    ExitFacts, HelperEventKind, Milestone, OutputSource, ProcessExitStatus, StopInitiator,
+    StopReason,
 };
-use fvm_contract::backend::RouteRepairOutcome;
+use fvm_contract::helper_internal::NetworkOutcome;
+use fvm_helper_core::session::backend::SessionEvent;
+
+const EPIPE: i32 = 32;
 
 fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
     ExitFacts {
@@ -26,12 +28,34 @@ fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
 }
 
 #[test]
-fn success_then_user_disconnect() {
-    let mut session = fixture("success", &[], Setup::default().submitting_otp());
-    session.wait_for(Milestone::TunnelUp);
-    assert!(session.run.process_id().is_some());
-    session.run.stop(StopReason::UserDisconnect);
-    let facts = session.wait_for_exit();
+fn a_session_goes_through_every_milestone_and_ends_on_the_users_stop() {
+    let received = Arc::new(Mutex::new(None));
+    let script = {
+        let received = Arc::clone(&received);
+        script(move |request, link| {
+            trust_gateway(link);
+            let otp = ask_otp(link).unwrap();
+            *received.lock().unwrap() = Some((
+                request.username.clone(),
+                request.password.to_string(),
+                otp.to_string(),
+                request.pins.clone(),
+            ));
+            open(link);
+            error_line(
+                link,
+                "DTLS handshake failed: Resource temporarily unavailable",
+            );
+            tunnel_ready(link, settings("utun9", "10.10.0.5"));
+            wait_for_cancel(link);
+            line(link, "Logged out");
+            ended(-EINTR, true)
+        })
+    };
+    let mut session = Session::start(script, Setup::default().submitting_otp());
+    session.bring_up(vec![gateway_route("192.0.2.1")]);
+    assert!(session.run.session_running());
+    let facts = session.stop_and_revert(StopReason::UserDisconnect);
 
     assert_eq!(session.milestones(), FULL_FLOW);
     for kind in session.events() {
@@ -41,59 +65,43 @@ fn success_then_user_disconnect() {
         } = kind
         {
             let expected =
-                (*milestone == Milestone::TunnelUp).then(|| "10.212.134.200".parse().unwrap());
+                (*milestone == Milestone::TunnelUp).then(|| "10.10.0.5".parse().unwrap());
             assert_eq!(*tunnel_ip, expected, "{milestone:?}");
         }
     }
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
             reason: StopReason::UserDisconnect
         }
     );
-    assert!(facts.cert_rejected_digests.is_empty());
-    assert_eq!(facts.cert_rejected_at, None);
+    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
     assert!(facts.up_duration.is_some());
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
-    // "Restoring routes..." finished, so no repair.
-    assert_eq!(session.repair_requests(), 0);
-    assert_eq!(session.run.process_id(), None);
+    assert_eq!(
+        facts.exit_status,
+        ProcessExitStatus::Exited { code: -EINTR }
+    );
+    assert_eq!(
+        *received.lock().unwrap(),
+        Some((
+            "alice".to_owned(),
+            PASSWORD.to_owned(),
+            OTP.to_owned(),
+            vec![PIN.to_owned()]
+        ))
+    );
 
-    // The script got exactly the password and the OTP, and stdin was closed after the OTP.
-    let record = session.record.values();
-    assert_eq!(record["password_eof"], "no");
-    assert_eq!(record["password_len"], PASSWORD.len().to_string());
-    assert_eq!(record["password_sha256"], sha256(PASSWORD));
-    assert_eq!(record["otp_eof"], "no");
-    assert_eq!(record["otp_sha256"], sha256(OTP));
-    assert_eq!(record["stdin_closed"], "yes");
-    assert_eq!(record["term"], "yes");
-
-    session.assert_finished_cleanly();
     let texts = session.texts();
-    let started = format!(
-        "/bin/sh {} {}›",
-        fixture_path("success").display(),
-        session.record.path.display()
-    );
-    assert_eq!(texts[0], "‹VPN client: openfortivpn 1.24.1›");
-    assert!(
-        texts[1].starts_with("‹attempt started: pid "),
-        "{}",
-        texts[1]
-    );
-    assert!(texts[1].ends_with(&started), "{}", texts[1]);
+    assert_eq!(texts[0], "‹VPN client: openconnect 9.21›");
     let order = [
-        "‹password sent›",
-        "INFO:   Connected to gateway.",
+        "Connected to HTTPS on 203.0.113.10 with ciphersuite (TLS1.3)",
         "‹OTP sent›",
-        "INFO:   Authenticated.",
-        "INFO:   Tunnel is up and running.",
-        "‹sent SIGTERM (reason: userDisconnect)›",
-        "INFO:   Restoring routes...",
-        "INFO:   Logged out.",
-        "‹exited: code 0›",
+        "Connected as 10.10.0.5, using SSL",
+        "‹network settings applied›",
+        "‹session cancelled (reason: userDisconnect)›",
+        "Logged out",
+        "‹session ended: code -4›",
+        "‹network settings reverted›",
     ];
     let positions: Vec<usize> = order
         .iter()
@@ -105,379 +113,174 @@ fn success_then_user_disconnect() {
         })
         .collect();
     assert!(positions.is_sorted(), "{texts:?}");
-    assert_eq!(texts.last(), Some(&"‹exited: code 0›"));
+    assert!(session.has_line(OutputSource::Stdout, "Logged out"));
     assert!(session.has_line(
         OutputSource::Stderr,
-        "Thu Oct 15 12:12:05 2026 : Modem hangup"
+        "DTLS handshake failed: Resource temporarily unavailable"
     ));
-    assert!(session.has_line(
-        OutputSource::Stdout,
-        "add host 203.0.113.10: gateway 192.168.1.1"
-    ));
-    // The prompt is part of the log, as a line of its own once the answer took the idle period.
-    assert!(session.has_text("VPN account password: "));
-    // Each milestone follows the line that led to it.
+    assert!(session.has_line(OutputSource::Helper, "‹OTP sent›"));
     let before = |milestone: Milestone| {
         session.texts_before(|kind| {
             matches!(kind, HelperEventKind::Milestone { milestone: reached, .. } if *reached == milestone)
         })
     };
-    assert!(before(Milestone::ConnectedToGateway).contains(&"INFO:   Connected to gateway."));
-    assert!(before(Milestone::Authenticated).contains(&"INFO:   Authenticated."));
+    assert_eq!(
+        before(Milestone::ConnectedToGateway).last(),
+        Some(&"Connected to HTTPS on 203.0.113.10 with ciphersuite (TLS1.3)")
+    );
     assert_eq!(
         before(Milestone::TunnelUp).last(),
-        Some(&"INFO:   Tunnel is up and running.")
+        Some(&"‹network settings applied›")
     );
+    session.assert_finished_cleanly();
 }
 
 #[test]
-fn certificate_rejected_before_login() {
-    let mut session = fixture("cert-rejected", &[], Setup::default());
+fn a_rejected_certificate_is_told_in_the_exit_once() {
+    let script = script(|_, link| {
+        link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
+        link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
+        error_line(link, "SSL connection failure");
+        ended(-EIO, false)
+    });
+    let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
-
     assert_eq!(session.milestones(), [Milestone::Spawned]);
     assert_eq!(
         facts,
         ExitFacts {
-            cert_rejected_digests: vec![REJECTED_DIGEST.to_owned()],
+            cert_rejected_digests: vec![OTHER_PIN.to_owned()],
             cert_rejected_at: Some(Milestone::Spawned),
-            ..client_exit(Milestone::Spawned, 1)
+            ..client_exit(Milestone::Spawned, -EIO)
         }
     );
-    // The password prompt comes before TLS, so it was answered.
     assert_eq!(
-        session.record.value("password_sha256"),
-        Some(sha256(PASSWORD))
-    );
-    assert_eq!(
-        session.count_text(&format!("ERROR:      trusted-cert = {REJECTED_DIGEST}")),
+        session.count_text(&format!("‹gateway certificate not trusted: {OTHER_PIN}›")),
         2
     );
-    assert!(session.has_text("INFO:   Could not log out."));
     session.assert_finished_cleanly();
 }
 
 #[test]
-fn password_rejected() {
-    let mut session = fixture("auth-failed", &["password"], Setup::default());
+fn a_certificate_rejected_after_the_gateway_was_trusted_is_told_where_it_came() {
+    let script = script(|_, link| {
+        trust_gateway(link);
+        link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
+        ended(-EIO, false)
+    });
+    let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
+    assert_eq!(facts.cert_rejected_at, Some(Milestone::ConnectedToGateway));
     assert_eq!(
-        session.milestones(),
-        [Milestone::Spawned, Milestone::ConnectedToGateway]
+        facts.furthest_milestone,
+        Some(Milestone::ConnectedToGateway)
     );
-    assert_eq!(facts, client_exit(Milestone::ConnectedToGateway, 1));
-    session.assert_finished_cleanly();
 }
 
 #[test]
-fn otp_rejected() {
-    let mut session = fixture("auth-failed", &["otp"], Setup::default().submitting_otp());
+fn a_session_that_fails_before_the_first_form_ends_at_spawned() {
+    let script = script(|_, link| {
+        error_line(
+            link,
+            "SSL connection failure: The TLS connection was non-properly terminated.",
+        );
+        ended(-EIO, false)
+    });
+    let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
-    assert_eq!(session.milestones(), FULL_FLOW[..4]);
-    assert_eq!(facts, client_exit(Milestone::OtpSubmitted, 1));
-    assert_eq!(session.record.value("otp_sha256"), Some(sha256(OTP)));
+    assert_eq!(facts, client_exit(Milestone::Spawned, -EIO));
+    assert_eq!(session.texts().last(), Some(&"‹session ended: code -5›"));
     session.assert_finished_cleanly();
+    let error = session.run.submit_otp(OTP.to_owned()).unwrap_err();
+    assert_eq!(error.message, "openconnect is not running");
 }
 
 #[test]
-fn gateway_ends_the_session() {
-    let mut session = fixture("server-cut", &["cut"], Setup::default().submitting_otp());
+fn a_tunnel_that_cannot_be_set_up_ends_after_authentication() {
+    let script = script(|_, link| {
+        trust_gateway(link);
+        open(link);
+        link.report(SessionEvent::TunnelFailed(
+            Some("10.10.0.5".parse().unwrap()),
+            Some("Operation not permitted (os error 1)".to_owned()),
+        ));
+        ended(-EIO, true)
+    });
+    let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
+    assert_eq!(facts, client_exit(Milestone::Authenticated, -EIO));
+    assert!(
+        session.has_text(
+            "‹the tunnel device could not be set up: Operation not permitted (os error 1)›"
+        )
+    );
+    assert!(session.jobs.is_empty());
+}
 
-    assert_eq!(session.milestones(), FULL_FLOW);
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
+#[test]
+fn the_gateway_ending_a_session_is_the_clients_end() {
+    let (cut, cut_wait) = mpsc::channel::<()>();
+    let script = script(move |_, link| {
+        trust_gateway(link);
+        open(link);
+        tunnel_ready(link, settings("utun9", "10.10.0.5"));
+        let _ = cut_wait.recv();
+        error_line(link, "Server closed connection");
+        ended(-EPIPE, true)
+    });
+    let mut session = Session::start(script, Setup::default());
+    session.bring_up(vec![gateway_route("192.0.2.1")]);
+    thread::sleep(Duration::from_millis(200));
+    cut.send(()).unwrap();
+    session
+        .next_job()
+        .finish(NetworkOutcome::Reverted { left: Vec::new() });
+    let facts = session.wait_for_exit();
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 1 });
-    // The script stays up for 0.3 s.
+    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
+    assert_eq!(
+        facts.exit_status,
+        ProcessExitStatus::Exited { code: -EPIPE }
+    );
     let up = facts.up_duration.unwrap();
     assert!(
         up >= Duration::from_millis(150) && up < Duration::from_secs(5),
         "{up:?}"
     );
-    assert_eq!(session.repair_requests(), 0);
-    assert!(session.has_line(
-        OutputSource::Stderr,
-        "Thu Oct 15 12:12:05 2026 : Connection terminated."
-    ));
-    assert!(session.has_line(
-        OutputSource::Stdout,
-        "ERROR:  pppd: The link was terminated by the modem hanging up."
-    ));
-    assert_eq!(session.texts().last(), Some(&"‹exited: code 1›"));
-    session.assert_finished_cleanly();
-}
-
-/// Killed after "Setting new routes...", the client never restores them: the caller is asked once
-/// and the outcome follows the exit line.
-#[test]
-fn crash_after_routes_changed_asks_for_route_repair() {
-    for (outcome, text) in [
-        (RouteRepairOutcome::Repaired, "‹routes repaired›"),
-        (
-            RouteRepairOutcome::NotNeeded,
-            "‹routes checked: no repair needed›",
-        ),
-        (
-            RouteRepairOutcome::Failed,
-            "‹route repair failed — see the Helper log›",
-        ),
-    ] {
-        let setup = Setup {
-            route_repair: outcome,
-            ..Setup::default().submitting_otp()
-        };
-        let mut session = fixture("server-cut", &["crash"], setup);
-        let facts = session.wait_for_exit();
-
-        assert_eq!(session.repair_requests(), 1);
-        assert_eq!(facts.exit_status, ProcessExitStatus::Signaled { signal: 9 });
-        assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
-        assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-        let texts = session.texts();
-        assert_eq!(
-            texts[texts.len() - 2..],
-            ["‹exited: signal 9 (SIGKILL)›", text]
-        );
-        session.assert_finished_cleanly();
-    }
-}
-
-#[test]
-fn no_route_repair_when_routes_were_never_changed() {
-    let mut session = fixture("auth-failed", &["password"], Setup::default());
-    session.wait_for_exit();
-    assert_eq!(session.repair_requests(), 0);
-    assert!(
-        !session
-            .texts()
-            .iter()
-            .any(|text| text.starts_with("‹route"))
-    );
-}
-
-/// The client closes stdin and exits right after the prompt: the password write fails with EPIPE,
-/// which is logged and otherwise taken as the client exiting.
-#[test]
-fn password_write_after_the_client_closed_stdin() {
-    let mut session = fixture("early-exit", &[], Setup::default());
-    let facts = session.wait_for_exit();
-
-    assert_eq!(facts, client_exit(Milestone::Spawned, 1));
-    assert!(session.has_text("‹input failed: openfortivpn exited before reading it (EPIPE)›"));
-    assert!(!session.has_text("‹password sent›"));
-    assert_eq!(session.record.value("exited").as_deref(), Some("yes"));
-    session.assert_finished_cleanly();
-    // A finished run takes no OTP.
-    let error = session.run.submit_otp(OTP.to_owned()).unwrap_err();
-    assert_eq!(error.code, HelperErrorCode::WrongPhase);
-    assert_eq!(error.message, "openfortivpn is not running");
-}
-
-#[test]
-fn immediate_exit_before_any_prompt() {
-    let mut session = script(
-        "echo 'ERROR:  Specify a valid host:port couple.'; exit 1",
-        Setup::default(),
-    );
-    let facts = session.wait_for_exit();
-    assert_eq!(session.milestones(), [Milestone::Spawned]);
-    assert_eq!(facts, client_exit(Milestone::Spawned, 1));
-    assert!(session.has_text("ERROR:  Specify a valid host:port couple."));
+    assert!(session.has_line(OutputSource::Stderr, "Server closed connection"));
     session.assert_finished_cleanly();
 }
 
 #[test]
-fn spawn_failure_is_reported_as_the_exit() {
-    let launch = shell(
-        "/nonexistent/openfortivpn",
-        vec!["-c".to_owned(), "/x".to_owned()],
+fn output_goes_out_in_batches_before_each_event() {
+    let mut session = Session::start(
+        up(settings("utun9", "10.10.0.5")),
+        Setup::default().submitting_otp(),
     );
-    let mut session = Session::start(launch, RecordFile::new(), Setup::default());
-    let facts = session.wait_for_exit();
-
-    assert_eq!(
-        facts,
-        ExitFacts {
-            furthest_milestone: None,
-            stop_initiator: StopInitiator::Client {},
-            cert_rejected_digests: Vec::new(),
-            cert_rejected_at: None,
-            tunnel_mode_rejected: false,
-            tunnel_address_in_use: false,
-            up_duration: None,
-            exit_status: ProcessExitStatus::SpawnFailed { errno: 2 },
-        }
-    );
-    assert!(session.milestones().is_empty());
-    assert_eq!(
-        session.texts(),
-        [
-            "‹VPN client: openfortivpn 1.24.1›",
-            "‹spawn failed: /nonexistent/openfortivpn: No such file or directory (errno 2)›"
-        ]
-    );
-    assert_eq!(session.lines()[0].source, OutputSource::Helper);
-    assert_eq!(session.run.process_id(), None);
-    // Stopping after the end does nothing.
-    session.run.stop(StopReason::UserDisconnect);
-    session.settle(Duration::from_millis(50));
-    assert_eq!(session.events().len(), 1);
-}
-
-#[test]
-fn spawn_failure_of_a_file_that_is_not_executable() {
-    let launch = shell("/dev/null", Vec::new());
-    let mut session = Session::start(launch, RecordFile::new(), Setup::default());
-    let facts = session.wait_for_exit();
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::SpawnFailed { errno: 13 }
-    );
-    assert_eq!(
-        session.texts(),
-        [
-            "‹VPN client: openfortivpn 1.24.1›",
-            "‹spawn failed: /dev/null: Permission denied (errno 13)›"
-        ]
-    );
-}
-
-/// pppd keeps the client's stderr and lives in its own session, so a pipe may stay open after the
-/// client exits: output is still collected for the drain period, then the exit is reported anyway
-/// and the run closes its end of the pipe.
-#[test]
-fn pipe_held_open_by_another_process_group() {
-    let script_text = "\
-set -m
-( trap '' PIPE
-  /bin/sleep 0.1; echo 'Thu Oct 15 12:12:06 2026 : late pppd line' >&2
-  /bin/sleep 1.2; /bin/echo 'after the drain' >&2 || echo 'late_write_failed=yes' >> \"$1\"
-  exec /bin/sleep 3 ) </dev/null >/dev/null &
-set +m
-echo 'INFO:   bye'
-exit 0";
-    let mut setup = Setup::default();
-    setup.timing.pipe_drain = Duration::from_millis(700);
-    let started = Instant::now();
-    let mut session = script(script_text, setup);
-    let facts = session.wait_for_exit();
-    let elapsed = started.elapsed();
-
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
-    assert!(elapsed >= Duration::from_millis(650), "{elapsed:?}");
-    assert!(elapsed < Duration::from_millis(2_500), "{elapsed:?}");
-    assert!(session.has_line(
-        OutputSource::Stderr,
-        "Thu Oct 15 12:12:06 2026 : late pppd line"
-    ));
-    assert!(session.has_text("‹output pipes still open after 0.7s; not waiting any longer›"));
-    session.assert_finished_cleanly();
-    // Nothing reads the pipe any more, so the holder's next write fails.
-    assert!(session.wait(Duration::from_secs(3), |session| {
-        session.record.value("late_write_failed").is_some()
-    }));
-}
-
-/// Output goes out in several batches, by time and before each event, and never after the exit.
-#[test]
-fn output_is_batched_and_delivered_before_events() {
-    let mut session = fixture("server-cut", &["cut"], Setup::default().submitting_otp());
-    session.wait_for_exit();
-
-    assert!(session.batches().len() >= FULL_FLOW.len());
-    // Every event but the OTP prompt, which comes from the unfinished prompt line, follows at
-    // least one new line.
+    session.bring_up(vec![gateway_route("192.0.2.1")]);
+    session.stop_and_revert(StopReason::UserDisconnect);
     let mut output_since_event = false;
     for delivered in &session.delivered {
         match delivered {
-            Delivered::Output(_) => output_since_event = true,
+            Delivered::Output(lines) => {
+                assert!(!lines.is_empty());
+                output_since_event = true;
+            }
             Delivered::Log(..) => {}
             Delivered::Event(kind) => {
-                let otp_prompt = matches!(
+                let silent = matches!(
                     kind,
                     HelperEventKind::Milestone {
-                        milestone: Milestone::OtpPrompted,
+                        milestone: Milestone::OtpPrompted | Milestone::Authenticated,
                         ..
                     }
                 );
                 assert!(
-                    otp_prompt || output_since_event,
+                    silent || output_since_event,
                     "no output right before {kind:?}"
                 );
                 output_since_event = false;
             }
-            Delivered::RepairRoutes => unreachable!("the routes were restored"),
         }
     }
-    let order = [
-        "INFO:   Connected to gateway.",
-        "INFO:   Authenticated.",
-        "INFO:   Setting new routes...",
-        "INFO:   Tunnel is up and running.",
-        "INFO:   Restoring routes...",
-        "INFO:   Logged out.",
-    ];
-    let stdout: Vec<&str> = session
-        .lines()
-        .iter()
-        .filter(|line| line.source == OutputSource::Stdout && order.contains(&line.text.as_str()))
-        .map(|line| line.text.as_str())
-        .collect();
-    assert_eq!(stdout, order);
-    session.assert_finished_cleanly();
-}
-
-#[test]
-fn unfinished_lines_are_shown_at_the_exit() {
-    let mut session = script(
-        "printf 'INFO:   complete\\nunfinished tail'; printf 'err tail' >&2; exit 0",
-        Setup::default(),
-    );
-    session.wait_for_exit();
-    let mut texts: Vec<&str> = session
-        .lines()
-        .iter()
-        .filter(|line| line.source != OutputSource::Helper)
-        .map(|line| line.text.as_str())
-        .collect();
-    texts.sort_unstable();
-    assert_eq!(texts, ["INFO:   complete", "err tail", "unfinished tail"]);
-    session.assert_finished_cleanly();
-}
-
-/// A line without a break, such as a prompt, shows up on its own after the idle period, while
-/// complete lines go out with the next batch.
-#[test]
-fn an_unfinished_line_is_shown_after_a_pause() {
-    let mut session = script(
-        "echo 'INFO:   first'; printf 'partial tail'; exec /bin/sleep 30",
-        Setup::default(),
-    );
-    assert!(session.wait(Duration::from_secs(5), |session| {
-        session.has_text("INFO:   first")
-    }));
-    assert!(!session.has_text("partial tail"));
-    assert!(session.wait(Duration::from_secs(5), |session| {
-        session.has_text("partial tail")
-    }));
-    let lines = session.lines();
-    let first = lines
-        .iter()
-        .find(|line| line.text == "INFO:   first")
-        .unwrap();
-    let partial = lines
-        .iter()
-        .find(|line| line.text == "partial tail")
-        .unwrap();
-    let pause = partial.date.duration_since(first.date).unwrap();
-    assert!(pause >= Duration::from_millis(200), "{pause:?}");
-    assert_eq!(session.events().len(), 1);
-
-    session.run.stop(StopReason::UserDisconnect);
-    let facts = session.wait_for_exit();
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::Signaled { signal: 15 }
-    );
-    session.assert_finished_cleanly();
 }

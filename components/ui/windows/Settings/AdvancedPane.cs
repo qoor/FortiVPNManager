@@ -23,8 +23,6 @@ internal sealed class AdvancedPane : IPane
     private readonly InfoBar registerError = Cards.Notice(InfoBarSeverity.Error);
     private readonly StackPanel client = new() { Spacing = 4 };
     private readonly TextBlock clientVersion = Cards.Value();
-    private readonly InfoBar untested = Cards.Notice(InfoBarSeverity.Warning);
-    private readonly InfoBar clientProblem = Cards.Notice(InfoBarSeverity.Error);
     private readonly TextBlock filePath = new() { IsTextSelectionEnabled = true, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button showFile = new() { Content = L("Show in File Explorer") };
     private readonly SettingsCard fileCard;
@@ -49,8 +47,6 @@ internal sealed class AdvancedPane : IPane
         client.Children.Add(Cards.SectionHeader(L("VPN client")));
         client.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
         client.Children.Add(rows["Version"] = Cards.Card(L("Version"), clientVersion));
-        client.Children.Add(untested);
-        client.Children.Add(clientProblem);
         body.Children.Add(client);
 
         showFile.Click += (_, _) =>
@@ -87,8 +83,6 @@ internal sealed class AdvancedPane : IPane
         if (readiness.Client is { } info)
         {
             clientVersion.Text = info.Version ?? L("Unknown");
-            untested.Show(info.UntestedVersion?.Message());
-            clientProblem.Show(info.Problem?.Message());
         }
 
         var file = config.File;

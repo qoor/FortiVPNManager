@@ -36,8 +36,8 @@ private func runHelper() {
     }
 
     // Rust ignores SIGPIPE only in a Rust main, and this main is Swift: without this, the Helper
-    // entry writing to the stdin of a VPN client that already exited would kill the process.
-    // fvm-helper-core's session module relies on this: it cannot switch SIGPIPE off for the pipe
+    // entry writing the logout request's cookie to the stdin of a curl that already exited would
+    // kill the process. fvm-helper-core relies on this: it cannot switch SIGPIPE off for the pipe
     // without unsafe Rust.
     signal(SIGPIPE, SIG_IGN)
     // A no-op handler for the dispatch source below; unlike SIG_IGN it is not inherited across exec.

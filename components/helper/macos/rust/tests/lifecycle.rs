@@ -3,15 +3,19 @@
 
 mod common;
 
-use std::process::Command;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use common::*;
 use serde_json::json;
 
+fn up() -> Script {
+    common::up(settings("utun9", "10.10.0.5"))
+}
+
 #[test]
 fn exit_when_idle_exits_shortly_after_the_reply_and_admits_no_one_meanwhile() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     let id = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(id));
@@ -42,7 +46,7 @@ fn exit_when_idle_exits_shortly_after_the_reply_and_admits_no_one_meanwhile() {
 
 #[test]
 fn exit_when_idle_is_declined_during_a_run() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::with([up()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
@@ -64,7 +68,7 @@ fn exit_when_idle_is_declined_during_a_run() {
 
 #[test]
 fn sigterm_while_idle_exits_at_once() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     swift.send(json!({"terminationRequested": {}}));
     swift.wait_until("the exit", |swift| {
         swift.position(is("exitAfterDraining")).is_some()
@@ -74,13 +78,13 @@ fn sigterm_while_idle_exits_at_once() {
 
 #[test]
 fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::with([up()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
     let id = swift.request(1, submit_otp(ATTEMPT, OTP));
     assert_eq!(swift.reply(id), None);
-    swift.wait_for_milestone(1, TUNNEL_UP);
+    swift.bring_up(1);
 
     swift.send(json!({"terminationRequested": {}}));
     swift.send(json!({"terminationRequested": {}}));
@@ -89,6 +93,7 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
         swift.connect(1, OTHER_ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
+    swift.answer_network("revert", reverted());
     swift.wait_until("the exit", |swift| {
         swift.position(is("exitAfterDraining")).is_some()
     });
@@ -117,11 +122,13 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
 
 #[test]
 fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
-    // The client ignores SIGTERM, and its grace period outlasts the Helper's shutdown limit.
-    let mut swift = Swift::start(Setup {
-        grace_period: Duration::from_secs(60),
-        ..Setup::fixture("hang").args(&["gateway", "ignore-term"])
+    let (release, released) = mpsc::channel::<()>();
+    let stuck = script(move |_, link| {
+        trust_gateway(link);
+        let _ = released.recv();
+        ended(-EIO, false)
     });
+    let mut swift = Swift::start(Setup::with([stuck]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, CONNECTED_TO_GATEWAY);
@@ -141,25 +148,13 @@ fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
     assert_eq!(swift.exit_facts(1), None);
     assert_eq!(swift.count(is("exitAfterDraining")), 0);
 
-    // The fixture would outlive the test.
-    let started = swift
-        .output(1)
-        .into_iter()
-        .find_map(|text| {
-            let rest = text.strip_prefix("‹attempt started: pid ")?;
-            Some(rest.split_once(',')?.0.to_owned())
-        })
-        .unwrap();
-    Command::new("/bin/kill")
-        .args(["-s", "KILL", "--", &format!("-{started}")])
-        .status()
-        .unwrap();
+    release.send(()).unwrap();
     swift.wait_for_exit(1);
 }
 
 #[test]
 fn a_replaced_helper_finishes_its_run_and_then_exits() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::with([up()]));
     assert!(swift.connect_app(1, 501));
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
@@ -190,7 +185,7 @@ fn a_replaced_helper_finishes_its_run_and_then_exits() {
 
 #[test]
 fn a_replaced_helper_that_is_idle_refuses_new_connections_and_exits() {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     swift.send(json!({"executableReplaced": {}}));
     assert!(!swift.connect_app(2, 501));

@@ -1,158 +1,97 @@
-//! Stage time limits and stopping.
-#![cfg(unix)] // The fake clients are shell scripts; tests/windows.rs covers Windows.
-
 mod common;
 
+use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
-use fvm_contract::app_helper::{Milestone, ProcessExitStatus, StopInitiator, StopReason};
-use fvm_contract::backend::RouteRepairOutcome;
+use fvm_contract::app_helper::{
+    HelperError, HelperErrorCode, Milestone, ProcessExitStatus, StopInitiator, StopReason,
+};
+use fvm_contract::helper_internal::NetworkOutcome;
 use fvm_helper_core::session::StageLimits;
-use rustix::process::Pid;
+use fvm_helper_core::session::backend::Link;
 
 const TINY: Duration = Duration::from_millis(150);
 
-fn wait_for_start(session: &mut Session) {
-    assert!(session.wait(Duration::from_secs(5), |session| {
-        session.record.value("started").is_some()
-    }));
-}
-
-/// SIGTERM goes to the client only: a process it started, such as /sbin/route restoring the
-/// routes, must be left to finish.
 #[test]
-fn sigterm_goes_to_the_client_only() {
-    let script_text = "\
-( trap 'echo leftover_term=yes >> \"$1\"' TERM; while :; do /bin/sleep 0.05; done ) </dev/null >/dev/null 2>&1 &
-trap 'echo client_term=yes >> \"$1\"; /bin/sleep 0.3; exit 0' TERM
-echo 'started=yes' >> \"$1\"
-while :; do /bin/sleep 0.05; done";
-    let mut session = script(script_text, Setup::default());
-    wait_for_start(&mut session);
-    session.run.stop(StopReason::UserDisconnect);
-    let facts = session.wait_for_exit();
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
-    assert_eq!(session.record.value("client_term").as_deref(), Some("yes"));
-    assert_eq!(session.record.value("leftover_term"), None);
-}
-
-/// What the client left in its group is killed once it exits, even when it ignores SIGTERM.
-#[test]
-fn leftovers_in_the_client_group_are_killed_after_it_exits() {
-    let script_text = "\
-( trap '' TERM; exec /bin/sleep 30 ) </dev/null >/dev/null 2>&1 &
-echo \"leftover=$!\" >> \"$1\"
-echo 'started=yes' >> \"$1\"
-exec /bin/sleep 30";
-    let mut session = script(script_text, Setup::default());
-    wait_for_start(&mut session);
-    let leftover: i32 = session.record.value("leftover").unwrap().parse().unwrap();
-    let leftover = Pid::from_raw(leftover).unwrap();
-    assert!(rustix::process::test_kill_process(leftover).is_ok());
-    session.run.stop(StopReason::UserDisconnect);
-    let facts = session.wait_for_exit();
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::Signaled { signal: 15 }
-    );
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while rustix::process::test_kill_process(leftover).is_ok() {
-        assert!(Instant::now() < deadline, "the leftover still runs");
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
-/// A leftover in the client's group that holds stdout is killed with the group, so the exit is
-/// reported without waiting for the drain period.
-#[test]
-fn a_leftover_holding_stdout_does_not_delay_the_exit() {
-    let mut setup = Setup::default();
-    setup.timing.pipe_drain = Duration::from_secs(2);
-    let started = Instant::now();
-    let mut session = script("/bin/sleep 30 &\necho 'INFO:   bye'\nexit 0", setup);
-    let facts = session.wait_for_exit();
-    assert!(
-        started.elapsed() < Duration::from_secs(1),
-        "{:?}",
-        started.elapsed()
-    );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
-    assert!(session.has_text("INFO:   bye"));
-    assert!(
-        !session
-            .texts()
-            .iter()
-            .any(|text| text.starts_with("‹output pipes still open"))
-    );
-    session.assert_finished_cleanly();
-}
-
-#[test]
-fn a_stalled_stage_stops_the_client() {
+fn a_stalled_stage_cancels_the_session() {
     type Shrink = fn(&mut StageLimits);
-    let stalls: [(&str, &str, Milestone, bool, Shrink); 5] = [
+    type Stall = fn(&Link);
+    let stalls: [(&str, Milestone, bool, Shrink, Stall); 5] = [
         (
-            "spawned",
             "spawnToGateway",
             Milestone::Spawned,
             false,
             |limits| limits.spawn_to_gateway = TINY,
+            |_| {},
         ),
         (
-            "gateway",
             "gatewayToPromptOrAuth",
             Milestone::ConnectedToGateway,
             false,
             |limits| limits.gateway_to_prompt_or_auth = TINY,
+            |link| trust_gateway(link),
         ),
         (
-            "otp",
             "otpPromptToSubmit",
             Milestone::OtpPrompted,
             false,
             |limits| limits.otp_prompt_to_submit = TINY,
+            |link| {
+                trust_gateway(link);
+                assert!(ask_otp(link).is_none(), "the watchdog ends the OTP wait");
+            },
         ),
         (
-            "submitted",
             "otpSubmitToAuth",
             Milestone::OtpSubmitted,
             true,
             |limits| limits.otp_submit_to_auth = TINY,
+            |link| {
+                trust_gateway(link);
+                assert!(ask_otp(link).is_some());
+            },
         ),
         (
-            "authenticated",
             "authToTunnel",
             Milestone::Authenticated,
             true,
             |limits| limits.auth_to_tunnel = TINY,
+            |link| {
+                trust_gateway(link);
+                assert!(ask_otp(link).is_some());
+                open(link);
+            },
         ),
     ];
-    let sessions: Vec<_> = stalls
+    let runs: Vec<_> = stalls
         .into_iter()
-        .map(|(stage, name, furthest, submits_otp, shrink)| {
+        .map(|(name, furthest, submits_otp, shrink, stall)| {
             thread::spawn(move || {
-                let mut setup = Setup::default();
-                shrink(&mut setup.timing.stages);
+                let gateway = FakeGateway::start();
+                let mut setup = Setup::default().logging_out_to(&gateway);
                 if submits_otp {
                     setup = setup.submitting_otp();
                 }
-                let mut session = fixture("hang", &[stage], setup);
+                shrink(&mut setup.timing.stages);
+                let script = script(move |_, link| {
+                    stall(link);
+                    wait_for_cancel(link);
+                    ended(-EIO, false)
+                });
+                let mut session = Session::start(script, setup);
                 let facts = session.wait_for_exit();
-
                 assert_eq!(
                     facts.stop_initiator,
                     StopInitiator::Helper {
                         reason: StopReason::Watchdog
                     },
-                    "{stage}"
+                    "{name}"
                 );
-                assert_eq!(facts.furthest_milestone, Some(furthest), "{stage}");
-                assert_eq!(
-                    facts.exit_status,
-                    ProcessExitStatus::Signaled { signal: 15 }
-                );
+                assert_eq!(facts.furthest_milestone, Some(furthest), "{name}");
                 assert_eq!(facts.up_duration, None);
                 let texts = session.texts();
                 let expired = format!("‹watchdog: {name} did not finish within 0.15s›");
@@ -160,14 +99,13 @@ fn a_stalled_stage_stops_the_client() {
                     .iter()
                     .position(|text| *text == expired)
                     .unwrap_or_else(|| panic!("{expired} missing from {texts:?}"));
-                assert_eq!(texts[fired + 1], "‹sent SIGTERM (reason: watchdog)›");
-                assert_eq!(texts.last(), Some(&"‹exited: signal 15 (SIGTERM)›"));
+                assert_eq!(texts[fired + 1], "‹session cancelled (reason: watchdog)›");
                 session.assert_finished_cleanly();
             })
         })
         .collect();
-    for session in sessions {
-        session.join().unwrap();
+    for run in runs {
+        run.join().unwrap();
     }
 }
 
@@ -182,13 +120,11 @@ fn no_stage_limit_once_the_tunnel_is_up() {
         otp_submit_to_auth: tiny,
         auth_to_tunnel: tiny,
     };
-    let mut session = fixture("hang", &["tunnel"], setup);
-    session.wait_for(Milestone::TunnelUp);
+    let mut session = Session::start(up(settings("utun9", "10.10.0.5")), setup);
+    session.bring_up(vec![gateway_route("192.0.2.1")]);
     session.settle(Duration::from_millis(500));
     assert_eq!(session.exit_facts(), None);
-    assert!(session.run.process_id().is_some());
-    session.run.stop(StopReason::Sleep);
-    let facts = session.wait_for_exit();
+    let facts = session.stop_and_revert(StopReason::Sleep);
     assert!(
         !session
             .texts()
@@ -201,108 +137,243 @@ fn no_stage_limit_once_the_tunnel_is_up() {
             reason: StopReason::Sleep
         }
     );
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
 }
 
-/// SIGTERM is ignored, so SIGKILL follows after the grace period; the stage limit stays the
-/// reason.
 #[test]
-fn sigkill_follows_an_ignored_sigterm() {
-    let mut setup = Setup {
-        grace_period: Duration::from_millis(200),
-        ..Setup::default()
-    };
-    setup.timing.stages.spawn_to_gateway = Duration::from_millis(300);
-    let mut session = fixture("hang", &["spawned", "ignore-term"], setup);
+fn a_network_setup_that_outlasts_the_tunnel_stage_ends_the_run_as_a_network_setup_failure() {
+    let mut setup = Setup::default();
+    setup.timing.stages.auth_to_tunnel = Duration::from_secs(1);
+    let mut session = Session::start(up_without_otp(settings("utun9", "10.10.0.5")), setup);
+    session
+        .next_job()
+        .finish(looked_up(vec![gateway_route("192.0.2.1")]));
+    let apply = session.next_job();
+    thread::sleep(Duration::from_millis(1200));
+    apply.finish(applied(vec![gateway_route("192.0.2.1")]));
+    session
+        .next_job()
+        .finish(NetworkOutcome::Reverted { left: Vec::new() });
     let facts = session.wait_for_exit();
-
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
-            reason: StopReason::Watchdog
+            reason: StopReason::NetworkSetupFailed
         }
     );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Signaled { signal: 9 });
-    assert!(session.has_text("‹watchdog: spawnToGateway did not finish within 0.3s›"));
-    assert!(session.has_text("‹sent SIGTERM (reason: watchdog)›"));
-    assert!(session.has_text("‹sent SIGKILL: still running 0.2s after SIGTERM›"));
+    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
     assert_eq!(
-        session.texts().last(),
-        Some(&"‹exited: signal 9 (SIGKILL)›")
+        session.count_text("‹watchdog: authToTunnel did not finish within 1s›"),
+        1
     );
-    session.assert_finished_cleanly();
 }
 
-/// A user stop that needs SIGKILL keeps the user as the reason, a second stop changes nothing, and
-/// the routes left changed are repaired.
 #[test]
-fn sigkill_after_a_user_stop_on_an_up_tunnel() {
-    let setup = Setup {
-        grace_period: Duration::from_millis(200),
-        route_repair: RouteRepairOutcome::Repaired,
-        ..Setup::default().submitting_otp()
-    };
-    let mut session = fixture("hang", &["tunnel", "ignore-term"], setup);
-    session.wait_for(Milestone::TunnelUp);
+fn a_second_stop_keeps_the_first_reason() {
+    let mut session = Session::start(up(settings("utun9", "10.10.0.5")), Setup::default());
+    session.wait_for(Milestone::OtpPrompted);
     session.run.stop(StopReason::UserDisconnect);
     session.run.stop(StopReason::AppQuit);
     let facts = session.wait_for_exit();
-
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
             reason: StopReason::UserDisconnect
         }
     );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Signaled { signal: 9 });
-    assert_eq!(session.texts().last(), Some(&"‹routes repaired›"));
-    assert_eq!(session.repair_requests(), 1);
+    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: -EIO });
     assert_eq!(
         session
             .texts()
             .iter()
-            .filter(|text| text.starts_with("‹sent SIGTERM"))
+            .filter(|text| text.starts_with("‹session cancelled"))
             .count(),
         1
     );
-    assert!(session.has_text("‹sent SIGKILL: still running 0.2s after SIGTERM›"));
-    session.assert_finished_cleanly();
+    session.run.stop(StopReason::UserDisconnect);
+    session.settle(Duration::from_millis(50));
+    assert_eq!(session.events().len(), 4);
 }
 
 #[test]
-fn up_duration_runs_from_tunnel_up_to_the_exit() {
-    let mut session = fixture("success", &[], Setup::default().submitting_otp());
-    session.wait_for(Milestone::TunnelUp);
-    thread::sleep(Duration::from_millis(400));
-    session.run.stop(StopReason::ProactiveReconnect);
+fn a_session_that_outlasts_its_cancel_is_cancelled_again_until_it_ends() {
+    let repeat = Duration::from_millis(300);
+    let mut setup = Setup::default();
+    setup.timing.cancel_repeat = repeat;
+    let writes = Arc::new(AtomicUsize::new(0));
+    let (written, cancels) = mpsc::channel();
+    let script = script({
+        let writes = Arc::clone(&writes);
+        move |_, link| {
+            assert!(link.arm_cancel(move || {
+                writes.fetch_add(1, Ordering::SeqCst);
+                let _ = written.send(());
+            }));
+            trust_gateway(link);
+            assert_eq!(cancels.iter().take(3).count(), 3);
+            link.disarm_cancel();
+            thread::sleep(repeat * 2);
+            ended(-EINTR, true)
+        }
+    });
+    let mut session = Session::start(script, setup);
+    session.wait_for(Milestone::ConnectedToGateway);
+    let stopped = Instant::now();
+    session.run.stop(StopReason::UserDisconnect);
     let facts = session.wait_for_exit();
-
-    let up = facts.up_duration.unwrap();
-    assert!(
-        up >= Duration::from_millis(400) && up < Duration::from_secs(3),
-        "{up:?}"
-    );
+    let waited = stopped.elapsed();
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
-            reason: StopReason::ProactiveReconnect
+            reason: StopReason::UserDisconnect
         }
     );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: 0 });
+    assert_eq!(
+        facts.exit_status,
+        ProcessExitStatus::Exited { code: -EINTR }
+    );
+    assert!(waited >= repeat * 4, "{waited:?}");
+    session.settle(repeat * 3);
+    assert_eq!(writes.load(Ordering::SeqCst), 3);
+    let again = "‹session still running: cancel sent again›";
+    let texts = session.texts();
+    let end = texts
+        .iter()
+        .position(|text| text.starts_with("‹session ended: "))
+        .unwrap_or_else(|| panic!("no session end in {texts:?}"));
+    assert_eq!(
+        texts[..end].iter().filter(|&&text| text == again).count(),
+        2,
+        "{texts:?}"
+    );
+    assert!(!texts[end..].contains(&again), "{texts:?}");
     session.assert_finished_cleanly();
 }
 
-/// The Log tab shows each stop reason as the app sends it.
 #[test]
-fn stop_reasons_are_shown_as_the_app_sends_them() {
-    for (reason, raw) in [
-        (StopReason::AppDisconnected, "clientInvalidated"),
-        (StopReason::HelperShutdown, "helperShutdown"),
-    ] {
-        let mut session = fixture("hang", &["spawned"], Setup::default());
-        session.wait_for(Milestone::Spawned);
-        session.run.stop(reason);
-        session.wait_for_exit();
-        assert!(session.has_text(&format!("‹sent SIGTERM (reason: {raw})›")));
-    }
+fn a_session_that_returned_is_not_cancelled_again_while_it_logs_out() {
+    let repeat = Duration::from_millis(100);
+    let hold = repeat * 5;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let mut setup = Setup::default();
+    setup.timing.cancel_repeat = repeat;
+    setup.request.host = "127.0.0.1".to_owned();
+    setup.request.port = i64::from(listener.local_addr().unwrap().port());
+    let gateway = thread::spawn(move || {
+        let (connection, _) = listener.accept().unwrap();
+        thread::sleep(hold);
+        drop(connection);
+    });
+    let script = script(|_, link| {
+        trust_gateway(link);
+        open(link);
+        wait_for_cancel(link);
+        ended(-EINTR, false)
+    });
+    let mut session = Session::start(script, setup);
+    session.wait_for(Milestone::Authenticated);
+    let stopped = Instant::now();
+    session.run.stop(StopReason::UserDisconnect);
+    session.wait_for_exit();
+    let waited = stopped.elapsed();
+    gateway.join().unwrap();
+    assert!(waited >= hold, "{waited:?}");
+    let texts = session.texts();
+    assert!(
+        texts
+            .iter()
+            .any(|text| text.starts_with("‹logout request failed: HTTP 000")),
+        "{texts:?}"
+    );
+    assert_eq!(
+        session.count_text("‹session still running: cancel sent again›"),
+        0,
+        "{texts:?}"
+    );
+    session.assert_finished_cleanly();
+}
+
+fn opened_then_returned() -> Script {
+    script(|_, link| {
+        trust_gateway(link);
+        open(link);
+        ended(-EIO, false)
+    })
+}
+
+fn assert_ended_by_the_client(session: &Session) {
+    let facts = session.exit_facts().unwrap();
+    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: -EIO });
+    let texts = session.texts();
+    assert!(
+        !texts
+            .iter()
+            .any(|text| text.starts_with("‹watchdog: ") || text.starts_with("‹session cancelled")),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|text| text.starts_with("‹logout request failed: HTTP 000")),
+        "{texts:?}"
+    );
+    session.assert_finished_cleanly();
+}
+
+#[test]
+fn a_stage_limit_does_not_expire_while_a_returned_session_logs_out() {
+    let gateway = FakeGateway::holding();
+    let mut setup = Setup::default().logging_out_to(&gateway);
+    setup.timing.stages.auth_to_tunnel = TINY;
+    let mut session = Session::start(opened_then_returned(), setup);
+    gateway.wait_for_connections(1);
+    session.settle(TINY * 3);
+    assert_eq!(session.exit_facts(), None);
+    gateway.release();
+    session.wait_for_exit();
+    assert_ended_by_the_client(&session);
+}
+
+#[test]
+fn a_stop_while_a_returned_session_logs_out_changes_nothing() {
+    let gateway = FakeGateway::holding();
+    let setup = Setup::default().logging_out_to(&gateway);
+    let mut session = Session::start(opened_then_returned(), setup);
+    gateway.wait_for_connections(1);
+    assert!(session.wait(Duration::from_secs(5), |session| {
+        !session.run.session_running()
+    }));
+    session.run.stop(StopReason::UserDisconnect);
+    session.settle(Duration::from_millis(100));
+    assert_eq!(session.exit_facts(), None);
+    assert!(!session.run.session_running());
+    gateway.release();
+    session.wait_for_exit();
+    assert_ended_by_the_client(&session);
+}
+
+#[test]
+fn an_otp_while_a_returned_session_logs_out_is_refused_as_for_a_run_that_is_not_running() {
+    let gateway = FakeGateway::holding();
+    let setup = Setup::default().logging_out_to(&gateway);
+    let mut session = Session::start(opened_then_returned(), setup);
+    gateway.wait_for_connections(1);
+    assert!(session.wait(Duration::from_secs(5), |session| {
+        !session.run.session_running()
+    }));
+    assert_eq!(
+        session.run.submit_otp(OTP.to_owned()),
+        Err(HelperError {
+            code: HelperErrorCode::WrongPhase,
+            message: "openconnect is not running".to_owned(),
+        })
+    );
+    session.settle(Duration::from_millis(100));
+    assert_eq!(session.exit_facts(), None);
+    gateway.release();
+    session.wait_for_exit();
+    assert!(!session.has_text("‹OTP sent›"));
+    assert!(!session.reached(Milestone::OtpSubmitted));
+    assert_ended_by_the_client(&session);
 }

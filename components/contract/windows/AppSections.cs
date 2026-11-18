@@ -224,26 +224,7 @@ public static partial class AppInternal
         public sealed record Unreachable(HelperChannelFailure Failure) : HelperState;
     }
 
-    public sealed record VpnClientInfo(
-        string? Version = null,
-        UntestedVersion? UntestedVersion = null,
-        ClientProblem? Problem = null);
-
-    public sealed record UntestedVersion(string TestedSeries);
-
-    /// <summary>components/contract/src/backend.rs</summary>
-    public sealed record ClientProblem(ClientProblemKind Kind, string Path);
-
-    [JsonConverter(typeof(CasesConverter<ClientProblemKind>))]
-    public abstract record ClientProblemKind
-    {
-        private ClientProblemKind() { }
-
-        public sealed record NotFound : ClientProblemKind;
-        public sealed record NotRegularFile : ClientProblemKind;
-        public sealed record WritableByOthers(uint Mode) : ClientProblemKind;
-        public sealed record NotExecutable : ClientProblemKind;
-    }
+    public sealed record VpnClientInfo(string? Version = null);
 
     // Gmail and Google account
 

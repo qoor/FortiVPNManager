@@ -464,26 +464,6 @@
           }
         }
       }
-    },
-    "openconnect did not report its version: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openconnect가 버전을 알려 주지 않았습니다: %@"
-          }
-        }
-      }
-    },
-    "openconnect is not a regular file: %@": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "openconnect가 일반 파일이 아닙니다: %@"
-          }
-        }
-      }
     }
   },
   "version": "1.0"

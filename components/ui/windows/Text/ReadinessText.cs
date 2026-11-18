@@ -32,18 +32,6 @@ public static class ReadinessText
         _ => throw new InvalidOperationException($"Windows does not report {error} for the Helper"),
     };
 
-    public static string Message(this UntestedVersion untested) =>
-        L("Not a tested version (%@.x), so connecting may fail.", untested.TestedSeries);
-
-    /// <summary>What is wrong with openconnect. Windows looks for it in one place and checks only these.</summary>
-    public static string Message(this ClientProblem problem) => problem.Kind switch
-    {
-        ClientProblemKind.NotFound => L("OpenConnect is not at %@. Reinstall FortiVPNManager.", problem.Path),
-        ClientProblemKind.NotRegularFile => L("openconnect is not a regular file: %@", problem.Path),
-        ClientProblemKind.NotExecutable => L("openconnect did not report its version: %@", problem.Path),
-        _ => throw new InvalidOperationException($"Windows does not report {problem.Kind} for openconnect"),
-    };
-
     /// <summary>Why "Open at login" could not be changed.</summary>
     public static string LoginItemMessage(this RegistrationError error) => error switch
     {

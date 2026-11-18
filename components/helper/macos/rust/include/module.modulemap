@@ -3,5 +3,10 @@
 module FVMHelperEntry {
     header "fvm_helper_entry.h"
     link "fvm_helper_macos"
+    link "xml2"
+    link "z"
+    link "iconv"
+    link framework "Security"
+    link framework "CoreFoundation"
     export *
 }

@@ -55,24 +55,3 @@ extension AppInternal.RegistrationError {
         }
     }
 }
-
-extension AppInternal.UntestedVersion {
-    var message: String {
-        String(localized: "Not a tested version (\(testedSeries).x), so connecting may fail.")
-    }
-}
-
-extension AppInternal.ClientProblem {
-    var message: String {
-        switch kind {
-        case .notFound:
-            String(localized: "OpenConnect is not at \(path). Reinstall FortiVPNManager.")
-        case .notRegularFile:
-            String(localized: "Not a regular file: \(path)")
-        case let .writableByOthers(mode):
-            String(localized: "Writable by other users (mode \(String(mode, radix: 8))); not run: \(path)")
-        case .notExecutable:
-            String(localized: "Not executable, or it did not report its version: \(path)")
-        }
-    }
-}

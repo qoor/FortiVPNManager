@@ -48,12 +48,6 @@ struct AdvancedPane: View {
                 .searchAnchor("Type", navigation)
             LabeledContent("Version", value: found.version ?? String(localized: "Unknown"))
                 .searchAnchor("Version", navigation)
-            if let untested = found.untestedVersion {
-                NoticeRow(text: untested.message, style: .warning)
-            }
-            if let problem = found.problem {
-                NoticeRow(text: problem.message, style: .error)
-            }
         }
     }
 

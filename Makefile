@@ -57,6 +57,9 @@ verify:
 	codesign --verify -R="anchor apple generic and identifier \"$(HELPER_LABEL)\" and certificate leaf[subject.OU] = \"$$team\"" "$(HELPER)"; \
 	test ! -e "$(APP)/Contents/embedded.provisionprofile" || { echo "unexpected provisioning profile"; exit 1; }; \
 	! otool -L "$(HELPER)" | grep -q '@rpath' || { echo "helper links @rpath frameworks"; exit 1; }; \
+	paths=$$(otool -L "$(HELPER)" | awk 'NR > 1 && $$1 !~ /^(\/usr\/lib\/|\/System\/Library\/)/ { print $$1 }'); \
+	test -z "$$paths" || { echo "helper loads $$paths"; exit 1; }; \
+	test ! -e "$(APP)/Contents/MacOS/openconnect" || { echo "unexpected MacOS/openconnect"; exit 1; }; \
 	test -f "$(APP)/Contents/Library/LaunchDaemons/$(HELPER_LABEL).plist"; \
 	echo "verify: OK"
 

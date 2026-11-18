@@ -1,19 +1,15 @@
-//! The routing table, through the IP Helper API in `os_api`.
-//!
-//! - The gateway host route that openconnect's route script adds is removed when openconnect ended
-//!   without removing it.
-//! - The exception routes go through the gateway of the primary interface: the hardware Ethernet or
-//!   Wi-Fi adapter whose default route has the lowest metric. Virtual adapters, such as
-//!   FortiClient's or Hyper-V's, report Ethernet too, so the hardware flag tells them apart. The app
-//!   sees its GUID as the service ID and its name as the service name, as a network service on
-//!   macOS. The routes live in the active routing table only, so Windows forgets them at a restart.
+//! The routing table, through the IP Helper API in `os_api`. The exception routes go through the
+//! gateway of the primary interface: the hardware Ethernet or Wi-Fi adapter whose default route has
+//! the lowest metric. Virtual adapters, such as FortiClient's or Hyper-V's, report Ethernet too, so
+//! the hardware flag tells them apart. The app sees its GUID as the service ID and its name as the
+//! service name, as a network service on macOS. The routes live in the active routing table only,
+//! so Windows forgets them at a restart.
 
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 
 use fvm_common::os_api::{self, DadState, Family, Luid, Medium, Route};
 use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
-use fvm_contract::backend::RouteRepairOutcome;
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, LogCategory, LogLevel, NetworkCheck,
 };
@@ -24,57 +20,6 @@ use crate::Log;
 /// The route metric New-NetRoute gives a route, which the exception routes had while the Helper
 /// wrote them with PowerShell.
 pub(crate) const BYPASS_ROUTE_METRIC: u32 = 256;
-
-/// Removes the host routes to `gateway` through a router, as openconnect's route script adds it,
-/// and checks they are gone.
-pub(crate) fn repair(gateway: Option<Ipv4Addr>, log: &Log) -> RouteRepairOutcome {
-    let Some(gateway) = gateway else {
-        return RouteRepairOutcome::NotNeeded;
-    };
-    let failed = |message: String| {
-        let message = format!("removing the gateway host route to {gateway} failed: {message}");
-        log(LogLevel::Error, LogCategory::Routes, &message);
-        RouteRepairOutcome::Failed
-    };
-    let leftovers = || -> Result<Vec<Route>, os_api::Error> {
-        Ok(os_api::routes(Family::Ipv4)?
-            .into_iter()
-            .filter(|route| {
-                route.destination == IpAddr::V4(gateway)
-                    && route.prefix_length == 32
-                    && !route.next_hop.is_unspecified()
-            })
-            .collect())
-    };
-    let found = match leftovers() {
-        Ok(found) => found,
-        Err(error) => return failed(error.to_string()),
-    };
-    if found.is_empty() {
-        return RouteRepairOutcome::NotNeeded;
-    }
-    for route in &found {
-        if let Err(error) = os_api::delete_route(route) {
-            log(LogLevel::Error, LogCategory::Routes, &error.to_string());
-        }
-    }
-    match leftovers() {
-        Err(error) => failed(error.to_string()),
-        Ok(left) if left.is_empty() => {
-            let message = format!("removed the gateway host route to {gateway}");
-            log(LogLevel::Notice, LogCategory::Routes, &message);
-            RouteRepairOutcome::Repaired
-        }
-        Ok(left) => {
-            let message = format!(
-                "{} gateway host route(s) to {gateway} still present after removing",
-                left.len()
-            );
-            log(LogLevel::Error, LogCategory::Routes, &message);
-            RouteRepairOutcome::Failed
-        }
-    }
-}
 
 /// Carries out `change`, as `BypassRoutesChange` describes it: one read of the routing table before
 /// the changes, and one after them.
@@ -592,23 +537,6 @@ mod tests {
             &quiet(),
         ));
         assert_eq!(error.code, HelperErrorCode::InvalidRequest, "{error:?}");
-    }
-
-    #[test]
-    fn a_gateway_host_route_left_behind_is_removed() {
-        let log = quiet();
-        let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
-        let gateway: Ipv4Addr = "192.0.2.77".parse().unwrap();
-        let primary = primary_now();
-        // As openconnect's route script adds it.
-        let left = as_route(&host("192.0.2.77", &primary.network.router), primary.luid).unwrap();
-        let _undo = Undo(move || {
-            let _ = os_api::delete_route(&left);
-        });
-        os_api::add_route(&left).unwrap();
-        assert_eq!(repair(Some(gateway), &log), RouteRepairOutcome::Repaired);
-        assert_eq!(repair(Some(gateway), &log), RouteRepairOutcome::NotNeeded);
-        assert_eq!(repair(None, &log), RouteRepairOutcome::NotNeeded);
     }
 
     #[test]

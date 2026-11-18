@@ -4,11 +4,9 @@ use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 
 use fvm_common::os_api::{self, DadState, Family, Luid, Route};
-use fvm_contract::backend::{
-    FamilySettings, IpNetwork, NetworkSettings, TunnelDevice, TunnelRoutes,
-};
 use fvm_contract::helper_internal::{
-    LogCategory, LogLevel, NetworkChange, NetworkOutcome, NetworkStep, OutsideChanges, OutsideRoute,
+    FamilySettings, IpNetwork, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
+    NetworkSettings, NetworkStep, OutsideChanges, OutsideRoute, TunnelDevice, TunnelRoutes,
 };
 
 use crate::Log;
@@ -661,8 +659,6 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, PoisonError};
-
-    use fvm_contract::backend::FamilySettings;
 
     use super::*;
     use crate::routes::{ROUTE_WRITES, Undo};

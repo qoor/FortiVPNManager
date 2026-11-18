@@ -11,7 +11,6 @@ use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
     HelperStatus, Milestone, OutputBatch, RunRequest, StopReason,
 };
-use fvm_contract::backend::ClientCheckWait;
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
     ToEntry,
@@ -19,14 +18,14 @@ use fvm_contract::helper_internal::{
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::recovery::{RecordSlot, RouteRepair};
+use crate::recovery::RecordSlot;
 use crate::session::{NotReplaceable, Replaced, Report, Run, SessionManager, StartFailure};
 
 use bypass_routes::{BypassRoutes, Job};
 
 /// How long exiting after the OS's termination request waits for the run to report its exit.
-/// Longer than the client's grace period, so a client that ignores the stop request is killed and
-/// reported first.
+/// Longer than the logout request's wait for the gateway, so a run whose session could not log out
+/// itself still logs out and is reported first.
 const SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
 /// Lets the reply to an exitWhenIdle request leave before the Helper exits.
 const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
@@ -93,14 +92,13 @@ fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Re
         runs: HashMap::new(),
         executable_replaced: false,
         lifecycle: Lifecycle::Serving,
-        route_repair: None,
         bypass_routes: BypassRoutes::new(left),
     }
     .run()
 }
 
-/// Has the session manager clean up after an earlier Helper, and the OS side repair the routes a
-/// run that did not finish may have left broken and remove the exception routes the earlier Helper
+/// Has the session manager clean up after an earlier Helper, with the OS side reverting the network
+/// settings a run that did not finish changed and removing the exception routes the earlier Helper
 /// added, before any app connection is accepted. Returns the exception routes that could not be
 /// removed. Until "ready", the OS side accepts no app connection and passes on no stop request, so
 /// the answers to these requests are the only messages it sends.
@@ -136,21 +134,6 @@ fn clean_up(sessions: &SessionManager, os: &OsSide, events: &Receiver<Event>) ->
                 other => panic!("the OS side answered a network revert with {other:?}"),
             };
             os.log(level, LogCategory::Routes, message);
-        },
-        |gateway| {
-            os.send(&FromEntry::RepairRoutes { gateway });
-            let Event::FromOs(ToEntry::RoutesRepaired { outcome }) =
-                events.recv().expect("the entry holds a sender")
-            else {
-                panic!(
-                    "the OS side sent something other than the route repair's answer before ready"
-                );
-            };
-            os.log(
-                LogLevel::Notice,
-                LogCategory::Helper,
-                format!("cleaned up after an unfinished run (route repair: {outcome:?})"),
-            );
         },
         |recorded| {
             let change = bypass_routes::removal(&recorded);
@@ -194,7 +177,6 @@ struct Entry {
     runs: HashMap<AttemptId, HeldRun>,
     executable_replaced: bool,
     lifecycle: Lifecycle,
-    route_repair: Option<RouteRepair>,
     bypass_routes: BypassRoutes,
 }
 
@@ -263,11 +245,6 @@ impl Entry {
             Event::FromOs(ToEntry::Request { id, app, request }) => self.request(id, app, request),
             Event::FromOs(ToEntry::ExecutableReplaced {}) => self.executable_replaced(),
             Event::FromOs(ToEntry::TerminationRequested {}) => self.termination_requested(),
-            Event::FromOs(ToEntry::RoutesRepaired { outcome }) => self
-                .route_repair
-                .take()
-                .expect("the OS side answers only the route repair it was asked for")
-                .finish(outcome),
             Event::FromOs(ToEntry::BypassRoutesChanged { outcome }) => {
                 self.bypass_routes_changed(outcome);
             }
@@ -412,6 +389,12 @@ impl Entry {
 
     fn start_run(&mut self, app: u64, request: &mut RunRequest) -> Result<(), HelperError> {
         let uid = self.app_uid(app)?;
+        if self.runs.contains_key(&request.attempt_id) {
+            return Err(error(
+                HelperErrorCode::InvalidRequest,
+                "the attempt ID belongs to a running connection",
+            ));
+        }
         if !matches!(self.lifecycle, Lifecycle::Serving) {
             return Err(error(
                 HelperErrorCode::Busy,
@@ -452,23 +435,17 @@ impl Entry {
                 .send(Event::Run(attempt.clone(), report))
                 .expect("the event loop runs as long as the process");
         });
-        let (run, client) = started.map_err(|failure| match failure {
-            StartFailure::ClientUnavailable(message) => {
-                error(HelperErrorCode::ClientUnavailable, message)
-            }
+        let run = started.map_err(|failure| match failure {
             StartFailure::InvalidRequest(reason) => error(HelperErrorCode::InvalidRequest, reason),
-            StartFailure::RunFiles {
-                client_name,
-                failure,
-            } => {
+            StartFailure::RunDirectory(failure) => {
                 self.os.log(
                     LogLevel::Error,
                     LogCategory::Helper,
-                    format!("cannot write the {client_name} config: {failure}"),
+                    format!("cannot prepare the run directory: {failure}"),
                 );
                 error(
                     HelperErrorCode::InternalError,
-                    format!("could not create the {client_name} config file: {failure}"),
+                    format!("could not prepare the run directory: {failure}"),
                 )
             }
         })?;
@@ -483,7 +460,7 @@ impl Entry {
                 "{} started for uid {uid} with {} {}{replacing}",
                 run.name(),
                 run.client_name(),
-                client.version
+                self.sessions.version()
             ),
         );
         self.runs.insert(
@@ -571,25 +548,11 @@ impl Entry {
     }
 
     fn status(&self) -> HelperStatus {
-        let client_running = self
-            .runs
-            .values()
-            .any(|held| held.run.process_id().is_some());
-        let client = match self.sessions.find_client(ClientCheckWait::Limited) {
-            Ok((executable, untested_version)) => ClientStatus {
-                version: Some(executable.version),
-                problem: None,
-                untested_version,
-            },
-            Err(problem) => ClientStatus {
-                version: None,
-                problem: Some(problem),
-                untested_version: None,
-            },
-        };
         HelperStatus {
-            client_running,
-            client,
+            client_running: self.runs.values().any(|held| held.run.session_running()),
+            client: ClientStatus {
+                version: Some(self.sessions.version().to_owned()),
+            },
         }
     }
 
@@ -651,11 +614,6 @@ impl Entry {
                         self.run_exited(&event.attempt_id, &facts);
                     }
                 }
-            }
-            Report::RepairRoutes(repair) => {
-                let gateway = repair.gateway;
-                self.route_repair = Some(repair);
-                self.os.send(&FromEntry::RepairRoutes { gateway });
             }
             Report::ChangeNetwork(job) => self.queue_bypass_job(Job::Network(job)),
             Report::Log(level, category, message) => self.os.log(level, category, message),

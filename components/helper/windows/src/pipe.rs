@@ -46,7 +46,7 @@ pub struct Options {
     pub pipe_name: String,
     /// The pipe's security descriptor in SDDL: who may connect, and its owner.
     pub security: String,
-    /// The VPN client, with its run files where only the Helper may write.
+    /// The VPN client, with its session secrets and run files where only the Helper may write.
     pub sessions: SessionManager,
 }
 
@@ -213,7 +213,7 @@ impl Relay {
             .expect("the relay's state is never held across a panic")
     }
 
-    /// Set right after the entry starts; route repairs during its cleanup may ask before that.
+    /// Set right after the entry starts; network changes during its cleanup may ask before that.
     fn inbox(&self) -> &Inbox {
         self.inbox.wait()
     }
@@ -251,18 +251,6 @@ impl Relay {
             }
             FromEntry::SendOutput { app, json } => {
                 self.send(*app, PipeMessage::Output { json: json.clone() });
-            }
-            FromEntry::RepairRoutes { gateway } => {
-                let gateway = *gateway;
-                let relay = Arc::clone(self);
-                // Changing routes must not hold up the entry's other messages.
-                thread::Builder::new()
-                    .name("fvm-helper-route-repair".into())
-                    .spawn(move || {
-                        let outcome = routes::repair(gateway, &relay.log);
-                        relay.inbox().deliver(ToEntry::RoutesRepaired { outcome });
-                    })
-                    .expect("starting the route repair thread");
             }
             FromEntry::ChangeBypassRoutes { change } => {
                 self.route_changes

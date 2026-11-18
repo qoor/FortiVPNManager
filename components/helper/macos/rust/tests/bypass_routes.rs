@@ -121,7 +121,7 @@ impl Swift {
 }
 
 fn started() -> Swift {
-    let mut swift = Swift::start(Setup::fixture("success"));
+    let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     swift
 }
@@ -239,7 +239,7 @@ fn a_route_recorded_through_two_services_is_removed_once_no_app_wants_it() {
     let both = [added(16), added_through(16, "WIFI")];
     let record = json!({"routes": both});
     fs::write(directory.join("exception-routes.json"), record.to_string()).unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(scratch, Setup::default());
     assert_eq!(swift.change(1), removal(&both));
     // It could not be removed then.
     swift.changed(None, &[], &[], &both);
@@ -419,7 +419,7 @@ fn the_routes_an_earlier_helper_added_are_removed_before_ready() {
     DirBuilder::new().mode(0o700).create(&directory).unwrap();
     let record = json!({"routes": [added(16), added(17)]});
     fs::write(directory.join("exception-routes.json"), record.to_string()).unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(scratch, Setup::default());
 
     let first = swift.receive_within(Duration::from_secs(10));
     assert_eq!(
@@ -455,7 +455,7 @@ fn an_unreadable_record_is_dropped() {
     let directory = scratch.run_directory();
     DirBuilder::new().mode(0o700).create(&directory).unwrap();
     fs::write(directory.join("exception-routes.json"), "not JSON").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(scratch, Setup::default());
     swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
     assert!(swift.changes().is_empty());
     assert_eq!(swift.recorded(), None);

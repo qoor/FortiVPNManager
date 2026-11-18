@@ -1,18 +1,17 @@
-//! Cleaning up after an earlier Helper before "ready". The tests do not run as root, so no recorded
-//! process can match and none is ever stopped here.
+//! Cleaning up after an earlier Helper before "ready".
 
 mod common;
 
 use std::fs::{self, DirBuilder};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-use std::process::{Child, Command};
+use std::sync::Arc;
 use std::time::Duration;
 
 use common::*;
 use serde_json::{Value, json};
 
-/// A run directory as an earlier Helper left it: the pidfile, a config file and an unfinished
-/// pidfile.
+/// A run directory as an earlier Helper left it: the run record, a config file of an older build
+/// and an unfinished run record.
 fn left_behind(record: &str) -> Scratch {
     let scratch = Scratch::new();
     let directory = scratch.run_directory();
@@ -20,276 +19,198 @@ fn left_behind(record: &str) -> Scratch {
     fs::write(directory.join("run.json"), record).unwrap();
     fs::write(directory.join("config.7"), "host = vpn.example.com\n").unwrap();
     fs::write(directory.join("run.json.tmp"), "{").unwrap();
-    fs::write(directory.join("unrelated"), "").unwrap();
     scratch
 }
 
-fn sleeper() -> Child {
-    Command::new("/bin/sleep").arg("30").spawn().unwrap()
-}
-
-#[test]
-fn routes_are_repaired_and_leftovers_removed_before_ready() {
-    let mut sleeper = sleeper();
-    // The sleeper's pid and path, but not its start time.
-    let record = json!({
-        "processes": [{
-            "pid": sleeper.id(),
-            "startSeconds": 1,
-            "startMicroseconds": 0,
-            "path": "/bin/sleep",
-        }],
-        "gatewayIP": GATEWAY,
-    });
-    let mut swift = Swift::launch(left_behind(&record.to_string()), Setup::fixture("success"));
-
-    let first = swift.receive_within(Duration::from_secs(10));
-    assert_eq!(first, Some(json!({"repairRoutes": {"gateway": GATEWAY}})));
-    let before_answer = swift.received_within(Duration::from_millis(300));
-    assert!(before_answer.is_empty(), "{before_answer:#?}");
-
-    swift.send(json!({"routesRepaired": {"outcome": "repaired"}}));
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    let logged = swift.position(is("log")).unwrap();
-    assert_eq!(
-        swift.received[logged]["log"]["message"],
-        "cleaned up after an unfinished run (route repair: Repaired)"
-    );
-    assert_eq!(swift.received.len(), 3, "{:#?}", swift.received);
-    assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
-
-    assert_eq!(sleeper.try_wait().unwrap(), None);
-    sleeper.kill().unwrap();
-    sleeper.wait().unwrap();
-}
-
-#[test]
-fn recorded_network_changes_are_reverted_before_the_route_repair_and_ready() {
-    let changes = json!({
-        "dnsServiceID": "svc",
+fn changes(dns: &str, destination: &str) -> Value {
+    json!({
+        "dnsServiceID": dns,
         "routes": [{
-            "destination": {"address": GATEWAY, "prefixLength": 32},
-            "router": "192.0.2.1",
-            "serviceID": "ethernet",
-        }],
-    });
-    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
-    let scratch = left_behind(&record.to_string());
-    let values = scratch.run_directory().join("values");
-    DirBuilder::new().mode(0o700).create(&values).unwrap();
-    fs::write(values.join("values.7"), "reason=connect\0").unwrap();
-    fs::write(values.join("values.8.tmp"), "reason=").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
-
-    let first = swift.receive_within(Duration::from_secs(10));
-    assert_eq!(
-        first,
-        Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
-    );
-    let before_answer = swift.received_within(Duration::from_millis(300));
-    assert!(before_answer.is_empty(), "{before_answer:#?}");
-    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
-    swift.wait_until("the route repair", |swift| {
-        swift.position(is("repairRoutes")).is_some()
-    });
-    assert!(swift.has_log(
-        "notice routes: reverted the network settings an unfinished run left (0 of 1 route(s) still in place)"
-    ));
-    swift.send(json!({"routesRepaired": {"outcome": "notNeeded"}}));
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert_eq!(swift.scratch.run_directory_names(), ["unrelated", "values"]);
-    assert_eq!(fs::read_dir(&values).unwrap().count(), 0);
-}
-
-#[test]
-fn every_pidfile_left_is_cleaned_up_before_ready() {
-    let changes = |dns: &str, destination: &str| {
-        json!({
-            "dnsServiceID": dns,
-            "routes": [{
-                "destination": {"address": destination, "prefixLength": 32},
-                "router": "192.0.2.1",
-                "serviceID": "ethernet",
-            }],
-        })
-    };
-    let first = changes("first", GATEWAY);
-    let second = changes("second", "198.51.100.7");
-    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": first});
-    let scratch = left_behind(&record.to_string());
-    let record = json!({"processes": [], "outsideChanges": second});
-    fs::write(
-        scratch.run_directory().join("run.json.2"),
-        record.to_string(),
-    )
-    .unwrap();
-    fs::write(scratch.run_directory().join("run.json.2.tmp"), "{").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
-
-    let requests = |swift: &Swift| -> Vec<Value> {
-        let logged = is("log");
-        swift
-            .received
-            .iter()
-            .filter(|message| !logged(message))
-            .cloned()
-            .collect()
-    };
-    for (number, (asked, answer)) in [
-        (
-            json!({"changeNetwork": {"change": {"revert": {"changes": first}}}}),
-            json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
-        ),
-        (
-            json!({"repairRoutes": {"gateway": GATEWAY}}),
-            json!({"routesRepaired": {"outcome": "notNeeded"}}),
-        ),
-        (
-            json!({"changeNetwork": {"change": {"revert": {"changes": second}}}}),
-            json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
-        ),
-        (
-            json!({"repairRoutes": {}}),
-            json!({"routesRepaired": {"outcome": "notNeeded"}}),
-        ),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        swift.wait_until("the next cleanup request", |swift| {
-            requests(swift).len() > number
-        });
-        assert_eq!(requests(&swift)[number], asked, "{:#?}", swift.received);
-        swift.send(answer);
-    }
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
-}
-
-#[test]
-fn both_records_of_a_switch_left_halfway_are_reverted_before_ready() {
-    let route = |destination: &str| {
-        json!({
             "destination": {"address": destination, "prefixLength": 32},
             "router": "192.0.2.1",
             "serviceID": "ethernet",
-        })
-    };
-    let changes = json!({
-        "dnsServiceID": "svc",
-        "routes": [route(GATEWAY), route("10.20.161.16")],
-    });
-    let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
-    let scratch = left_behind(&record.to_string());
-    fs::write(
-        scratch.run_directory().join("run.json.2"),
-        record.to_string(),
-    )
-    .unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+        }],
+    })
+}
 
-    let requests = |swift: &Swift| -> Vec<Value> {
-        let logged = is("log");
-        swift
-            .received
-            .iter()
-            .filter(|message| !logged(message))
-            .cloned()
-            .collect()
-    };
-    let revert = (
-        json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}),
-        json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}),
-    );
-    let repair = (
-        json!({"repairRoutes": {"gateway": GATEWAY}}),
-        json!({"routesRepaired": {"outcome": "notNeeded"}}),
-    );
-    for (number, (asked, answer)) in [revert.clone(), repair.clone(), revert, repair]
-        .into_iter()
-        .enumerate()
-    {
-        swift.wait_until("the next cleanup request", |swift| {
-            requests(swift).len() > number
-        });
-        assert_eq!(requests(&swift)[number], asked, "{:#?}", swift.received);
-        swift.send(answer);
-    }
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert_eq!(swift.scratch.run_directory_names(), ["unrelated"]);
+fn requests(swift: &Swift) -> Vec<Value> {
+    let logged = is("log");
+    swift
+        .received
+        .iter()
+        .filter(|message| !logged(message))
+        .cloned()
+        .collect()
 }
 
 #[test]
-fn a_second_pidfile_left_alone_is_cleaned_up_before_ready() {
-    let changes = json!({
-        "dnsServiceID": "svc",
-        "routes": [{
-            "destination": {"address": GATEWAY, "prefixLength": 32},
-            "router": "192.0.2.1",
-            "serviceID": "ethernet",
-        }],
-    });
+fn recorded_network_changes_are_reverted_before_ready() {
+    let changes = changes("svc", GATEWAY);
     let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
-    let scratch = Scratch::new();
-    let directory = scratch.run_directory();
-    DirBuilder::new().mode(0o700).create(&directory).unwrap();
-    fs::write(directory.join("run.json.2"), record.to_string()).unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(left_behind(&record.to_string()), Setup::default());
 
     let first = swift.receive_within(Duration::from_secs(10));
     assert_eq!(
         first,
         Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
     );
+    let before_answer = swift.received_within(Duration::from_millis(300));
+    assert!(before_answer.is_empty(), "{before_answer:#?}");
     swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
-    swift.wait_until("the route repair", |swift| {
-        swift.position(is("repairRoutes")).is_some()
-    });
-    assert_eq!(
-        swift.received[swift.position(is("repairRoutes")).unwrap()],
-        json!({"repairRoutes": {"gateway": GATEWAY}})
-    );
-    swift.send(json!({"routesRepaired": {"outcome": "notNeeded"}}));
     swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert!(swift.scratch.run_directory_names().is_empty());
+    assert!(swift.has_log(
+        "notice routes: reverted the network settings an unfinished run left (0 of 1 route(s) still in place)"
+    ));
+    assert_eq!(
+        swift.scratch.run_directory_names(),
+        ["config.7", "run.json.tmp"]
+    );
 }
 
 #[test]
-fn an_unreadable_pidfile_still_leads_to_a_route_repair() {
-    let mut swift = Swift::launch(left_behind("not JSON"), Setup::fixture("success"));
-    swift.wait_until("the route repair", |swift| {
-        swift.position(is("repairRoutes")).is_some()
-    });
-    let pidfile = swift.scratch.run_directory().join("run.json");
+fn every_run_record_left_is_cleaned_up_before_ready() {
+    let first = changes("first", GATEWAY);
+    let second = changes("second", "198.51.100.7");
+    let record = json!({"outsideChanges": first});
+    let scratch = left_behind(&record.to_string());
+    let record = json!({"outsideChanges": second});
+    fs::write(
+        scratch.run_directory().join("run.json.2"),
+        record.to_string(),
+    )
+    .unwrap();
+    let mut swift = Swift::launch(scratch, Setup::default());
+
+    for (number, changes) in [first, second].into_iter().enumerate() {
+        swift.wait_until("the next cleanup request", |swift| {
+            requests(swift).len() > number
+        });
+        assert_eq!(
+            requests(&swift)[number],
+            json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}),
+            "{:#?}",
+            swift.received
+        );
+        swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    }
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
     assert_eq!(
-        swift.received[..2],
+        swift.scratch.run_directory_names(),
+        ["config.7", "run.json.tmp"]
+    );
+}
+
+#[test]
+fn an_unreadable_run_record_is_logged_and_removed() {
+    let mut swift = Swift::launch(left_behind("not JSON"), Setup::default());
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    let record = swift.scratch.run_directory().join("run.json");
+    assert_eq!(
+        swift.received,
         [
             json!({"log": {
                 "level": "error",
                 "category": "helper",
-                "message": format!("ignoring unreadable pidfile {}", pidfile.display()),
+                "message": format!("ignoring unreadable run record {}", record.display()),
             }}),
-            json!({"repairRoutes": {}}),
+            json!({"ready": {}}),
         ]
     );
-    swift.send(json!({"routesRepaired": {"outcome": "notNeeded"}}));
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert!(
-        swift
-            .has_log("notice helper: cleaned up after an unfinished run (route repair: NotNeeded)")
-    );
+    assert!(!record.exists());
 }
 
 #[test]
-fn without_a_pidfile_the_entry_is_ready_at_once() {
+fn the_sessions_an_earlier_helper_left_are_logged_out_and_deleted_before_ready() {
+    let gateway = FakeGateway::start();
+    let secrets = Arc::new(FakeSecrets::holding([
+        (
+            ATTEMPT.to_owned(),
+            Ok(secret_json("127.0.0.1", gateway.port)),
+        ),
+        ("unreadable".to_owned(), Err("decryption failed".to_owned())),
+    ]));
+    let changes = changes("svc", GATEWAY);
+    let record = json!({"outsideChanges": changes});
+    let setup = Setup {
+        secrets: Arc::clone(&secrets),
+        ..Setup::default()
+    };
+    let mut swift = Swift::launch(left_behind(&record.to_string()), setup);
+    let first = swift.receive_within(Duration::from_secs(10));
+    assert_eq!(
+        first,
+        Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
+    );
+    assert!(gateway.connections().is_empty());
+    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert_eq!(gateway.connections(), [TLS_HANDSHAKE.to_vec()]);
+    assert!(secrets.stored().is_empty());
+    let logs = swift.logs();
+    let logged_out = format!("notice helper: session {ATTEMPT} an earlier helper left: ");
+    assert!(
+        logs.iter().any(|line| line.starts_with(&logged_out)),
+        "{logs:#?}"
+    );
+    assert!(swift.has_log(
+        "error helper: cannot read the session unreadable an earlier helper left: decryption failed"
+    ));
+    let ready = swift.position(is("ready")).unwrap();
+    let last_log = swift.received.iter().rposition(is("log")).unwrap();
+    assert!(last_log < ready);
+}
+
+#[test]
+fn a_session_left_with_a_bad_pin_or_host_is_deleted_without_a_logout_before_ready() {
+    let gateway = FakeGateway::start();
+    let secret = |host: &str, pin: &str| {
+        serde_json::to_vec(
+            &json!({"host": host, "port": gateway.port, "pins": [pin], "cookie": COOKIE}),
+        )
+        .unwrap()
+    };
+    let secrets = Arc::new(FakeSecrets::holding([
+        (
+            "bad-pin".to_owned(),
+            Ok(secret(
+                "127.0.0.1",
+                "sha256//VU1WXtWqa2dQMFah3Sd01wcu+T+caKs4wthkccwXx3A=",
+            )),
+        ),
+        ("bad-host".to_owned(), Ok(secret("127.0.0.1/x", PIN))),
+    ]));
+    let setup = Setup {
+        secrets: Arc::clone(&secrets),
+        ..Setup::default()
+    };
+    let mut swift = Swift::launch(Scratch::new(), setup);
+    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    assert!(gateway.connections().is_empty());
+    assert!(secrets.stored().is_empty());
+    let mut deleted = secrets.deletes();
+    deleted.sort();
+    assert_eq!(deleted, ["bad-host", "bad-pin"]);
+    assert!(swift.has_log(
+        "error helper: cannot read the session bad-pin an earlier helper left: pin 0 is not a \
+         pin-sha256: value"
+    ));
+    assert!(swift.has_log(
+        "error helper: cannot read the session bad-host an earlier helper left: host must be a DNS \
+         hostname (letters, digits and hyphens, labels of 1-63) or a dotted-quad IPv4 address"
+    ));
+    let ready = swift.position(is("ready")).unwrap();
+    assert_eq!(swift.received.len(), ready + 1, "{:#?}", swift.received);
+    assert_eq!(ready, 2, "{:#?}", swift.received);
+}
+
+#[test]
+fn without_a_run_record_the_entry_is_ready_at_once() {
     let scratch = Scratch::new();
     let directory = scratch.run_directory();
     DirBuilder::new().mode(0o755).create(&directory).unwrap();
-    fs::write(directory.join("config.3"), "").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(scratch, Setup::default());
     let first = swift.receive_within(Duration::from_secs(10));
     assert_eq!(first, Some(json!({"ready": {}})));
-    assert!(swift.scratch.run_directory_names().is_empty());
     // The directory is made private again.
     let mode = fs::metadata(&directory).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o700);
@@ -300,35 +221,33 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     let scratch = Scratch::new();
     // A file where the directory belongs.
     fs::write(scratch.run_directory(), "").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::fixture("success"));
+    let mut swift = Swift::launch(scratch, Setup::default());
     swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
     let path = swift.scratch.run_directory();
+    let unusable = format!(
+        "{} is not a directory owned by the helper: Operation not permitted (os error 1)",
+        path.display()
+    );
     assert_eq!(
         swift.received[0]["log"],
         json!({
             "level": "error",
             "category": "helper",
-            "message": format!(
-                "cannot prepare the run directory: {} is not a directory owned by the helper: \
-                 Operation not permitted (os error 1)",
-                path.display()
-            ),
+            "message": format!("cannot prepare the run directory: {unusable}"),
         })
     );
 
     // A connect then fails the same way, before anything starts.
     assert!(swift.connect_app(1, 501));
-    let message = format!(
-        "could not create the openconnect config file: {} is not a directory owned by the \
-         helper: Operation not permitted (os error 1)",
-        path.display()
+    assert_eq!(
+        swift.connect(1, ATTEMPT),
+        error(
+            "internalError",
+            &format!("could not prepare the run directory: {unusable}")
+        )
     );
-    assert_eq!(swift.connect(1, ATTEMPT), error("internalError", &message));
-    assert!(
-        swift
-            .logs()
-            .iter()
-            .any(|line| line.starts_with("error helper: cannot write the openconnect config: "))
-    );
+    assert!(swift.logs().iter().any(|line| {
+        line == &format!("error helper: cannot prepare the run directory: {unusable}")
+    }));
     assert!(swift.events(1).is_empty());
 }

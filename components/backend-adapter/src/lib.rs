@@ -1,6 +1,4 @@
-//! Backend adapter: what is particular to one VPN client, behind `fvm_contract::backend::Backend`.
-//! openconnect runs on Windows and macOS.
+//! Backend adapter: what is particular to one VPN client, behind
+//! `fvm_helper_core::session::backend::Backend`. openconnect runs on Windows and macOS.
 
-#[cfg(unix)]
-mod homebrew;
 pub mod openconnect;

@@ -1,31 +1,24 @@
 use std::collections::VecDeque;
-use std::fs;
-use std::io;
 use std::mem;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::sync::mpsc::Sender;
-use std::thread;
 use std::time::Instant;
 
 use fvm_contract::app_helper::{ExitFacts, Milestone, StopReason};
-use fvm_contract::backend::{IpNetwork, NetworkSettings};
 use fvm_contract::helper_internal::{
-    LogCategory, LogLevel, NetworkChange, NetworkOutcome, OutsideChanges, OutsideRoute,
+    IpNetwork, LogCategory, LogLevel, NetworkChange, NetworkOutcome, NetworkSettings,
+    OutsideChanges, OutsideRoute,
 };
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 
-use super::{Input, Phase, Watch, seconds};
-use crate::recovery::run_directory::{self, RunFiles};
-use crate::session::{NetworkJob, Report, os};
+use super::{Input, Phase, Watch, tunnel_ipv4};
+use crate::session::{NetworkJob, Report};
 
 const RETRIES: u32 = 3;
 const APPLIED: &str = "‹network settings applied›";
 
 #[derive(Default)]
 pub(super) struct Network {
-    values_watch: Option<RecommendedWatcher>,
     watching: bool,
-    values_deadline: Option<Instant>,
     applied: Option<NetworkSettings>,
     wanted: Option<NetworkSettings>,
     next: Option<NetworkSettings>,
@@ -33,8 +26,6 @@ pub(super) struct Network {
     failures: u32,
     retry_at: Option<Instant>,
     owned: Vec<OutsideRoute>,
-    script_wait: bool,
-    script_left: bool,
     prepared: Option<NetworkSettings>,
     dns_service_id: String,
     switch: Switch,
@@ -92,18 +83,8 @@ enum Switch {
 }
 
 impl Network {
-    pub(super) fn new(values_watch: Option<RecommendedWatcher>) -> Self {
-        Self {
-            values_watch,
-            ..Self::default()
-        }
-    }
-
     pub(super) fn deadline(&self) -> Option<Instant> {
-        [self.values_deadline, self.retry_at]
-            .into_iter()
-            .flatten()
-            .min()
+        self.retry_at
     }
 
     pub(super) fn watching(&self) -> bool {
@@ -111,11 +92,8 @@ impl Network {
     }
 
     pub(super) fn stop_watching(&mut self) {
-        self.values_watch = None;
         self.watching = false;
-        self.values_deadline = None;
         self.retry_at = None;
-        self.script_wait = false;
         self.next = None;
     }
 
@@ -129,59 +107,28 @@ impl Network {
     }
 }
 
-pub(super) fn values_watcher(files: &RunFiles, inputs: &Sender<Input>) -> RecommendedWatcher {
-    let name = files
-        .values
-        .file_name()
-        .expect("the value file has a name")
-        .to_owned();
-    let inputs = inputs.clone();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
-        if event.is_ok_and(|event| {
-            event.need_rescan()
-                || event
-                    .paths
-                    .iter()
-                    .any(|path| path.file_name() == Some(&name))
-        }) {
-            let _ = inputs.send(Input::ValuesWritten);
-        }
-    })
-    .expect("creating the value folder's watcher");
-    watcher
-        .watch(&files.values_directory, RecursiveMode::NonRecursive)
-        .expect("watching the value folder");
-    watcher
-}
-
 impl<R: FnMut(Report)> Watch<R> {
     fn changing_network(&self) -> bool {
-        self.script_runner.is_some()
-            && self.running()
-            && self.stop.is_none()
-            && !self.network.handed_over
+        self.running() && self.stop.is_none() && !self.network.handed_over
     }
 
-    pub(super) fn watch_values(&mut self) {
-        self.network.values_watch = Some(values_watcher(&self.files, &self.inputs));
-    }
-
-    pub(super) fn tunnel_configured(&mut self) {
-        if !self.changing_network() || self.network.watching {
+    pub(super) fn tunnel_ready(&mut self, settings: Result<Box<NetworkSettings>, String>) {
+        if !self.changing_network() {
             return;
         }
-        self.network.watching = true;
-        self.network.values_deadline = Some(Instant::now() + self.timing.network_values);
-        self.read_values();
-    }
-
-    pub(super) fn values_written(&mut self) {
-        if self.network.watching && self.changing_network() {
-            self.read_values();
+        match settings {
+            Ok(settings) => {
+                self.tunnel_ip = Some(tunnel_ipv4(settings.ipv4.address.address));
+                self.network.watching = true;
+                self.settings_received(*settings);
+            }
+            Err(reason) => {
+                self.network_setup_failed(format!("‹invalid network settings: {reason}›"));
+            }
         }
     }
 
-    pub(super) fn gateway_route_requested(&mut self) {
+    pub(super) fn reconnected(&mut self) {
         if !self.changing_network() {
             return;
         }
@@ -190,49 +137,24 @@ impl<R: FnMut(Report)> Watch<R> {
         }
     }
 
-    pub(super) fn network_deadlines_passed(&mut self, now: Instant) {
-        if self.network.values_deadline.is_some_and(|at| at <= now) {
-            self.values_expired();
+    pub(super) fn tunnel_failed(&mut self, address: Option<Ipv4Addr>, reason: Option<String>) {
+        let in_use = self.replaced.as_ref().is_some_and(|replaced| {
+            address.is_some_and(|address| replaced.address == IpAddr::V4(address))
+        });
+        if in_use {
+            self.tunnel_address_in_use = true;
+            self.meta("‹the connection to replace has the same tunnel address›");
+        } else if let Some(reason) = reason {
+            self.meta(format!("‹the tunnel device could not be set up: {reason}›"));
+        } else {
+            self.meta("‹the tunnel device could not be set up›");
         }
+    }
+
+    pub(super) fn network_deadlines_passed(&mut self, now: Instant) {
         if self.network.retry_at.is_some_and(|at| at <= now) {
             self.network.retry_at = None;
             self.retry_network();
-        }
-    }
-
-    fn values_expired(&mut self) {
-        if self.changing_network() {
-            self.read_values();
-        }
-        if self.network.values_deadline.take().is_some() && self.changing_network() {
-            let text = format!(
-                "‹no network settings from {} within {}›",
-                self.backend.client_name(),
-                seconds(self.timing.network_values)
-            );
-            self.network_setup_failed(text);
-        }
-    }
-
-    fn read_values(&mut self) {
-        let path = self.files.values.clone();
-        let bytes = match fs::read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return,
-            Err(error) => {
-                self.network_setup_failed(format!("‹cannot read the network settings: {error}›"));
-                return;
-            }
-        };
-        if let Err(line) = run_directory::remove(&path) {
-            self.log(LogLevel::Error, LogCategory::Helper, line);
-        }
-        self.network.values_deadline = None;
-        match self.backend.network_settings(&bytes) {
-            Ok(settings) => self.settings_received(settings),
-            Err(reason) => {
-                self.network_setup_failed(format!("‹invalid network settings: {reason}›"));
-            }
         }
     }
 
@@ -404,7 +326,7 @@ impl<R: FnMut(Report)> Watch<R> {
             routes,
         });
         if let Err(failure) = self.files.write_record(&self.record) {
-            let message = format!("cannot write the pidfile: {failure}");
+            let message = format!("cannot write the run record: {failure}");
             self.log(LogLevel::Error, LogCategory::Helper, message.clone());
             self.network_failed(message);
             return;
@@ -457,8 +379,8 @@ impl<R: FnMut(Report)> Watch<R> {
         if let Some(next) = self.network.next.take().filter(|_| self.changing_network()) {
             self.look_up(next);
         }
-        if resuming && self.changing_network() && !self.network.script_wait {
-            self.wait_for_script();
+        if resuming && self.changing_network() {
+            self.network_ready();
         }
     }
 
@@ -503,47 +425,6 @@ impl<R: FnMut(Report)> Watch<R> {
         self.stop(StopReason::NetworkSetupFailed);
     }
 
-    fn wait_for_script(&mut self) {
-        let Phase::Running(child) = &self.phase else {
-            unreachable!("the network changes only while the client runs")
-        };
-        let runner = self
-            .script_runner
-            .as_deref()
-            .expect("the network changes only for a client with a script");
-        let scripts = if self.network.script_left {
-            Vec::new()
-        } else {
-            os::running_scripts(child.id(), runner)
-        };
-        if scripts.is_empty() {
-            self.network_ready();
-            return;
-        }
-        self.network.script_wait = true;
-        let inputs = self.inputs.clone();
-        thread::Builder::new()
-            .name("fvm-process-script".to_owned())
-            .spawn(move || {
-                for script in &scripts {
-                    script.wait(None);
-                }
-                let _ = inputs.send(Input::ScriptExited);
-            })
-            .expect("starting the process script thread");
-    }
-
-    pub(super) fn script_exited(&mut self) {
-        if mem::take(&mut self.network.script_wait) && self.changing_network() {
-            self.network_ready();
-        }
-    }
-
-    pub(super) fn script_left_running(&mut self) {
-        self.network.script_left = true;
-        self.script_exited();
-    }
-
     pub(super) fn revert_network_or_continue(&mut self, facts: ExitFacts) {
         if self.hand_over_open() {
             self.flush_batch();
@@ -551,7 +432,7 @@ impl<R: FnMut(Report)> Watch<R> {
             return;
         }
         let Some(changes) = self.record.outside_changes.clone() else {
-            self.repair_routes_or_report(facts);
+            self.report_exit(facts);
             return;
         };
         self.flush_batch();
@@ -564,8 +445,8 @@ impl<R: FnMut(Report)> Watch<R> {
         self.network.failures = 0;
         if let Some(next) = self.network.next.take().filter(|_| self.changing_network()) {
             self.look_up(next);
-        } else if self.changing_network() && !self.network.script_wait {
-            self.wait_for_script();
+        } else if self.changing_network() {
+            self.network_ready();
         }
     }
 
@@ -691,7 +572,7 @@ impl<R: FnMut(Report)> Watch<R> {
             routes: self.network.owned.clone(),
         });
         if let Err(failure) = self.files.write_record(&self.record) {
-            let message = format!("cannot write the pidfile: {failure}");
+            let message = format!("cannot write the run record: {failure}");
             self.log(LogLevel::Error, LogCategory::Helper, message.clone());
             self.network_failed(message);
             return;
@@ -824,54 +705,6 @@ impl<R: FnMut(Report)> Watch<R> {
             );
         }
         self.meta("‹network settings reverted›");
-        self.repair_routes_or_report(facts);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::mpsc::{self, RecvTimeoutError};
-    use std::time::Duration;
-    use std::{env, process};
-
-    use super::*;
-    use crate::recovery::RecordSlot;
-
-    #[test]
-    fn a_value_file_renamed_into_the_value_folder_is_reported() {
-        let directory = env::temp_dir().join(format!("fvm-values-watch-{}", process::id()));
-        let _ = fs::remove_dir_all(&directory);
-        let mut latencies = Vec::new();
-        for run in 1..=20 {
-            let files = RunFiles::new(&directory, run, RecordSlot::First);
-            fs::create_dir_all(&files.values_directory).unwrap();
-            let (inputs, received) = mpsc::channel();
-            let watcher = values_watcher(&files, &inputs);
-            let draft = files.values_directory.join(format!("values.{run}.tmp"));
-            fs::write(&draft, b"reason=connect\0").unwrap();
-            if run == 1 {
-                assert!(matches!(
-                    received.recv_timeout(Duration::from_millis(300)),
-                    Err(RecvTimeoutError::Timeout)
-                ));
-            }
-            let renamed = Instant::now();
-            fs::rename(&draft, &files.values).unwrap();
-            assert!(matches!(
-                received.recv_timeout(Duration::from_secs(5)),
-                Ok(Input::ValuesWritten)
-            ));
-            latencies.push(renamed.elapsed());
-            drop(watcher);
-        }
-        fs::remove_dir_all(&directory).unwrap();
-        latencies.sort();
-        println!(
-            "value file seen after a rename, over {} runs: min {:?}, median {:?}, max {:?}",
-            latencies.len(),
-            latencies[0],
-            latencies[latencies.len() / 2],
-            latencies[latencies.len() - 1]
-        );
+        self.report_exit(facts);
     }
 }

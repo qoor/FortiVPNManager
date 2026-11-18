@@ -14,8 +14,6 @@ use std::time::{Duration, SystemTime};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 
-use crate::backend::{ClientProblem, UntestedVersion};
-
 /// One connection attempt, as the app's UUID text. Kept in uppercase, the form the app writes, so
 /// equal attempts compare equal however the text was cased.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -326,11 +324,6 @@ pub struct HelperStatus {
 pub struct ClientStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub problem: Option<ClientProblem>,
-    /// The backend adapter's judgment of `version`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub untested_version: Option<UntestedVersion>,
 }
 
 /// Error answer to an app request; `message` is English and reaches the app as it is.

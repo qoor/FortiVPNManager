@@ -9,7 +9,8 @@
 # the next run starts them ahead again.
 # Usage: scripts/test-windows.sh <folder> [cargo test options, such as --package fvm-helper-core]
 # <folder> is the PC's copy of this tree under %USERPROFILE%\src, kept current by sync-windows.sh,
-# which this runs first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm and lld.
+# which this runs first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm, lld,
+# mingw-w64, autoconf, automake, libtool and pkgconf.
 set -euo pipefail
 folder=${1:?usage: scripts/test-windows.sh <folder> [cargo test options]}
 shift
@@ -35,10 +36,16 @@ for line in open(sys.argv[2]):
         print(m["executable"] + "|" + package)
 EOF
 
-# Only executables whose content changed since the last copy are sent and started ahead.
+openconnect=target/$target/openconnect
+rm -rf "$openconnect"
+zip=$(packaging/openconnect/build.sh windows)
+unzip -q "$zip" '*.dll' -d "$openconnect"
+
+# Only files whose content changed since the last copy are sent, and the test executables among them
+# started ahead.
 state="${XDG_CACHE_HOME:-$HOME/.cache}/fvm-windows-sync/$host-$folder.tests.sha1"
 touch "$state"
-cut -d'|' -f1 "$work/tests" | xargs shasum -a 1 | LC_ALL=C sort >"$work/now"
+{ cut -d'|' -f1 "$work/tests"; printf '%s\n' "$PWD/$openconnect"/*.dll; } | xargs shasum -a 1 | LC_ALL=C sort >"$work/now"
 LC_ALL=C comm -13 "$state" "$work/now" | cut -c43- >"$work/new"
 ssh "$host" "if not exist %USERPROFILE%\\src\\$folder\\.windows-tests mkdir %USERPROFILE%\\src\\$folder\\.windows-tests"
 if [ -s "$work/new" ]; then

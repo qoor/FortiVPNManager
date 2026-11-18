@@ -1,10 +1,7 @@
 [
   {
     "client": {
-      "untestedVersion": {
-        "testedSeries": "1.24"
-      },
-      "version": "1.25.0"
+      "version": "9.21-unknown"
     },
     "helper": {
       "running": {
@@ -23,14 +20,7 @@
     "registerHelper": "enabled"
   },
   {
-    "client": {
-      "problem": {
-        "kind": {
-          "notFound": {}
-        },
-        "path": "/opt/homebrew/bin/openfortivpn"
-      }
-    },
+    "client": {},
     "helper": {
       "running": {
         "build": "20261109120000"

@@ -59,14 +59,6 @@ struct AppInternalTests {
     @Test func readinessSections() throws {
         let sections: [AppInternal.ReadinessSection] = try decoded("readiness_sections.json")
         #expect(sections == AppInternal.Expected.readinessSections)
-        let problems: [AppInternal.ClientProblem] = try decoded("client_problems.json")
-        let cellar = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
-        #expect(problems == [
-            .init(kind: .notFound, path: cellar),
-            .init(kind: .notRegularFile, path: cellar),
-            .init(kind: .writableByOthers(mode: 0o775), path: cellar),
-            .init(kind: .notExecutable, path: cellar),
-        ])
         let failures: [AppInternal.HelperChannelFailure] = try decoded("helper_channel_failures.json")
         #expect(failures == AppInternal.Expected.helperChannelFailures)
     }
@@ -358,9 +350,7 @@ private extension AppInternal {
         static let readinessSections: [ReadinessSection] = [
             ReadinessSection(
                 helper: .running(build: "20261109120000"), registerHelper: .hidden, registerError: nil,
-                client: VpnClientInfo(
-                    version: "1.25.0", untestedVersion: UntestedVersion(testedSeries: "1.24"), problem: nil
-                )
+                client: VpnClientInfo(version: "9.21-unknown")
             ),
             ReadinessSection(
                 helper: .notRegistered, registerHelper: .enabled, registerError: .notInstalledCopy, client: nil
@@ -368,10 +358,7 @@ private extension AppInternal {
             ReadinessSection(
                 helper: .running(build: "20261109120000"), registerHelper: .hidden,
                 registerError: .failed(description: "Operation not permitted"),
-                client: VpnClientInfo(
-                    version: nil, untestedVersion: nil,
-                    problem: ClientProblem(kind: .notFound, path: "/opt/homebrew/bin/openfortivpn")
-                )
+                client: VpnClientInfo(version: nil)
             ),
             readinessSection(.requiresApproval),
             readinessSection(.versionMismatch(helperBuild: "20261108090000", appBuild: "20261109120000")),

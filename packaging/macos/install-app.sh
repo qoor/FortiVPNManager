@@ -40,7 +40,8 @@ quit_app() {
 swap() {
     set -x
     vpn_was_up=no
-    pgrep -x openconnect >/dev/null && vpn_was_up=yes
+    ifconfig | awk '/^[^[:space:]]/ { utun = $1 ~ /^utun[0-9]+:$/ } utun && $1 == "inet" { up = 1 } END { exit !up }' &&
+        vpn_was_up=yes
     quit_app
     rm -rf "$previous"
     if [ -e "$installed" ]; then

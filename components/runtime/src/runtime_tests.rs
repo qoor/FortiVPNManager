@@ -25,7 +25,6 @@ use fvm_contract::app_internal::section::{
 use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
 };
-use fvm_contract::backend::{ClientProblem, ClientProblemKind};
 use serde_json::json;
 
 use crate::orchestration::{self, ClientSettings, Input, Paths, Runtime};
@@ -436,12 +435,7 @@ impl App {
                 let status = HelperStatus {
                     client_running: false,
                     client: ClientStatus {
-                        version: None,
-                        problem: Some(ClientProblem {
-                            kind: ClientProblemKind::NotFound {},
-                            path: "/opt/homebrew/bin/openconnect".into(),
-                        }),
-                        untested_version: None,
+                        version: Some("9.21".into()),
                     },
                 };
                 reply(serde_json::to_value(status).unwrap())
@@ -734,7 +728,10 @@ fn the_helper_status_shows_the_vpn_client() {
     app.write_config(ACCOUNT);
     app.launch();
     app.settle_until("the Helper's status", |app| app.vpn_client_info().is_some());
-    assert!(app.vpn_client_info().unwrap().problem.is_some());
+    assert_eq!(
+        app.vpn_client_info().unwrap().version.as_deref(),
+        Some("9.21")
+    );
 }
 
 #[test]

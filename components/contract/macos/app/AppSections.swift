@@ -165,25 +165,6 @@ extension AppInternal {
 
     struct VpnClientInfo: Decodable, Equatable, Sendable {
         var version: String?
-        var untestedVersion: UntestedVersion?
-        var problem: ClientProblem?
-    }
-
-    struct UntestedVersion: Decodable, Equatable, Sendable {
-        var testedSeries: String
-    }
-
-    /// components/contract/src/backend.rs
-    struct ClientProblem: Decodable, Equatable, Sendable {
-        var kind: ClientProblemKind
-        var path: String
-    }
-
-    enum ClientProblemKind: Decodable, Equatable, Sendable {
-        case notFound
-        case notRegularFile
-        case writableByOthers(mode: UInt32)
-        case notExecutable
     }
 
     // MARK: Gmail and Google account

@@ -7,8 +7,6 @@
   {"replyFlag": {"id": 5, "value": true}},
   {"sendEvent": {"app": 1, "json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\",\"kind\":{\"milestone\":{\"_0\":0}}}"}},
   {"sendOutput": {"app": 1, "json": "[{\"date\":1762412345.25,\"source\":\"stdout\",\"text\":\"INFO:   Connected to gateway.\"}]"}},
-  {"repairRoutes": {"gateway": "10.30.161.16"}},
-  {"repairRoutes": {}},
   {"changeBypassRoutes": {"change": {"network": {"expect": {"network": {"serviceID": "8A3F1C2E-5B6D-4E7F-9A0B-1C2D3E4F5A6B", "serviceName": "Ethernet", "router": "10.20.161.1", "address": "10.20.161.20", "subnetMask": "255.255.255.0"}}}, "remove": [{"route": {"destination": "10.30.161.16", "subnetMask": "255.255.255.255", "gateway": "10.20.161.254"}, "serviceID": "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"}], "add": [{"destination": "10.30.161.16", "subnetMask": "255.255.255.255", "gateway": "10.20.161.1"}, {"destination": "10.30.170.0", "subnetMask": "255.255.255.0", "gateway": "10.20.161.1"}], "lookUp": [{"destination": "10.30.161.16", "subnetMask": "255.255.255.255", "gateway": "10.20.161.1"}, {"destination": "10.30.170.0", "subnetMask": "255.255.255.0", "gateway": "10.20.161.1"}]}}},
   {"changeBypassRoutes": {"change": {"network": {"read": {}}, "remove": [], "add": [], "lookUp": [{"destination": "10.30.161.16", "subnetMask": "255.255.255.255", "gateway": "10.20.161.1"}]}}},
   {"changeBypassRoutes": {"change": {"network": {"skip": {}}, "remove": [{"route": {"destination": "10.30.161.16", "subnetMask": "255.255.255.255", "gateway": "10.20.161.254"}, "serviceID": "0F1E2D3C-4B5A-6978-8796-A5B4C3D2E1F0"}], "add": [], "lookUp": []}}},

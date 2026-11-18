@@ -2,7 +2,7 @@
 //! Swift side on macOS, the service's own part on Windows. The OS side accepts and checks
 //! app connections and answers the version check itself; every other app request goes to the entry
 //! unread. The entry decides which exception routes to add and remove, and the OS side changes the
-//! routing table as it asks, as it repairs the routes a run left. The JSON follows Swift's enum
+//! routing table as it asks. The JSON follows Swift's enum
 //! coding (see `app_helper`), so the Swift side, `components/contract/macos/HelperInternal.swift`,
 //! uses synthesized `Codable`. The entry only receives `ToEntry` and only sends `FromEntry`.
 
@@ -12,7 +12,6 @@ use std::net::{IpAddr, Ipv4Addr};
 use serde::{Deserialize, Serialize};
 
 use crate::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError};
-use crate::backend::{IpNetwork, NetworkSettings, RouteRepairOutcome, TunnelDevice};
 
 /// Sent by the OS side.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
@@ -42,10 +41,6 @@ pub enum ToEntry {
     ExecutableReplaced {},
     /// The OS asked the Helper to stop: SIGTERM on macOS, the service stop on Windows.
     TerminationRequested {},
-    /// Answers `FromEntry::RepairRoutes`.
-    RoutesRepaired {
-        outcome: RouteRepairOutcome,
-    },
     /// Answers `FromEntry::ChangeBypassRoutes`.
     BypassRoutesChanged {
         outcome: BypassRoutesOutcome,
@@ -146,12 +141,6 @@ pub enum FromEntry {
         app: u64,
         json: String,
     },
-    /// Check the routing table a client may have left broken and repair it; `gateway` is the VPN
-    /// gateway it connected to, if known.
-    RepairRoutes {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        gateway: Option<Ipv4Addr>,
-    },
     /// Change the exception routes in the routing table.
     ChangeBypassRoutes {
         change: BypassRoutesChange,
@@ -234,6 +223,50 @@ pub enum BypassRoutesOutcome {
     /// primary network, it is not the one expected, or a route to add is not one the Helper
     /// writes.
     Refused { error: HelperError },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkSettings {
+    pub tunnel: TunnelDevice,
+    pub gateway: IpAddr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtu: Option<u32>,
+    pub ipv4: FamilySettings,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipv6: Option<FamilySettings>,
+    pub split_exclude: Vec<IpNetwork>,
+    pub dns_servers: Vec<IpAddr>,
+    pub default_domains: Vec<String>,
+    pub split_dns_domains: Vec<String>,
+    pub wins_servers: Vec<Ipv4Addr>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct TunnelDevice {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<u32>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+pub struct FamilySettings {
+    pub address: IpNetwork,
+    pub routes: TunnelRoutes,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TunnelRoutes {
+    Full {},
+    Split { include: Vec<IpNetwork> },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IpNetwork {
+    pub address: IpAddr,
+    pub prefix_length: u8,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]

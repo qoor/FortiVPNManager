@@ -182,9 +182,7 @@ pub(super) fn ready() -> ReadinessFacts {
             status: Some(HelperStatus {
                 client_running: false,
                 client: ClientStatus {
-                    version: Some("1.24.1".to_owned()),
-                    problem: None,
-                    untested_version: None,
+                    version: Some("9.21".to_owned()),
                 },
             }),
         },

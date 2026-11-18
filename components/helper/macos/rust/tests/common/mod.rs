@@ -1,225 +1,57 @@
-//! A test backend that runs the process tests' fake openfortivpn scripts with the openconnect
-//! adapter's checks, and a fake Swift side that drives the entry through the Helper-internal
-//! protocol and records everything it sends.
+//! Fake sessions behind the real Helper entry, and a fake Swift side that drives the entry through
+//! the Helper-internal protocol and records everything it sends.
 
-#![allow(dead_code)] // Each test file uses a different part.
+#![allow(dead_code)]
+
+#[path = "../../../../tests/common/fake.rs"]
+mod fake;
 
 use std::io::{self, BufRead, BufReader};
-use std::net::Ipv4Addr;
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use std::{env, fs, process};
 
-use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::app_helper::{Milestone, OutputSource, RunRequest};
-use fvm_contract::backend::{
-    Backend, ClientCheckWait, ClientExecutable, ClientProblem, Finding, LaunchSpec,
-    NetworkSettings, OutputInterpreter, Prompt, UntestedVersion,
-};
 use fvm_contract::stream;
 use serde_json::{Value, json};
 
+pub use fake::*;
+
 pub const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
 pub const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
-/// An IPv4 literal, so the gateway lookup needs no DNS.
-pub const GATEWAY: &str = "203.0.113.10";
-/// Leading and trailing spaces must reach the client byte for byte.
+/// Leading and trailing spaces must reach the session byte for byte.
 pub const PASSWORD: &str = " p@ssw0rd #1 ";
 pub const OTP: &str = "042137";
-pub const REJECTED_DIGEST: &str =
-    "b0cf91f4d820f99d16e54f757dea3f71c2e717b62c6860cfd8357ed43429ba11";
 
 pub const SPAWNED: u64 = 0;
 pub const CONNECTED_TO_GATEWAY: u64 = 1;
 pub const OTP_PROMPTED: u64 = 2;
+pub const AUTHENTICATED: u64 = 4;
 pub const TUNNEL_UP: u64 = 5;
 
 /// Generous, so a broken test fails instead of hanging.
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
 
-/// openconnect as far as the entry can tell: the adapter checks the request, but the client is a
-/// fixture script run by /bin/sh.
-pub struct TestBackend {
-    client: Result<ClientExecutable, ClientProblem>,
-    fixture: PathBuf,
-    args: Vec<String>,
-    record: PathBuf,
-    grace_period: Duration,
-}
-
-impl Backend for TestBackend {
-    fn client_name(&self) -> &'static str {
-        OpenConnect.client_name()
-    }
-
-    fn locate_client(&self, _: ClientCheckWait) -> Result<ClientExecutable, ClientProblem> {
-        self.client.clone()
-    }
-
-    fn describe_problem(&self, problem: &ClientProblem) -> String {
-        OpenConnect.describe_problem(problem)
-    }
-
-    fn untested_version(&self, version: &str) -> Option<UntestedVersion> {
-        OpenConnect.untested_version(version)
-    }
-
-    fn launch_spec(
-        &self,
-        client: &ClientExecutable,
-        request: &RunRequest,
-        config_path: &Path,
-        values_path: &Path,
-    ) -> Result<LaunchSpec, String> {
-        let checked = OpenConnect.launch_spec(client, request, config_path, values_path)?;
-        let mut args = vec![
-            self.fixture.display().to_string(),
-            self.record.display().to_string(),
-        ];
-        args.extend(self.args.iter().cloned());
-        Ok(LaunchSpec {
-            program: PathBuf::from("/bin/sh"),
-            args,
-            config_file: Some(format!("host = {}\n", request.host)),
-            session: None,
-            script_runner: None,
-            ..checked
-        })
-    }
-
-    fn network_settings(&self, values: &[u8]) -> Result<NetworkSettings, String> {
-        OpenConnect.network_settings(values)
-    }
-
-    fn check_otp(&self, code: &str) -> Result<(), String> {
-        OpenConnect.check_otp(code)
-    }
-
-    fn interpreter(&self) -> Box<dyn OutputInterpreter + Send> {
-        Box::new(FixtureInterpreter::default())
-    }
-
-    fn stop_grace_period(&self) -> Duration {
-        self.grace_period
-    }
-
-    /// Every path, so that only the process identity keeps a leftover alive.
-    fn is_own_executable(&self, _: &Path) -> bool {
-        true
-    }
-}
-
 #[derive(Default)]
-struct FixtureInterpreter {
-    certificates: Vec<String>,
-    routes: Routes,
-}
-
-#[derive(Default, PartialEq)]
-enum Routes {
-    #[default]
-    Unchanged,
-    Changed,
-    Restoring,
-    Restored,
-}
-
-impl OutputInterpreter for FixtureInterpreter {
-    fn prompt(&mut self, source: OutputSource, partial_line: &[u8]) -> Option<Prompt> {
-        if source != OutputSource::Stdout {
-            None
-        } else if partial_line.ends_with(b"VPN account password: ") {
-            Some(Prompt::Password)
-        } else if partial_line.ends_with(b"Two-factor authentication token: ") {
-            Some(Prompt::Otp)
-        } else {
-            None
-        }
-    }
-
-    fn password_expected(&self, milestone: Milestone) -> bool {
-        milestone < Milestone::ConnectedToGateway
-    }
-
-    fn line(&mut self, source: OutputSource, text: &str) -> Option<Finding> {
-        if source != OutputSource::Stdout {
-            return None;
-        }
-        let (level, message) = ["INFO:   ", "WARN:   ", "ERROR:  ", "DEBUG:  "]
-            .into_iter()
-            .find_map(|prefix| Some((prefix, text.strip_prefix(prefix)?)))?;
-        if self.routes == Routes::Restoring && matches!(level, "INFO:   " | "ERROR:  ") {
-            self.routes = Routes::Restored;
-        }
-        match message {
-            "Connected to gateway." => Some(Finding::Milestone(Milestone::ConnectedToGateway)),
-            "Authenticated." => Some(Finding::Milestone(Milestone::Authenticated)),
-            "Tunnel is up and running." => Some(Finding::Milestone(Milestone::TunnelUp)),
-            "Setting new routes..." => {
-                self.routes = Routes::Changed;
-                None
-            }
-            "Restoring routes..." => {
-                if self.routes == Routes::Changed {
-                    self.routes = Routes::Restoring;
-                }
-                None
-            }
-            _ => {
-                if let Some(addresses) = message.strip_prefix("Got addresses: [") {
-                    let (ip, _) = addresses.split_once(']')?;
-                    return ip.parse::<Ipv4Addr>().ok().map(Finding::TunnelIp);
-                }
-                let value = message.strip_prefix("    trusted-cert = ")?;
-                if self.certificates.iter().any(|known| known == value) {
-                    return None;
-                }
-                self.certificates.push(value.to_owned());
-                Some(Finding::CertificateRejected(value.to_owned()))
-            }
-        }
-    }
-
-    fn routes_left_unrestored(&self) -> bool {
-        matches!(self.routes, Routes::Changed | Routes::Restoring)
-    }
-}
-
 pub struct Setup {
-    pub fixture: &'static str,
-    pub args: Vec<&'static str>,
-    pub client: Result<ClientExecutable, ClientProblem>,
-    pub grace_period: Duration,
+    pub scripts: Vec<Script>,
+    pub secrets: Arc<FakeSecrets>,
 }
 
 impl Setup {
-    pub fn fixture(fixture: &'static str) -> Self {
+    pub fn with(scripts: impl IntoIterator<Item = Script>) -> Self {
         Self {
-            fixture,
-            args: Vec::new(),
-            client: Ok(ClientExecutable {
-                path: PathBuf::from("/bin/sh"),
-                version: "9.21".to_owned(),
-            }),
-            grace_period: OpenConnect.stop_grace_period(),
-        }
-    }
-
-    pub fn args(self, args: &[&'static str]) -> Self {
-        Self {
-            args: args.to_vec(),
-            ..self
+            scripts: scripts.into_iter().collect(),
+            ..Self::default()
         }
     }
 }
 
 static SCRATCH_NUMBER: AtomicU64 = AtomicU64::new(0);
 
-/// A directory per test for the run directory and the fixture's record file.
+/// A directory per test for the run directory.
 pub struct Scratch {
     pub root: PathBuf,
 }
@@ -237,16 +69,6 @@ impl Scratch {
         self.root.join("run")
     }
 
-    /// The `key=value` lines the fixture writes: lengths and digests of what it read, never the
-    /// secrets themselves.
-    pub fn record_value(&self, key: &str) -> Option<String> {
-        let text = fs::read_to_string(self.root.join("record.txt")).unwrap_or_default();
-        text.lines().find_map(|line| {
-            let (name, value) = line.split_once('=')?;
-            (name == key).then(|| value.to_owned())
-        })
-    }
-
     pub fn run_directory_names(&self) -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(self.run_directory())
             .unwrap()
@@ -254,6 +76,11 @@ impl Scratch {
             .collect();
         names.sort();
         names
+    }
+
+    pub fn recorded(&self, name: &str) -> Value {
+        let record = fs::read(self.run_directory().join(name)).unwrap();
+        serde_json::from_slice::<Value>(&record).unwrap()["outsideChanges"].clone()
     }
 }
 
@@ -270,6 +97,8 @@ pub struct Swift {
     pub received: Vec<Value>,
     last_request: u64,
     pub scratch: Scratch,
+    pub secrets: Arc<FakeSecrets>,
+    network_answered: usize,
 }
 
 impl Swift {
@@ -282,24 +111,11 @@ impl Swift {
 
     /// Starts an entry in `scratch`, which may hold what an earlier Helper left.
     pub fn launch(scratch: Scratch, setup: Setup) -> Self {
-        let backend = TestBackend {
-            client: setup.client,
-            fixture: fixture_path(setup.fixture),
-            args: setup.args.iter().map(|&arg| arg.to_owned()).collect(),
-            record: scratch.root.join("record.txt"),
-            grace_period: setup.grace_period,
-        };
-        Self::launch_with(scratch, Arc::new(backend))
-    }
-
-    pub fn start_with(backend: Arc<dyn Backend>) -> Self {
-        let mut swift = Self::launch_with(Scratch::new(), backend);
-        swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-        swift
-    }
-
-    fn launch_with(scratch: Scratch, backend: Arc<dyn Backend>) -> Self {
-        let stream = fvm_helper_macos::start(backend, scratch.run_directory());
+        let stream = fvm_helper_macos::start(
+            Arc::new(FakeBackend::new(setup.scripts)),
+            Arc::clone(&setup.secrets) as _,
+            scratch.run_directory(),
+        );
         let reader = BufReader::new(stream.try_clone().unwrap());
         Self {
             stream,
@@ -307,6 +123,8 @@ impl Swift {
             received: Vec::new(),
             last_request: 0,
             scratch,
+            secrets: setup.secrets,
+            network_answered: 0,
         }
     }
 
@@ -527,16 +345,69 @@ impl Swift {
             .count()
     }
 
-    /// Nothing the entry sent holds the password or the OTP.
+    /// Nothing the entry sent holds the password, the OTP or the session cookie.
     pub fn assert_no_secret(&self) {
         for message in &self.received {
             let text = message.to_string();
             assert!(
-                !text.contains(PASSWORD) && !text.contains(OTP),
+                !text.contains(PASSWORD) && !text.contains(OTP) && !text.contains(COOKIE),
                 "secret in {text}"
             );
         }
     }
+
+    pub fn network_changes(&self) -> Vec<Value> {
+        self.received
+            .iter()
+            .filter_map(|message| Some(message.get("changeNetwork")?["change"].clone()))
+            .collect()
+    }
+
+    pub fn next_network_change(&mut self) -> Value {
+        let answered = self.network_answered;
+        self.wait_until("a network change", |swift| {
+            swift.network_changes().len() > answered
+        });
+        self.network_answered += 1;
+        self.network_changes()[answered].clone()
+    }
+
+    pub fn answer_network(&mut self, kind: &str, outcome: Value) -> Value {
+        let change = self.next_network_change();
+        assert!(change.get(kind).is_some(), "not {kind}: {change:#}");
+        self.send(json!({"networkChanged": {"outcome": outcome}}));
+        change[kind].clone()
+    }
+
+    pub fn bring_up(&mut self, app: u64) {
+        self.answer_network("lookUp", looked_up(outside_routes()));
+        self.answer_network("apply", applied(outside_routes()));
+        self.wait_for_milestone(app, TUNNEL_UP);
+    }
+}
+
+pub fn route(destination: &str) -> Value {
+    json!({
+        "destination": {"address": destination, "prefixLength": 32},
+        "router": "192.0.2.1",
+        "serviceID": "ethernet",
+    })
+}
+
+pub fn outside_routes() -> Value {
+    json!([route(GATEWAY), route("10.20.161.16")])
+}
+
+pub fn looked_up(missing: Value) -> Value {
+    json!({"lookedUp": {"dnsServiceID": "svc", "missing": missing}})
+}
+
+pub fn applied(added: Value) -> Value {
+    json!({"applied": {"added": added, "left": []}})
+}
+
+pub fn reverted() -> Value {
+    json!({"reverted": {"left": []}})
 }
 
 /// Whether a message is the case `name` of `FromEntry`.
@@ -556,7 +427,7 @@ pub fn connect_request(attempt: &str) -> Value {
         "host": GATEWAY,
         "port": 443,
         "username": "alice",
-        "trustedCerts": [],
+        "trustedCerts": [PIN],
         "dtls": false,
         "password": PASSWORD,
     }))
@@ -576,16 +447,4 @@ pub fn disconnect(attempt: &str, reason: &str) -> Value {
 
 pub fn error(code: &str, message: &str) -> Option<Value> {
     Some(json!({"code": code, "message": message}))
-}
-
-pub fn fixture_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../tests/fixtures/{name}.sh"))
-}
-
-pub fn sha256(text: &str) -> String {
-    let output = Command::new("/bin/sh")
-        .args(["-c", "printf '%s' \"$1\" | /sbin/sha256 -q", "sh", text])
-        .output()
-        .unwrap();
-    String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }

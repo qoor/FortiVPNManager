@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  FortiVPNManager for Windows: the app, the Helper service and OpenConnect, per machine in
-  C:\Program Files\FortiVPNManager, for Windows 11 on x64. The installer never starts the Helper or the
-  app; the app starts the Helper. An upgrade, repair or uninstall closes the app and stops the Helper
-  first, which ends a VPN connection.
+  FortiVPNManager for Windows: the app, the Helper service and the OpenConnect libraries the Helper
+  loads, per machine in C:\Program Files\FortiVPNManager, for Windows 11 on x64. The installer never
+  starts the Helper or the app; the app starts the Helper. An upgrade, repair or uninstall closes the
+  app and stops the Helper first, which ends a VPN connection.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
@@ -35,9 +35,7 @@
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <!-- Private IDs: the folder is fixed, as the app and the Helper look for their files there. -->
-      <Directory Id="AppFolder" Name="FortiVPNManager">
-        <Directory Id="OpenConnectFolder" Name="OpenConnect" />
-      </Directory>
+      <Directory Id="AppFolder" Name="FortiVPNManager" />
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
@@ -47,12 +45,7 @@
       <!-- Symbols serve crash analysis only; build.ps1 keeps the app's next to the MSI. -->
       <Exclude Files="$(var.AppFolder)\**\*.pdb" />
     </Files>
-    <Files Directory="OpenConnectFolder" Include="$(var.OpenConnectFolder)\**" />
-    <Files Directory="OpenConnectFolder" Include="$(sys.SOURCEFILEDIR)OpenConnect-licenses\**" />
-
-    <Component Directory="AppFolder">
-      <File Source="$(sys.SOURCEFILEDIR)vpnc-values.js" />
-    </Component>
+    <Files Directory="AppFolder" Subdirectory="OpenConnect-licenses" Include="$(sys.SOURCEFILEDIR)OpenConnect-licenses\**" />
 
     <Component Directory="AppFolder">
       <File Source="$(var.AppFolder)\FortiVPNManager.exe">
@@ -92,9 +85,7 @@
          CloseRunning. -->
     <util:CloseApplication Target="FortiVPNManager.exe" EndSessionMessage="yes" RebootPrompt="no" Timeout="10" />
     <!-- Without Restart Manager, the files-in-use dialog lists only programs with a titled window, which
-         the app then no longer is. Restart Manager would list, and in a quiet install try to shut down,
-         the openconnect the Helper runs, which StopServices and CloseRunning end before any file
-         changes. -->
+         the app then no longer is. -->
     <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
 
     <!-- The Helper is restarted after every failure: at 5 s, 5 s, then every minute, as Windows repeats
