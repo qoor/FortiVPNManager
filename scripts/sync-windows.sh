@@ -18,7 +18,7 @@ trap 'rm -rf "$work"' EXIT
 
 # What is here now: one "sha1  path" line per existing file git tracks or would add.
 git ls-files -co --exclude-standard -z |
-    while IFS= read -r -d '' f; do [ -f "$f" ] && printf '%s\0' "$f"; done |
+    while IFS= read -r -d '' f; do [ ! -f "$f" ] || printf '%s\0' "$f"; done |
     xargs -0 shasum -a 1 | LC_ALL=C sort >"$work/now"
 touch "$sent"
 LC_ALL=C comm -13 "$sent" "$work/now" | cut -c43- >"$work/changed"

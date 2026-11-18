@@ -32,9 +32,20 @@ jobs:
       TZ: Asia/Seoul
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: true
       - run: rustup update --no-self-update stable && rustup default stable
       - uses: Swatinem/rust-cache@v2
-      - run: brew install xcodegen
+      - run: brew install xcodegen autoconf automake libtool pkgconf
+      - id: openconnect
+        run: |
+          zip=$(packaging/openconnect/build.sh macos path)
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "key=$(basename "$zip" .zip)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.openconnect.outputs.zip }}
+          key: openconnect-${{ steps.openconnect.outputs.key }}
       - if: inputs.oauth-client
         env:
           CLIENT: ${{ secrets.GOOGLE_OAUTH_CLIENT_JSON }}

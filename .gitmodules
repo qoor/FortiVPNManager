@@ -1,0 +1,3 @@
+[submodule "third_party/openconnect"]
+	path = third_party/openconnect
+	url = https://github.com/qoor/openconnect.git
