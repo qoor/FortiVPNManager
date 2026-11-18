@@ -335,14 +335,19 @@ fn output_batch() {
 
 #[test]
 fn helper_statuses() {
-    let running = HelperStatus {
-        client_running: true,
+    let status = |client_running, routing_complete| HelperStatus {
+        client_running,
         client: ClientStatus {
             version: Some("9.21".into()),
         },
+        routing_complete,
     };
     both_ways(
-        running,
+        [
+            status(true, Some(true)),
+            status(true, Some(false)),
+            status(false, None),
+        ],
         include_str!("fixtures/app-helper/helper_status.json"),
     );
 }

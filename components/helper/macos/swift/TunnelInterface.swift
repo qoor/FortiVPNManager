@@ -23,6 +23,33 @@ struct TunnelInterface: Equatable {
         return parse(result.output)
     }
 
+    static func owners(of address: String) -> [String]? {
+        var wanted = in_addr()
+        guard inet_pton(AF_INET, address, &wanted) == 1 else {
+            fatalError("the Helper entry sent \(address) as the tunnel's IPv4 address")
+        }
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0 else {
+            HelperLog.routes.error("getifaddrs failed: \(String(cString: strerror(errno)), privacy: .public)")
+            return nil
+        }
+        defer { freeifaddrs(list) }
+        var owners: [String] = []
+        var cursor = list
+        while let entry = cursor {
+            cursor = entry.pointee.ifa_next
+            guard let socket = entry.pointee.ifa_addr, socket.pointee.sa_family == sa_family_t(AF_INET) else {
+                continue
+            }
+            let found = socket.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr.s_addr }
+            let name = String(cString: entry.pointee.ifa_name)
+            if found == wanted.s_addr, !owners.contains(name) {
+                owners.append(name)
+            }
+        }
+        return owners
+    }
+
     static func parse(_ output: String) -> TunnelInterface? {
         let lines = output.split(whereSeparator: \.isNewline).map { $0.split(whereSeparator: \.isWhitespace) }
         guard let first = lines.first, first.count >= 2, first[1].hasPrefix("flags=") else { return nil }

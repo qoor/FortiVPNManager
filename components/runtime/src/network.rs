@@ -66,20 +66,21 @@ impl Runtime {
                     route_interface,
                     addresses,
                     client_running: None,
+                    routing_complete: None,
                 };
                 if !probe.client_running {
                     runtime.feed(connection::Input::NetworkProbed(result));
                     return;
                 }
                 runtime.call_helper(HelperCall::Status {}, move |runtime, response| {
-                    result.client_running = match response {
+                    let status = match response {
                         PortResponse::HelperReply { json: Some(json) } => {
-                            serde_json::from_str::<HelperStatus>(&json)
-                                .ok()
-                                .map(|status| status.client_running)
+                            serde_json::from_str::<HelperStatus>(&json).ok()
                         }
                         _ => None,
                     };
+                    result.client_running = status.as_ref().map(|status| status.client_running);
+                    result.routing_complete = status.and_then(|status| status.routing_complete);
                     runtime.feed(connection::Input::NetworkProbed(result));
                 });
             },

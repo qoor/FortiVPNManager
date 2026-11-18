@@ -345,6 +345,7 @@ impl<R: FnMut(Report)> Watch<R> {
             previous: self.network.applied.clone().map(Box::new),
             remove: remove.clone(),
             add: missing,
+            outside,
         };
         self.ask(change, Asked::Apply { remove });
     }
@@ -492,6 +493,21 @@ impl<R: FnMut(Report)> Watch<R> {
         })
     }
 
+    pub(super) fn routing_check(&self) -> Option<NetworkChange> {
+        if !self.changing_network() || self.furthest != Milestone::TunnelUp || self.network.busy() {
+            return None;
+        }
+        let settings = self
+            .network
+            .applied
+            .clone()
+            .expect("a tunnel is up once its network settings are applied");
+        Some(NetworkChange::Check {
+            outside: Self::outside(&settings),
+            settings: Box::new(settings),
+        })
+    }
+
     pub(super) fn replaced_exited(&mut self) {
         self.replaced = None;
         if !matches!(self.network.switch, Switch::Asked | Switch::Declined) {
@@ -553,13 +569,14 @@ impl<R: FnMut(Report)> Watch<R> {
         else {
             unreachable!("the traffic moves only during a hand-over")
         };
+        let settings = self
+            .network
+            .prepared
+            .clone()
+            .expect("a hand-over is asked for once the network is prepared");
         let change = NetworkChange::Switch {
-            settings: Box::new(
-                self.network
-                    .prepared
-                    .clone()
-                    .expect("a hand-over is asked for once the network is prepared"),
-            ),
+            outside: Self::outside(&settings),
+            settings: Box::new(settings),
             replaced: replaced.clone(),
         };
         for route in routes {

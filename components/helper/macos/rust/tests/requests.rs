@@ -63,11 +63,14 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         record,
         json!({"outsideChanges": {"dnsServiceID": "svc", "routes": outside_routes()}})
     );
+    let status = swift.request(1, json!({"status": {}}));
+    swift.answer_network("check", json!({"checked": {"complete": true}}));
     assert_eq!(
-        swift.status(1),
+        swift.reply_json(status),
         json!({
             "childAlive": true,
             "client": {"version": VERSION},
+            "routingComplete": true,
         })
     );
 
@@ -324,6 +327,61 @@ fn the_status_carries_the_clients_version() {
             "client": {"version": VERSION},
         })
     );
+}
+
+#[test]
+fn the_status_of_an_up_run_waits_for_its_routing_check() {
+    let mut swift = Swift::start(Setup::with([up_without_otp(settings(
+        "utun9",
+        "10.10.0.5",
+    ))]));
+    assert!(swift.connect_app(1, 501));
+    assert_eq!(swift.connect(1, ATTEMPT), None);
+    swift.bring_up(1);
+    let outcomes = [
+        (json!({"checked": {"complete": true}}), Some(true)),
+        (json!({"checked": {"complete": false}}), Some(false)),
+        (
+            json!({"failed": {"step": "routes", "error": "the routing table could not be read", "added": [], "left": []}}),
+            None,
+        ),
+    ];
+    for (outcome, routing_complete) in outcomes {
+        let status = swift.request(1, json!({"status": {}}));
+        let late = swift.received_within(Duration::from_millis(200));
+        assert!(
+            !late.iter().any(|message| message["reply"]["id"] == status),
+            "{late:#?}"
+        );
+        let check = swift.answer_network("check", outcome);
+        assert_eq!(check["settings"]["tunnel"]["name"], "utun9");
+        assert_eq!(
+            check["outside"],
+            json!([
+                {"address": GATEWAY, "prefixLength": 32},
+                {"address": "10.20.161.16", "prefixLength": 32},
+            ])
+        );
+        let reply = swift.reply_json(status);
+        assert_eq!(reply["childAlive"], true);
+        assert_eq!(
+            reply.get("routingComplete").and_then(Value::as_bool),
+            routing_complete,
+            "{reply}"
+        );
+    }
+}
+
+#[test]
+fn the_status_of_a_run_that_is_not_up_needs_no_routing_check() {
+    let mut swift = Swift::start(Setup::with([up()]));
+    assert!(swift.connect_app(1, 501));
+    assert_eq!(swift.connect(1, ATTEMPT), None);
+    swift.wait_for_milestone(1, OTP_PROMPTED);
+    let reply = swift.status(1);
+    assert_eq!(reply["childAlive"], true);
+    assert!(reply.get("routingComplete").is_none(), "{reply}");
+    assert!(swift.network_changes().is_empty());
 }
 
 #[test]

@@ -131,6 +131,30 @@ fn wrong_phase() -> Value {
 }
 
 #[test]
+fn the_exception_routes_are_kept_outside_in_the_apply_and_the_routing_check() {
+    let mut swift = Swift::start(Setup::with([up_without_otp(settings(
+        "utun9",
+        "10.10.0.5",
+    ))]));
+    assert!(swift.connect_app(1, 501));
+    swift.write_added(1, &[host(16)], 1);
+    assert_eq!(swift.connect(1, ATTEMPT), None);
+    swift.answer_network("lookUp", looked_up(outside_routes()));
+    let apply = swift.answer_network("apply", applied(outside_routes()));
+    let outside = json!([
+        {"address": GATEWAY, "prefixLength": 32},
+        {"address": "10.20.161.16", "prefixLength": 32},
+        {"address": "10.30.161.16", "prefixLength": 32},
+    ]);
+    assert_eq!(apply["outside"], outside);
+    swift.wait_for_milestone(1, TUNNEL_UP);
+    let status = swift.request(1, json!({"status": {}}));
+    let check = swift.answer_network("check", json!({"checked": {"complete": true}}));
+    assert_eq!(check["outside"], outside);
+    assert_eq!(swift.reply_json(status)["routingComplete"], true);
+}
+
+#[test]
 fn a_write_looks_up_first_and_records_only_what_it_adds() {
     let mut swift = started();
     let id = swift.request(1, write(&[host(16), host(17)]));

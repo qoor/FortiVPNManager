@@ -341,6 +341,7 @@ impl DadState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnicastAddress {
+    pub interface: Luid,
     pub address: IpAddr,
     pub prefix_length: u8,
     pub dad_state: DadState,
@@ -375,8 +376,8 @@ fn unicast_row(luid: Luid, address: IpAddr) -> MIB_UNICASTIPADDRESS_ROW {
     row
 }
 
-/// The interface's addresses of `family`.
-pub fn addresses(luid: Luid, family: Family) -> Result<Vec<UnicastAddress>, Error> {
+/// The addresses of `family` on every interface.
+pub fn addresses(family: Family) -> Result<Vec<UnicastAddress>, Error> {
     let mut table: *mut MIB_UNICASTIPADDRESS_TABLE = ptr::null_mut();
     // SAFETY: `table` is live for the call, which points it to a table it allocates.
     let code = unsafe { GetUnicastIpAddressTable(family.raw(), &mut table) };
@@ -390,8 +391,8 @@ pub fn addresses(luid: Luid, family: Family) -> Result<Vec<UnicastAddress>, Erro
         );
         let addresses = rows
             .iter()
-            .filter(|row| Luid::from_raw(row.InterfaceLuid) == luid)
             .map(|row| UnicastAddress {
+                interface: Luid::from_raw(row.InterfaceLuid),
                 address: ip(&row.Address, family),
                 prefix_length: row.OnLinkPrefixLength,
                 dad_state: DadState::from_raw(row.DadState),
@@ -463,8 +464,9 @@ pub fn routes(family: Family) -> Result<Vec<Route>, Error> {
     Ok(routes)
 }
 
-/// The route Windows would send a packet to `destination` by, through any interface.
-pub fn best_route(destination: IpAddr) -> Result<Route, Error> {
+/// The route Windows would send a packet to `destination` by, through any interface, and the source
+/// address it would send it from.
+pub fn best_route(destination: IpAddr) -> Result<(Route, IpAddr), Error> {
     let mut row = MIB_IPFORWARD_ROW2::default();
     let mut source = SOCKADDR_INET::default();
     // SAFETY: The destination, `row` and `source` are live for the call, which reads the first and
@@ -482,7 +484,8 @@ pub fn best_route(destination: IpAddr) -> Result<Route, Error> {
         )
     };
     check("GetBestRoute2", code)?;
-    Ok(route(&row, Family::of(destination)))
+    let family = Family::of(destination);
+    Ok((route(&row, family), ip(&source, family)))
 }
 
 fn route(row: &MIB_IPFORWARD_ROW2, family: Family) -> Route {
@@ -918,7 +921,7 @@ mod tests {
     }
 
     fn loopback() -> Luid {
-        best_route(Ipv4Addr::LOCALHOST.into()).unwrap().interface
+        best_route(Ipv4Addr::LOCALHOST.into()).unwrap().0.interface
     }
 
     #[test]
@@ -973,17 +976,15 @@ mod tests {
         assert!(!interface.hardware && interface.up, "{interface:?}");
         assert!(interface.guid.starts_with('{') && interface.guid.len() == 38);
         let localhost = UnicastAddress {
+            interface: loopback,
             address: Ipv4Addr::LOCALHOST.into(),
             prefix_length: 8,
             dad_state: DadState::Preferred,
         };
-        assert!(
-            addresses(loopback, Family::Ipv4)
-                .unwrap()
-                .contains(&localhost)
-        );
-        let best = best_route(Ipv4Addr::LOCALHOST.into()).unwrap();
+        assert!(addresses(Family::Ipv4).unwrap().contains(&localhost));
+        let (best, source) = best_route(Ipv4Addr::LOCALHOST.into()).unwrap();
         assert!(routes(Family::Ipv4).unwrap().contains(&best), "{best:?}");
+        assert_eq!(source, IpAddr::from(Ipv4Addr::LOCALHOST));
         assert!(interface_settings(loopback, Family::Ipv6).unwrap().mtu > 0);
     }
 
@@ -991,7 +992,7 @@ mod tests {
     fn routes_are_added_found_and_deleted() {
         let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
         // With no route to TEST-NET-1, the best one is the primary interface's default route.
-        let default = best_route(Ipv4Addr::new(192, 0, 2, 1).into()).unwrap();
+        let (default, _) = best_route(Ipv4Addr::new(192, 0, 2, 1).into()).unwrap();
         assert_eq!(default.prefix_length, 0, "{default:?}");
         let through_router = Route {
             interface: default.interface,
@@ -1015,10 +1016,26 @@ mod tests {
             add_route(&route).unwrap();
             assert!(add_route(&route).unwrap_err().already_exists());
             assert!(routes(family).unwrap().contains(&route), "{route:?}");
-            assert_eq!(best_route(route.destination), Ok(route));
+            assert_eq!(
+                best_route(route.destination).map(|(best, _)| best),
+                Ok(route)
+            );
             delete_route(&route).unwrap();
             assert!(!routes(family).unwrap().contains(&route), "{route:?}");
         }
+    }
+
+    #[test]
+    fn the_best_route_to_the_unspecified_address_is_a_default_route() {
+        let (best, source) = best_route(Ipv4Addr::UNSPECIFIED.into()).unwrap();
+        assert_eq!(best.prefix_length, 0, "{best:?}");
+        assert!(
+            addresses(Family::Ipv4)
+                .unwrap()
+                .iter()
+                .any(|found| found.interface == best.interface && found.address == source),
+            "{source}"
+        );
     }
 
     #[test]
@@ -1039,13 +1056,14 @@ mod tests {
             let again = add_address(loopback, address, prefix_length).unwrap_err();
             assert!(again.already_exists(), "{again}");
             let added = UnicastAddress {
+                interface: loopback,
                 address,
                 prefix_length,
                 dad_state: DadState::Preferred,
             };
-            assert!(addresses(loopback, family).unwrap().contains(&added));
+            assert!(addresses(family).unwrap().contains(&added));
             delete_address(loopback, address).unwrap();
-            let left = addresses(loopback, family).unwrap();
+            let left = addresses(family).unwrap();
             assert!(!left.iter().any(|found| found.address == address));
         }
     }

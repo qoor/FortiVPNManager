@@ -228,10 +228,12 @@ pub(crate) fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError
         IpAddr::V4(router) if !router.is_unspecified() => router,
         _ => return Err(no_router_or_address()),
     };
-    let address = os_api::addresses(route.interface, Family::Ipv4)
+    let address = os_api::addresses(Family::Ipv4)
         .map_err(unreadable)?
         .into_iter()
-        .find(|address| address.dad_state == DadState::Preferred)
+        .find(|address| {
+            address.interface == route.interface && address.dad_state == DadState::Preferred
+        })
         .ok_or_else(no_router_or_address)?;
     let subnet_mask = mask(address.prefix_length).ok_or_else(no_router_or_address)?;
     Ok(Primary {

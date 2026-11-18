@@ -437,6 +437,7 @@ impl App {
                     client: ClientStatus {
                         version: Some("9.21".into()),
                     },
+                    routing_complete: None,
                 };
                 reply(serde_json::to_value(status).unwrap())
             }

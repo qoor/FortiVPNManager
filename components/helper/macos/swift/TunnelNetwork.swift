@@ -11,14 +11,16 @@ enum TunnelNetwork {
         switch change {
         case .lookUp(_, let outside):
             return lookUp(outside)
-        case .apply(let settings, let previous, let remove, let add):
-            return apply(settings, previous: previous, remove: remove, add: add, routesAndDNS: true)
+        case .apply(let settings, let previous, let remove, let add, let outside):
+            return apply(settings, previous: previous, remove: remove, add: add, outside: outside, routesAndDNS: true)
         case .prepare(let settings, let add):
-            return apply(settings, previous: nil, remove: [], add: add, routesAndDNS: false)
-        case .switch(let settings, let replaced):
-            return switchTraffic(to: settings, from: replaced)
+            return apply(settings, previous: nil, remove: [], add: add, outside: [], routesAndDNS: false)
+        case .switch(let settings, let replaced, let outside):
+            return switchTraffic(to: settings, from: replaced, outside: outside)
         case .revert(let changes):
             return revert(changes)
+        case .check(let settings, let outside):
+            return check(settings, outside: outside)
         }
     }
 
@@ -41,7 +43,8 @@ enum TunnelNetwork {
 
     private static func apply(
         _ settings: HelperInternal.NetworkSettings, previous: HelperInternal.NetworkSettings?,
-        remove: [HelperInternal.OutsideRoute], add: [HelperInternal.OutsideRoute], routesAndDNS: Bool
+        remove: [HelperInternal.OutsideRoute], add: [HelperInternal.OutsideRoute],
+        outside: [HelperInternal.IPNetwork], routesAndDNS: Bool
     ) -> HelperInternal.NetworkOutcome {
         guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil) else {
             return failed(.network, "the network configuration could not be read", left: remove)
@@ -141,11 +144,16 @@ enum TunnelNetwork {
         guard !routesAndDNS || hasDNS(settings, store) else {
             return finish((.dns, "the DNS settings were not kept"), table: after)
         }
-        return finish(nil, table: after)
+        guard routesAndDNS else { return finish(nil, table: after) }
+        guard let owners = TunnelInterface.owners(of: settings.ipv4.address.address) else {
+            return finish((.addresses, "the interface addresses could not be read"), table: after)
+        }
+        return finish(routingProblem(settings, outside: outside, table: after, owners: owners), table: after)
     }
 
     private static func switchTraffic(
-        to settings: HelperInternal.NetworkSettings, from replaced: HelperInternal.NetworkSettings
+        to settings: HelperInternal.NetworkSettings, from replaced: HelperInternal.NetworkSettings,
+        outside: [HelperInternal.IPNetwork]
     ) -> HelperInternal.NetworkOutcome {
         guard let store = SCDynamicStoreCreate(nil, FortiIdentifiers.helperBundleID as CFString, nil, nil) else {
             return failed(.network, "the network configuration could not be read", left: [])
@@ -181,6 +189,12 @@ enum TunnelNetwork {
         guard hasDNS(settings, store) else {
             return failed(.dns, "the DNS settings were not kept", left: [])
         }
+        guard let owners = TunnelInterface.owners(of: settings.ipv4.address.address) else {
+            return failed(.addresses, "the interface addresses could not be read", left: [])
+        }
+        if let problem = routingProblem(settings, outside: outside, table: after, owners: owners) {
+            return failed(problem.step, problem.error, left: [])
+        }
         HelperLog.routes.notice("moved the VPN traffic from \(replaced.tunnel.name, privacy: .public) to \(settings.tunnel.name, privacy: .public)")
         return .applied(added: [], left: [])
     }
@@ -211,6 +225,76 @@ enum TunnelNetwork {
         }
         let deletes = present.filter { route in !wanted.contains { sameDestination($0, route) } }.map(SwitchStep.delete)
         return moves + deletes
+    }
+
+    private static func check(
+        _ settings: HelperInternal.NetworkSettings, outside: [HelperInternal.IPNetwork]
+    ) -> HelperInternal.NetworkOutcome {
+        let name = settings.tunnel.name
+        guard let table = readTable(Set(tunnelRoutes(settings).map(\.family))),
+              let owners = TunnelInterface.owners(of: settings.ipv4.address.address)
+        else {
+            let error = "the routing table or the interface addresses could not be read"
+            HelperLog.routes.error("checking the VPN routing of \(name, privacy: .public) failed: \(error, privacy: .public)")
+            return .failed(step: .routes, error: error, added: [], left: [])
+        }
+        guard let problem = routingProblem(settings, outside: outside, table: table, owners: owners) else {
+            return .checked(complete: true)
+        }
+        HelperLog.routes.error("the VPN routing of \(name, privacy: .public) is not complete: \(problem.error, privacy: .public)")
+        return .checked(complete: false)
+    }
+
+    static func routingProblem(
+        _ settings: HelperInternal.NetworkSettings, outside: [HelperInternal.IPNetwork], table: [RouteTable.Row],
+        owners: [String]
+    ) -> (step: HelperInternal.NetworkStep, error: String)? {
+        let name = settings.tunnel.name
+        guard owners == [name] else {
+            let holders = owners.isEmpty ? "no interface" : owners.joined(separator: ", ")
+            return (.addresses, "the tunnel address \(settings.ipv4.address.address) is on \(holders), not only on \(name)")
+        }
+        let unscoped = table.filter { !$0.flags.contains("I") }
+        for route in tunnelRoutes(settings) {
+            guard let first = addressBits(route.destination, route.prefixLength) else {
+                fatalError("the tunnel route to \(route.destination) has no address")
+            }
+            let chosen = unscoped.filter { row in
+                addressBits(row.destination, row.prefixLength) == addressBits(first, row.prefixLength)
+            }.max { $0.prefixLength < $1.prefixLength }
+            guard let chosen else {
+                return (.routes, "no route covers \(route.destination)/\(route.prefixLength)")
+            }
+            let kept = outside.contains { network in
+                network.prefixLength == chosen.prefixLength
+                    && addressBits(network.address, chosen.prefixLength)
+                        == addressBits(chosen.destination, chosen.prefixLength)
+            }
+            if chosen.interface == name || kept { continue }
+            return (.routes, "the route for \(route.destination)/\(route.prefixLength) goes through \(chosen.interface) (\(chosen.destination)/\(chosen.prefixLength)), not \(name)")
+        }
+        return nil
+    }
+
+    private static func addressBits(_ address: String, _ prefixLength: Int) -> [UInt8]? {
+        var ipv4 = in_addr()
+        var ipv6 = in6_addr()
+        let bytes: [UInt8]
+        if inet_pton(AF_INET, address, &ipv4) == 1 {
+            bytes = withUnsafeBytes(of: ipv4) { Array($0) }
+        } else if inet_pton(AF_INET6, address, &ipv6) == 1 {
+            bytes = withUnsafeBytes(of: ipv6) { Array($0) }
+        } else {
+            return nil
+        }
+        return addressBits(bytes, prefixLength)
+    }
+
+    private static func addressBits(_ bytes: [UInt8], _ prefixLength: Int) -> [UInt8] {
+        bytes.enumerated().map { index, byte in
+            let kept = min(max(prefixLength - index * 8, 0), 8)
+            return kept == 8 ? byte : byte & ~(UInt8.max >> kept)
+        }
     }
 
     private static func revert(_ changes: HelperInternal.OutsideChanges) -> HelperInternal.NetworkOutcome {

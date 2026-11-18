@@ -1559,7 +1559,10 @@ impl ConnectionManager {
             && session
                 .planned_reconnect
                 .is_some_and(|planned| planned <= self.now);
-        let reason = if !observation.client_running || !observation.tunnel_up {
+        let reason = if !observation.client_running
+            || !observation.tunnel_up
+            || observation.routing_incomplete
+        {
             Some(AttemptReason::TunnelLost)
         } else if let (Some(old), Some(new)) = (&session.underlay, &observation.underlay)
             && old != new
@@ -1589,7 +1592,7 @@ impl ConnectionManager {
         }
     }
 
-    pub(super) fn path_changed(&mut self, snapshot: PathSnapshot) {
+    pub(super) fn path_changed(&mut self, snapshot: PathSnapshot, routing_incomplete: bool) {
         self.record_path(snapshot.clone());
         if self.sleeping {
             return;
@@ -1630,6 +1633,12 @@ impl ConnectionManager {
             },
             Some(_) => {}
             None => session.underlay = Some(underlay),
+        }
+        if routing_incomplete && matches!(self.phase, Phase::Connected(_)) {
+            let Phase::Connected(session) = self.take_phase() else {
+                unreachable!("matched above")
+            };
+            self.restart_session(session, AttemptReason::TunnelLost);
         }
     }
 

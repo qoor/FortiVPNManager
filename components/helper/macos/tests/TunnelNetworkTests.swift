@@ -163,6 +163,72 @@ import Testing
         #expect(entries.dns == nil && entries.ipv4 == nil)
     }
 
+    private func splitTable(_ rows: String) -> [RouteTable.Row] {
+        RouteTable.parse(table: """
+            Routing tables
+
+            Internet:
+            Destination        Gateway            Flags               Netif Expire
+            default            10.71.161.254      UGScg                 en0
+            10.212.133.105     10.212.133.105     UH                  utun5
+            192.168.50         10.212.133.105     UGSc                utun5
+            203.0.113.10       10.71.161.254      UGHS                  en0
+            \(rows)
+
+            """, family: .inet)
+    }
+
+    private var tunnelRow: String { "10.30/16           10.212.133.105     UGSc                utun5" }
+
+    @Test func routesThroughTheTunnelAndItsAddressOnItAloneCompleteTheRouting() {
+        let problem = TunnelNetwork.routingProblem(split, outside: [], table: splitTable(tunnelRow), owners: ["utun5"])
+        #expect(problem == nil)
+    }
+
+    @Test func aRouteBoundToAnotherInterfaceFailsTheRouting() {
+        let table = splitTable("10.30/16           10.212.133.105     UGSc                utun3")
+        let problem = TunnelNetwork.routingProblem(split, outside: [], table: table, owners: ["utun5"])
+        #expect(problem?.step == .routes)
+        #expect(problem?.error == "the route for 10.30.0.0/16 goes through utun3 (10.30.0.0/16), not utun5")
+    }
+
+    @Test func theTunnelAddressOnTwoInterfacesFailsTheRouting() {
+        let table = splitTable(tunnelRow)
+        let problem = TunnelNetwork.routingProblem(split, outside: [], table: table, owners: ["utun3", "utun5"])
+        #expect(problem?.step == .addresses)
+        #expect(problem?.error == "the tunnel address 10.212.133.105 is on utun3, utun5, not only on utun5")
+        let missing = TunnelNetwork.routingProblem(split, outside: [], table: table, owners: [])
+        #expect(missing?.error == "the tunnel address 10.212.133.105 is on no interface, not only on utun5")
+    }
+
+    @Test func aMoreSpecificRouteThroughAnotherInterfaceFailsTheRouting() {
+        let table = splitTable(tunnelRow + "\n10.30.0/24          10.71.161.254      UGSc                  en0")
+        let problem = TunnelNetwork.routingProblem(split, outside: [], table: table, owners: ["utun5"])
+        #expect(problem?.step == .routes)
+        #expect(problem?.error == "the route for 10.30.0.0/16 goes through en0 (10.30.0.0/24), not utun5")
+    }
+
+    @Test func aRouteKeptOutsideTheTunnelPassesTheRouting() {
+        let table = splitTable(tunnelRow + "\n10.30.0/24          10.71.161.254      UGSc                  en0")
+        let problem = TunnelNetwork.routingProblem(
+            split, outside: [network("203.0.113.10", 32), network("10.30.0.0", 24)], table: table, owners: ["utun5"]
+        )
+        #expect(problem == nil)
+    }
+
+    @Test func aRouteScopedToAnotherInterfaceDoesNotTakeTheTraffic() {
+        let table = splitTable(tunnelRow + "\n10.30.0/24          10.71.161.254      UGScI                 en0")
+        let problem = TunnelNetwork.routingProblem(split, outside: [], table: table, owners: ["utun5"])
+        #expect(problem == nil)
+    }
+
+    @Test func aTunnelRouteMissingFromTheTableFailsTheRouting() {
+        let problem = TunnelNetwork.routingProblem(
+            split, outside: [], table: splitTable(""), owners: ["utun5"]
+        )
+        #expect(problem?.error == "the route for 10.30.0.0/16 goes through en0 (0.0.0.0/0), not utun5")
+    }
+
     @Test func onlyFE80Slash10RoutersAreLinkLocal() {
         #expect(TunnelNetwork.isLinkLocal("fe80::1"))
         #expect(TunnelNetwork.isLinkLocal("febf::1"))

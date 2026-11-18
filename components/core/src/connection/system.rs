@@ -41,6 +41,7 @@ pub(super) struct WakeObservation {
     pub(super) client_running: bool,
     /// The tunnel interface is still there and up.
     pub(super) tunnel_up: bool,
+    pub(super) routing_incomplete: bool,
 }
 
 /// Waiting for the network after a wake: until it is back or the time is up, looking every
@@ -163,6 +164,7 @@ impl ConnectionManager {
                 underlay: None,
                 client_running: false,
                 tunnel_up: false,
+                routing_incomplete: false,
             });
             self.wake_look_due();
         }
@@ -211,12 +213,16 @@ impl ConnectionManager {
 
     fn report_path(&mut self) {
         if self.raw_path.as_ref().is_some_and(|path| path.satisfied) {
-            self.path_probe = Some(self.probe(false));
+            let connected = matches!(self.phase, Phase::Connected(_));
+            self.path_probe = Some(self.probe(connected));
         } else {
-            self.path_changed(PathSnapshot {
-                satisfied: false,
-                underlay: None,
-            });
+            self.path_changed(
+                PathSnapshot {
+                    satisfied: false,
+                    underlay: None,
+                },
+                false,
+            );
         }
     }
 
@@ -262,12 +268,16 @@ impl ConnectionManager {
             self.gateway_ip = Some((host, ip));
         }
         let underlay = self.underlay(&result);
+        let routing_incomplete = result.routing_complete == Some(false);
         if for_path.is_some() {
             self.path_probe = None;
-            self.path_changed(PathSnapshot {
-                satisfied: true,
-                underlay,
-            });
+            self.path_changed(
+                PathSnapshot {
+                    satisfied: true,
+                    underlay,
+                },
+                routing_incomplete,
+            );
         } else {
             self.wake_settle = None;
             let tunnel_up = self.tunnel_interface_up(&result.addresses);
@@ -276,6 +286,7 @@ impl ConnectionManager {
                 underlay,
                 client_running: result.client_running.unwrap_or(false),
                 tunnel_up,
+                routing_incomplete,
             });
         }
     }

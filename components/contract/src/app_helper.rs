@@ -317,6 +317,12 @@ pub struct HelperStatus {
     #[serde(rename = "childAlive")]
     pub client_running: bool,
     pub client: ClientStatus,
+    #[serde(
+        rename = "routingComplete",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub routing_complete: Option<bool>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]

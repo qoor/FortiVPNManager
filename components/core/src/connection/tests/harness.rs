@@ -184,6 +184,7 @@ pub(super) fn ready() -> ReadinessFacts {
                 client: ClientStatus {
                     version: Some("9.21".to_owned()),
                 },
+                routing_complete: None,
             }),
         },
     }
@@ -309,6 +310,7 @@ pub(super) struct Observe {
     pub(super) tunnel: bool,
     pub(super) underlay: Option<Underlay>,
     pub(super) settled: bool,
+    pub(super) routing: Option<bool>,
 }
 
 pub(super) fn observe() -> Observe {
@@ -317,6 +319,7 @@ pub(super) fn observe() -> Observe {
         tunnel: true,
         underlay: Some(wifi()),
         settled: true,
+        routing: Some(true),
     }
 }
 
@@ -339,6 +342,10 @@ impl Observe {
 
     pub(super) fn via(self, underlay: Option<Underlay>) -> Self {
         Self { underlay, ..self }
+    }
+
+    pub(super) fn routing(self, routing: Option<bool>) -> Self {
+        Self { routing, ..self }
     }
 
     pub(super) fn unsettled(self) -> Self {
@@ -656,6 +663,14 @@ impl Harness {
     /// The OS reports `path`; after it stayed unchanged long enough, the manager looks at it.
     /// Takes 3 seconds.
     pub(super) fn set_path(&mut self, path: Path) -> Vec<Effect> {
+        self.set_path_with_routing(path, None)
+    }
+
+    pub(super) fn set_path_with_routing(
+        &mut self,
+        path: Path,
+        routing_complete: Option<bool>,
+    ) -> Vec<Effect> {
         self.send(Input::NetworkPathChanged {
             satisfied: path.satisfied,
             interfaces: path_interfaces(),
@@ -665,7 +680,7 @@ impl Harness {
             return effects;
         }
         let probe = probe_id(&effects);
-        self.answer_probe(probe, path.underlay.as_ref(), true, None)
+        self.answer_probe(probe, path.underlay.as_ref(), true, None, routing_complete)
     }
 
     pub(super) fn sleep(&mut self) -> Vec<Effect> {
@@ -695,6 +710,7 @@ impl Harness {
                         observation.underlay.as_ref(),
                         observation.tunnel,
                         Some(observation.alive),
+                        observation.routing,
                     );
                 }
                 self.fire(TimerKind::WakeSettle);
@@ -720,6 +736,7 @@ impl Harness {
         underlay: Option<&Underlay>,
         tunnel_up: bool,
         client_running: Option<bool>,
+        routing_complete: Option<bool>,
     ) -> Vec<Effect> {
         let mut addresses = vec![
             address("lo0", true, Some(Ipv4Addr::LOCALHOST)),
@@ -736,6 +753,7 @@ impl Harness {
             route_interface: underlay.map(|underlay| underlay.interface.clone()),
             addresses,
             client_running,
+            routing_complete,
         }))
     }
 }

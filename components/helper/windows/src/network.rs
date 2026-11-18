@@ -45,10 +45,26 @@ pub(crate) fn change(change: &NetworkChange, log: &Log) -> NetworkOutcome {
             previous,
             remove,
             add,
-        } => apply(settings, previous.as_deref(), remove, add, true, log),
-        NetworkChange::Prepare { settings, add } => apply(settings, None, &[], add, false, log),
-        NetworkChange::Switch { settings, replaced } => switch(settings, replaced, log),
+            outside,
+        } => apply(
+            settings,
+            previous.as_deref(),
+            remove,
+            add,
+            true,
+            Some(outside),
+            log,
+        ),
+        NetworkChange::Prepare { settings, add } => {
+            apply(settings, None, &[], add, false, None, log)
+        }
+        NetworkChange::Switch {
+            settings,
+            replaced,
+            outside,
+        } => switch(settings, replaced, outside, log),
         NetworkChange::Revert { changes } => revert(changes, log),
+        NetworkChange::Check { settings, outside } => return check(settings, outside, log),
     };
     if let NetworkOutcome::Failed { step, error, .. } = &outcome {
         let message = format!("changing the VPN network settings failed ({step:?}): {error}");
@@ -180,6 +196,7 @@ fn apply(
     remove: &[OutsideRoute],
     add: &[OutsideRoute],
     routes_and_dns: bool,
+    outside: Option<&[IpNetwork]>,
     log: &Log,
 ) -> NetworkOutcome {
     let mut added = Vec::new();
@@ -190,6 +207,7 @@ fn apply(
         remove,
         add,
         routes_and_dns,
+        outside,
         &mut added,
         &mut unchanged,
         log,
@@ -232,6 +250,7 @@ fn apply_steps(
     remove: &[OutsideRoute],
     add: &[OutsideRoute],
     routes_and_dns: bool,
+    outside: Option<&[IpNetwork]>,
     added: &mut Vec<OutsideRoute>,
     unchanged: &mut Option<Vec<Route>>,
     log: &Log,
@@ -317,6 +336,9 @@ fn apply_steps(
         set_wins_servers(tunnel, previous_wins, &settings.wins_servers)?;
     }
     confirm(tunnel, settings, &physical, add, true)?;
+    if let Some(outside) = outside {
+        routing(settings, tunnel, outside)?;
+    }
     let after = table(remove.iter().map(|route| route.destination.address))
         .map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
     Ok(remove
@@ -465,11 +487,12 @@ fn confirm(
     routes_and_dns: bool,
 ) -> Result<(), Failure> {
     for address in addresses(settings) {
-        let present = os_api::addresses(tunnel, Family::of(address.address))
+        let present = os_api::addresses(Family::of(address.address))
             .map_err(|error| failure(NetworkStep::Addresses, error))?
             .iter()
             .any(|found| {
-                found.address == address.address
+                found.interface == tunnel
+                    && found.address == address.address
                     && found.prefix_length == address.prefix_length
                     && !matches!(found.dad_state, DadState::Duplicate | DadState::Invalid)
             });
@@ -541,12 +564,21 @@ fn confirm(
     Ok(())
 }
 
-fn switch(settings: &NetworkSettings, replaced: &NetworkSettings, log: &Log) -> NetworkOutcome {
-    let applied = apply(settings, None, &[], &[], true, log);
+fn switch(
+    settings: &NetworkSettings,
+    replaced: &NetworkSettings,
+    outside: &[IpNetwork],
+    log: &Log,
+) -> NetworkOutcome {
+    let applied = apply(settings, None, &[], &[], true, None, log);
     if !matches!(applied, NetworkOutcome::Applied { .. }) {
         return applied;
     }
-    match remove_replaced(replaced) {
+    let routed = remove_replaced(replaced).and_then(|()| {
+        let tunnel = tunnel_interface(&settings.tunnel)?;
+        routing(settings, tunnel, outside)
+    });
+    match routed {
         Ok(()) => {
             let message = format!(
                 "moved the VPN traffic from {} to {}",
@@ -588,6 +620,143 @@ fn remove_replaced(replaced: &NetworkSettings) -> Result<(), Failure> {
         )),
         None => Ok(()),
     }
+}
+
+fn check(settings: &NetworkSettings, outside: &[IpNetwork], log: &Log) -> NetworkOutcome {
+    let facts = tunnel_interface(&settings.tunnel)
+        .and_then(|tunnel| Ok((tunnel, routing_facts(settings, tunnel)?)));
+    let (tunnel, (owners, chosen)) = match facts {
+        Ok(facts) => facts,
+        Err(failure) => {
+            let message = format!(
+                "checking the VPN routing of {} failed ({:?}): {}",
+                settings.tunnel.name, failure.step, failure.error
+            );
+            log(LogLevel::Error, LogCategory::Routes, &message);
+            return NetworkOutcome::Failed {
+                step: failure.step,
+                error: failure.error,
+                added: Vec::new(),
+                left: Vec::new(),
+            };
+        }
+    };
+    let Some(problem) = routing_problem(settings, tunnel, outside, &owners, &chosen) else {
+        return NetworkOutcome::Checked { complete: true };
+    };
+    let message = format!(
+        "the VPN routing of {} is not complete: {}",
+        settings.tunnel.name, problem.error
+    );
+    log(LogLevel::Error, LogCategory::Routes, &message);
+    NetworkOutcome::Checked { complete: false }
+}
+
+fn routing(settings: &NetworkSettings, tunnel: Luid, outside: &[IpNetwork]) -> Result<(), Failure> {
+    let (owners, chosen) = routing_facts(settings, tunnel)?;
+    routing_problem(settings, tunnel, outside, &owners, &chosen).map_or(Ok(()), Err)
+}
+
+type Chosen = (Route, Route, IpAddr);
+
+fn routing_facts(
+    settings: &NetworkSettings,
+    tunnel: Luid,
+) -> Result<(Vec<Luid>, Vec<Chosen>), Failure> {
+    let address = settings.ipv4.address.address;
+    let owners = os_api::addresses(Family::Ipv4)
+        .map_err(|error| failure(NetworkStep::Addresses, error))?
+        .into_iter()
+        .filter(|found| found.address == address)
+        .map(|found| found.interface)
+        .collect();
+    let chosen = tunnel_routes(tunnel, settings)
+        .into_iter()
+        .map(|route| {
+            let (best, source) = os_api::best_route(first_address(&route))
+                .map_err(|error| failure(NetworkStep::Routes, error))?;
+            Ok((route, best, source))
+        })
+        .collect::<Result<_, Failure>>()?;
+    Ok((owners, chosen))
+}
+
+fn first_address(route: &Route) -> IpAddr {
+    let length = u32::from(route.prefix_length);
+    match route.destination {
+        IpAddr::V4(address) => {
+            let mask = u32::MAX.checked_shl(32 - length).unwrap_or(0);
+            Ipv4Addr::from(u32::from(address) & mask).into()
+        }
+        IpAddr::V6(address) => {
+            let mask = u128::MAX.checked_shl(128 - length).unwrap_or(0);
+            Ipv6Addr::from(u128::from(address) & mask).into()
+        }
+    }
+}
+
+fn routing_problem(
+    settings: &NetworkSettings,
+    tunnel: Luid,
+    outside: &[IpNetwork],
+    owners: &[Luid],
+    chosen: &[Chosen],
+) -> Option<Failure> {
+    let name = &settings.tunnel.name;
+    let address = settings.ipv4.address.address;
+    if owners != [tunnel] {
+        let holders = if owners.is_empty() {
+            "no interface".to_owned()
+        } else {
+            owners
+                .iter()
+                .map(|&luid| alias(luid))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        return Some(failure(
+            NetworkStep::Addresses,
+            format!("the tunnel address {address} is on {holders}, not only on {name}"),
+        ));
+    }
+    for (route, best, source) in chosen {
+        let own = match route.destination {
+            IpAddr::V4(_) => address,
+            IpAddr::V6(_) => {
+                let ipv6 = settings
+                    .ipv6
+                    .as_ref()
+                    .expect("IPv6 tunnel routes come with an IPv6 address");
+                ipv6.address.address
+            }
+        };
+        let kept = outside.contains(&IpNetwork {
+            address: best.destination,
+            prefix_length: best.prefix_length,
+        });
+        if (best.interface == tunnel && *source == own) || kept {
+            continue;
+        }
+        return Some(failure(
+            NetworkStep::Routes,
+            format!(
+                "the route for {}/{} goes through {} ({}/{}) from {source}, not {name} from {own}",
+                route.destination,
+                route.prefix_length,
+                alias(best.interface),
+                best.destination,
+                best.prefix_length
+            ),
+        ));
+    }
+    None
+}
+
+fn alias(luid: Luid) -> String {
+    os_api::interface(luid).map_or_else(
+        |error| format!("an unreadable interface ({error})"),
+        |interface| interface.alias,
+    )
 }
 
 fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
@@ -666,6 +835,7 @@ mod tests {
     fn loopback() -> Luid {
         os_api::best_route(Ipv4Addr::LOCALHOST.into())
             .unwrap()
+            .0
             .interface
     }
 
@@ -809,6 +979,7 @@ mod tests {
                 previous: None,
                 remove: Vec::new(),
                 add: vec![gateway_route.clone()],
+                outside: vec![gateway_route.destination],
             },
             &quiet(),
         );
@@ -833,6 +1004,7 @@ mod tests {
                 previous: Some(Box::new(first)),
                 remove: Vec::new(),
                 add: Vec::new(),
+                outside: vec![gateway_route.destination],
             },
             &quiet(),
         );
@@ -891,6 +1063,7 @@ mod tests {
                 previous: None,
                 remove: Vec::new(),
                 add: Vec::new(),
+                outside: Vec::new(),
             },
             &quiet(),
         );
@@ -912,7 +1085,7 @@ mod tests {
         assert_eq!(
             prepared,
             NetworkOutcome::Applied {
-                added: vec![gateway_route],
+                added: vec![gateway_route.clone()],
                 left: Vec::new(),
             }
         );
@@ -920,21 +1093,20 @@ mod tests {
         assert!(routes::has(&table, &gateway_row));
         assert!(routes::has(&table, &on_loopback(replaced_include)));
         assert!(!routes::has(&table, &on_loopback(include)));
-        let addresses = os_api::addresses(loopback(), Family::Ipv4).unwrap();
-        assert!(
-            addresses
-                .iter()
-                .any(|found| found.address == "198.51.100.98".parse::<IpAddr>().unwrap())
-        );
+        let addresses = os_api::addresses(Family::Ipv4).unwrap();
+        assert!(addresses.iter().any(|found| found.interface == loopback()
+            && found.address == "198.51.100.98".parse::<IpAddr>().unwrap()));
         assert_eq!(
             os_api::dns_servers(loopback(), Family::Ipv4),
             Ok(replaced.dns_servers.clone())
         );
 
+        os_api::delete_address(loopback(), "198.51.100.97".parse().unwrap()).unwrap();
         let switched = super::change(
             &NetworkChange::Switch {
                 settings: Box::new(next.clone()),
                 replaced: Box::new(replaced),
+                outside: vec![gateway_route.destination],
             },
             &quiet(),
         );
@@ -1016,6 +1188,7 @@ mod tests {
                 previous: None,
                 remove: Vec::new(),
                 add: vec![gateway_route],
+                outside: Vec::new(),
             },
             &quiet(),
         );
@@ -1028,11 +1201,181 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let addresses = os_api::addresses(loopback(), Family::Ipv4).unwrap();
+        let addresses = os_api::addresses(Family::Ipv4).unwrap();
+        assert!(!addresses.iter().any(|found| found.interface == loopback()
+            && found.address == "198.51.100.97".parse::<IpAddr>().unwrap()));
+    }
+
+    fn on_loopback_from(destination: IpNetwork, source: &str) -> Chosen {
+        let route = on_loopback(destination);
+        (route, route, source.parse().unwrap())
+    }
+
+    #[test]
+    fn the_tunnel_address_on_a_second_interface_fails_the_routing() {
+        let primary = Physical::read(&quiet()).ok().unwrap().luid;
+        let settings = settings(network("198.51.100.128", 25));
+        let chosen = [on_loopback_from(
+            network("198.51.100.128", 25),
+            "198.51.100.97",
+        )];
+        assert!(routing_problem(&settings, loopback(), &[], &[loopback()], &chosen).is_none());
+        let problem =
+            routing_problem(&settings, loopback(), &[], &[loopback(), primary], &chosen).unwrap();
+        assert_eq!(problem.step, NetworkStep::Addresses);
         assert!(
-            !addresses
-                .iter()
-                .any(|found| found.address == "198.51.100.97".parse::<IpAddr>().unwrap())
+            problem
+                .error
+                .starts_with("the tunnel address 198.51.100.97 is on "),
+            "{}",
+            problem.error
+        );
+        assert!(
+            problem.error.ends_with(", not only on loopback"),
+            "{}",
+            problem.error
+        );
+    }
+
+    #[test]
+    fn a_route_through_another_interface_or_from_another_address_fails_the_routing() {
+        let primary = Physical::read(&quiet()).ok().unwrap().luid;
+        let include = network("198.51.100.128", 25);
+        let settings = settings(include);
+        let tunnel_route = on_loopback(include);
+        let elsewhere = Route {
+            interface: primary,
+            ..tunnel_route
+        };
+        for (best, source) in [(elsewhere, "198.51.100.97"), (tunnel_route, "127.0.0.1")] {
+            let chosen = [(tunnel_route, best, source.parse().unwrap())];
+            let problem =
+                routing_problem(&settings, loopback(), &[], &[loopback()], &chosen).unwrap();
+            assert_eq!(problem.step, NetworkStep::Routes);
+            assert!(
+                problem
+                    .error
+                    .starts_with("the route for 198.51.100.128/25 goes through "),
+                "{}",
+                problem.error
+            );
+            assert!(
+                problem.error.ends_with(&format!(
+                    "(198.51.100.128/25) from {source}, not loopback from 198.51.100.97"
+                )),
+                "{}",
+                problem.error
+            );
+        }
+    }
+
+    #[test]
+    fn a_route_kept_outside_the_tunnel_passes_the_routing() {
+        let primary = Physical::read(&quiet()).ok().unwrap().luid;
+        let include = network("198.51.100.128", 25);
+        let excluded = network("198.51.100.128", 26);
+        let best = Route {
+            interface: primary,
+            ..on_loopback(excluded)
+        };
+        let chosen = [(on_loopback(include), best, "192.0.2.10".parse().unwrap())];
+        let settings = settings(include);
+        assert!(
+            routing_problem(&settings, loopback(), &[excluded], &[loopback()], &chosen).is_none()
+        );
+        assert!(routing_problem(&settings, loopback(), &[], &[loopback()], &chosen).is_some());
+    }
+
+    #[test]
+    fn the_first_address_of_a_route_clears_its_host_bits() {
+        let route = |destination, prefix_length| on_loopback(network(destination, prefix_length));
+        assert_eq!(
+            first_address(&route("198.51.100.200", 25)),
+            "198.51.100.128".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(
+            first_address(&route("0.0.0.0", 0)),
+            "0.0.0.0".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(
+            first_address(&route("2001:db8::5", 3)),
+            "2000::".parse::<IpAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn a_more_specific_route_through_another_interface_fails_the_check_unless_kept_outside() {
+        let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+        let _dns = put_back_loopback_dns();
+        let include = network("198.51.100.128", 25);
+        let excluded = network("198.51.100.128", 26);
+        let physical = Physical::read(&quiet()).ok().unwrap();
+        let through_primary = Route {
+            interface: physical.luid,
+            destination: excluded.address,
+            prefix_length: excluded.prefix_length,
+            next_hop: physical.ipv4_router,
+            metric: BYPASS_ROUTE_METRIC,
+        };
+        let _undo = Undo(move || {
+            let _ = os_api::delete_route(&through_primary);
+            let _ = os_api::delete_route(&on_loopback(include));
+            let _ = os_api::delete_address(loopback(), "198.51.100.97".parse().unwrap());
+        });
+        let settings = settings(include);
+        let apply = |outside: Vec<IpNetwork>| {
+            super::change(
+                &NetworkChange::Apply {
+                    settings: Box::new(settings.clone()),
+                    previous: None,
+                    remove: Vec::new(),
+                    add: Vec::new(),
+                    outside,
+                },
+                &quiet(),
+            )
+        };
+        let check = |outside: Vec<IpNetwork>| {
+            super::change(
+                &NetworkChange::Check {
+                    settings: Box::new(settings.clone()),
+                    outside,
+                },
+                &quiet(),
+            )
+        };
+        assert!(
+            matches!(apply(Vec::new()), NetworkOutcome::Applied { .. }),
+            "the tunnel's own route"
+        );
+        assert_eq!(
+            check(Vec::new()),
+            NetworkOutcome::Checked { complete: true }
+        );
+
+        os_api::add_route(&through_primary).unwrap();
+        assert_eq!(
+            check(Vec::new()),
+            NetworkOutcome::Checked { complete: false }
+        );
+        assert_eq!(
+            check(vec![excluded]),
+            NetworkOutcome::Checked { complete: true }
+        );
+        match apply(Vec::new()) {
+            NetworkOutcome::Failed { step, error, .. } => {
+                assert_eq!(step, NetworkStep::Routes);
+                assert!(
+                    error.starts_with("the route for 198.51.100.128/25 goes through "),
+                    "{error}"
+                );
+                assert!(error.contains("(198.51.100.128/26)"), "{error}");
+            }
+            other => panic!("not failed: {other:?}"),
+        }
+        assert!(
+            matches!(apply(vec![excluded]), NetworkOutcome::Applied { .. }),
+            "kept outside"
         );
     }
 

@@ -212,6 +212,12 @@ fn messages_to_the_entry() {
                 },
             },
             ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Checked { complete: true },
+            },
+            ToEntry::NetworkChanged {
+                outcome: NetworkOutcome::Checked { complete: false },
+            },
+            ToEntry::NetworkChanged {
                 outcome: NetworkOutcome::Failed {
                     step: NetworkStep::Dns,
                     error: "the DNS settings could not be written".into(),
@@ -320,6 +326,11 @@ fn messages_from_the_entry() {
                 previous: None,
                 remove: Vec::new(),
                 add: vec![gateway_route(), excluded_route()],
+                outside: vec![
+                    ip_network("203.0.113.10", 32),
+                    ip_network("10.30.161.0", 24),
+                    ip_network("10.30.170.0", 24),
+                ],
             },
         },
         FromEntry::ChangeNetwork {
@@ -328,6 +339,7 @@ fn messages_from_the_entry() {
                 previous: Some(Box::new(split_tunnel())),
                 remove: vec![excluded_route()],
                 add: Vec::new(),
+                outside: vec![ip_network("2001:db8::10", 128)],
             },
         },
         FromEntry::ChangeNetwork {
@@ -340,6 +352,7 @@ fn messages_from_the_entry() {
             change: NetworkChange::Switch {
                 settings: Box::new(full_tunnel()),
                 replaced: Box::new(split_tunnel()),
+                outside: vec![ip_network("2001:db8::10", 128)],
             },
         },
         FromEntry::ChangeNetwork {
@@ -348,6 +361,15 @@ fn messages_from_the_entry() {
                     dns_service_id: DNS_SERVICE.into(),
                     routes: vec![gateway_route(), excluded_route()],
                 },
+            },
+        },
+        FromEntry::ChangeNetwork {
+            change: NetworkChange::Check {
+                settings: Box::new(split_tunnel()),
+                outside: vec![
+                    ip_network("203.0.113.10", 32),
+                    ip_network("10.30.161.0", 24),
+                ],
             },
         },
         FromEntry::ExitAfterDraining {},

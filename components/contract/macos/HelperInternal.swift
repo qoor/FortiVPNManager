@@ -99,10 +99,14 @@ nonisolated enum HelperInternal {
 
     enum NetworkChange: Decodable, Sendable {
         case lookUp(tunnel: TunnelDevice, outside: [IPNetwork])
-        case apply(settings: NetworkSettings, previous: NetworkSettings?, remove: [OutsideRoute], add: [OutsideRoute])
+        case apply(
+            settings: NetworkSettings, previous: NetworkSettings?, remove: [OutsideRoute], add: [OutsideRoute],
+            outside: [IPNetwork]
+        )
         case prepare(settings: NetworkSettings, add: [OutsideRoute])
-        case `switch`(settings: NetworkSettings, replaced: NetworkSettings)
+        case `switch`(settings: NetworkSettings, replaced: NetworkSettings, outside: [IPNetwork])
         case revert(changes: OutsideChanges)
+        case check(settings: NetworkSettings, outside: [IPNetwork])
     }
 
     struct NetworkSettings: Decodable, Sendable {
@@ -153,6 +157,7 @@ nonisolated enum HelperInternal {
         case lookedUp(dnsServiceID: String, missing: [OutsideRoute])
         case applied(added: [OutsideRoute], left: [OutsideRoute])
         case reverted(left: [OutsideRoute])
+        case checked(complete: Bool)
         case failed(step: NetworkStep, error: String, added: [OutsideRoute], left: [OutsideRoute])
     }
 

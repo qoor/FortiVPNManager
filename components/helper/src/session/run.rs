@@ -21,7 +21,7 @@ use fvm_contract::app_helper::{
     ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
     ProcessExitStatus, RunRequest, StopInitiator, StopReason,
 };
-use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkOutcome};
+use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkChange, NetworkOutcome};
 use fvm_contract::validation;
 use zeroize::Zeroizing;
 
@@ -216,6 +216,19 @@ impl Run {
         answer.recv().unwrap_or(Err(NotReplaceable::NotUp))
     }
 
+    pub fn routing_check(&self) -> Option<NetworkChange> {
+        assert_ne!(
+            thread::current().id(),
+            self.run_thread,
+            "routing_check from on_report would wait for its own thread"
+        );
+        let (reply, answer) = mpsc::sync_channel(1);
+        if self.inputs.send(Input::RoutingCheck(reply)).is_err() {
+            return None;
+        }
+        answer.recv().ok().flatten()
+    }
+
     pub fn replaced_run_exited(&self) {
         let _ = self.inputs.send(Input::ReplacedExited);
     }
@@ -285,6 +298,7 @@ pub(crate) enum Input {
     Stop(StopReason),
     NetworkChanged(NetworkOutcome),
     Replaceable(SyncSender<Result<Replaced, NotReplaceable>>),
+    RoutingCheck(SyncSender<Option<NetworkChange>>),
     ReplacedExited,
     FirstSlotFreed,
     HandOverAsked(Sender<Input>),
@@ -382,6 +396,9 @@ impl<R: FnMut(Report)> Watch<R> {
             Input::NetworkChanged(outcome) => self.network_changed(outcome),
             Input::Replaceable(reply) => {
                 let _ = reply.send(self.replaceable());
+            }
+            Input::RoutingCheck(reply) => {
+                let _ = reply.send(self.routing_check());
             }
             Input::ReplacedExited => self.replaced_exited(),
             Input::FirstSlotFreed => self.take_first_slot(),

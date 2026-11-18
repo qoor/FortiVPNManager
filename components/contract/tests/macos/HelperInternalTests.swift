@@ -77,6 +77,8 @@ struct HelperInternalTests {
             .networkChanged(outcome: .lookedUp(dnsServiceID: dnsService, missing: [gatewayRoute, excludedRoute])),
             .networkChanged(outcome: .applied(added: [gatewayRoute, excludedRoute], left: [])),
             .networkChanged(outcome: .reverted(left: [excludedRoute])),
+            .networkChanged(outcome: .checked(complete: true)),
+            .networkChanged(outcome: .checked(complete: false)),
             .networkChanged(outcome: .failed(
                 step: .dns, error: "the DNS settings could not be written", added: [gatewayRoute], left: []
             )),
@@ -115,12 +117,21 @@ struct HelperInternalTests {
             .changeBypassRoutes(change: .init(network: .skip, remove: [stale], add: [], lookUp: [])),
             .changeNetwork(change: .lookUp(tunnel: utun, outside: [ipNetwork("203.0.113.10", 32), ipNetwork("10.30.161.0", 24)])),
             .changeNetwork(change: .apply(
-                settings: splitTunnel, previous: nil, remove: [], add: [gatewayRoute, excludedRoute]
+                settings: splitTunnel, previous: nil, remove: [], add: [gatewayRoute, excludedRoute],
+                outside: [ipNetwork("203.0.113.10", 32), ipNetwork("10.30.161.0", 24), ipNetwork("10.30.170.0", 24)]
             )),
-            .changeNetwork(change: .apply(settings: fullTunnel, previous: splitTunnel, remove: [excludedRoute], add: [])),
+            .changeNetwork(change: .apply(
+                settings: fullTunnel, previous: splitTunnel, remove: [excludedRoute], add: [],
+                outside: [ipNetwork("2001:db8::10", 128)]
+            )),
             .changeNetwork(change: .prepare(settings: fullTunnel, add: [gatewayRoute])),
-            .changeNetwork(change: .switch(settings: fullTunnel, replaced: splitTunnel)),
+            .changeNetwork(change: .switch(
+                settings: fullTunnel, replaced: splitTunnel, outside: [ipNetwork("2001:db8::10", 128)]
+            )),
             .changeNetwork(change: .revert(changes: .init(dnsServiceID: dnsService, routes: [gatewayRoute, excludedRoute]))),
+            .changeNetwork(change: .check(
+                settings: splitTunnel, outside: [ipNetwork("203.0.113.10", 32), ipNetwork("10.30.161.0", 24)]
+            )),
             .exitAfterDraining,
             .exitNow,
             .log(level: .info, category: .routes, message: "gateway has no IPv4 address; its host route will not be repaired"),

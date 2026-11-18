@@ -28,6 +28,7 @@ fn apply_parts(
             previous,
             remove,
             add,
+            ..
         } => (settings, previous.as_deref(), remove, add),
         other => panic!("not an apply: {other:?}"),
     }
@@ -122,6 +123,67 @@ fn the_settings_are_recorded_and_applied_before_the_tunnel_is_up_and_reverted_at
     assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
     assert_eq!(session.count_text("‹network settings reverted›"), 1);
     assert!(session.directory.names().is_empty());
+}
+
+#[test]
+fn the_apply_names_the_destinations_kept_outside_the_tunnel() {
+    let mut session = Session::start(
+        up_without_otp(settings("utun9", "10.10.0.5")),
+        Setup::default(),
+    );
+    session
+        .next_job()
+        .finish(looked_up(vec![gateway_route("192.0.2.1")]));
+    let apply = session.next_job();
+    let NetworkChange::Apply { outside, .. } = &apply.change else {
+        panic!("not an apply: {:?}", apply.change)
+    };
+    assert_eq!(
+        outside,
+        &[network(GATEWAY, 32), network("10.20.161.16", 32)]
+    );
+    apply.finish(applied(vec![gateway_route("192.0.2.1")]));
+    session.wait_for(Milestone::TunnelUp);
+    session.run.stop(StopReason::UserDisconnect);
+    revert(&mut session, vec![gateway_route("192.0.2.1")]);
+    session.wait_for_exit();
+}
+
+#[test]
+fn only_an_up_run_whose_settings_are_in_place_offers_a_routing_check() {
+    let (reconnect, reconnects) = mpsc::channel();
+    let mut session = Session::start(
+        reconnecting(settings("utun9", "10.10.0.5"), reconnects),
+        Setup::default(),
+    );
+    let look_up = session.next_job();
+    assert_eq!(session.run.routing_check(), None);
+    look_up.finish(looked_up(vec![gateway_route("192.0.2.1")]));
+    let apply = session.next_job();
+    let applied_settings = apply_parts(&apply).0.clone();
+    apply.finish(applied(vec![gateway_route("192.0.2.1")]));
+    session.wait_for(Milestone::TunnelUp);
+    let check = NetworkChange::Check {
+        settings: Box::new(applied_settings),
+        outside: vec![network(GATEWAY, 32), network("10.20.161.16", 32)],
+    };
+    assert_eq!(session.run.routing_check(), Some(check.clone()));
+
+    reconnect.send(()).unwrap();
+    let look_up = session.next_job();
+    assert_eq!(session.run.routing_check(), None);
+    look_up.finish(looked_up(Vec::new()));
+    session.next_job().finish(applied(Vec::new()));
+    assert!(session.wait(std::time::Duration::from_secs(5), |session| {
+        session.count_text("‹network settings applied›") == 2
+    }));
+    assert_eq!(session.run.routing_check(), Some(check));
+
+    session.run.stop(StopReason::UserDisconnect);
+    assert_eq!(session.run.routing_check(), None);
+    drop(reconnect);
+    revert(&mut session, vec![gateway_route("192.0.2.1")]);
+    session.wait_for_exit();
 }
 
 #[test]

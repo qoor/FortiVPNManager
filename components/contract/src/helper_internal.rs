@@ -282,6 +282,7 @@ pub enum NetworkChange {
         previous: Option<Box<NetworkSettings>>,
         remove: Vec<OutsideRoute>,
         add: Vec<OutsideRoute>,
+        outside: Vec<IpNetwork>,
     },
     Prepare {
         settings: Box<NetworkSettings>,
@@ -290,9 +291,14 @@ pub enum NetworkChange {
     Switch {
         settings: Box<NetworkSettings>,
         replaced: Box<NetworkSettings>,
+        outside: Vec<IpNetwork>,
     },
     Revert {
         changes: OutsideChanges,
+    },
+    Check {
+        settings: Box<NetworkSettings>,
+        outside: Vec<IpNetwork>,
     },
 }
 
@@ -327,6 +333,9 @@ pub enum NetworkOutcome {
     },
     Reverted {
         left: Vec<OutsideRoute>,
+    },
+    Checked {
+        complete: bool,
     },
     Failed {
         step: NetworkStep,

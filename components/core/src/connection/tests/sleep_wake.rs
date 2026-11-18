@@ -5,7 +5,7 @@ use std::time::Duration;
 use fvm_contract::app_helper::{Milestone, StopReason};
 
 use super::super::machine::{AfterStop, AttemptReason, RetryReason};
-use super::super::{Effect, Input, Settings, TimerKind};
+use super::super::{Effect, Input, NetworkProbe, Settings, TimerKind};
 use super::harness::*;
 
 fn reason(h: &Harness) -> Option<AttemptReason> {
@@ -74,6 +74,24 @@ fn wake_cases() -> Vec<WakeCase> {
             600.0,
             observe().tunnel(false),
             Some(TunnelLost),
+        ),
+        case(
+            "2. routing not complete",
+            600.0,
+            observe().routing(Some(false)),
+            Some(TunnelLost),
+        ),
+        case(
+            "2 beats 3: routing not complete and underlay changed",
+            600.0,
+            observe().routing(Some(false)).via(Some(ethernet())),
+            Some(TunnelLost),
+        ),
+        case(
+            "5. routing not checked keeps",
+            600.0,
+            observe().routing(None),
+            None,
         ),
         case(
             "2 beats 3: process gone and underlay changed",
@@ -425,6 +443,93 @@ fn an_underlay_change_reconnects() {
             .up(500.0),
     );
     assert_eq!(reason(&h), Some(AttemptReason::NetworkChanged));
+}
+
+#[test]
+fn incomplete_routing_on_the_same_underlay_reconnects_as_a_lost_tunnel() {
+    let mut h = Harness::new();
+    h.launch_connected();
+    let id = h.connected().unwrap().attempt.clone();
+    let effects = connection_effects(&h.set_path_with_routing(online(), Some(false)));
+    assert_eq!(
+        effects,
+        [
+            Effect::StopRun {
+                attempt: id,
+                reason: StopReason::Reconnect
+            },
+            Effect::CancelTimer(TimerKind::ProactiveReconnect),
+        ]
+    );
+    assert_eq!(
+        after(&h),
+        Some(AfterStop::Reconnect(AttemptReason::TunnelLost))
+    );
+    h.exit(
+        ended(Milestone::TunnelUp)
+            .by_helper(StopReason::Reconnect)
+            .up(500.0),
+    );
+    assert_eq!(reason(&h), Some(AttemptReason::TunnelLost));
+}
+
+#[test]
+fn an_underlay_change_with_incomplete_routing_reconnects_for_the_network() {
+    let mut h = Harness::new();
+    h.launch_connected();
+    assert_eq!(
+        stop_reasons(&h.set_path_with_routing(online_via(ethernet()), Some(false))),
+        [StopReason::Reconnect]
+    );
+    assert_eq!(
+        after(&h),
+        Some(AfterStop::Reconnect(AttemptReason::NetworkChanged))
+    );
+}
+
+#[test]
+fn complete_or_unchecked_routing_keeps_the_tunnel() {
+    for routing in [Some(true), None] {
+        let mut h = Harness::new();
+        h.launch_connected();
+        assert_eq!(
+            connection_effects(&h.set_path_with_routing(online(), routing)),
+            []
+        );
+        assert!(h.connected().is_some());
+    }
+}
+
+#[test]
+fn a_path_probe_asks_the_helper_only_while_connected() {
+    let asks_helper = |effects: &[Effect]| {
+        effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Effect::ProbeNetwork(NetworkProbe {
+                    client_running: true,
+                    ..
+                })
+            )
+        })
+    };
+    let mut h = Harness::new();
+    h.launch_connected();
+    h.send(Input::NetworkPathChanged {
+        satisfied: true,
+        interfaces: path_interfaces(),
+    });
+    assert!(asks_helper(&h.fire(TimerKind::PathSettle)));
+    let mut connecting = Harness::new();
+    connecting.launch();
+    connecting.start_tunnel();
+    connecting.send(Input::NetworkPathChanged {
+        satisfied: true,
+        interfaces: path_interfaces(),
+    });
+    let effects = connecting.fire(TimerKind::PathSettle);
+    probe_id(&effects);
+    assert!(!asks_helper(&effects));
 }
 
 #[test]

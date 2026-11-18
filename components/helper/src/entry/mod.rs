@@ -344,8 +344,11 @@ impl Entry {
             AppRequest::SubmitOtp { attempt, code } => self.submit_otp(app, &attempt, code),
             AppRequest::Disconnect { attempt, reason } => self.disconnect(app, &attempt, &reason),
             AppRequest::Status {} => {
-                let json = Some(to_json(&self.status()));
-                self.os.send(&FromEntry::Reply { id, json });
+                if self.runs.is_empty() {
+                    self.reply_status(id, None);
+                } else {
+                    self.queue_bypass_job(Job::Status { id });
+                }
                 return;
             }
             AppRequest::ExitWhenIdle {} => {
@@ -547,13 +550,16 @@ impl Entry {
         Ok(held)
     }
 
-    fn status(&self) -> HelperStatus {
-        HelperStatus {
+    fn reply_status(&self, id: u64, routing_complete: Option<bool>) {
+        let status = HelperStatus {
             client_running: self.runs.values().any(|held| held.run.session_running()),
             client: ClientStatus {
                 version: Some(self.sessions.version().to_owned()),
             },
-        }
+            routing_complete,
+        };
+        let json = Some(to_json(&status));
+        self.os.send(&FromEntry::Reply { id, json });
     }
 
     fn exit_when_idle(&mut self) -> bool {

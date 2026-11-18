@@ -410,7 +410,8 @@ pub struct NetworkProbe {
     /// The gateway to find the route to: the interface the routing table uses for it and the
     /// interface addresses. `None` when no server address is set.
     pub gateway: Option<GatewayLookup>,
-    /// Also ask the Helper whether the VPN client is running.
+    /// Also ask the Helper whether the VPN client is running and the connected session's routing
+    /// is complete.
     pub client_running: bool,
 }
 
@@ -431,6 +432,7 @@ pub struct ProbeResult {
     pub addresses: Vec<InterfaceAddress>,
     /// When asked: whether the VPN client runs, `false` when the Helper did not answer.
     pub client_running: Option<bool>,
+    pub routing_complete: Option<bool>,
 }
 
 /// Decisions the Log pane shows: the schedule's, so that a quiet evening can be told from a
