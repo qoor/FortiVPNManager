@@ -53,8 +53,8 @@ public sealed class LogLines
         string.Join("\n", entries.Select((entry, index) => FileLine(entry.Line, zone, afterAnother: index > 0)));
 
     /// <summary>
-    /// <c>&lt;ISO 8601 local time with milliseconds&gt; [out|err|▸] &lt;text&gt;</c>, the line format of the
-    /// log file, such as <c>2026-10-15T14:03:22.123+09:00 [out] Connected to gateway.</c> Universal
+    /// <c>&lt;ISO 8601 local time with milliseconds&gt; [info|err|▸] &lt;text&gt;</c>, the line format of the
+    /// log file, such as <c>2026-10-15T14:03:22.123+09:00 [info] Connected to gateway.</c> Universal
     /// time ends with Z, as the file writes it.
     /// </summary>
     public static string FileLine(LogLine line, TimeZoneInfo zone, bool afterAnother)
@@ -74,8 +74,8 @@ public sealed class LogLines
 
     public static string Tag(LogSource source) => source switch
     {
-        LogSource.Stdout => "out",
-        LogSource.Stderr => "err",
+        LogSource.Info => "info",
+        LogSource.Error => "err",
         LogSource.Note => "▸",
         _ => throw new InvalidOperationException($"unknown log source {source}"),
     };

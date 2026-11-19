@@ -182,9 +182,7 @@ internal sealed class LogPane : IPane, IDisposable
     }
 
     /// <summary>
-    /// <c>HH:mm:ss [err|▸] text</c> after the log file's gap before an attempt's first line. stderr carries
-    /// openconnect's ordinary progress too, so it only gets a small "err" marker. openconnect has no
-    /// ERROR:/WARN: prefixes, which macOS colours for openfortivpn.
+    /// <c>HH:mm:ss [err|▸] text</c> after the log file's gap before an attempt's first line.
     /// </summary>
     private void Append(IEnumerable<LogEntry> entries)
     {
@@ -210,10 +208,11 @@ internal sealed class LogPane : IPane, IDisposable
                         Run("▸ ", colors.Secondary);
                         text = colors.Secondary;
                         break;
-                    case LogSource.Stderr:
+                    case LogSource.Error:
                         Run("err ", colors.Tertiary, size: 10);
+                        text = colors.Critical;
                         break;
-                    case LogSource.Stdout:
+                    case LogSource.Info:
                         break;
                     default:
                         throw new InvalidOperationException($"unknown log source {line.Source}");
@@ -346,10 +345,10 @@ internal sealed class LogPane : IPane, IDisposable
     /// The log's colours for the theme the lines are added in. The view's text takes no transparency,
     /// so the secondary and tertiary text colours of Fluent are given as the opaque greys they look like.
     /// </summary>
-    private sealed record Palette(Color Primary, Color Secondary, Color Tertiary)
+    private sealed record Palette(Color Primary, Color Secondary, Color Tertiary, Color Critical)
     {
-        private static readonly Palette Light = new(Hex(0x1B1B1B), Hex(0x5E5E5E), Hex(0x8A8A8A));
-        private static readonly Palette Dark = new(Hex(0xFFFFFF), Hex(0xC5C5C5), Hex(0x8A8A8A));
+        private static readonly Palette Light = new(Hex(0x1B1B1B), Hex(0x5E5E5E), Hex(0x8A8A8A), Hex(0xC42B1C));
+        private static readonly Palette Dark = new(Hex(0xFFFFFF), Hex(0xC5C5C5), Hex(0x8A8A8A), Hex(0xFF99A4));
 
         public static Palette For(ElementTheme theme) => theme == ElementTheme.Dark ? Dark : Light;
 

@@ -213,8 +213,7 @@ struct LogTextView: NSViewRepresentable {
             return scrollView.contentView.bounds.maxY >= documentView.frame.height - 8
         }
 
-        /// `HH:mm:ss [err|▸] text`. Colour follows the openfortivpn prefix, not the stream:
-        /// stderr is mostly ordinary pppd chatter, so it only gets a small "err" marker.
+        /// `HH:mm:ss [err|▸] text`.
         private static func render(_ line: AppInternal.LogLine) -> NSAttributedString {
             let result = NSMutableAttributedString(
                 string: timeFormatter.string(from: line.time) + " ",
@@ -225,21 +224,14 @@ struct LogTextView: NSViewRepresentable {
             case .note:
                 result.append(NSAttributedString(string: "▸ ", attributes: [.font: font, .foregroundColor: NSColor.secondaryLabelColor]))
                 textColor = .secondaryLabelColor
-            case .stderr:
+            case .error:
                 result.append(NSAttributedString(string: "err ", attributes: [.font: markerFont, .foregroundColor: NSColor.tertiaryLabelColor]))
-                textColor = color(forPrefixOf: line.text)
-            case .stdout:
-                textColor = color(forPrefixOf: line.text)
+                textColor = .systemRed
+            case .info:
+                textColor = .labelColor
             }
             result.append(NSAttributedString(string: line.text + "\n", attributes: [.font: font, .foregroundColor: textColor]))
             return result
-        }
-
-        private static func color(forPrefixOf text: String) -> NSColor {
-            let message = text.prefixMatch(of: #/[0-9]{10} /#).map { text[$0.range.upperBound...] } ?? text[...]
-            if message.hasPrefix("ERROR:") { return .systemRed }
-            if message.hasPrefix("WARN:") { return .systemOrange }
-            return .labelColor
         }
     }
 }

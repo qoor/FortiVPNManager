@@ -258,8 +258,8 @@ private extension AppInternal {
             .section(.bypassRules(bypassSection(.checking, notice: nil))),
             .section(.config(configSection(accountForm(0)))),
             .logLines(lines: [
-                LogLine(time: at(t0), source: .stdout, text: "INFO:   Connected to gateway.", startsAttempt: false),
-                LogLine(time: at(t0 + 750), source: .stderr, text: "Using interface ppp0", startsAttempt: false),
+                LogLine(time: at(t0), source: .info, text: "INFO:   Connected to gateway.", startsAttempt: false),
+                LogLine(time: at(t0 + 750), source: .error, text: "Using interface ppp0", startsAttempt: false),
                 LogLine(
                     time: at(t0 + 1_000), source: .note, text: "‹schedule: scheduled hours started, connecting›",
                     startsAttempt: true
@@ -809,7 +809,7 @@ private extension AppInternal {
             .event(.quitRequested),
             .event(.helperEvent(json: #"{"attemptID":"\#(attempt)","kind":{"milestone":{"_0":0}}}"#)),
             .event(.helperOutput(
-                json: #"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#
+                json: #"[{"date":1762412345.25,"source":"info","text":"INFO:   Connected to gateway."}]"#
             )),
             .event(.helperConnectionLost),
         ]

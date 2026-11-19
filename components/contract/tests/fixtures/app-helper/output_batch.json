@@ -1,1 +1,1 @@
-{"attemptID":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","lines":[{"source":"stdout","text":"INFO:   Connected to gateway.","date":1762412345.25},{"source":"helper","text":"‹exited: code 0›","date":1762412346.125}]}
+{"attemptID":"E621E1F8-C36C-495A-93FC-0C247A3E6E5F","lines":[{"source":"info","text":"INFO:   Connected to gateway.","date":1762412345.25},{"source":"helper","text":"‹exited: code 0›","date":1762412346.125}]}

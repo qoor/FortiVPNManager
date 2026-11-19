@@ -70,7 +70,7 @@ struct LogLinesTests {
     }
 
     private func line(_ text: String) -> AppInternal.LogLine {
-        AppInternal.LogLine(time: Date(timeIntervalSince1970: 1_762_412_345), source: .stdout, text: text, startsAttempt: false)
+        AppInternal.LogLine(time: Date(timeIntervalSince1970: 1_762_412_345), source: .info, text: text, startsAttempt: false)
     }
 }
 

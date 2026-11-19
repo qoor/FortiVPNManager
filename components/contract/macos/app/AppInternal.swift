@@ -61,8 +61,8 @@ nonisolated enum AppInternal {
     }
 
     enum LogSource: String, Decodable, Sendable {
-        case stdout
-        case stderr
+        case info
+        case error
         /// An explanation line from the app or the Helper.
         case note
     }

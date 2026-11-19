@@ -285,8 +285,9 @@ fn messages_from_the_entry() {
         },
         FromEntry::SendOutput {
             app: 1,
-            json: r#"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#
-                .into(),
+            json:
+                r#"[{"date":1762412345.25,"source":"info","text":"INFO:   Connected to gateway."}]"#
+                    .into(),
         },
         FromEntry::ChangeBypassRoutes {
             change: BypassRoutesChange {
@@ -317,7 +318,10 @@ fn messages_from_the_entry() {
         FromEntry::ChangeNetwork {
             change: NetworkChange::LookUp {
                 tunnel: utun(),
-                outside: vec![ip_network("203.0.113.10", 32), ip_network("10.30.161.0", 24)],
+                outside: vec![
+                    ip_network("203.0.113.10", 32),
+                    ip_network("10.30.161.0", 24),
+                ],
             },
         },
         FromEntry::ChangeNetwork {

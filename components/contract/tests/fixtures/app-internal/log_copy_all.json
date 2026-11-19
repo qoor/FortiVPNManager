@@ -10,19 +10,19 @@
           "time": 1751371200000
         },
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "INFO:   Tunnel is up and running.",
           "time": 1751371200001
         },
         {
-          "source": "stderr",
+          "source": "error",
           "startsAttempt": false,
           "text": "Using interface ppp0",
           "time": 1762412345000
         },
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "INFO:   Connected to gateway.",
           "time": 1762412345250
@@ -40,25 +40,25 @@
           "time": 1762412346500
         },
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "Two-factor authentication token: ",
           "time": 1762412346999
         },
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "ERROR:  Could not authenticate to gateway. Please check the password, client certificate, etc.",
           "time": 1762412347010
         },
         {
-          "source": "stderr",
+          "source": "error",
           "startsAttempt": false,
           "text": "",
           "time": 1762412347100
         },
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "WARN:   Bad port in config file: \"\\t443\"",
           "time": 1762412347456
@@ -68,14 +68,14 @@
   },
   "copyAll": [
     "2025-07-01T08:00:00.000-04:00 [▸] ‹VPN client: openfortivpn 1.24.1›",
-    "2025-07-01T08:00:00.001-04:00 [out] INFO:   Tunnel is up and running.",
+    "2025-07-01T08:00:00.001-04:00 [info] INFO:   Tunnel is up and running.",
     "2025-11-06T01:59:05.000-05:00 [err] Using interface ppp0",
-    "2025-11-06T01:59:05.250-05:00 [out] INFO:   Connected to gateway.",
+    "2025-11-06T01:59:05.250-05:00 [info] INFO:   Connected to gateway.",
     "\n\n2025-11-06T01:59:06.007-05:00 [▸] ‹schedule: scheduled hours started, connecting›",
     "2025-11-06T01:59:06.500-05:00 [▸] ‹VPN client: openfortivpn 1.24.1›",
-    "2025-11-06T01:59:06.999-05:00 [out] Two-factor authentication token: ",
-    "2025-11-06T01:59:07.010-05:00 [out] ERROR:  Could not authenticate to gateway. Please check the password, client certificate, etc.",
+    "2025-11-06T01:59:06.999-05:00 [info] Two-factor authentication token: ",
+    "2025-11-06T01:59:07.010-05:00 [info] ERROR:  Could not authenticate to gateway. Please check the password, client certificate, etc.",
     "2025-11-06T01:59:07.100-05:00 [err] ",
-    "2025-11-06T01:59:07.456-05:00 [out] WARN:   Bad port in config file: \"\\t443\""
+    "2025-11-06T01:59:07.456-05:00 [info] WARN:   Bad port in config file: \"\\t443\""
   ]
 }

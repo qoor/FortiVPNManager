@@ -108,7 +108,7 @@ struct HelperInternalTests {
             .sendEvent(app: 1, json: #"{"attemptID":"\#(attempt)","kind":{"milestone":{"_0":0}}}"#),
             .sendOutput(
                 app: 1,
-                json: #"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#
+                json: #"[{"date":1762412345.25,"source":"info","text":"INFO:   Connected to gateway."}]"#
             ),
             .changeBypassRoutes(change: .init(
                 network: .expect(network: ethernet), remove: [stale], add: [host, lan], lookUp: [host, lan]

@@ -179,13 +179,13 @@
     "logLines": {
       "lines": [
         {
-          "source": "stdout",
+          "source": "info",
           "startsAttempt": false,
           "text": "INFO:   Connected to gateway.",
           "time": 1762412345250
         },
         {
-          "source": "stderr",
+          "source": "error",
           "startsAttempt": false,
           "text": "Using interface ppp0",
           "time": 1762412346000

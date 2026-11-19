@@ -125,10 +125,10 @@ pub struct LogLine {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LogSource {
-    /// The VPN client's standard output.
-    Stdout,
-    /// The VPN client's standard error, mostly ordinary messages of its helper processes.
-    Stderr,
+    /// The VPN backend's output that openconnect does not report as an error.
+    Info,
+    /// The VPN backend's output that openconnect reports as an error.
+    Error,
     /// An explanation line from the app or the Helper.
     Note,
 }

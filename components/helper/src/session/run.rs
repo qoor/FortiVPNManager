@@ -454,8 +454,8 @@ impl<R: FnMut(Report)> Watch<R> {
             SessionEvent::Authenticated => self.advance(Milestone::Authenticated),
             SessionEvent::Line(level, text) => {
                 let source = match level {
-                    LineLevel::Error => OutputSource::Stderr,
-                    LineLevel::Info => OutputSource::Stdout,
+                    LineLevel::Error => OutputSource::Error,
+                    LineLevel::Info => OutputSource::Info,
                 };
                 self.output(source, text);
             }

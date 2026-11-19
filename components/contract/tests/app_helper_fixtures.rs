@@ -236,8 +236,8 @@ fn helper_events() {
 #[test]
 fn output_sources() {
     let sources = [
-        OutputSource::Stdout,
-        OutputSource::Stderr,
+        OutputSource::Info,
+        OutputSource::Error,
         OutputSource::Helper,
     ];
     both_ways(
@@ -256,12 +256,12 @@ fn output_lines() {
     let lines = [
         line(
             at(1_762_412_345.25),
-            OutputSource::Stdout,
+            OutputSource::Info,
             "INFO:   Connected to gateway.",
         ),
         line(
             at(1_762_412_346.0),
-            OutputSource::Stderr,
+            OutputSource::Error,
             "Using interface ppp0",
         ),
         line(
@@ -271,7 +271,7 @@ fn output_lines() {
         ),
         line(
             at(1_762_412_347.5),
-            OutputSource::Stdout,
+            OutputSource::Info,
             "VPN account password: \\x1b[0m",
         ),
     ];
@@ -285,7 +285,7 @@ fn output_batch() {
         lines: vec![
             OutputLine {
                 date: at(1_762_412_345.25),
-                source: OutputSource::Stdout,
+                source: OutputSource::Info,
                 text: "INFO:   Connected to gateway.".into(),
             },
             OutputLine {

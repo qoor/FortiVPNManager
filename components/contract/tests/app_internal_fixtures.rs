@@ -146,13 +146,13 @@ fn messages_from_the_runtime() {
                 lines: vec![
                     LogLine {
                         time: at(T0),
-                        source: LogSource::Stdout,
+                        source: LogSource::Info,
                         text: "INFO:   Connected to gateway.".into(),
                         starts_attempt: false,
                     },
                     LogLine {
                         time: at(T0 + 750),
-                        source: LogSource::Stderr,
+                        source: LogSource::Error,
                         text: "Using interface ppp0".into(),
                         starts_attempt: false,
                     },
@@ -1784,7 +1784,7 @@ fn system_events() {
                 json: format!(r#"{{"attemptID":"{ATTEMPT}","kind":{{"milestone":{{"_0":0}}}}}}"#),
             }),
             event(SystemEvent::HelperOutput {
-                json: r#"[{"date":1762412345.25,"source":"stdout","text":"INFO:   Connected to gateway."}]"#.into(),
+                json: r#"[{"date":1762412345.25,"source":"info","text":"INFO:   Connected to gateway."}]"#.into(),
             }),
             event(SystemEvent::HelperConnectionLost {}),
         ],

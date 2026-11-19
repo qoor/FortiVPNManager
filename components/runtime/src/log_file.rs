@@ -15,7 +15,7 @@ const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 /// The current file and the rotated `.1` to `.4`.
 const KEPT_FILES: u32 = 5;
 
-/// `2026-11-09T09:00:38.543+09:00 [out] text`, in the local time zone with milliseconds. The first
+/// `2026-11-09T09:00:38.543+09:00 [info] text`, in the local time zone with milliseconds. The first
 /// line of an attempt comes after two empty lines, unless no line comes before it.
 pub(crate) fn line(line: &LogLine, time_zone: &TimeZone, after_another: bool) -> String {
     let since_1970 = line.time.duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -25,8 +25,8 @@ pub(crate) fn line(line: &LogLine, time_zone: &TimeZone, after_another: bool) ->
     .expect("a time within the calendar");
     let zoned = timestamp.to_zoned(time_zone.clone());
     let tag = match line.source {
-        LogSource::Stdout => "out",
-        LogSource::Stderr => "err",
+        LogSource::Info => "info",
+        LogSource::Error => "err",
         LogSource::Note => "▸",
     };
     let gap = if line.starts_attempt && after_another {
@@ -211,8 +211,8 @@ mod tests {
             .enumerate()
             .map(|(index, entry)| {
                 let source = match entry.source.as_str() {
-                    "stdout" => LogSource::Stdout,
-                    "stderr" => LogSource::Stderr,
+                    "info" => LogSource::Info,
+                    "error" => LogSource::Error,
                     _ => LogSource::Note,
                 };
                 let entry = LogLine {
@@ -270,7 +270,7 @@ mod tests {
         let mut log = LogFile::new(path.clone());
         let big = LogLine {
             time: UNIX_EPOCH,
-            source: LogSource::Stdout,
+            source: LogSource::Info,
             text: "x".repeat(1024 * 1024),
             starts_attempt: false,
         };

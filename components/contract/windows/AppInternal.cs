@@ -80,8 +80,8 @@ public static partial class AppInternal
     [JsonConverter(typeof(EnumNameConverter<LogSource>))]
     public enum LogSource
     {
-        Stdout,
-        Stderr,
+        Info,
+        Error,
 
         /// <summary>An explanation line from the app or the Helper.</summary>
         Note,

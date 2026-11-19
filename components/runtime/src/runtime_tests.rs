@@ -1243,7 +1243,7 @@ fn the_helpers_output_reaches_the_log_file_as_it_came() {
             },
             fvm_contract::app_helper::OutputLine {
                 date: std::time::SystemTime::now(),
-                source: fvm_contract::app_helper::OutputSource::Stdout,
+                source: fvm_contract::app_helper::OutputSource::Info,
                 text: marker.into(),
             },
         ],
@@ -1255,7 +1255,7 @@ fn the_helpers_output_reaches_the_log_file_as_it_came() {
     });
     let ends = [
         format!(" [▸] {session} ‹password sent›"),
-        format!(" [out] {session} {marker}"),
+        format!(" [info] {session} {marker}"),
     ];
     app.settle_until("the lines in the log file", |app| {
         let file = fs::read_to_string(app.folder.join("logs/vpn_backend.log")).unwrap_or_default();

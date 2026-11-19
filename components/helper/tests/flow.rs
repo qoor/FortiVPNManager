@@ -105,9 +105,9 @@ fn a_session_goes_through_every_milestone_and_ends_on_the_users_stop() {
         })
         .collect();
     assert!(positions.is_sorted(), "{texts:?}");
-    assert!(session.has_line(OutputSource::Stdout, "Logged out"));
+    assert!(session.has_line(OutputSource::Info, "Logged out"));
     assert!(session.has_line(
-        OutputSource::Stderr,
+        OutputSource::Error,
         "DTLS handshake failed: Resource temporarily unavailable"
     ));
     assert!(session.has_line(OutputSource::Helper, "‹OTP sent›"));
@@ -233,7 +233,7 @@ fn the_gateway_ending_a_session_is_the_clients_end() {
     assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
     assert_eq!(facts.end_code, -EPIPE);
-    assert!(session.has_line(OutputSource::Stderr, "Server closed connection"));
+    assert!(session.has_line(OutputSource::Error, "Server closed connection"));
     session.assert_finished_cleanly();
 }
 

@@ -76,7 +76,7 @@ public class LogLinesTests
         Assert.Equal("2025-11-06T06:59:05.250Z [▸] x", LogLines.FileLine(line, TimeZoneInfo.Utc, afterAnother: false));
     }
 
-    private static LogLine Line(string text) => new(DateTimeOffset.FromUnixTimeSeconds(1_762_412_345), LogSource.Stdout, text, StartsAttempt: false);
+    private static LogLine Line(string text) => new(DateTimeOffset.FromUnixTimeSeconds(1_762_412_345), LogSource.Info, text, StartsAttempt: false);
 
     private static string FixturePath(string name, [CallerFilePath] string here = "") =>
         Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "..", "contract", "tests", "fixtures", "app-internal", name);

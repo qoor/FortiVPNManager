@@ -260,8 +260,8 @@ pub enum HelperEventKind {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OutputSource {
-    Stdout,
-    Stderr,
+    Info,
+    Error,
     /// Lines the Helper writes itself.
     Helper,
 }

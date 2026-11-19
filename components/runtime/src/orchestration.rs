@@ -620,8 +620,8 @@ impl Runtime {
                 let session = self.sessions[&batch.attempt_id];
                 for line in batch.lines {
                     let source = match line.source {
-                        OutputSource::Stdout => LogSource::Stdout,
-                        OutputSource::Stderr => LogSource::Stderr,
+                        OutputSource::Info => LogSource::Info,
+                        OutputSource::Error => LogSource::Error,
                         OutputSource::Helper => LogSource::Note,
                     };
                     let starts_attempt =

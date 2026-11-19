@@ -138,7 +138,7 @@
     "event": {
       "_0": {
         "helperOutput": {
-          "json": "[{\"date\":1762412345.25,\"source\":\"stdout\",\"text\":\"INFO:   Connected to gateway.\"}]"
+          "json": "[{\"date\":1762412345.25,\"source\":\"info\",\"text\":\"INFO:   Connected to gateway.\"}]"
         }
       }
     }
