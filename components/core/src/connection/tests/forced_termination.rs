@@ -120,7 +120,7 @@ fn a_user_connect_or_reconnect_starts_fresh() {
         h.launch_connected();
         h.lose_helper(600.0);
         let id = h.start_tunnel();
-        h.run_milestones(&id, Milestone::Spawned);
+        h.run_milestones(&id, Milestone::Started);
         h.send(Input::HelperConnectionLost);
         assert_eq!(
             h.retry_wait().map(|(_, reason)| reason),
@@ -133,7 +133,7 @@ fn a_user_connect_or_reconnect_starts_fresh() {
             h.send(Input::Connect);
         }
         let id = h.start_tunnel();
-        h.run_milestones(&id, Milestone::Spawned);
+        h.run_milestones(&id, Milestone::Started);
         h.send(Input::HelperConnectionLost);
         assert_eq!(reason(&h), Some(FORCED), "reconnect now: {reconnect_now}");
     }

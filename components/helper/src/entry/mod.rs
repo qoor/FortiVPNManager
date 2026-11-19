@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
-    AttemptId, ClientStatus, ExitFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
+    AttemptId, BackendStatus, EndFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
     HelperStatus, Milestone, OutputBatch, RunRequest, StopReason,
 };
 use fvm_contract::helper_internal::{
@@ -552,8 +552,8 @@ impl Entry {
 
     fn reply_status(&self, id: u64, routing_complete: Option<bool>) {
         let status = HelperStatus {
-            client_running: self.runs.values().any(|held| held.run.session_running()),
-            client: ClientStatus {
+            session_running: self.runs.values().any(|held| held.run.session_running()),
+            backend: BackendStatus {
                 version: Some(self.sessions.version().to_owned()),
             },
             routing_complete,
@@ -655,7 +655,7 @@ impl Entry {
         replaced_run.run.stop(StopReason::Replaced);
     }
 
-    fn run_exited(&mut self, attempt: &AttemptId, facts: &ExitFacts) {
+    fn run_exited(&mut self, attempt: &AttemptId, facts: &EndFacts) {
         let exited = self.runs.remove(attempt).expect("a held run exited");
         for held in self.runs.values_mut() {
             if held.replacing.as_ref() == Some(attempt) {

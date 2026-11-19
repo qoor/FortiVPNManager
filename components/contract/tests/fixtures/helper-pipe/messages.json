@@ -1,7 +1,7 @@
 [
   {"build": {"id": 1, "build": "20261112.1"}},
   {"reply": {"id": 2}},
-  {"reply": {"id": 5, "json": "{\"childAlive\":false}"}},
+  {"reply": {"id": 5, "json": "{\"sessionRunning\":false}"}},
   {"replyFlag": {"id": 6, "value": false}},
   {"event": {"json": "{\"attemptID\":\"E621E1F8-C36C-495A-93FC-0C247A3E6E5F\"}"}},
   {"output": {"json": "[]"}}

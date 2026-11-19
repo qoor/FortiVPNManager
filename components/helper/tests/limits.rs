@@ -23,10 +23,10 @@ fn a_stalled_stage_cancels_the_session() {
     type Stall = fn(&Link);
     let stalls: [(&str, Milestone, bool, Shrink, Stall); 5] = [
         (
-            "spawnToGateway",
-            Milestone::Spawned,
+            "startToGateway",
+            Milestone::Started,
             false,
-            |limits| limits.spawn_to_gateway = TINY,
+            |limits| limits.start_to_gateway = TINY,
             |_| {},
         ),
         (
@@ -43,7 +43,7 @@ fn a_stalled_stage_cancels_the_session() {
             |limits| limits.otp_prompt_to_submit = TINY,
             |link| {
                 trust_gateway(link);
-                assert!(ask_otp(link).is_none(), "the watchdog ends the OTP wait");
+                assert!(ask_otp(link).is_none(), "the stage limit ends the OTP wait");
             },
         ),
         (
@@ -87,18 +87,18 @@ fn a_stalled_stage_cancels_the_session() {
                 assert_eq!(
                     facts.stop_initiator,
                     StopInitiator::Helper {
-                        reason: StopReason::Watchdog
+                        reason: StopReason::StageLimit
                     },
                     "{name}"
                 );
                 assert_eq!(facts.furthest_milestone, furthest, "{name}");
                 let texts = session.texts();
-                let expired = format!("‹watchdog: {name} did not finish within 0.15s›");
+                let expired = format!("‹stage limit: {name} did not finish within 0.15s›");
                 let fired = texts
                     .iter()
                     .position(|text| *text == expired)
                     .unwrap_or_else(|| panic!("{expired} missing from {texts:?}"));
-                assert_eq!(texts[fired + 1], "‹session cancelled (reason: watchdog)›");
+                assert_eq!(texts[fired + 1], "‹session cancelled (reason: stageLimit)›");
                 session.assert_finished_cleanly();
             })
         })
@@ -113,7 +113,7 @@ fn no_stage_limit_once_the_tunnel_is_up() {
     let mut setup = Setup::default().submitting_otp();
     let tiny = Duration::from_millis(300);
     setup.timing.stages = StageLimits {
-        spawn_to_gateway: tiny,
+        start_to_gateway: tiny,
         gateway_to_prompt_or_auth: tiny,
         otp_prompt_to_submit: tiny,
         otp_submit_to_auth: tiny,
@@ -122,13 +122,13 @@ fn no_stage_limit_once_the_tunnel_is_up() {
     let mut session = Session::start(up(settings("utun9", "10.10.0.5")), setup);
     session.bring_up(vec![gateway_route("192.0.2.1")]);
     session.settle(Duration::from_millis(500));
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     let facts = session.stop_and_revert(StopReason::Sleep);
     assert!(
         !session
             .texts()
             .iter()
-            .any(|text| text.starts_with("‹watchdog: "))
+            .any(|text| text.starts_with("‹stage limit: "))
     );
     assert_eq!(
         facts.stop_initiator,
@@ -161,7 +161,7 @@ fn a_network_setup_that_outlasts_the_tunnel_stage_ends_the_run_as_a_network_setu
     );
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert_eq!(
-        session.count_text("‹watchdog: authToTunnel did not finish within 1s›"),
+        session.count_text("‹stage limit: authToTunnel did not finish within 1s›"),
         1
     );
 }
@@ -276,7 +276,7 @@ fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_del
         !session.run.session_running()
     }));
     session.settle(detach_after * 5);
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     release.send(()).unwrap();
     session.wait_for_exit();
     assert_eq!(*commands.lock().unwrap(), [Command::Cancel]);
@@ -328,7 +328,7 @@ fn a_session_still_running_after_its_cancel_is_reported_stuck_after_its_lines() 
     let waited = stopped.elapsed();
     assert!(waited >= stuck_after, "{waited:?}");
     assert!(session.run.session_running());
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     let line = "‹session did not end within 0.3s after the cancel: restarting the Helper›";
     let log = format!(
         "0277070470 run {ATTEMPT}: session did not end within 0.3s after the cancel; aborting so the OS restarts the Helper"
@@ -447,15 +447,15 @@ fn opened_then_returned() -> Script {
 }
 
 fn assert_ended_by_the_client(session: &Session) {
-    let facts = session.exit_facts().unwrap();
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    let facts = session.end_facts().unwrap();
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert_eq!(facts.end_code, -EIO);
     let texts = session.texts();
     assert!(
-        !texts
-            .iter()
-            .any(|text| text.starts_with("‹watchdog: ") || text.starts_with("‹session cancelled")),
+        !texts.iter().any(
+            |text| text.starts_with("‹stage limit: ") || text.starts_with("‹session cancelled")
+        ),
         "{texts:?}"
     );
     session.assert_finished_cleanly();
@@ -470,7 +470,7 @@ fn a_stage_limit_does_not_expire_while_a_returned_session_deletes_its_secret() {
     let mut session = Session::start(opened_then_returned(), setup);
     assert!(session.wait(Duration::from_secs(5), |_| !secrets.deletes().is_empty()));
     session.settle(TINY * 3);
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     release.send(()).unwrap();
     session.wait_for_exit();
     assert_ended_by_the_client(&session);
@@ -487,7 +487,7 @@ fn a_stop_while_a_returned_session_deletes_its_secret_changes_nothing() {
     }));
     session.run.stop(StopReason::UserDisconnect);
     session.settle(Duration::from_millis(100));
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     assert!(!session.run.session_running());
     release.send(()).unwrap();
     session.wait_for_exit();
@@ -512,7 +512,7 @@ fn an_otp_while_a_returned_session_deletes_its_secret_is_refused_as_for_a_run_th
         })
     );
     session.settle(Duration::from_millis(100));
-    assert_eq!(session.exit_facts(), None);
+    assert_eq!(session.end_facts(), None);
     release.send(()).unwrap();
     session.wait_for_exit();
     assert!(!session.has_text("‹OTP sent›"));

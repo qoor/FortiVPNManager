@@ -148,7 +148,7 @@ fn the_run_reports_its_end_only_after_the_secret_is_deleted() {
         !secrets.deletes().is_empty()
     }));
     session.settle(std::time::Duration::from_millis(300));
-    assert!(session.exit_facts().is_none());
+    assert!(session.end_facts().is_none());
     assert!(!session.run.session_running());
     release.send(()).unwrap();
     session.wait_for_exit();

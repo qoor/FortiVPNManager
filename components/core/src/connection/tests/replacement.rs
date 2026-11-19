@@ -95,8 +95,8 @@ fn reject_login(h: &mut Harness, id: &AttemptId) {
 
 fn fail_on_the_network(h: &mut Harness, id: &AttemptId) {
     h.advance(1.0);
-    h.milestone_for(id, Milestone::Spawned, None);
-    h.exit_for(id, ended(Milestone::Spawned));
+    h.milestone_for(id, Milestone::Started, None);
+    h.exit_for(id, ended(Milestone::Started));
 }
 
 #[test]
@@ -362,7 +362,7 @@ fn failures_before_the_run_count_as_other_failures_and_never_stop() {
 
     h.fire(TimerKind::Retry);
     let id = start_replacement(&mut h, &old);
-    h.send(Input::RunRejected(id, HelperErrorCode::ClientUnavailable));
+    h.send(Input::RunRejected(id, HelperErrorCode::InvalidRequest));
     assert_eq!(h.timer(TimerKind::Retry), Some(h.now + secs(20.0)));
     h.fire(TimerKind::Retry);
     h.fire(TimerKind::AttemptDeadline);
@@ -445,19 +445,19 @@ fn a_certificate_change_prepares_again_at_once_uncounted() {
     h.fire(TimerKind::ProactiveReconnect);
     let id = start_replacement(&mut h, &old);
     h.advance(1.0);
-    h.milestone_for(&id, Milestone::Spawned, None);
+    h.milestone_for(&id, Milestone::Started, None);
     let effects = h.exit_for(
         &id,
-        ended(Milestone::Spawned).certs(&[digest('b')], Some(Milestone::Spawned)),
+        ended(Milestone::Started).certs(&[digest('b')], Some(Milestone::Started)),
     );
     assert_eq!(saved_certs(&effects).unwrap()[0], digest('b'));
     assert_eq!(renewal(&h).unwrap().tries, 0);
     let id = start_replacement(&mut h, &old);
     h.advance(1.0);
-    h.milestone_for(&id, Milestone::Spawned, None);
+    h.milestone_for(&id, Milestone::Started, None);
     h.exit_for(
         &id,
-        ended(Milestone::Spawned).certs(&[digest('c')], Some(Milestone::Spawned)),
+        ended(Milestone::Started).certs(&[digest('c')], Some(Milestone::Started)),
     );
     assert_eq!(renewal(&h).unwrap().tries, 1);
     start_replacement(&mut h, &old);
@@ -770,7 +770,7 @@ fn disconnect_and_quit_stop_both_tunnels_and_wait_for_both() {
     assert_eq!(h.cm.current_attempt(), Some(&id));
     let effects = h.exit_for(
         &id,
-        ended(Milestone::Spawned).by_helper(StopReason::AppQuit),
+        ended(Milestone::Started).by_helper(StopReason::AppQuit),
     );
     assert_eq!(effects.last(), Some(&Effect::ApproveQuit));
 
@@ -928,7 +928,7 @@ fn a_late_exit_of_a_stopped_preparation_changes_nothing() {
     let before = h.cm.phase.clone();
     assert_eq!(
         connection_effects(
-            &h.exit_for(&id, ended(Milestone::Spawned).by_helper(StopReason::Sleep))
+            &h.exit_for(&id, ended(Milestone::Started).by_helper(StopReason::Sleep))
         ),
         []
     );

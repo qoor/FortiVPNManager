@@ -272,8 +272,8 @@ extension AppUI {
             if case .connected? = connection?.status { true } else { false }
         case .gmailApi:
             gmail?.method == .gmailApi
-        case .vpnClientFound:
-            readiness?.client != nil
+        case .vpnBackendFound:
+            readiness?.backend != nil
         }
     }
 

@@ -9,8 +9,8 @@ struct AdvancedPane: View {
         SettingsForm(navigation: navigation) {
             if let readiness = ui.readiness, let config = ui.config {
                 helperSection(readiness)
-                if let found = readiness.client {
-                    clientSection(found)
+                if let found = readiness.backend {
+                    backendSection(found)
                 }
                 settingsFileSection(config.file)
             }
@@ -42,7 +42,7 @@ struct AdvancedPane: View {
     }
 
     /// The VPN client the Helper runs.
-    private func clientSection(_ found: AppInternal.VpnClientInfo) -> some View {
+    private func backendSection(_ found: AppInternal.VpnBackendInfo) -> some View {
         Section("VPN client") {
             LabeledContent("Type", value: "openconnect")
                 .searchAnchor("Type", navigation)

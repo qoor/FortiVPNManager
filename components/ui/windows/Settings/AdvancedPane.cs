@@ -21,8 +21,8 @@ internal sealed class AdvancedPane : IPane
     private readonly Button registerHelper = new() { Content = L("Register Helper") };
     private readonly SettingsCard registerCard;
     private readonly InfoBar registerError = Cards.Notice(InfoBarSeverity.Error);
-    private readonly StackPanel client = new() { Spacing = 4 };
-    private readonly TextBlock clientVersion = Cards.Value();
+    private readonly StackPanel backend = new() { Spacing = 4 };
+    private readonly TextBlock backendVersion = Cards.Value();
     private readonly TextBlock filePath = new() { IsTextSelectionEnabled = true, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button showFile = new() { Content = L("Show in File Explorer") };
     private readonly SettingsCard fileCard;
@@ -44,10 +44,10 @@ internal sealed class AdvancedPane : IPane
         body.Children.Add(rows["Register Helper"] = registerCard);
         body.Children.Add(registerError);
 
-        client.Children.Add(Cards.SectionHeader(L("VPN client")));
-        client.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
-        client.Children.Add(rows["Version"] = Cards.Card(L("Version"), clientVersion));
-        body.Children.Add(client);
+        backend.Children.Add(Cards.SectionHeader(L("VPN client")));
+        backend.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
+        backend.Children.Add(rows["Version"] = Cards.Card(L("Version"), backendVersion));
+        body.Children.Add(backend);
 
         showFile.Click += (_, _) =>
         {
@@ -79,10 +79,10 @@ internal sealed class AdvancedPane : IPane
         registerCard.Visible(readiness.RegisterHelper != ButtonState.Hidden);
         registerError.Show(readiness.RegisterError?.HelperMessage());
 
-        client.Visible(readiness.Client is not null);
-        if (readiness.Client is { } info)
+        backend.Visible(readiness.Backend is not null);
+        if (readiness.Backend is { } info)
         {
-            clientVersion.Text = info.Version ?? L("Unknown");
+            backendVersion.Text = info.Version ?? L("Unknown");
         }
 
         var file = config.File;

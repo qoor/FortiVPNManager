@@ -54,7 +54,7 @@ fn a_disconnect_while_the_tunnel_is_starting() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     assert_eq!(
         connection_effects(&h.send(Input::Disconnect)),
         [
@@ -69,7 +69,7 @@ fn a_disconnect_while_the_tunnel_is_starting() {
             Effect::CancelTimer(TimerKind::AttemptDeadline),
         ]
     );
-    h.exit(ended(Milestone::Spawned).by_helper(StopReason::UserDisconnect));
+    h.exit(ended(Milestone::Started).by_helper(StopReason::UserDisconnect));
     assert_eq!(h.cm.phase, Phase::Idle);
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
 }
@@ -112,7 +112,7 @@ fn a_disconnect_while_waiting_cancels_the_wait() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(
         connection_effects(&h.send(Input::Disconnect)),
         [
@@ -240,7 +240,7 @@ fn a_quit_while_waiting_is_approved_at_once() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(
         connection_effects(&h.send(Input::QuitRequested)),
         [
@@ -334,7 +334,7 @@ fn reconnect_now_after_the_gap_starts_at_once() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
         Some(RetryReason::Network)
@@ -536,7 +536,7 @@ fn helper_events_of_other_attempts_are_ignored() {
         []
     );
     assert_eq!(
-        connection_effects(&h.exit_for(&stranger(), ended(Milestone::Spawned))),
+        connection_effects(&h.exit_for(&stranger(), ended(Milestone::Started))),
         []
     );
     assert_eq!(snapshot(&h), before);
@@ -559,10 +559,10 @@ fn the_exit_of_an_old_attempt_while_waiting_is_ignored() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     let waiting = snapshot(&h);
     assert_eq!(
-        connection_effects(&h.exit_for(&id, ended(Milestone::Spawned))),
+        connection_effects(&h.exit_for(&id, ended(Milestone::Started))),
         []
     );
     assert_eq!(
@@ -571,7 +571,7 @@ fn the_exit_of_an_old_attempt_while_waiting_is_ignored() {
     );
     let late = Input::RunRejected(
         id,
-        fvm_contract::app_helper::HelperErrorCode::ClientUnavailable,
+        fvm_contract::app_helper::HelperErrorCode::InvalidRequest,
     );
     assert_eq!(connection_effects(&h.send(late)), []);
     assert_eq!(snapshot(&h), waiting);
@@ -583,12 +583,12 @@ fn helper_events_before_the_run_was_requested_are_ignored() {
     h.launch();
     let id = h.attempt().unwrap().id.clone();
     assert_eq!(
-        connection_effects(&h.milestone_for(&id, Milestone::Spawned, None)),
+        connection_effects(&h.milestone_for(&id, Milestone::Started, None)),
         []
     );
     h.send(Input::ReadinessChecked(ready()));
     assert_eq!(
-        connection_effects(&h.exit_for(&id, ended(Milestone::Spawned))),
+        connection_effects(&h.exit_for(&id, ended(Milestone::Started))),
         []
     );
     assert_eq!(
@@ -602,9 +602,9 @@ fn inputs_for_the_attempt_before_a_certificate_retry_are_ignored() {
     let mut h = Harness::new();
     h.launch();
     let first = h.start_tunnel();
-    h.run_milestones(&first, Milestone::Spawned);
+    h.run_milestones(&first, Milestone::Started);
     let old_deadline = h.timer_id(TimerKind::AttemptDeadline);
-    h.exit(ended(Milestone::Spawned).certs(&[digest('a')], Some(Milestone::Spawned)));
+    h.exit(ended(Milestone::Started).certs(&[digest('a')], Some(Milestone::Started)));
     h.send(Input::ReadinessChecked(ready()));
     let retry_state = snapshot(&h);
     for input in [
@@ -635,7 +635,7 @@ fn timers_fire_once_per_generation() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     let timer = h.timer_id(TimerKind::Retry);
     h.fire(TimerKind::Retry);
     let fired = snapshot(&h);

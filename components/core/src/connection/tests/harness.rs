@@ -6,7 +6,7 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
-    AttemptId, ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
+    AttemptId, BackendStatus, EndFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
     StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
@@ -184,8 +184,8 @@ pub(super) fn ready() -> ReadinessFacts {
         helper: HelperFacts::Answered {
             build: APP_BUILD.to_owned(),
             status: Some(HelperStatus {
-                client_running: false,
-                client: ClientStatus {
+                session_running: false,
+                backend: BackendStatus {
                     version: Some("9.21".to_owned()),
                 },
                 routing_complete: None,
@@ -194,7 +194,7 @@ pub(super) fn ready() -> ReadinessFacts {
     }
 }
 
-/// How a run ended, for the exit facts.
+/// How a run ended, for the end facts.
 #[derive(Clone)]
 pub(super) struct Exit {
     furthest: Milestone,
@@ -210,7 +210,7 @@ pub(super) struct Exit {
 pub(super) fn ended(furthest: Milestone) -> Exit {
     Exit {
         furthest,
-        initiator: StopInitiator::Client {},
+        initiator: StopInitiator::Session {},
         certs: Vec::new(),
         cert_at: None,
         code: -EIO,
@@ -246,8 +246,8 @@ impl Exit {
         self
     }
 
-    pub(super) fn facts(self) -> ExitFacts {
-        ExitFacts {
+    pub(super) fn facts(self) -> EndFacts {
+        EndFacts {
             furthest_milestone: self.furthest,
             stop_initiator: self.initiator,
             cert_rejected_digests: self.certs,
@@ -580,7 +580,7 @@ impl Harness {
     /// the tunnel it takes 12 seconds.
     pub(super) fn run_milestones(&mut self, id: &AttemptId, last: Milestone) {
         let all = [
-            Milestone::Spawned,
+            Milestone::Started,
             Milestone::ConnectedToGateway,
             Milestone::OtpPrompted,
             Milestone::OtpSubmitted,
@@ -589,7 +589,7 @@ impl Harness {
         ];
         for milestone in all.into_iter().filter(|milestone| *milestone <= last) {
             match milestone {
-                Milestone::Spawned | Milestone::ConnectedToGateway | Milestone::OtpPrompted => {
+                Milestone::Started | Milestone::ConnectedToGateway | Milestone::OtpPrompted => {
                     self.advance(1.0);
                     self.milestone_for(id, milestone, None);
                 }
@@ -708,7 +708,7 @@ impl Harness {
         probe: u64,
         underlay: Option<&Underlay>,
         tunnel_up: bool,
-        client_running: Option<bool>,
+        session_running: Option<bool>,
         routing_complete: Option<bool>,
     ) -> Vec<Effect> {
         let mut addresses = vec![
@@ -725,7 +725,7 @@ impl Harness {
             gateway_ip: Some(Ipv4Addr::new(203, 0, 113, 7)),
             route_interface: underlay.map(|underlay| underlay.interface.clone()),
             addresses,
-            client_running,
+            session_running,
             routing_complete,
         }))
     }

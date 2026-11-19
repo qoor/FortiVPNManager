@@ -204,11 +204,11 @@ fn the_start_clears_a_failure_like_connect() {
     h.launch();
     h.send(Input::Connect);
     let id = h.start_tunnel();
-    h.send(Input::RunRejected(id, HelperErrorCode::ClientUnavailable));
+    h.send(Input::RunRejected(id, HelperErrorCode::InvalidRequest));
     assert_eq!(
         h.cm.phase,
         Phase::Failed(Failure::Helper {
-            code: HelperErrorCode::ClientUnavailable,
+            code: HelperErrorCode::InvalidRequest,
         })
     );
     h.fire(TimerKind::Schedule);

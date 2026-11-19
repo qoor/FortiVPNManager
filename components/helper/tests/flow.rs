@@ -4,17 +4,17 @@ use std::sync::{Arc, Mutex, mpsc};
 
 use common::*;
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputSource, StopInitiator, StopReason,
+    EndFacts, HelperEventKind, Milestone, OutputSource, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::NetworkOutcome;
 use fvm_helper_core::session::backend::SessionEvent;
 
 const EPIPE: i32 = 32;
 
-fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
-    ExitFacts {
+fn session_end(furthest: Milestone, code: i32) -> EndFacts {
+    EndFacts {
         furthest_milestone: furthest,
-        stop_initiator: StopInitiator::Client {},
+        stop_initiator: StopInitiator::Session {},
         cert_rejected_digests: Vec::new(),
         cert_rejected_at: None,
         tunnel_setup_failed: false,
@@ -137,13 +137,13 @@ fn a_rejected_certificate_is_told_in_the_exit_once() {
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
-    assert_eq!(session.milestones(), [Milestone::Spawned]);
+    assert_eq!(session.milestones(), [Milestone::Started]);
     assert_eq!(
         facts,
-        ExitFacts {
+        EndFacts {
             cert_rejected_digests: vec![OTHER_PIN.to_owned()],
-            cert_rejected_at: Some(Milestone::Spawned),
-            ..client_exit(Milestone::Spawned, -EIO)
+            cert_rejected_at: Some(Milestone::Started),
+            ..session_end(Milestone::Started, -EIO)
         }
     );
     assert_eq!(
@@ -167,7 +167,7 @@ fn a_certificate_rejected_after_the_gateway_was_trusted_is_told_where_it_came() 
 }
 
 #[test]
-fn a_session_that_fails_before_the_first_form_ends_at_spawned() {
+fn a_session_that_fails_before_the_first_form_ends_at_started() {
     let script = script(|_, link| {
         error_line(
             link,
@@ -177,7 +177,7 @@ fn a_session_that_fails_before_the_first_form_ends_at_spawned() {
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
-    assert_eq!(facts, client_exit(Milestone::Spawned, -EIO));
+    assert_eq!(facts, session_end(Milestone::Started, -EIO));
     assert_eq!(session.texts().last(), Some(&"‹session ended: code -5›"));
     session.assert_finished_cleanly();
     let error = session.run.submit_otp(OTP.to_owned()).unwrap_err();
@@ -199,9 +199,9 @@ fn a_tunnel_that_cannot_be_set_up_ends_after_authentication() {
     let facts = session.wait_for_exit();
     assert_eq!(
         facts,
-        ExitFacts {
+        EndFacts {
             tunnel_setup_failed: true,
-            ..client_exit(Milestone::Authenticated, -EIO)
+            ..session_end(Milestone::Authenticated, -EIO)
         }
     );
     assert!(
@@ -230,7 +230,7 @@ fn the_gateway_ending_a_session_is_the_clients_end() {
         .next_job()
         .finish(NetworkOutcome::Reverted { left: Vec::new() });
     let facts = session.wait_for_exit();
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
     assert_eq!(facts.end_code, -EPIPE);
     assert!(session.has_line(OutputSource::Stderr, "Server closed connection"));

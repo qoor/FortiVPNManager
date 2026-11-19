@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use std::{env, fs, process};
 
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, SessionId,
+    EndFacts, HelperEventKind, Milestone, OutputLine, OutputSource, RunRequest, SessionId,
     StopReason,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkOutcome, OutsideRoute};
@@ -30,7 +30,7 @@ pub const RETRY: Duration = Duration::from_millis(200);
 const WAIT_LIMIT: Duration = Duration::from_secs(10);
 
 pub const FULL_FLOW: [Milestone; 6] = [
-    Milestone::Spawned,
+    Milestone::Started,
     Milestone::ConnectedToGateway,
     Milestone::OtpPrompted,
     Milestone::OtpSubmitted,
@@ -42,7 +42,7 @@ pub fn timing() -> Timing {
     let stage = Duration::from_secs(5);
     Timing {
         stages: StageLimits {
-            spawn_to_gateway: stage,
+            start_to_gateway: stage,
             gateway_to_prompt_or_auth: stage,
             otp_prompt_to_submit: stage,
             otp_submit_to_auth: stage,
@@ -250,13 +250,13 @@ impl Session {
         );
     }
 
-    pub fn wait_for_exit(&mut self) -> ExitFacts {
+    pub fn wait_for_exit(&mut self) -> EndFacts {
         assert!(
-            self.wait(WAIT_LIMIT, |session| session.exit_facts().is_some()),
+            self.wait(WAIT_LIMIT, |session| session.end_facts().is_some()),
             "no exit: {:#?}",
             self.texts()
         );
-        self.exit_facts().unwrap()
+        self.end_facts().unwrap()
     }
 
     pub fn settle(&mut self, duration: Duration) {
@@ -278,7 +278,7 @@ impl Session {
         self.wait_for(Milestone::TunnelUp);
     }
 
-    pub fn stop_and_revert(&mut self, reason: StopReason) -> ExitFacts {
+    pub fn stop_and_revert(&mut self, reason: StopReason) -> EndFacts {
         self.run.stop(reason);
         self.next_job()
             .finish(NetworkOutcome::Reverted { left: Vec::new() });
@@ -348,7 +348,7 @@ impl Session {
         self.milestones().contains(&milestone)
     }
 
-    pub fn exit_facts(&self) -> Option<ExitFacts> {
+    pub fn end_facts(&self) -> Option<EndFacts> {
         self.events().into_iter().find_map(|kind| match kind {
             HelperEventKind::Exited { facts } => Some(facts.clone()),
             HelperEventKind::Milestone { .. } => None,

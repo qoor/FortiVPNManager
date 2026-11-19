@@ -25,7 +25,7 @@ pub const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 pub const PASSWORD: &str = " p@ssw0rd #1 ";
 pub const OTP: &str = "042137";
 
-pub const SPAWNED: u64 = 0;
+pub const STARTED: u64 = 0;
 pub const CONNECTED_TO_GATEWAY: u64 = 1;
 pub const OTP_PROMPTED: u64 = 2;
 pub const AUTHENTICATED: u64 = 4;
@@ -291,15 +291,15 @@ impl Swift {
         });
     }
 
-    pub fn exit_facts(&self, app: u64) -> Option<Value> {
+    pub fn end_facts(&self, app: u64) -> Option<Value> {
         self.events(app)
             .into_iter()
             .find_map(|event| Some(event["kind"].get("exited")?["_0"].clone()))
     }
 
     pub fn wait_for_exit(&mut self, app: u64) -> Value {
-        self.wait_until("the exit", |swift| swift.exit_facts(app).is_some());
-        self.exit_facts(app).unwrap()
+        self.wait_until("the exit", |swift| swift.end_facts(app).is_some());
+        self.end_facts(app).unwrap()
     }
 
     /// The Log tab lines sent to `app`.

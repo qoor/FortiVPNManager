@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use fvm_contract::app_helper::{
-    BypassRoutesSnapshot, ExitFacts, Milestone, RunRequest, StopInitiator, StopReason,
+    BypassRoutesSnapshot, EndFacts, Milestone, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{
     AppRequest, BypassRoutesOutcome, FromEntry, NetworkChange, NetworkOutcome, NetworkSettings,
@@ -57,7 +57,7 @@ fn revert(session: &mut Session, routes: Vec<OutsideRoute>) {
             },
         }
     );
-    assert!(session.exit_facts().is_none());
+    assert!(session.end_facts().is_none());
     job.finish(NetworkOutcome::Reverted { left: Vec::new() });
 }
 
@@ -319,7 +319,7 @@ fn a_reconnect_applies_the_settings_again_through_the_current_router() {
     drop(reconnect);
     revert(&mut session, vec![gateway_route("192.0.2.254")]);
     let facts = session.wait_for_exit();
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
 }
 
 #[test]
@@ -351,7 +351,7 @@ fn a_look_up_answered_after_the_session_returned_is_not_recorded_or_applied() {
     release.send(()).unwrap();
     let facts = session.wait_for_exit();
     assert!(session.jobs.is_empty());
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.assert_finished_cleanly();
 }
@@ -389,7 +389,7 @@ fn an_apply_answered_after_the_session_returned_does_not_bring_the_tunnel_up() {
     release.send(()).unwrap();
     revert(&mut session, vec![gateway_route("192.0.2.1")]);
     let facts = session.wait_for_exit();
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.assert_finished_cleanly();
 }
@@ -412,7 +412,7 @@ fn replacing_setup() -> Setup {
     }
 }
 
-fn address_in_use_end(new: &mut Session) -> ExitFacts {
+fn address_in_use_end(new: &mut Session) -> EndFacts {
     let facts = new.wait_for_exit();
     assert!(facts.tunnel_address_in_use, "{facts:?}");
     assert!(new.has_text("‹the connection to replace has the same tunnel address›"));
@@ -441,10 +441,10 @@ fn a_tunnel_device_refused_for_the_replaced_runs_address_is_told_in_the_exit() {
     });
     let mut new = Session::start_replacing(script, replacing_setup(), Some(replaced));
     let facts = address_in_use_end(&mut new);
-    assert_eq!(facts.stop_initiator, StopInitiator::Client {});
+    assert_eq!(facts.stop_initiator, StopInitiator::Session {});
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert!(new.jobs.is_empty());
-    assert!(old.exit_facts().is_none());
+    assert!(old.end_facts().is_none());
     old.run.stop(StopReason::UserDisconnect);
     revert(&mut old, vec![gateway_route("192.0.2.1")]);
     old.wait_for_exit();

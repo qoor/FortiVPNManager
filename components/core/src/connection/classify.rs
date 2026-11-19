@@ -1,7 +1,7 @@
 //! Why a run ended without the app asking for it, judged only from the facts the Helper and the app
 //! observed: how far the run got, who stopped it and why, and the code openconnect ended with.
 
-use fvm_contract::app_helper::{ExitFacts, Milestone, StopInitiator, StopReason};
+use fvm_contract::app_helper::{EndFacts, Milestone, StopInitiator, StopReason};
 
 use super::OtpFailure;
 use super::ledger::Failure;
@@ -10,7 +10,7 @@ const EPERM: i32 = 1;
 const EPIPE: i32 = 32;
 
 pub(super) struct ExitContext<'a> {
-    pub(super) facts: &'a ExitFacts,
+    pub(super) facts: &'a EndFacts,
     /// The furthest milestone the manager saw; the facts may lag behind it.
     pub(super) seen_milestone: Option<Milestone>,
     /// The chain already used its one immediate retry after a certificate rejection.
@@ -41,7 +41,7 @@ pub(super) fn classify(context: &ExitContext) -> Outcome {
     let facts = context.facts;
     let furthest = facts
         .furthest_milestone
-        .max(context.seen_milestone.unwrap_or(Milestone::Spawned));
+        .max(context.seen_milestone.unwrap_or(Milestone::Started));
 
     // The app stopped the run because the Gmail session failed and no OTP could arrive.
     if let Some(failure) = context.otp_failure {

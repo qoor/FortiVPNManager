@@ -68,8 +68,8 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     assert_eq!(
         swift.reply_json(status),
         json!({
-            "childAlive": true,
-            "client": {"version": VERSION},
+            "sessionRunning": true,
+            "backend": {"version": VERSION},
             "routingComplete": true,
         })
     );
@@ -184,8 +184,8 @@ fn a_rejected_certificate_is_reported_with_its_value() {
     assert_eq!(swift.connect(1, ATTEMPT), None);
     let facts = swift.wait_for_exit(1);
     assert_eq!(facts["certRejectedDigests"], json!([OTHER_PIN]));
-    assert_eq!(facts["certRejectedAt"], SPAWNED);
-    assert_eq!(facts["furthestMilestone"], SPAWNED);
+    assert_eq!(facts["certRejectedAt"], STARTED);
+    assert_eq!(facts["furthestMilestone"], STARTED);
     assert_eq!(facts["stopInitiator"], json!({"none": {}}));
 }
 
@@ -309,21 +309,21 @@ fn a_bad_connect_request_starts_nothing() {
         swift.reply(invalid),
         error("invalidRequest", "port 0 is refused")
     );
-    assert_eq!(swift.status(1)["childAlive"], false);
+    assert_eq!(swift.status(1)["sessionRunning"], false);
     assert!(swift.events(1).is_empty());
     assert!(swift.scratch.run_directory_names().is_empty());
     swift.assert_no_secret();
 }
 
 #[test]
-fn the_status_carries_the_clients_version() {
+fn the_status_carries_the_backends_version() {
     let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     assert_eq!(
         swift.status(1),
         json!({
-            "childAlive": false,
-            "client": {"version": VERSION},
+            "sessionRunning": false,
+            "backend": {"version": VERSION},
         })
     );
 }
@@ -362,7 +362,7 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
             ])
         );
         let reply = swift.reply_json(status);
-        assert_eq!(reply["childAlive"], true);
+        assert_eq!(reply["sessionRunning"], true);
         assert_eq!(
             reply.get("routingComplete").and_then(Value::as_bool),
             routing_complete,
@@ -378,7 +378,7 @@ fn the_status_of_a_run_that_is_not_up_needs_no_routing_check() {
     assert_eq!(swift.connect(1, ATTEMPT), None);
     swift.wait_for_milestone(1, OTP_PROMPTED);
     let reply = swift.status(1);
-    assert_eq!(reply["childAlive"], true);
+    assert_eq!(reply["sessionRunning"], true);
     assert!(reply.get("routingComplete").is_none(), "{reply}");
     assert!(swift.network_changes().is_empty());
 }
@@ -392,7 +392,7 @@ fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
     let status = swift.request(1, json!({"status": {}}));
     swift.disconnect_app(1);
 
-    assert_eq!(swift.reply_json(status)["childAlive"], true);
+    assert_eq!(swift.reply_json(status)["sessionRunning"], true);
     let facts = swift.wait_for_exit(1);
     assert_eq!(
         facts["stopInitiator"],
@@ -420,7 +420,7 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
     assert_eq!(swift.reply(connect), gone);
     assert_eq!(swift.reply(otp), gone);
     assert_eq!(swift.reply(stop), gone);
-    assert_eq!(swift.reply_json(status)["childAlive"], false);
+    assert_eq!(swift.reply_json(status)["sessionRunning"], false);
 
     let late = swift.received_within(Duration::from_millis(300));
     assert!(late.is_empty(), "{late:#?}");

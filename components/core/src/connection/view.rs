@@ -7,7 +7,7 @@ use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{
     AfterDisconnect, ConnectProgress, ConnectionIcon, ConnectionSection, ConnectionStatus,
     FailureReason, HelperState, ProactiveReconnect, ReadinessSection, ScheduleOutlook, SetupItem,
-    VpnClientInfo, WaitReason,
+    VpnBackendInfo, WaitReason,
 };
 
 use super::ledger::Failure;
@@ -94,12 +94,12 @@ impl ConnectionManager {
                 app_build: self.app_build.clone(),
             },
         };
-        let client = match &self.helper {
+        let backend = match &self.helper {
             Some(HelperFacts::Answered {
                 build,
                 status: Some(status),
-            }) if *build == self.app_build => Some(VpnClientInfo {
-                version: status.client.version.clone(),
+            }) if *build == self.app_build => Some(VpnBackendInfo {
+                version: status.backend.version.clone(),
             }),
             _ => None,
         };
@@ -107,7 +107,7 @@ impl ConnectionManager {
             register_helper: shown(matches!(helper, HelperState::NotRegistered {})),
             helper,
             register_error: self.register_error.clone(),
-            client,
+            backend,
         }
     }
 
@@ -150,7 +150,7 @@ impl ConnectionManager {
                     (Stage::WaitingForStaleOtp { .. } | Stage::PreparingOtp, _) => {
                         ConnectProgress::ConnectingToGmail
                     }
-                    (Stage::Run, None | Some(Milestone::Spawned)) => {
+                    (Stage::Run, None | Some(Milestone::Started)) => {
                         ConnectProgress::ContactingServer
                     }
                     (Stage::Run, Some(Milestone::ConnectedToGateway)) => ConnectProgress::LoggingIn,

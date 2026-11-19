@@ -196,8 +196,8 @@ impl Drop for NetworkJob {
 /// begins it; one that takes longer stops the session.
 #[derive(Clone, Copy)]
 pub struct StageLimits {
-    /// Spawned until connected to the gateway.
-    pub spawn_to_gateway: Duration,
+    /// Started until connected to the gateway.
+    pub start_to_gateway: Duration,
     /// Connected to the gateway until the OTP prompt or authenticated.
     pub gateway_to_prompt_or_auth: Duration,
     /// OTP prompt until the OTP is submitted. The app's own OTP limit is shorter; this one is a
@@ -212,7 +212,7 @@ pub struct StageLimits {
 impl Default for StageLimits {
     fn default() -> Self {
         Self {
-            spawn_to_gateway: Duration::from_secs(30),
+            start_to_gateway: Duration::from_secs(30),
             gateway_to_prompt_or_auth: Duration::from_secs(30),
             otp_prompt_to_submit: Duration::from_secs(65),
             otp_submit_to_auth: Duration::from_secs(20),
@@ -226,7 +226,7 @@ impl StageLimits {
     /// for it; `None` once the tunnel is up.
     fn after(&self, milestone: Milestone) -> Option<(&'static str, Duration)> {
         match milestone {
-            Milestone::Spawned => Some(("spawnToGateway", self.spawn_to_gateway)),
+            Milestone::Started => Some(("startToGateway", self.start_to_gateway)),
             Milestone::ConnectedToGateway => {
                 Some(("gatewayToPromptOrAuth", self.gateway_to_prompt_or_auth))
             }

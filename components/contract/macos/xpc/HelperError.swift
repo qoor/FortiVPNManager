@@ -7,7 +7,6 @@ struct HelperError: Error, Codable, Sendable, Equatable {
         case invalidRequest
         case unknownAttempt
         case wrongPhase
-        case binaryUnavailable
         case notAuthorized
         case internalError
     }

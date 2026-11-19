@@ -14,7 +14,7 @@ public enum SearchCondition
     GmailApi,
 
     /// <summary>The VPN client was looked for (the Advanced pane's client rows).</summary>
-    VpnClientFound,
+    VpnBackendFound,
 
     /// <summary>The Advanced pane offers Register Helper.</summary>
     RegisterHelper,
@@ -138,10 +138,10 @@ public static class SettingsSearch
         [
             Item(pane, "Helper"),
             Item(pane, "Register Helper", when: SearchCondition.RegisterHelper),
-            Item(pane, "Type", when: SearchCondition.VpnClientFound),
+            Item(pane, "Type", when: SearchCondition.VpnBackendFound),
             // The client's name is not translated.
-            new SearchItem(pane, "openconnect", "openconnect", "Type", SearchCondition.VpnClientFound),
-            Item(pane, "Version", when: SearchCondition.VpnClientFound),
+            new SearchItem(pane, "openconnect", "openconnect", "Type", SearchCondition.VpnBackendFound),
+            Item(pane, "Version", when: SearchCondition.VpnBackendFound),
             Item(pane, "Settings File"),
             Item(pane, "Show in File Explorer", row: "Settings File"),
         ],

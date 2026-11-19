@@ -130,10 +130,6 @@ public static partial class AppInternal
         InvalidRequest,
         UnknownAttempt,
         WrongPhase,
-
-        [JsonStringEnumMemberName("binaryUnavailable")]
-        ClientUnavailable,
-
         NotAuthorized,
         InternalError,
     }
@@ -207,7 +203,7 @@ public static partial class AppInternal
         HelperState Helper,
         ButtonState RegisterHelper,
         RegistrationError? RegisterError = null,
-        VpnClientInfo? Client = null);
+        VpnBackendInfo? Backend = null);
 
     [JsonConverter(typeof(CasesConverter<HelperState>))]
     public abstract record HelperState
@@ -222,7 +218,7 @@ public static partial class AppInternal
         public sealed record Unreachable(HelperChannelFailure Failure) : HelperState;
     }
 
-    public sealed record VpnClientInfo(string? Version = null);
+    public sealed record VpnBackendInfo(string? Version = null);
 
     // Gmail and Google account
 

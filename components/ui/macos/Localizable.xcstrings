@@ -191,16 +191,6 @@
         }
       }
     },
-    "%@ not found": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@을(를) 찾을 수 없음"
-          }
-        }
-      }
-    },
     "%@ rejected (%@): %@": {
       "localizations": {
         "ko": {

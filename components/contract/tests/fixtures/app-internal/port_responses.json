@@ -144,7 +144,7 @@
       "id": 12,
       "response": {
         "helperReply": {
-          "json": "{\"childAlive\":false}"
+          "json": "{\"sessionRunning\":false}"
         }
       }
     }

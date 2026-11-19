@@ -106,7 +106,7 @@ fn each_counted_fact_waits_ninety_seconds_and_counts() {
 #[test]
 fn an_end_before_the_tunnel_without_a_fact_backs_off_uncounted() {
     for furthest in [
-        Milestone::Spawned,
+        Milestone::Started,
         Milestone::ConnectedToGateway,
         Milestone::OtpPrompted,
         Milestone::OtpSubmitted,
@@ -115,7 +115,7 @@ fn an_end_before_the_tunnel_without_a_fact_backs_off_uncounted() {
         for exit in [
             ended(furthest),
             ended(furthest).code(-EPERM),
-            ended(furthest).by_helper(StopReason::Watchdog),
+            ended(furthest).by_helper(StopReason::StageLimit),
         ] {
             let mut h = Harness::new();
             h.launch();
@@ -250,7 +250,7 @@ fn a_network_retry_delivered_slightly_early_starts_the_attempt() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(wait_reason(&h), Some(RetryReason::Network));
     assert!(
         h.fire_early(TimerKind::Retry, 0.005)
@@ -282,7 +282,7 @@ fn network_setup_failures_back_off_like_network_errors_without_counting() {
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
     assert_eq!(h.cm.ledger.last_auth_failure, None);
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(
         h.retry_wait(),
         Some((h.now + secs(80.0), RetryReason::Network)),
@@ -296,8 +296,8 @@ fn network_failures_back_off_without_counting() {
     h.launch();
     for expected in [10.0, 20.0, 40.0, 80.0, 160.0, 300.0, 300.0] {
         h.start_tunnel();
-        h.milestone(Milestone::Spawned);
-        let effects = h.exit(ended(Milestone::Spawned).by_helper(StopReason::Watchdog));
+        h.milestone(Milestone::Started);
+        let effects = h.exit(ended(Milestone::Started).by_helper(StopReason::StageLimit));
         assert_eq!(
             h.retry_wait(),
             Some((h.now + secs(expected), RetryReason::Network))
@@ -321,9 +321,9 @@ fn a_network_failure_waits_for_the_path_then_backs_off() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     assert_eq!(connection_effects(&h.set_path(offline())), []);
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     assert_eq!(
         h.network_wait(),
         Some((RetryReason::Network, Duration::from_secs(10)))
@@ -353,7 +353,7 @@ fn a_retry_due_while_offline_waits_for_the_path_then_starts_at_once() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     h.set_path(offline());
     assert!(
         h.retry_wait().is_some(),
@@ -603,7 +603,7 @@ fn failed_only_clears_on_a_user_action() {
         h.send(input);
         assert_eq!(h.cm.phase, failed, "{label} must not clear failed");
     }
-    h.exit_for(&id(2), ended(Milestone::Spawned));
+    h.exit_for(&id(2), ended(Milestone::Started));
     assert_eq!(h.cm.phase, failed);
     h.sleep();
     h.advance(4000.0);
@@ -802,12 +802,6 @@ fn connect_rejections_are_classified_by_code() {
         (Code::WrongPhase, None),
         (Code::UnknownAttempt, None),
         (Code::InternalError, None),
-        (
-            Code::ClientUnavailable,
-            Some(Failure::Helper {
-                code: Code::ClientUnavailable,
-            }),
-        ),
         (
             Code::InvalidRequest,
             Some(Failure::Helper {

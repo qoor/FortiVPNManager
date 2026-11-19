@@ -190,7 +190,7 @@ private extension AppInternal {
         }
 
         static func readinessSection(_ helper: HelperState) -> ReadinessSection {
-            ReadinessSection(helper: helper, registerHelper: .hidden, registerError: nil, client: nil)
+            ReadinessSection(helper: helper, registerHelper: .hidden, registerError: nil, backend: nil)
         }
 
         static func gmailSection(_ test: GmailTest, account: GoogleAccountStatus = .notConnected) -> GmailSection {
@@ -253,7 +253,7 @@ private extension AppInternal {
         static let fromRuntime: [FromRuntime] = [
             .section(.connection(connectionSection(.notConnected))),
             .section(.schedule(scheduleSection(enabled: false, outlook: nil, hoursError: nil))),
-            .section(.readiness(ReadinessSection(helper: .checking, registerHelper: .hidden, registerError: nil, client: nil))),
+            .section(.readiness(ReadinessSection(helper: .checking, registerHelper: .hidden, registerError: nil, backend: nil))),
             .section(.gmail(gmailSection(.idle))),
             .section(.bypassRules(bypassSection(.checking, notice: nil))),
             .section(.config(configSection(accountForm(0)))),
@@ -318,7 +318,6 @@ private extension AppInternal {
             .helper(code: .invalidRequest),
             .helper(code: .unknownAttempt),
             .helper(code: .wrongPhase),
-            .helper(code: .clientUnavailable),
             .helper(code: .notAuthorized),
             .helper(code: .internalError),
         ]
@@ -348,15 +347,15 @@ private extension AppInternal {
         static let readinessSections: [ReadinessSection] = [
             ReadinessSection(
                 helper: .running(build: "20261109120000"), registerHelper: .hidden, registerError: nil,
-                client: VpnClientInfo(version: "9.21-unknown")
+                backend: VpnBackendInfo(version: "9.21-unknown")
             ),
             ReadinessSection(
-                helper: .notRegistered, registerHelper: .enabled, registerError: .notInstalledCopy, client: nil
+                helper: .notRegistered, registerHelper: .enabled, registerError: .notInstalledCopy, backend: nil
             ),
             ReadinessSection(
                 helper: .running(build: "20261109120000"), registerHelper: .hidden,
                 registerError: .failed(description: "Operation not permitted"),
-                client: VpnClientInfo(version: nil)
+                backend: VpnBackendInfo(version: nil)
             ),
             readinessSection(.requiresApproval),
             readinessSection(.versionMismatch(helperBuild: "20261108090000", appBuild: "20261109120000")),
@@ -760,7 +759,7 @@ private extension AppInternal {
             .portResponse(id: 6, response: .registrationFailed(error: .failed(description: "Operation not permitted"))),
             .portResponse(id: 7, response: .helperBuild(build: "20261109120000")),
             .portResponse(id: 8, response: .helperReply(json: nil)),
-            .portResponse(id: 12, response: .helperReply(json: #"{"childAlive":false}"#)),
+            .portResponse(id: 12, response: .helperReply(json: #"{"sessionRunning":false}"#)),
             .portResponse(id: 13, response: .helperReplyFlag(value: true)),
             .portResponse(id: 8, response: .helperUnreachable(failure: .appNotSigned)),
             .portResponse(id: 8, response: .helperUnreachable(failure: .connection(

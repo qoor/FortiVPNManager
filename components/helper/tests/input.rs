@@ -18,7 +18,7 @@ fn wrong_phase(message: &str) -> HelperError {
 #[test]
 fn an_otp_before_the_prompt_is_refused() {
     for (trusted, milestone) in [
-        (false, Milestone::Spawned),
+        (false, Milestone::Started),
         (true, Milestone::ConnectedToGateway),
     ] {
         let script = script(move |_, link| {

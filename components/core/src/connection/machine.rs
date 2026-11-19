@@ -10,7 +10,7 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
-    AttemptId, ExitFacts, HelperErrorCode, HelperEvent, HelperEventKind, Milestone, SessionId,
+    AttemptId, EndFacts, HelperErrorCode, HelperEvent, HelperEventKind, Milestone, SessionId,
     StopReason,
 };
 use fvm_contract::app_internal::SecretText;
@@ -1056,7 +1056,7 @@ impl ConnectionManager {
             return;
         }
         attempt.milestone = Some(milestone);
-        if previous.unwrap_or(Milestone::Spawned) < Milestone::ConnectedToGateway
+        if previous.unwrap_or(Milestone::Started) < Milestone::ConnectedToGateway
             && milestone >= Milestone::ConnectedToGateway
         {
             // The certificate check passed and the credentials go out next: this counts toward
@@ -1085,7 +1085,7 @@ impl ConnectionManager {
                     prompted_at: self.now,
                 });
             }
-            Milestone::Spawned
+            Milestone::Started
             | Milestone::ConnectedToGateway
             | Milestone::OtpSubmitted
             | Milestone::Authenticated => {}
@@ -1113,7 +1113,7 @@ impl ConnectionManager {
         });
     }
 
-    fn exited(&mut self, id: &AttemptId, facts: &ExitFacts) {
+    fn exited(&mut self, id: &AttemptId, facts: &EndFacts) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
                 self.learn_certificates(facts);
@@ -1196,12 +1196,9 @@ impl ConnectionManager {
                 match (attempt.otp_failure, code) {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
                     (Some(OtpFailure::Network), _) => self.network_failure(RetryReason::Network),
-                    (
-                        None,
-                        HelperErrorCode::ClientUnavailable
-                        | HelperErrorCode::InvalidRequest
-                        | HelperErrorCode::NotAuthorized,
-                    ) => self.fail(Failure::Helper { code }),
+                    (None, HelperErrorCode::InvalidRequest | HelperErrorCode::NotAuthorized) => {
+                        self.fail(Failure::Helper { code })
+                    }
                     (
                         None,
                         HelperErrorCode::Busy
@@ -1508,7 +1505,7 @@ impl ConnectionManager {
             && session
                 .planned_reconnect
                 .is_some_and(|planned| planned <= self.now);
-        let reason = if !observation.client_running
+        let reason = if !observation.session_running
             || !observation.tunnel_up
             || observation.routing_incomplete
         {
@@ -2052,7 +2049,7 @@ impl ConnectionManager {
             .is_none_or(|run| run.same_gateway(&self.settings.account))
     }
 
-    fn learn_certificates(&mut self, facts: &ExitFacts) {
+    fn learn_certificates(&mut self, facts: &EndFacts) {
         // A run started before a server address or port change saw the old gateway's certificate.
         if facts.cert_rejected_digests.is_empty() || !self.run_is_for_current_gateway() {
             return;

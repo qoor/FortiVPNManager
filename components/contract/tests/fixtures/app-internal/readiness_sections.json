@@ -1,6 +1,6 @@
 [
   {
-    "client": {
+    "backend": {
       "version": "9.21-unknown"
     },
     "helper": {
@@ -20,7 +20,7 @@
     "registerHelper": "enabled"
   },
   {
-    "client": {},
+    "backend": {},
     "helper": {
       "running": {
         "build": "20261109120000"

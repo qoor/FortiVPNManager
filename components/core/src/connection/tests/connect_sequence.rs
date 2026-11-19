@@ -50,7 +50,7 @@ fn launch_runs_the_whole_sequence_in_order() {
     );
     assert_eq!(h.attempt().unwrap().stage, Stage::Run);
     h.advance(1.0);
-    assert_eq!(connection_effects(&h.milestone(Milestone::Spawned)), []);
+    assert_eq!(connection_effects(&h.milestone(Milestone::Started)), []);
     h.advance(1.0);
     assert_eq!(
         connection_effects(&h.milestone(Milestone::ConnectedToGateway)),
@@ -257,7 +257,7 @@ fn the_attempt_deadline_stops_a_running_tunnel() {
     h.launch();
     let id = h.start_tunnel();
     h.advance(1.0);
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     let effects = connection_effects(&h.fire(TimerKind::AttemptDeadline));
     assert_eq!(h.now, t0() + secs(150.0));
     assert_eq!(
@@ -273,7 +273,7 @@ fn the_attempt_deadline_stops_a_running_tunnel() {
             },
         ]
     );
-    h.exit(ended(Milestone::Spawned).by_helper(StopReason::AttemptTimeout));
+    h.exit(ended(Milestone::Started).by_helper(StopReason::AttemptTimeout));
     assert_eq!(
         h.retry_wait(),
         Some((h.now + secs(10.0), RetryReason::Network))
@@ -310,7 +310,7 @@ fn a_gateway_without_otp_closes_the_session_at_tunnel_up() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     h.milestone(Milestone::ConnectedToGateway);
     h.milestone(Milestone::Authenticated);
     let effects = connection_effects(&h.milestone_for(&id, Milestone::TunnelUp, Some(TUNNEL_IP)));
@@ -348,7 +348,7 @@ fn a_code_before_the_prompt_is_ignored() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     h.milestone(Milestone::ConnectedToGateway);
     assert_eq!(
         connection_effects(&h.send(Input::OtpCodeFound(id, code("123456")))),
@@ -363,7 +363,7 @@ fn out_of_order_and_repeated_milestones_are_ignored() {
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::OtpPrompted);
     assert_eq!(connection_effects(&h.milestone(Milestone::OtpPrompted)), []);
-    assert_eq!(connection_effects(&h.milestone(Milestone::Spawned)), []);
+    assert_eq!(connection_effects(&h.milestone(Milestone::Started)), []);
     assert_eq!(h.attempt().unwrap().milestone, Some(Milestone::OtpPrompted));
 }
 
@@ -372,7 +372,7 @@ fn the_auth_attempt_is_recorded_once_per_attempt_even_when_milestones_skip() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     // `connectedToGateway` was never reported; `otpPrompted` implies it.
     let effects = h.milestone(Milestone::OtpPrompted);
     assert_eq!(
@@ -389,7 +389,7 @@ fn attempt_ids_are_deterministic_and_fresh() {
     h.launch();
     assert_eq!(h.attempt().unwrap().id, id(1));
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     h.fire(TimerKind::Retry);
     assert_eq!(h.attempt().unwrap().id, id(2));
     assert_ne!(id(1), id(2));
@@ -420,7 +420,7 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
     // A certificate retry is an attempt of its own.
     h.start_tunnel();
     assert_eq!(announced(&h), []);
-    h.exit(ended(Milestone::Spawned).certs(&[digest('a')], Some(Milestone::Spawned)));
+    h.exit(ended(Milestone::Started).certs(&[digest('a')], Some(Milestone::Started)));
     assert_eq!(h.attempt().unwrap().reason, AttemptReason::CertificateRetry);
     assert!(
         matches!(&h.effects[0], Effect::AttemptBegun { attempt, .. } if *attempt == id(2)),

@@ -147,7 +147,6 @@ public static class ConnectionText
     {
         HelperErrorCode.Busy => L("Helper is busy with another connection"),
         HelperErrorCode.InvalidRequest => L("Invalid connection request"),
-        HelperErrorCode.ClientUnavailable => L("%@ not found", "openconnect"),
         HelperErrorCode.NotAuthorized => L("Helper refused the request"),
         _ => L("Helper internal error"),
     };

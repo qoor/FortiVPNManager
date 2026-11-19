@@ -496,7 +496,7 @@ fn a_path_probe_asks_the_helper_only_while_connected() {
             matches!(
                 effect,
                 Effect::ProbeNetwork(NetworkProbe {
-                    client_running: true,
+                    session_running: true,
                     ..
                 })
             )

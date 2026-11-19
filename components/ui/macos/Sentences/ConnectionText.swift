@@ -150,7 +150,6 @@ extension AppInternal.HelperErrorCode {
         switch self {
         case .busy: String(localized: "Helper is busy with another connection")
         case .invalidRequest: String(localized: "Invalid connection request")
-        case .clientUnavailable: String(localized: "\("openconnect") not found")
         case .notAuthorized: String(localized: "Helper refused the request")
         case .unknownAttempt, .wrongPhase, .internalError: String(localized: "Helper internal error")
         }

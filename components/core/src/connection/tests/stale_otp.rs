@@ -201,7 +201,7 @@ fn every_other_end_after_the_credentials_searches() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     h.milestone(Milestone::ConnectedToGateway);
     h.advance(120.0);
     h.milestone(Milestone::OtpPrompted);
@@ -452,11 +452,11 @@ fn no_search_without_credentials_or_once_the_code_was_submitted() {
     let mut h = Harness::new();
     h.launch();
     let id = h.start_tunnel();
-    h.run_milestones(&id, Milestone::Spawned);
+    h.run_milestones(&id, Milestone::Started);
     let effects = h.send(Input::Disconnect);
     assert!(effects.contains(&close(&id, false)), "{effects:?}");
     assert_eq!(timer_set(&effects, TimerKind::StaleOtp), None);
-    h.exit(ended(Milestone::Spawned).by_helper(StopReason::UserDisconnect));
+    h.exit(ended(Milestone::Started).by_helper(StopReason::UserDisconnect));
     let (next, effects) = connect_again(&mut h);
     assert_eq!(effects, [Effect::OpenOtpSession { attempt: next }]);
 

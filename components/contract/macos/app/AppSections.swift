@@ -90,7 +90,6 @@ extension AppInternal {
         case invalidRequest
         case unknownAttempt
         case wrongPhase
-        case clientUnavailable = "binaryUnavailable"
         case notAuthorized
         case internalError
     }
@@ -149,7 +148,7 @@ extension AppInternal {
         var helper: HelperState
         var registerHelper: ButtonState
         var registerError: RegistrationError?
-        var client: VpnClientInfo?
+        var backend: VpnBackendInfo?
     }
 
     enum HelperState: Decodable, Equatable, Sendable {
@@ -161,7 +160,7 @@ extension AppInternal {
         case unreachable(failure: HelperChannelFailure)
     }
 
-    struct VpnClientInfo: Decodable, Equatable, Sendable {
+    struct VpnBackendInfo: Decodable, Equatable, Sendable {
         var version: String?
     }
 

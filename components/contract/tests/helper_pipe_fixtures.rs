@@ -57,7 +57,7 @@ fn messages_to_the_app() {
         PipeMessage::Reply { id: 2, json: None },
         PipeMessage::Reply {
             id: 5,
-            json: Some(r#"{"childAlive":false}"#.into()),
+            json: Some(r#"{"sessionRunning":false}"#.into()),
         },
         PipeMessage::ReplyFlag {
             id: 6,

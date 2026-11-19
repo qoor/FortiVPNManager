@@ -123,7 +123,7 @@ fn messages_from_the_runtime() {
                         helper: HelperState::Checking {},
                         register_helper: ButtonState::Hidden,
                         register_error: None,
-                        client: None,
+                        backend: None,
                     }),
                 },
             },
@@ -316,9 +316,6 @@ fn connection_kinds() {
                 code: HelperErrorCode::WrongPhase,
             },
             FailureReason::Helper {
-                code: HelperErrorCode::ClientUnavailable,
-            },
-            FailureReason::Helper {
                 code: HelperErrorCode::NotAuthorized,
             },
             FailureReason::Helper {
@@ -420,7 +417,7 @@ fn readiness_section(helper: HelperState) -> ReadinessSection {
         helper,
         register_helper: ButtonState::Hidden,
         register_error: None,
-        client: None,
+        backend: None,
     }
 }
 
@@ -435,7 +432,7 @@ fn readiness_sections() {
                 },
                 register_helper: ButtonState::Hidden,
                 register_error: None,
-                client: Some(VpnClientInfo {
+                backend: Some(VpnBackendInfo {
                     version: Some("9.21-unknown".into()),
                 }),
             },
@@ -443,7 +440,7 @@ fn readiness_sections() {
                 helper: HelperState::NotRegistered {},
                 register_helper: ButtonState::Enabled,
                 register_error: Some(RegistrationError::NotInstalledCopy {}),
-                client: None,
+                backend: None,
             },
             ReadinessSection {
                 helper: HelperState::Running {
@@ -453,7 +450,7 @@ fn readiness_sections() {
                 register_error: Some(RegistrationError::Failed {
                     description: "Operation not permitted".into(),
                 }),
-                client: Some(VpnClientInfo { version: None }),
+                backend: Some(VpnBackendInfo { version: None }),
             },
             readiness_section(HelperState::RequiresApproval {}),
             readiness_section(HelperState::VersionMismatch {
@@ -1662,7 +1659,7 @@ fn port_responses() {
             response(
                 12,
                 PortResponse::HelperReply {
-                    json: Some(r#"{"childAlive":false}"#.into()),
+                    json: Some(r#"{"sessionRunning":false}"#.into()),
                 },
             ),
             response(13, PortResponse::HelperReplyFlag { value: true }),

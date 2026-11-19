@@ -173,7 +173,7 @@ enum SettingsSearch {
         /// The OTP is read with the Gmail API (the Account pane's Google rows).
         case gmailApi
         /// The VPN client was found (the Advanced pane's client rows).
-        case vpnClientFound
+        case vpnBackendFound
     }
 
     /// The settings of `pane`, built once: the search goes through them on every keystroke.
@@ -250,9 +250,9 @@ enum SettingsSearch {
                 item(pane, "Register Helper"),
                 item(pane, "App Background Activity"),
                 item(pane, "Open System Settings…", row: "App Background Activity"),
-                item(pane, "Type", when: .vpnClientFound),
-                item(pane, "openconnect", row: "Type", when: .vpnClientFound),
-                item(pane, "Version", when: .vpnClientFound),
+                item(pane, "Type", when: .vpnBackendFound),
+                item(pane, "openconnect", row: "Type", when: .vpnBackendFound),
+                item(pane, "Version", when: .vpnBackendFound),
                 item(pane, "Settings File"),
                 item(pane, "Show in Finder", row: "Settings File"),
             ]

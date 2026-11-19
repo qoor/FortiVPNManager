@@ -25,14 +25,13 @@ const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
 const OTHER_ATTEMPT: &str = "0B6C3D51-2F4A-4E8B-9C7D-1A2B3C4D5E6F";
 const DIGEST_A: &str = "4f7a0c2b9d1e8f3a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a";
 const DIGEST_B: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const CELLAR_PATH: &str = "/opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn";
 
 fn attempt() -> AttemptId {
     ATTEMPT.parse().unwrap()
 }
 
-fn full_facts() -> ExitFacts {
-    ExitFacts {
+fn full_facts() -> EndFacts {
+    EndFacts {
         furthest_milestone: Milestone::TunnelUp,
         stop_initiator: StopInitiator::Helper {
             reason: StopReason::ProactiveReconnect,
@@ -110,7 +109,7 @@ fn run_request_replacing_a_run() {
 fn milestones_in_order() {
     use Milestone::*;
     let milestones = [
-        Spawned,
+        Started,
         ConnectedToGateway,
         OtpPrompted,
         OtpSubmitted,
@@ -137,7 +136,7 @@ fn stop_reasons() {
         Sleep,
         AppQuit,
         AppDisconnected,
-        Watchdog,
+        StageLimit,
         NetworkSetupFailed,
         HelperShutdown,
         Replaced,
@@ -157,12 +156,12 @@ fn stop_reason_parses_the_raw_value_of_a_disconnect_request() {
 #[test]
 fn stop_initiators() {
     let initiators = [
-        StopInitiator::Client {},
+        StopInitiator::Session {},
         StopInitiator::Helper {
             reason: StopReason::UserDisconnect,
         },
         StopInitiator::Helper {
-            reason: StopReason::Watchdog,
+            reason: StopReason::StageLimit,
         },
     ];
     both_ways(
@@ -172,18 +171,18 @@ fn stop_initiators() {
 }
 
 #[test]
-fn exit_facts() {
+fn end_facts() {
     both_ways(
         full_facts(),
-        include_str!("fixtures/app-helper/exit_facts.json"),
+        include_str!("fixtures/app-helper/end_facts.json"),
     );
 }
 
 #[test]
-fn exit_facts_tunnel_setup_failed() {
-    let facts = ExitFacts {
+fn end_facts_tunnel_setup_failed() {
+    let facts = EndFacts {
         furthest_milestone: Milestone::Authenticated,
-        stop_initiator: StopInitiator::Client {},
+        stop_initiator: StopInitiator::Session {},
         cert_rejected_digests: vec![],
         cert_rejected_at: None,
         tunnel_setup_failed: true,
@@ -192,7 +191,7 @@ fn exit_facts_tunnel_setup_failed() {
     };
     both_ways(
         facts,
-        include_str!("fixtures/app-helper/exit_facts_tunnel_setup_failed.json"),
+        include_str!("fixtures/app-helper/end_facts_tunnel_setup_failed.json"),
     );
 }
 
@@ -301,9 +300,9 @@ fn output_batch() {
 
 #[test]
 fn helper_statuses() {
-    let status = |client_running, routing_complete| HelperStatus {
-        client_running,
-        client: ClientStatus {
+    let status = |session_running, routing_complete| HelperStatus {
+        session_running,
+        backend: BackendStatus {
             version: Some("9.21".into()),
         },
         routing_complete,
@@ -330,10 +329,6 @@ fn helper_errors() {
         error(InvalidRequest, "could not decode the connect request"),
         error(UnknownAttempt, "not the active connection attempt"),
         error(WrongPhase, "openfortivpn is not waiting for an OTP"),
-        error(
-            ClientUnavailable,
-            &format!("openfortivpn is not executable: {CELLAR_PATH}"),
-        ),
         error(NotAuthorized, "the VPN run belongs to another user"),
         error(
             InternalError,

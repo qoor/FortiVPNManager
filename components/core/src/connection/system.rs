@@ -38,7 +38,7 @@ pub(super) struct RawPath {
 pub(super) struct WakeObservation {
     pub(super) path_satisfied: bool,
     pub(super) underlay: Option<Underlay>,
-    pub(super) client_running: bool,
+    pub(super) session_running: bool,
     /// The tunnel interface is still there and up.
     pub(super) tunnel_up: bool,
     pub(super) routing_incomplete: bool,
@@ -162,7 +162,7 @@ impl ConnectionManager {
             self.wake_settled(WakeObservation {
                 path_satisfied: false,
                 underlay: None,
-                client_running: false,
+                session_running: false,
                 tunnel_up: false,
                 routing_incomplete: false,
             });
@@ -179,8 +179,8 @@ impl ConnectionManager {
             self.report_path();
             return;
         }
-        let client_running = self.run_active();
-        let (id, host) = self.probe(client_running);
+        let session_running = self.run_active();
+        let (id, host) = self.probe(session_running);
         if let Some(settle) = &mut self.wake_settle {
             settle.step = SettleStep::Observing(id, host);
         }
@@ -227,7 +227,7 @@ impl ConnectionManager {
     }
 
     /// Asks for the route to the gateway; returns the probe's ID and the host it looks up.
-    fn probe(&mut self, client_running: bool) -> (u64, String) {
+    fn probe(&mut self, session_running: bool) -> (u64, String) {
         self.next_probe += 1;
         let host = self.settings.account.host.clone();
         let gateway = (!host.is_empty()).then(|| GatewayLookup {
@@ -241,7 +241,7 @@ impl ConnectionManager {
         self.effects.push(Effect::ProbeNetwork(NetworkProbe {
             id: self.next_probe,
             gateway,
-            client_running,
+            session_running,
         }));
         (self.next_probe, host)
     }
@@ -284,7 +284,7 @@ impl ConnectionManager {
             self.wake_settled(WakeObservation {
                 path_satisfied: true,
                 underlay,
-                client_running: result.client_running.unwrap_or(false),
+                session_running: result.session_running.unwrap_or(false),
                 tunnel_up,
                 routing_incomplete,
             });

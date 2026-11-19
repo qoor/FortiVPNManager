@@ -407,9 +407,9 @@ pub struct NetworkProbe {
     /// The gateway to find the route to: the interface the routing table uses for it and the
     /// interface addresses. `None` when no server address is set.
     pub gateway: Option<GatewayLookup>,
-    /// Also ask the Helper whether the VPN client is running and the connected session's routing
-    /// is complete.
-    pub client_running: bool,
+    /// Also ask the Helper whether the session is running and the connected session's routing is
+    /// complete.
+    pub session_running: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -427,8 +427,8 @@ pub struct ProbeResult {
     pub gateway_ip: Option<Ipv4Addr>,
     pub route_interface: Option<String>,
     pub addresses: Vec<InterfaceAddress>,
-    /// When asked: whether the VPN client runs, `false` when the Helper did not answer.
-    pub client_running: Option<bool>,
+    /// When asked: whether the session runs, `false` when the Helper did not answer.
+    pub session_running: Option<bool>,
     pub routing_complete: Option<bool>,
 }
 

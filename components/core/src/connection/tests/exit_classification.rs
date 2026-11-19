@@ -1,6 +1,6 @@
 //! Why a run ended without the app asking.
 
-use fvm_contract::app_helper::{ExitFacts, Milestone, StopReason};
+use fvm_contract::app_helper::{EndFacts, Milestone, StopReason};
 
 use super::super::classify::{ExitContext, Outcome, classify};
 use super::super::{Failure, OtpFailure};
@@ -15,7 +15,7 @@ struct Case {
     otp_in_spam: bool,
 }
 
-fn outcome(facts: ExitFacts, case: Case) -> Outcome {
+fn outcome(facts: EndFacts, case: Case) -> Outcome {
     classify(&ExitContext {
         facts: &facts,
         seen_milestone: case.seen,
@@ -26,11 +26,11 @@ fn outcome(facts: ExitFacts, case: Case) -> Outcome {
     })
 }
 
-fn plain(facts: ExitFacts) -> Outcome {
+fn plain(facts: EndFacts) -> Outcome {
     outcome(facts, Case::default())
 }
 
-fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> ExitFacts {
+fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> EndFacts {
     let certs: Vec<String> = certs.iter().map(|cert| cert.to_string()).collect();
     ended(furthest).certs(&certs, at).facts()
 }
@@ -40,7 +40,7 @@ fn auth(failure: Failure) -> Outcome {
 }
 
 const BEFORE_THE_TUNNEL: [Milestone; 5] = [
-    Milestone::Spawned,
+    Milestone::Started,
     Milestone::ConnectedToGateway,
     Milestone::OtpPrompted,
     Milestone::OtpSubmitted,
@@ -52,16 +52,16 @@ fn certificate_rejection_before_the_otp_was_submitted() {
     let a = digest('a');
     let a = a.as_str();
     assert_eq!(
-        plain(cert(Milestone::Spawned, &[a], Some(Milestone::Spawned))),
+        plain(cert(Milestone::Started, &[a], Some(Milestone::Started))),
         Outcome::CertificateRetry
     );
     assert_eq!(
-        plain(cert(Milestone::Spawned, &[a, a], Some(Milestone::Spawned))),
+        plain(cert(Milestone::Started, &[a, a], Some(Milestone::Started))),
         Outcome::CertificateRetry
     );
     assert_eq!(
         outcome(
-            cert(Milestone::Spawned, &[a], Some(Milestone::Spawned)),
+            cert(Milestone::Started, &[a], Some(Milestone::Started)),
             Case {
                 cert_retry_used: true,
                 ..Case::default()
@@ -129,7 +129,7 @@ fn any_other_end_after_the_tunnel_is_a_network_error() {
     assert_eq!(
         plain(
             ended(Milestone::TunnelUp)
-                .by_helper(StopReason::Watchdog)
+                .by_helper(StopReason::StageLimit)
                 .code(-EPIPE)
                 .facts()
         ),
@@ -294,7 +294,7 @@ fn any_other_end_before_the_tunnel_is_a_network_error() {
             );
         }
         assert_eq!(
-            plain(ended(furthest).by_helper(StopReason::Watchdog).facts()),
+            plain(ended(furthest).by_helper(StopReason::StageLimit).facts()),
             Outcome::NetworkError,
             "{furthest:?}"
         );
@@ -315,7 +315,7 @@ fn any_other_end_before_the_tunnel_is_a_network_error() {
     }
     assert_eq!(
         outcome(
-            ended(Milestone::Spawned).facts(),
+            ended(Milestone::Started).facts(),
             Case {
                 seen: Some(Milestone::OtpSubmitted),
                 ..Case::default()

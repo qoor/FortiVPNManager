@@ -100,9 +100,9 @@ public class StringsTests
         Assert.Equal("Waiting to reconnect (1:12)", waiting.StatusLine(null, time));
         var refused = connected with
         {
-            Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.ClientUnavailable)),
+            Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.InvalidRequest)),
         };
-        Assert.Equal("Error: openconnect not found", refused.StatusLine(null, time));
+        Assert.Equal("Error: Invalid connection request", refused.StatusLine(null, time));
     }
 
     [Fact]

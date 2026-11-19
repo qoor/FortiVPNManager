@@ -28,7 +28,7 @@ fn with_account(account: VpnAccount) -> Settings {
 }
 
 fn rejected(certs: &[String]) -> Exit {
-    ended(Milestone::Spawned).certs(certs, Some(Milestone::Spawned))
+    ended(Milestone::Started).certs(certs, Some(Milestone::Started))
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn a_rejection_learns_the_value_and_retries_at_once_without_counting() {
     let first = h.start_tunnel();
     assert_eq!(run_starts(&h.effects), [account()]);
     h.advance(1.0);
-    h.milestone(Milestone::Spawned);
+    h.milestone(Milestone::Started);
     let effects = connection_effects(&h.exit(rejected(&[digest('a'), digest('a')])));
     let second = id(2);
     assert_eq!(
@@ -137,9 +137,9 @@ fn values_learned_from_a_stopped_run_are_kept() {
     h.send(Input::Disconnect);
     let effects = h.exit_for(
         &id,
-        ended(Milestone::Spawned)
+        ended(Milestone::Started)
             .by_helper(StopReason::UserDisconnect)
-            .certs(&[digest('a')], Some(Milestone::Spawned)),
+            .certs(&[digest('a')], Some(Milestone::Started)),
     );
     assert_eq!(saved_certs(&effects), Some(vec![digest('a'), pin_old()]));
     assert_eq!(h.cm.phase, Phase::Idle);

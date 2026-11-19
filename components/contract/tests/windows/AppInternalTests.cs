@@ -41,9 +41,7 @@ public class AppInternalTests
         Assert.Equal(
             [AfterDisconnect.Idle, AfterDisconnect.Reconnect, AfterDisconnect.Sleep, AfterDisconnect.Quit],
             RoundTrip<AfterDisconnect>("after_disconnect.json"));
-        var reasons = RoundTrip<FailureReason>("failure_reasons.json");
-        // The Rust name of the Helper's code is older than the C# one.
-        Assert.Contains(new FailureReason.Helper(HelperErrorCode.ClientUnavailable), reasons);
+        RoundTrip<FailureReason>("failure_reasons.json");
         RoundTrip<WaitReason>("wait_reasons.json");
         RoundTrip<SetupItem>("setup_items.json");
     }

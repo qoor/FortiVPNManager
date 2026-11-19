@@ -15,7 +15,7 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
+    EndFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
     RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkChange, NetworkOutcome};
@@ -137,7 +137,7 @@ impl Run {
             returned: Arc::clone(&returned),
             phase: Phase::Running,
             otp_submitted: false,
-            furthest: Milestone::Spawned,
+            furthest: Milestone::Started,
             tunnel_ip: None,
             rejected_certificates: Vec::new(),
             certificate_rejected_at: None,
@@ -328,8 +328,8 @@ struct Watch<R> {
 enum Phase {
     Running,
     Returned(SessionEnd),
-    AwaitingSwitch(ExitFacts),
-    RevertingNetwork(ExitFacts),
+    AwaitingSwitch(EndFacts),
+    RevertingNetwork(EndFacts),
     Reported,
 }
 
@@ -342,7 +342,7 @@ struct Stage {
 impl<R: FnMut(Report)> Watch<R> {
     fn run(mut self, client_line: OutputLine, inputs: &Receiver<Input>) {
         self.batch.push(client_line);
-        self.reach(Milestone::Spawned);
+        self.reach(Milestone::Started);
         while !matches!(self.phase, Phase::Reported) {
             let input = match self.next_deadline() {
                 None => Some(inputs.recv().expect("the run holds a sender")),
@@ -555,7 +555,7 @@ impl<R: FnMut(Report)> Watch<R> {
             return;
         };
         let text = format!(
-            "‹watchdog: {} did not finish within {}›",
+            "‹stage limit: {} did not finish within {}›",
             stage.name,
             seconds(stage.limit)
         );
@@ -563,7 +563,7 @@ impl<R: FnMut(Report)> Watch<R> {
             self.network_setup_failed(text);
         } else {
             self.meta(text);
-            self.stop(StopReason::Watchdog);
+            self.stop(StopReason::StageLimit);
         }
     }
 
@@ -620,11 +620,11 @@ impl<R: FnMut(Report)> Watch<R> {
             self.log(LogLevel::Error, LogCategory::Helper, message);
         }
         self.meta(format!("‹session ended: code {}›", end.code));
-        let facts = ExitFacts {
+        let facts = EndFacts {
             furthest_milestone: self.furthest,
             stop_initiator: match self.stop {
                 Some(reason) => StopInitiator::Helper { reason },
-                None => StopInitiator::Client {},
+                None => StopInitiator::Session {},
             },
             cert_rejected_digests: mem::take(&mut self.rejected_certificates),
             cert_rejected_at: self.certificate_rejected_at,
@@ -662,7 +662,7 @@ impl<R: FnMut(Report)> Watch<R> {
         (self.on_report)(Report::Log(level, category, message));
     }
 
-    fn report_exit(&mut self, facts: ExitFacts) {
+    fn report_exit(&mut self, facts: EndFacts) {
         self.phase = Phase::Reported;
         if let Err(line) = self.files.remove() {
             self.log(LogLevel::Error, LogCategory::Helper, line);

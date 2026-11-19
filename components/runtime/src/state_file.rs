@@ -421,9 +421,9 @@ mod tests {
             (Failure::GmailRejected, r#"{"gmailAppPassword":{}}"#),
             (
                 Failure::Helper {
-                    code: HelperErrorCode::ClientUnavailable,
+                    code: HelperErrorCode::InternalError,
                 },
-                r#"{"helper":{"_0":"binaryUnavailable"}}"#,
+                r#"{"helper":{"_0":"internalError"}}"#,
             ),
             (
                 Failure::OtpNotReceived { in_spam: true },
@@ -445,13 +445,13 @@ mod tests {
 
     #[test]
     fn a_helper_failure_of_an_earlier_build_reads_without_its_client() {
-        let json = r#"{"helper":{"_0":"binaryUnavailable","client":"openfortivpn"}}"#;
+        let json = r#"{"helper":{"_0":"internalError","client":"openfortivpn"}}"#;
         assert_eq!(
             serde_json::from_str::<WireFailure>(json)
                 .unwrap()
                 .into_failure(),
             Failure::Helper {
-                code: HelperErrorCode::ClientUnavailable
+                code: HelperErrorCode::InternalError
             }
         );
     }

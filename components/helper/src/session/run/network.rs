@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
-use fvm_contract::app_helper::{ExitFacts, Milestone, StopReason};
+use fvm_contract::app_helper::{EndFacts, Milestone, StopReason};
 use fvm_contract::helper_internal::{
     IpNetwork, LogCategory, LogLevel, NetworkChange, NetworkOutcome, NetworkSettings,
     OutsideChanges, OutsideRoute,
@@ -430,7 +430,7 @@ impl<R: FnMut(Report)> Watch<R> {
         self.stop(StopReason::NetworkSetupFailed);
     }
 
-    pub(super) fn revert_network_or_continue(&mut self, facts: ExitFacts) {
+    pub(super) fn revert_network_or_continue(&mut self, facts: EndFacts) {
         if self.hand_over_open() {
             self.flush_batch();
             self.phase = Phase::AwaitingSwitch(facts);

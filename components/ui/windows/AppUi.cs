@@ -56,7 +56,7 @@ public sealed class AppUi
     {
         SearchCondition.Connected => Connection?.Status is ConnectionStatus.Connected,
         SearchCondition.GmailApi => Gmail?.Method == OtpMethod.GmailApi,
-        SearchCondition.VpnClientFound => Readiness?.Client is not null,
+        SearchCondition.VpnBackendFound => Readiness?.Backend is not null,
         SearchCondition.RegisterHelper => Readiness is { RegisterHelper: not ButtonState.Hidden },
         SearchCondition.AddCurrentNetwork => BypassRules is { AddCurrentNetwork: not ButtonState.Hidden },
         _ => throw new InvalidOperationException($"unknown condition {condition}"),

@@ -8,9 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    AttemptId, BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
-    ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone, OutputBatch,
-    OutputLine, OutputSource, RunRequest, StopInitiator, StopReason,
+    AttemptId, BackendStatus, BypassRoute, BypassRoutesReply, BypassRoutesRequest,
+    BypassRoutesSnapshot, EndFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
+    OutputBatch, OutputLine, OutputSource, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
@@ -259,7 +259,7 @@ impl App {
     }
 
     fn bring_up(&mut self, attempt: &AttemptId, tunnel_ip: std::net::Ipv4Addr) {
-        for milestone in [Milestone::Spawned, Milestone::ConnectedToGateway] {
+        for milestone in [Milestone::Started, Milestone::ConnectedToGateway] {
             self.helper_event(
                 attempt,
                 HelperEventKind::Milestone {
@@ -433,8 +433,8 @@ impl App {
         match call {
             HelperCall::Status {} => {
                 let status = HelperStatus {
-                    client_running: false,
-                    client: ClientStatus {
+                    session_running: false,
+                    backend: BackendStatus {
                         version: Some("9.21".into()),
                     },
                     routing_complete: None,
@@ -503,9 +503,9 @@ impl App {
     }
 
     #[cfg(not(windows))]
-    fn vpn_client_info(&self) -> Option<&fvm_contract::app_internal::section::VpnClientInfo> {
+    fn vpn_backend_info(&self) -> Option<&fvm_contract::app_internal::section::VpnBackendInfo> {
         self.sections.iter().find_map(|section| match section {
-            Section::Readiness { section } => section.client.as_ref(),
+            Section::Readiness { section } => section.backend.as_ref(),
             _ => None,
         })
     }
@@ -728,9 +728,11 @@ fn the_helper_status_shows_the_vpn_client() {
     let mut app = App::new();
     app.write_config(ACCOUNT);
     app.launch();
-    app.settle_until("the Helper's status", |app| app.vpn_client_info().is_some());
+    app.settle_until("the Helper's status", |app| {
+        app.vpn_backend_info().is_some()
+    });
     assert_eq!(
-        app.vpn_client_info().unwrap().version.as_deref(),
+        app.vpn_backend_info().unwrap().version.as_deref(),
         Some("9.21")
     );
 }
@@ -1308,7 +1310,7 @@ fn reconnect_now_runs_the_next_tunnel_beside_the_connected_one() {
     app.helper_event(
         &old,
         HelperEventKind::Exited {
-            facts: ExitFacts {
+            facts: EndFacts {
                 furthest_milestone: Milestone::TunnelUp,
                 stop_initiator: StopInitiator::Helper {
                     reason: StopReason::Replaced,

@@ -1,1 +1,1 @@
-["userDisconnect","proactiveReconnect","reconnect","otpTimeout","otpUnavailable","attemptTimeout","sleep","appQuit","clientInvalidated","watchdog","networkSetupFailed","helperShutdown","replaced"]
+["userDisconnect","proactiveReconnect","reconnect","otpTimeout","otpUnavailable","attemptTimeout","sleep","appQuit","clientInvalidated","stageLimit","networkSetupFailed","helperShutdown","replaced"]

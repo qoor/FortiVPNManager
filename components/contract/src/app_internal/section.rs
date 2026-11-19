@@ -280,7 +280,7 @@ pub struct ReadinessSection {
     /// What the Helper reports about the VPN client, once it answers with this build, as it
     /// reports it.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub client: Option<VpnClientInfo>,
+    pub backend: Option<VpnBackendInfo>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -304,7 +304,7 @@ pub enum HelperState {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VpnClientInfo {
+pub struct VpnBackendInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 }

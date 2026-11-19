@@ -98,7 +98,7 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
         swift.position(is("exitAfterDraining")).is_some()
     });
     let facts = swift
-        .exit_facts(1)
+        .end_facts(1)
         .expect("the run's exit before the Helper's");
     assert_eq!(
         facts["stopInitiator"],
@@ -145,7 +145,7 @@ fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
     assert!(swift.has_log(
         "error helper: the run did not finish after the termination request; exiting anyway"
     ));
-    assert_eq!(swift.exit_facts(1), None);
+    assert_eq!(swift.end_facts(1), None);
     assert_eq!(swift.count(is("exitAfterDraining")), 0);
 
     release.send(()).unwrap();
@@ -174,7 +174,7 @@ fn a_replaced_helper_finishes_its_run_and_then_exits() {
     swift.wait_until("the exit", |swift| {
         swift.position(is("exitAfterDraining")).is_some()
     });
-    assert!(swift.exit_facts(1).is_some());
+    assert!(swift.end_facts(1).is_some());
     let executable = std::env::current_exe().unwrap();
     assert!(swift.has_log(&format!(
         "notice helper: executable replaced at {}; exiting so launchd starts the new build",

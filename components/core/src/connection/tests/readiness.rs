@@ -124,7 +124,7 @@ fn losing_the_setup_while_waiting_shows_the_setup() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    h.exit(ended(Milestone::Spawned));
+    h.exit(ended(Milestone::Started));
     let mismatch = ReadinessFacts {
         helper: HelperFacts::Answered {
             build: "99".into(),
@@ -218,7 +218,7 @@ fn an_account_change_while_the_gmail_session_starts_applies_to_the_next_attempt(
     assert_eq!(run_starts(&effects), [account()]);
     assert_eq!(h.cm.settings.account, bob());
     // The next attempt checks readiness for bob and stops at the setup.
-    h.exit_for(&id, ended(Milestone::Spawned));
+    h.exit_for(&id, ended(Milestone::Started));
     h.fire(TimerKind::Retry);
     assert!(h.effects.contains(&Effect::CheckReadiness));
     h.send(Input::ReadinessChecked(without_password()));

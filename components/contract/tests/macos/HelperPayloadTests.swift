@@ -19,10 +19,6 @@ struct HelperPayloadTests {
             HelperError(.invalidRequest, "could not decode the connect request"),
             HelperError(.unknownAttempt, "not the active connection attempt"),
             HelperError(.wrongPhase, "openfortivpn is not waiting for an OTP"),
-            HelperError(
-                .binaryUnavailable,
-                "openfortivpn is not executable: /opt/homebrew/Cellar/openfortivpn/1.24.1/bin/openfortivpn"
-            ),
             HelperError(.notAuthorized, "the VPN run belongs to another user"),
             HelperError(.internalError, "could not create the openfortivpn config file: permission denied"),
         ]

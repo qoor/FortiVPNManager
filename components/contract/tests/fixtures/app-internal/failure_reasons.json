@@ -52,11 +52,6 @@
   },
   {
     "helper": {
-      "code": "binaryUnavailable"
-    }
-  },
-  {
-    "helper": {
       "code": "notAuthorized"
     }
   },

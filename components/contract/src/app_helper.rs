@@ -127,7 +127,7 @@ impl fmt::Debug for RunRequest {
 #[serde(into = "u8", try_from = "u8")]
 #[repr(u8)]
 pub enum Milestone {
-    Spawned,
+    Started,
     ConnectedToGateway,
     OtpPrompted,
     OtpSubmitted,
@@ -156,7 +156,7 @@ impl TryFrom<u8> for Milestone {
     fn try_from(position: u8) -> Result<Self, Self::Error> {
         use Milestone::*;
         [
-            Spawned,
+            Started,
             ConnectedToGateway,
             OtpPrompted,
             OtpSubmitted,
@@ -187,7 +187,7 @@ pub enum StopReason {
     #[serde(rename = "clientInvalidated")]
     AppDisconnected,
     /// A step of the run took too long.
-    Watchdog,
+    StageLimit,
     /// The client asked again for the password or the OTP it was given: the gateway rejected it.
     PromptRepeated,
     NetworkSetupFailed,
@@ -207,9 +207,9 @@ impl FromStr for StopReason {
 /// Who ended the run.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum StopInitiator {
-    /// The client exited on its own (server cut, failed login, crash, ...).
+    /// The session ended on its own (server cut, failed login, ...).
     #[serde(rename = "none")]
-    Client {},
+    Session {},
     #[serde(rename = "helper")]
     Helper {
         #[serde(rename = "_0")]
@@ -220,7 +220,7 @@ pub enum StopInitiator {
 /// What the Helper recorded about a finished run; the app classifies the end from these facts.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExitFacts {
+pub struct EndFacts {
     pub furthest_milestone: Milestone,
     pub stop_initiator: StopInitiator,
     /// Certificate values the client printed when it rejected the gateway, without repeats.
@@ -253,7 +253,7 @@ pub enum HelperEventKind {
     /// The run's last event.
     Exited {
         #[serde(rename = "_0")]
-        facts: ExitFacts,
+        facts: EndFacts,
     },
 }
 
@@ -287,9 +287,9 @@ pub struct OutputBatch {
 /// Answer to the app's status request.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct HelperStatus {
-    #[serde(rename = "childAlive")]
-    pub client_running: bool,
-    pub client: ClientStatus,
+    #[serde(rename = "sessionRunning")]
+    pub session_running: bool,
+    pub backend: BackendStatus,
     #[serde(
         rename = "routingComplete",
         default,
@@ -300,7 +300,7 @@ pub struct HelperStatus {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClientStatus {
+pub struct BackendStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 }
@@ -319,8 +319,6 @@ pub enum HelperErrorCode {
     InvalidRequest,
     UnknownAttempt,
     WrongPhase,
-    #[serde(rename = "binaryUnavailable")]
-    ClientUnavailable,
     NotAuthorized,
     InternalError,
 }

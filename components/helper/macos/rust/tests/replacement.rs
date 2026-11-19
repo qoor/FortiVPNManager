@@ -106,7 +106,7 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
     assert_eq!(swift.scratch.recorded("run.json"), owned);
     assert_eq!(
         milestones_of(&swift, NEW),
-        [SPAWNED, CONNECTED_TO_GATEWAY, AUTHENTICATED]
+        [STARTED, CONNECTED_TO_GATEWAY, AUTHENTICATED]
     );
     swift.send(json!({"networkChanged": {"outcome": applied(json!([]))}}));
 
@@ -123,7 +123,7 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
     assert_eq!(facts["furthestMilestone"], TUNNEL_UP);
     assert_eq!(
         milestones_of(&swift, NEW),
-        [SPAWNED, CONNECTED_TO_GATEWAY, AUTHENTICATED, TUNNEL_UP]
+        [STARTED, CONNECTED_TO_GATEWAY, AUTHENTICATED, TUNNEL_UP]
     );
     let new_up = events_of(&swift, NEW).last().unwrap().0;
     let old_exit = events_of(&swift, ATTEMPT).last().unwrap().0;

@@ -137,8 +137,8 @@ fn each_connection_gets_the_answers_to_its_own_requests() {
     for connection in [&first, &second] {
         let answer: Value = stream::receive(&mut &*connection).unwrap();
         let status: HelperStatus = reply(&answer, 1);
-        assert!(!status.client_running);
-        assert_eq!(status.client.version.as_deref(), Some(VERSION));
+        assert!(!status.session_running);
+        assert_eq!(status.backend.version.as_deref(), Some(VERSION));
     }
 }
 

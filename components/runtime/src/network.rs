@@ -65,10 +65,10 @@ impl Runtime {
                     gateway_ip,
                     route_interface,
                     addresses,
-                    client_running: None,
+                    session_running: None,
                     routing_complete: None,
                 };
-                if !probe.client_running {
+                if !probe.session_running {
                     runtime.feed(connection::Input::NetworkProbed(result));
                     return;
                 }
@@ -79,7 +79,7 @@ impl Runtime {
                         }
                         _ => None,
                     };
-                    result.client_running = status.as_ref().map(|status| status.client_running);
+                    result.session_running = status.as_ref().map(|status| status.session_running);
                     result.routing_complete = status.and_then(|status| status.routing_complete);
                     runtime.feed(connection::Input::NetworkProbed(result));
                 });
