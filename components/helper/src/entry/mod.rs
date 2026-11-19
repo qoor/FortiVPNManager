@@ -3,6 +3,7 @@ mod bypass_routes;
 use std::collections::HashMap;
 use std::env;
 use std::mem;
+use std::panic;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -55,6 +56,24 @@ pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'stati
         })
         .expect("starting the entry thread");
     inbox
+}
+
+pub fn report_panics(fault: impl Fn(&str) + Send + Sync + 'static) {
+    let default = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        let thread = thread::current();
+        let location = info.location().expect("std gives every panic a location");
+        let mut line = format!(
+            "thread '{}' panicked at {location}",
+            thread.name().unwrap_or("<unnamed>")
+        );
+        if let Some(literal) = info.payload().downcast_ref::<&'static str>() {
+            line.push_str(": ");
+            line.push_str(literal);
+        }
+        fault(&line);
+        default(info);
+    }));
 }
 
 enum Event {
@@ -699,4 +718,71 @@ fn error(code: HelperErrorCode, message: impl Into<String>) -> HelperError {
 
 fn to_json(value: &impl Serialize) -> String {
     serde_json::to_string(value).expect("contract types serialize")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Write};
+    use std::process::Command;
+
+    use super::*;
+
+    fn after_file<'a>(stdout: &'a str, thread: &str) -> &'a str {
+        let prefix = format!("thread '{thread}' panicked at {}:", file!());
+        let line = stdout
+            .lines()
+            .find(|line| line.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("{stdout}"));
+        &line[prefix.len()..]
+    }
+
+    fn assert_row_and_column(site: &str) {
+        assert!(
+            matches!(site.split_once(':'), Some((row, column))
+                if row.parse::<u32>().is_ok() && column.parse::<u32>().is_ok()),
+            "{site}"
+        );
+    }
+
+    #[test]
+    fn a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message() {
+        let child = Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "entry::tests::panic_on_named_threads",
+                "--ignored",
+            ])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8(child.stdout).unwrap();
+        assert!(child.status.success(), "{stdout}");
+        let literal = after_file(&stdout, "fvm-literal");
+        let (site, message) = literal
+            .split_once(": ")
+            .unwrap_or_else(|| panic!("{literal}"));
+        assert_row_and_column(site);
+        assert_eq!(message, "on purpose");
+        assert_row_and_column(after_file(&stdout, "fvm-formatted"));
+    }
+
+    #[test]
+    #[ignore = "the panicking child of a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message"]
+    fn panic_on_named_threads() {
+        report_panics(|line| {
+            io::stdout()
+                .write_all(format!("{line}\n").as_bytes())
+                .unwrap();
+        });
+        let literal = thread::Builder::new()
+            .name("fvm-literal".into())
+            .spawn(|| panic!("on purpose"))
+            .unwrap()
+            .join();
+        let formatted = thread::Builder::new()
+            .name("fvm-formatted".into())
+            .spawn(|| panic!("on purpose with {}", String::from("secret")))
+            .unwrap()
+            .join();
+        assert!(literal.is_err() && formatted.is_err());
+    }
 }

@@ -23,9 +23,16 @@ use keychain::Keychain;
 const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
 
 /// Starts the Helper entry and returns Swift's end of its socketpair, which Swift then owns.
-#[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
+// The C symbol Swift calls and the C function Swift passes: exporting a fixed name needs the unsafe
+// attribute, and calling the function an unsafe block.
+#[allow(unsafe_code)]
 #[unsafe(no_mangle)]
-pub extern "C" fn fvm_helper_entry_start() -> i32 {
+pub extern "C" fn fvm_helper_entry_start(fault: unsafe extern "C" fn(*const u8, usize)) -> i32 {
+    fvm_helper_core::entry::report_panics(move |line| {
+        // SAFETY: Swift's function reads the `length` bytes at `text` during the call, which `line`
+        // holds.
+        unsafe { fault(line.as_ptr(), line.len()) }
+    });
     start(
         Arc::new(OpenConnect::default()),
         Arc::new(Keychain),

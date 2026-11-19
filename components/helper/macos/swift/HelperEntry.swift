@@ -7,6 +7,10 @@ nonisolated enum HelperEntry {
     static func start(
         onMessage: @escaping @Sendable (HelperInternal.FromEntry) -> Void
     ) -> MessageStream<HelperInternal.FromEntry, HelperInternal.ToEntry> {
-        MessageStream(fileDescriptor: fvm_helper_entry_start(), onMessage: onMessage)
+        let fileDescriptor = fvm_helper_entry_start { text, length in
+            let line = String(decoding: UnsafeBufferPointer(start: text, count: length), as: UTF8.self)
+            HelperLog.helper.fault("\(line, privacy: .public)")
+        }
+        return MessageStream(fileDescriptor: fileDescriptor, onMessage: onMessage)
     }
 }
