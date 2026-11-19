@@ -35,6 +35,9 @@ use windows_sys::Win32::Networking::WinSock::{
 use windows_sys::Win32::Security::Cryptography::{
     CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptProtectData, CryptUnprotectData,
 };
+use windows_sys::Win32::System::LibraryLoader::{
+    LOAD_LIBRARY_SEARCH_APPLICATION_DIR, LoadLibraryExW,
+};
 use windows_sys::Win32::System::Registry::{
     HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_MULTI_SZ, RegCloseKey, RegOpenKeyExW,
     RegQueryValueExW, RegSetValueExW,
@@ -841,6 +844,23 @@ fn environment_block(environment: &[(&str, OsString)]) -> Vec<u16> {
     }
     block.push(0);
     block
+}
+
+pub fn keep_library_loaded(name: &str) -> Result<(), Error> {
+    let name = U16CString::from_str(name).expect("a library name has no NUL");
+    // SAFETY: `name` is NUL-terminated and live for the call, which only reads it; the reserved
+    // file handle is null.
+    let module = unsafe {
+        LoadLibraryExW(
+            name.as_ptr(),
+            ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_APPLICATION_DIR,
+        )
+    };
+    if module.is_null() {
+        return Err(last_error("LoadLibraryExW"));
+    }
+    Ok(())
 }
 
 fn last_error(operation: &'static str) -> Error {

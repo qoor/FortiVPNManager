@@ -6,6 +6,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
+use fvm_common::os_api;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
 use fvm_helper_core::entry::report_panics;
@@ -93,6 +94,18 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         ServiceState::StartPending,
         ServiceExitCode::Win32(0),
     );
+    match os_api::keep_library_loaded("wintun.dll") {
+        Ok(()) => log(
+            LogLevel::Notice,
+            LogCategory::Helper,
+            "wintun.dll kept loaded",
+        ),
+        Err(error) => log(
+            LogLevel::Error,
+            LogCategory::Helper,
+            &format!("cannot keep wintun.dll loaded: {error}"),
+        ),
+    }
     let sessions = SessionManager::new(
         Arc::new(OpenConnect::default()),
         Arc::new(SecretFiles::new(PathBuf::from(RUN_DIRECTORY))),
