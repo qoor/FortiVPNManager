@@ -432,7 +432,7 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
     assert_eq!(announced(&h), []);
     assert_eq!(h.cm.current_attempt(), Some(&id(2)));
     // So is the immediate reconnect after a forced end.
-    h.forcibly_end(ForcedEnd::ClientKilled, 30.0);
+    h.lose_helper(30.0);
     assert_eq!(
         h.attempt().unwrap().reason,
         AttemptReason::Retry(RetryReason::ForcedTermination)
@@ -448,11 +448,7 @@ fn every_attempt_begun_is_announced_and_current_until_it_ends() {
     h.send(Input::Disconnect);
     assert_eq!(announced(&h), []);
     assert_eq!(h.cm.current_attempt(), Some(&id(3)));
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::UserDisconnect)
-            .up(30.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::UserDisconnect));
     assert_eq!(announced(&h), []);
     assert_eq!(h.cm.current_attempt(), None);
 }

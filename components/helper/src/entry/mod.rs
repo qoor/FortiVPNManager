@@ -671,9 +671,9 @@ impl Entry {
             LogLevel::Notice,
             LogCategory::Helper,
             format!(
-                "{} exited: {:?}, initiator {:?}, furthest {:?}",
+                "{} exited: code {}, initiator {:?}, furthest {:?}",
                 exited.run.name(),
-                facts.exit_status,
+                facts.end_code,
                 facts.stop_initiator,
                 facts.furthest_milestone
             ),

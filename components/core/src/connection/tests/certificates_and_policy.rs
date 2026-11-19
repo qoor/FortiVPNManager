@@ -69,11 +69,7 @@ fn a_rejection_learns_the_value_and_retries_at_once_without_counting() {
     assert!(h.connected().is_some());
     // ...and with the one after that.
     h.send(Input::ReconnectNow);
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(30.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect));
     h.start_tunnel();
     assert_eq!(started_certs(&h), [digest('a'), pin_old()]);
 }
@@ -238,11 +234,7 @@ fn a_dtls_change_applies_from_the_next_connection() {
     assert!(h.connected().is_some());
     assert!(!h.cm.connection_section().account_applies_next_connection);
     h.send(Input::ReconnectNow);
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(50.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect));
     h.start_tunnel();
     assert!(run_starts(&h.effects)[0].dtls);
 }

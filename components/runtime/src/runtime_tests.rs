@@ -10,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime};
 use fvm_contract::app_helper::{
     AttemptId, BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot,
     ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone, OutputBatch,
-    OutputLine, OutputSource, ProcessExitStatus, RunRequest, StopInitiator, StopReason,
+    OutputLine, OutputSource, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
@@ -1309,16 +1309,15 @@ fn reconnect_now_runs_the_next_tunnel_beside_the_connected_one() {
         &old,
         HelperEventKind::Exited {
             facts: ExitFacts {
-                furthest_milestone: Some(Milestone::TunnelUp),
+                furthest_milestone: Milestone::TunnelUp,
                 stop_initiator: StopInitiator::Helper {
                     reason: StopReason::Replaced,
                 },
                 cert_rejected_digests: Vec::new(),
                 cert_rejected_at: None,
-                tunnel_mode_rejected: false,
+                tunnel_setup_failed: false,
                 tunnel_address_in_use: false,
-                up_duration: Some(Duration::from_secs(30)),
-                exit_status: ProcessExitStatus::Exited { code: 0 },
+                end_code: -4,
             },
         },
     );

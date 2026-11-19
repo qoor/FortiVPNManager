@@ -75,7 +75,10 @@ pub(super) struct Context<'a> {
 impl Context<'_> {
     pub(super) fn certificate(&self, hash: &str) -> bool {
         let trusted = self.request.pins.iter().any(|pin| pin == hash);
-        if !trusted {
+        if trusted {
+            self.gateway_reached
+                .call_once(|| self.link.report(SessionEvent::GatewayTrusted));
+        } else {
             self.link
                 .report(SessionEvent::CertificateRejected(hash.to_owned()));
         }
@@ -83,8 +86,6 @@ impl Context<'_> {
     }
 
     pub(super) fn auth_form(&self, form: &mut Form<'_>) -> c_int {
-        self.gateway_reached
-            .call_once(|| self.link.report(SessionEvent::GatewayTrusted));
         for (level, text) in [
             (LineLevel::Info, form.banner()),
             (LineLevel::Info, form.message()),
@@ -374,10 +375,12 @@ mod tests {
     }
 
     #[test]
-    fn a_pinned_certificate_alone_does_not_reach_the_gateway() {
+    fn the_first_pinned_certificate_reaches_the_gateway() {
         assert_eq!(
-            reported(&[OTHER_PIN, PIN], |context| context.certificate(PIN)),
-            (true, Vec::new())
+            reported(&[OTHER_PIN, PIN], |context| {
+                [context.certificate(PIN), context.certificate(PIN)]
+            }),
+            ([true, true], vec![SessionEvent::GatewayTrusted])
         );
     }
 

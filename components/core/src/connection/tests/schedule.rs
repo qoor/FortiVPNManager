@@ -225,7 +225,7 @@ fn the_end_keeps_the_tunnel_and_reconnects_while_the_user_is_present() {
     assert!(h.connected().is_some());
     assert!(h.timer(TimerKind::ProactiveReconnect).is_some());
     h.advance(3600.0);
-    h.exit(ended(Milestone::TunnelUp).up(7200.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(reason(&h), Some(retry(RetryReason::ServerSessionEnded)));
 }
@@ -256,7 +256,7 @@ fn away_outside_the_hours_holds_the_reconnect_until_the_user_returns() {
         Some(at(18, 20, 10, 0))
     );
     h.advance(1800.0);
-    h.exit(ended(Milestone::TunnelUp).up(5400.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(
         h.retry_wait(),
@@ -282,7 +282,7 @@ fn away_inside_the_hours_changes_nothing() {
     h.advance(3600.0);
     away(&mut h);
     assert!(h.timer(TimerKind::ProactiveReconnect).is_some());
-    h.exit(ended(Milestone::TunnelUp).up(3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(reason(&h), Some(retry(RetryReason::ServerSessionEnded)));
 }
@@ -305,7 +305,7 @@ fn the_away_limit_stops_reconnects_but_keeps_the_tunnel() {
     back(&mut h);
     assert_eq!(h.timer(TimerKind::ProactiveReconnect), None);
     h.advance(600.0);
-    h.exit(ended(Milestone::TunnelUp).up(3.0 * 3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(h.cm.phase, Phase::Idle);
     assert!(!h.cm.wants_connection);
@@ -325,7 +325,7 @@ fn a_held_reconnect_is_given_up_at_the_limit() {
     h.advance(600.0);
     away(&mut h);
     h.advance(1800.0);
-    h.exit(ended(Milestone::TunnelUp).up(5400.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
@@ -362,7 +362,7 @@ fn the_next_start_clears_the_suspension() {
     h.fire(TimerKind::Schedule);
     away(&mut h);
     h.fire(TimerKind::AwayLimit);
-    h.exit(ended(Milestone::TunnelUp).up(3.0 * 3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(h.cm.phase, Phase::Idle);
     h.fire(TimerKind::Schedule);
@@ -408,9 +408,7 @@ fn a_long_sleep_outside_the_hours_stops_reconnects_before_the_user_unlocks() {
     assert_eq!(stop_reasons(&settled), [StopReason::Reconnect]);
     h.exit_for(
         &id,
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(3600.0),
+        ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect),
     );
     assert_eq!(h.cm.phase, Phase::Idle);
     assert!(!h.cm.wants_connection);
@@ -451,9 +449,7 @@ fn a_missed_weekend_applies_only_the_latest_boundary() {
     h.send(Input::Disconnect);
     h.exit_for(
         &id,
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::UserDisconnect)
-            .up(600.0),
+        ended(Milestone::TunnelUp).by_helper(StopReason::UserDisconnect),
     );
     assert_eq!(h.cm.phase, Phase::Idle);
     away(&mut h);
@@ -472,7 +468,7 @@ fn sleep_keeps_a_held_reconnect_waiting_for_the_user() {
     h.launch_connected();
     h.fire(TimerKind::Schedule);
     away(&mut h);
-    h.exit(ended(Milestone::TunnelUp).up(3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
@@ -514,7 +510,7 @@ fn removing_the_schedule_resumes_a_held_reconnect() {
     h.launch_connected();
     h.fire(TimerKind::Schedule);
     away(&mut h);
-    h.exit(ended(Milestone::TunnelUp).up(3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),

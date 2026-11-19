@@ -6,7 +6,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::HelperErrorCode;
 use fvm_core::connection::{Failure, FailureLedger};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::files;
 
@@ -79,9 +80,13 @@ fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Wire {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "or_absent"
+    )]
     ledger: Option<WireLedger>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_absent")]
     login_item_registered: bool,
 }
 
@@ -89,7 +94,7 @@ struct Wire {
 #[serde(rename_all = "camelCase")]
 struct WireLedger {
     profile_key: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_absent")]
     consecutive_auth_failures: u32,
     #[serde(
         default,
@@ -97,7 +102,11 @@ struct WireLedger {
         with = "optional_time"
     )]
     last_auth_failure_at: Option<SystemTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "or_absent"
+    )]
     last_auth_failure_reason: Option<WireFailure>,
     #[serde(default, with = "times")]
     recent_auth_attempts: Vec<SystemTime>,
@@ -114,8 +123,6 @@ enum WireFailure {
     },
     OtpRejected {},
     TunnelSetupFailed {},
-    TunnelModeRejected {},
-    SessionDroppedEarly {},
     CertificateRejectedAfterLogin {},
     GmailAppPassword {},
     TooManyReconnects {},
@@ -163,8 +170,6 @@ impl WireFailure {
             Self::OtpNotReceived { in_junk } => Failure::OtpNotReceived { in_spam: in_junk },
             Self::OtpRejected {} => Failure::OtpRejected,
             Self::TunnelSetupFailed {} => Failure::TunnelSetupFailed,
-            Self::TunnelModeRejected {} => Failure::TunnelModeRejected,
-            Self::SessionDroppedEarly {} => Failure::SessionDroppedEarly,
             Self::CertificateRejectedAfterLogin {} => Failure::CertificateRejectedAfterLogin,
             Self::GmailAppPassword {} => Failure::GmailRejected,
             Self::TooManyReconnects {} => Failure::TooManyReconnects,
@@ -179,8 +184,6 @@ impl WireFailure {
             Failure::OtpNotReceived { in_spam } => Self::OtpNotReceived { in_junk: in_spam },
             Failure::OtpRejected => Self::OtpRejected {},
             Failure::TunnelSetupFailed => Self::TunnelSetupFailed {},
-            Failure::TunnelModeRejected => Self::TunnelModeRejected {},
-            Failure::SessionDroppedEarly => Self::SessionDroppedEarly {},
             Failure::CertificateRejectedAfterLogin => Self::CertificateRejectedAfterLogin {},
             Failure::GmailRejected => Self::GmailAppPassword {},
             Failure::TooManyReconnects => Self::TooManyReconnects {},
@@ -188,6 +191,13 @@ impl WireFailure {
             Failure::Helper { code } => Self::Helper { code },
         }
     }
+}
+
+fn or_absent<'de, D: Deserializer<'de>, T: DeserializeOwned + Default>(
+    deserializer: D,
+) -> Result<T, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(T::deserialize(value).unwrap_or_default())
 }
 
 /// `2026-10-15T06:30:21Z`: whole seconds in UTC, readable when someone opens the file.
@@ -211,7 +221,7 @@ fn parse_time(text: &str) -> Option<SystemTime> {
 mod optional_time {
     use std::time::SystemTime;
 
-    use serde::{Deserialize, Deserializer, Serializer, de};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub(super) fn serialize<S: Serializer>(
         time: &Option<SystemTime>,
@@ -224,17 +234,15 @@ mod optional_time {
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Option<SystemTime>, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        super::parse_time(&text)
-            .map(Some)
-            .ok_or_else(|| de::Error::custom("not an ISO 8601 time"))
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(value.as_str().and_then(super::parse_time))
     }
 }
 
 mod times {
     use std::time::SystemTime;
 
-    use serde::{Deserialize, Deserializer, Serializer, de, ser::SerializeSeq};
+    use serde::{Deserialize, Deserializer, Serializer, ser::SerializeSeq};
 
     pub(super) fn serialize<S: Serializer>(
         times: &[SystemTime],
@@ -250,12 +258,13 @@ mod times {
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Vec<SystemTime>, D::Error> {
-        Vec::<String>::deserialize(deserializer)?
-            .iter()
-            .map(|text| {
-                super::parse_time(text).ok_or_else(|| de::Error::custom("not an ISO 8601 time"))
-            })
-            .collect()
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|time| time.as_str().and_then(super::parse_time))
+            .collect())
     }
 }
 
@@ -309,6 +318,82 @@ mod tests {
                 recent_auth_attempts: vec![at("2026-11-09T04:08:26Z")],
             })
         );
+        assert!(state.login_item_registered);
+    }
+
+    #[test]
+    fn a_failure_this_build_does_not_know_leaves_the_rest_of_the_ledger() {
+        let file = r#"{
+  "ledger" : {
+    "consecutiveAuthFailures" : 1,
+    "lastAuthFailureAt" : "2026-10-15T06:30:21Z",
+    "lastAuthFailureReason" : {
+      "sessionDroppedEarly" : {}
+    },
+    "profileKey" : "alice@vpn.example.com",
+    "recentAuthAttempts" : [
+      "2026-10-15T06:28:02Z",
+      "2026-10-15T06:30:01Z"
+    ]
+  },
+  "loginItemRegistered" : true
+}"#;
+        let state = serde_json::from_str::<Wire>(file).unwrap().into_state();
+        assert_eq!(
+            state.ledger,
+            Some(FailureLedger {
+                account_key: "alice@vpn.example.com".into(),
+                consecutive_auth_failures: 1,
+                last_auth_failure_at: Some(at("2026-10-15T06:30:21Z")),
+                last_auth_failure: None,
+                recent_auth_attempts: vec![at("2026-10-15T06:28:02Z"), at("2026-10-15T06:30:01Z")],
+            })
+        );
+        assert!(state.login_item_registered);
+    }
+
+    #[test]
+    fn a_malformed_value_is_absent_and_the_others_are_read() {
+        let file = r#"{
+  "ledger" : {
+    "consecutiveAuthFailures" : "one",
+    "lastAuthFailureAt" : "yesterday",
+    "lastAuthFailureReason" : {
+      "otpRejected" : {}
+    },
+    "profileKey" : "alice@vpn.example.com",
+    "recentAuthAttempts" : [
+      "2026-10-15T06:28:02Z",
+      7,
+      "2026-10-15T06:30:01Z"
+    ]
+  },
+  "loginItemRegistered" : "yes"
+}"#;
+        let state = serde_json::from_str::<Wire>(file).unwrap().into_state();
+        assert_eq!(
+            state.ledger,
+            Some(FailureLedger {
+                account_key: "alice@vpn.example.com".into(),
+                consecutive_auth_failures: 0,
+                last_auth_failure_at: None,
+                last_auth_failure: Some(Failure::OtpRejected),
+                recent_auth_attempts: vec![at("2026-10-15T06:28:02Z"), at("2026-10-15T06:30:01Z")],
+            })
+        );
+        assert!(!state.login_item_registered);
+    }
+
+    #[test]
+    fn a_ledger_without_its_account_is_absent_and_the_rest_is_read() {
+        let file = r#"{
+  "ledger" : {
+    "consecutiveAuthFailures" : 2
+  },
+  "loginItemRegistered" : true
+}"#;
+        let state = serde_json::from_str::<Wire>(file).unwrap().into_state();
+        assert_eq!(state.ledger, None);
         assert!(state.login_item_registered);
     }
 

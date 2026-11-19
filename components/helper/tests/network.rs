@@ -120,7 +120,7 @@ fn the_settings_are_recorded_and_applied_before_the_tunnel_is_up_and_reverted_at
         vec![gateway_route("192.0.2.1"), excluded_route()],
     );
     let facts = session.wait_for_exit();
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
+    assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
     assert_eq!(session.count_text("‹network settings reverted›"), 1);
     assert!(session.directory.names().is_empty());
 }
@@ -221,7 +221,7 @@ fn a_failing_apply_is_tried_four_times_then_the_run_ends_and_reverts() {
             reason: StopReason::NetworkSetupFailed
         }
     );
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert_eq!(
         session.count_text("‹network settings not applied: Dns: no DNS›"),
         4
@@ -349,7 +349,7 @@ fn a_look_up_answered_after_the_session_returned_is_not_recorded_or_applied() {
     let facts = session.wait_for_exit();
     assert!(session.jobs.is_empty());
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.assert_finished_cleanly();
 }
 
@@ -387,7 +387,7 @@ fn an_apply_answered_after_the_session_returned_does_not_bring_the_tunnel_up() {
     revert(&mut session, vec![gateway_route("192.0.2.1")]);
     let facts = session.wait_for_exit();
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.assert_finished_cleanly();
 }
 
@@ -439,7 +439,7 @@ fn a_tunnel_device_refused_for_the_replaced_runs_address_is_told_in_the_exit() {
     let mut new = Session::start_replacing(script, replacing_setup(), Some(replaced));
     let facts = address_in_use_end(&mut new);
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert!(new.jobs.is_empty());
     assert!(old.exit_facts().is_none());
     old.run.stop(StopReason::UserDisconnect);

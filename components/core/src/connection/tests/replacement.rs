@@ -87,7 +87,10 @@ fn start_replacement(h: &mut Harness, old: &Session) -> AttemptId {
 
 fn reject_login(h: &mut Harness, id: &AttemptId) {
     h.run_milestones(id, Milestone::ConnectedToGateway);
-    h.exit_for(id, ended(Milestone::ConnectedToGateway));
+    h.exit_for(
+        id,
+        ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated),
+    );
 }
 
 fn fail_on_the_network(h: &mut Harness, id: &AttemptId) {
@@ -118,7 +121,7 @@ fn the_proactive_reconnect_brings_up_the_next_tunnel_before_the_old_one_ends() {
     assert_eq!(session.tunnel_ip, Some(NEXT_TUNNEL_IP));
     assert_eq!(session.planned_reconnect, Some(h.now + secs(175.0 * 60.0)));
     assert_eq!(session.renewal, None);
-    assert_eq!(session.replaced, Some((old.attempt.clone(), old.since)));
+    assert_eq!(session.replaced, Some(old.attempt.clone()));
     assert_eq!(
         timer_set(&effects, TimerKind::ProactiveReconnect),
         session.planned_reconnect
@@ -126,12 +129,9 @@ fn the_proactive_reconnect_brings_up_the_next_tunnel_before_the_old_one_ends() {
     shows_connected_on(&h, &session);
 
     h.advance(1.0);
-    let up = h.now.duration_since(old.since).unwrap().as_secs_f64();
     let effects = h.exit_for(
         &old.attempt,
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Replaced)
-            .up(up),
+        ended(Milestone::TunnelUp).by_helper(StopReason::Replaced),
     );
     assert_eq!(connection_effects(&effects), []);
     assert_eq!(h.connected().unwrap().replaced, None);
@@ -271,7 +271,10 @@ fn login_failures_wait_out_the_cooldown_and_the_second_keeps_the_tunnel() {
     h.fire(TimerKind::Retry);
     let second = start_replacement(&mut h, &old);
     h.run_milestones(&second, Milestone::OtpSubmitted);
-    let effects = h.exit_for(&second, ended(Milestone::OtpSubmitted));
+    let effects = h.exit_for(
+        &second,
+        ended(Milestone::OtpSubmitted).by_helper(StopReason::PromptRepeated),
+    );
     assert_eq!(stop_reasons(&effects), []);
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 2);
     assert_eq!(h.cm.ledger.last_auth_failure, Some(Failure::OtpRejected));
@@ -283,13 +286,18 @@ fn login_failures_wait_out_the_cooldown_and_the_second_keeps_the_tunnel() {
     assert_eq!(h.connection_timers(), []);
     shows_connected_on(&h, &old);
 
-    let up = h.now.duration_since(old.since).unwrap().as_secs_f64();
-    h.exit_for(&old.attempt, ended(Milestone::TunnelUp).up(up));
+    let second_failed_at = h.now;
+    h.exit_for(&old.attempt, ended(Milestone::TunnelUp).code(-EPIPE));
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
         Some(RetryReason::ServerSessionEnded)
     );
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 2);
+    h.fire(TimerKind::Retry);
+    assert_eq!(
+        h.retry_wait(),
+        Some((second_failed_at + secs(90.0), RetryReason::AuthCooldown))
+    );
 }
 
 #[test]
@@ -494,11 +502,7 @@ fn a_renewal_started_by_reconnect_now_shows_what_a_reconnect_attempt_shows() {
         after(&restarting),
         Some(AfterStop::Reconnect(AttemptReason::ReconnectNow))
     );
-    restarting.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(180.0 * 60.0 - 60.0),
-    );
+    restarting.exit(ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect));
     let section = renewing.cm.connection_section();
     assert_eq!(section, restarting.cm.connection_section());
     assert_eq!(section.icon, ConnectionIcon::InProgress);
@@ -562,7 +566,7 @@ fn reconnect_now_during_a_proactive_preparation_turns_it_into_a_reconnect_now_re
     h.run_milestones(&id, Milestone::TunnelUp);
     let session = h.connected().unwrap().clone();
     assert_eq!(session.attempt, id);
-    assert_eq!(session.replaced, Some((old.attempt.clone(), old.since)));
+    assert_eq!(session.replaced, Some(old.attempt.clone()));
     shows_connected_on(&h, &session);
 }
 
@@ -790,19 +794,12 @@ fn the_old_tunnel_ending_during_the_preparation_leaves_the_next_as_the_attempt()
     h.fire(TimerKind::Retry);
     h.run_to_connected();
     let old = h.connected().unwrap().clone();
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
     h.fire(TimerKind::ProactiveReconnect);
     let id = start_replacement(&mut h, &old);
     h.run_milestones(&id, Milestone::OtpPrompted);
-    let up = h.now.duration_since(old.since).unwrap().as_secs_f64();
-    let effects = h.exit_for(&old.attempt, ended(Milestone::TunnelUp).up(up));
-    assert_eq!(
-        connection_effects(&effects),
-        [Effect::SaveLedger(FailureLedger {
-            consecutive_auth_failures: 0,
-            ..h.cm.ledger.clone()
-        })]
-    );
+    let effects = h.exit_for(&old.attempt, ended(Milestone::TunnelUp));
+    assert_eq!(connection_effects(&effects), []);
     assert_eq!(h.attempt().map(|attempt| &attempt.id), Some(&id));
     assert_eq!(replaced(&h), None);
     assert_eq!(
@@ -817,7 +814,7 @@ fn the_old_tunnel_ending_during_the_preparation_leaves_the_next_as_the_attempt()
 
     let (mut h, old) = connected();
     h.fire(TimerKind::ProactiveReconnect);
-    h.exit_for(&old.attempt, ended(Milestone::TunnelUp).up(10_000.0));
+    h.exit_for(&old.attempt, ended(Milestone::TunnelUp));
     h.send(Input::ReadinessChecked(ready()));
     let id = h.attempt().unwrap().id.clone();
     let effects = h.send(Input::OtpSessionReady(id.clone()));
@@ -830,27 +827,28 @@ fn the_old_tunnel_ending_during_the_preparation_leaves_the_next_as_the_attempt()
 }
 
 #[test]
-fn a_stable_replaced_tunnel_clears_the_failure_count() {
-    let mut h = Harness::with_settings(settings());
-    h.launch();
-    let first = h.start_tunnel();
-    reject_login(&mut h, &first);
-    h.fire(TimerKind::Retry);
-    h.run_to_connected();
-    let old = h.connected().unwrap().clone();
+fn a_replacement_reaching_the_tunnel_clears_the_failure_count() {
+    let (mut h, old) = connected();
     h.fire(TimerKind::ProactiveReconnect);
-    let id = start_replacement(&mut h, &old);
-    h.run_milestones(&id, Milestone::TunnelUp);
+    let first = start_replacement(&mut h, &old);
+    reject_login(&mut h, &first);
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
-    let up = h.now.duration_since(old.since).unwrap().as_secs_f64();
+    h.fire(TimerKind::Retry);
+    let id = start_replacement(&mut h, &old);
+    h.run_milestones(&id, Milestone::Authenticated);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+    h.advance(2.0);
+    let effects = h.milestone_for(&id, Milestone::TunnelUp, Some(NEXT_TUNNEL_IP));
+    assert_eq!(saved_ledger(&effects).unwrap().consecutive_auth_failures, 0);
+    assert_eq!(h.connected().unwrap().attempt, id);
     let effects = h.exit_for(
         &old.attempt,
         ended(Milestone::TunnelUp)
             .by_helper(StopReason::Replaced)
-            .up(up),
+            .code(-EINTR),
     );
-    assert_eq!(saved_ledger(&effects).unwrap().consecutive_auth_failures, 0);
-    assert_eq!(h.connected().unwrap().attempt, id);
+    assert_eq!(saved_ledger(&effects), None);
+    assert_eq!(h.connected().unwrap().replaced, None);
 }
 
 #[test]

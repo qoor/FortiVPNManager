@@ -9,7 +9,7 @@
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
@@ -217,47 +217,20 @@ pub enum StopInitiator {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ProcessExitStatus {
-    Exited {
-        code: i32,
-    },
-    Signaled {
-        signal: i32,
-    },
-    SpawnFailed {
-        errno: i32,
-    },
-    /// The status could not be collected.
-    Unknown {},
-}
-
 /// What the Helper recorded about a finished run; the app classifies the end from these facts.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExitFacts {
-    /// `None` when the client could not be started.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub furthest_milestone: Option<Milestone>,
+    pub furthest_milestone: Milestone,
     pub stop_initiator: StopInitiator,
     /// Certificate values the client printed when it rejected the gateway, without repeats.
     pub cert_rejected_digests: Vec<String>,
     /// The milestone reached when the first certificate rejection was printed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cert_rejected_at: Option<Milestone>,
-    /// The gateway refused tunnel mode after authentication.
-    pub tunnel_mode_rejected: bool,
+    pub tunnel_setup_failed: bool,
     pub tunnel_address_in_use: bool,
-    /// From tunnel up to exit, if the tunnel came up.
-    #[serde(
-        default,
-        serialize_with = "seconds::optional_duration",
-        deserialize_with = "seconds::read_optional_duration",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub up_duration: Option<Duration>,
-    pub exit_status: ProcessExitStatus,
+    pub end_code: i32,
 }
 
 /// Sent by the Helper to the app that owns the run.
@@ -413,7 +386,7 @@ pub enum BypassRoutesReply {
     },
 }
 
-/// Seconds since 1970 or durations in seconds, as numbers.
+/// Seconds since 1970, as numbers.
 mod seconds {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -430,27 +403,11 @@ mod seconds {
         write(since_1970, serializer)
     }
 
-    pub fn optional_duration<S: Serializer>(
-        duration: &Option<Duration>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        match duration {
-            Some(duration) => write(*duration, serializer),
-            None => serializer.serialize_none(),
-        }
-    }
-
     fn read<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
         Duration::try_from_secs_f64(f64::deserialize(deserializer)?).map_err(de::Error::custom)
     }
 
     pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
         Ok(UNIX_EPOCH + read(deserializer)?)
-    }
-
-    pub fn read_optional_duration<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Duration>, D::Error> {
-        read(deserializer).map(Some)
     }
 }

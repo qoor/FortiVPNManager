@@ -23,7 +23,6 @@ use fvm_core::config;
 use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup, TimerId};
 use jiff::tz::TimeZone;
 
-use crate::client;
 use crate::config_file::ConfigFile;
 use crate::log_file::{self, LogFile};
 use crate::state_file::StateFile;
@@ -165,7 +164,6 @@ impl Runtime {
             attempt_seed,
             settings,
             time_zone: time_zone.clone(),
-            kills_show_as_signals: client::KILLS_SHOW_AS_SIGNALS,
         });
         let timer_inputs = inputs.clone();
         let timers = Timers::start(move |timer| {

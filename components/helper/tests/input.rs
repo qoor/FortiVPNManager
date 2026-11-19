@@ -4,7 +4,7 @@ use std::sync::mpsc;
 
 use common::*;
 use fvm_contract::app_helper::{
-    HelperError, HelperErrorCode, Milestone, ProcessExitStatus, StopInitiator, StopReason,
+    HelperError, HelperErrorCode, Milestone, StopInitiator, StopReason,
 };
 use fvm_helper_core::session::backend::{FormKind, SessionEvent};
 
@@ -36,7 +36,7 @@ fn an_otp_before_the_prompt_is_refused() {
         );
         session.run.stop(StopReason::UserDisconnect);
         let facts = session.wait_for_exit();
-        assert_eq!(facts.furthest_milestone, Some(milestone));
+        assert_eq!(facts.furthest_milestone, milestone);
         assert!(!session.has_text("‹OTP sent›"));
     }
 }
@@ -66,7 +66,7 @@ fn an_otp_is_accepted_once_while_prompted_and_reaches_the_session() {
         Err(wrong_phase("openconnect is not running"))
     );
     let facts = session.wait_for_exit();
-    assert_eq!(facts.furthest_milestone, Some(Milestone::OtpSubmitted));
+    assert_eq!(facts.furthest_milestone, Milestone::OtpSubmitted);
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
@@ -91,7 +91,7 @@ fn an_otp_that_is_not_one_is_refused_before_the_run_sees_it() {
     assert_eq!(refused.code, HelperErrorCode::InvalidRequest);
     session.run.stop(StopReason::OtpTimeout);
     let facts = session.wait_for_exit();
-    assert_eq!(facts.furthest_milestone, Some(Milestone::OtpPrompted));
+    assert_eq!(facts.furthest_milestone, Milestone::OtpPrompted);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn a_stop_ends_the_otp_wait_and_refuses_a_later_otp() {
         session.run.submit_otp(OTP.to_owned()),
         Err(wrong_phase("openconnect is not running"))
     );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: -EIO });
+    assert_eq!(facts.end_code, -EIO);
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {
@@ -138,10 +138,7 @@ fn a_repeated_login_form_ends_the_run_as_a_repeated_prompt() {
             reason: StopReason::PromptRepeated
         }
     );
-    assert_eq!(
-        facts.furthest_milestone,
-        Some(Milestone::ConnectedToGateway)
-    );
+    assert_eq!(facts.furthest_milestone, Milestone::ConnectedToGateway);
     session.assert_finished_cleanly();
 }
 
@@ -158,7 +155,7 @@ fn a_repeated_otp_form_ends_the_run_as_a_repeated_prompt() {
     let facts = session.wait_for_exit();
     assert_eq!(session.count_text("‹OTP sent›"), 1);
     assert!(session.has_text("‹OTP asked again: the gateway rejected the OTP›"));
-    assert_eq!(facts.furthest_milestone, Some(Milestone::OtpSubmitted));
+    assert_eq!(facts.furthest_milestone, Milestone::OtpSubmitted);
     assert_eq!(
         facts.stop_initiator,
         StopInitiator::Helper {

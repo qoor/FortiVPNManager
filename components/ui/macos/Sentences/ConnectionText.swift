@@ -79,8 +79,6 @@ extension AppInternal.FailureReason {
             inSpam ? String(localized: "OTP email is in Spam") : String(localized: "OTP email not received")
         case .otpRejected: String(localized: "OTP verification failed")
         case .tunnelSetupFailed: String(localized: "Tunnel setup failed")
-        case .tunnelModeRejected: String(localized: "Server rejected tunnel mode")
-        case .droppedEarly: String(localized: "Dropped right after connecting")
         case .certificateChangedAfterLogin: String(localized: "Server certificate changed")
         case let .gmailRejected(method):
             switch method {
@@ -106,10 +104,6 @@ extension AppInternal.FailureReason {
             String(localized: "The server did not accept the OTP.")
         case .tunnelSetupFailed:
             String(localized: "Couldn't open the tunnel after login.")
-        case .tunnelModeRejected:
-            String(localized: "The gateway doesn't allow SSL VPN tunnel mode.")
-        case let .droppedEarly(withinSeconds):
-            String(localized: "The connection dropped within \(time.spelledOut(seconds: withinSeconds)).")
         case .certificateChangedAfterLogin:
             String(localized: "The server certificate was rejected after login.")
         case let .gmailRejected(method):
@@ -137,8 +131,7 @@ extension AppInternal.FailureReason {
         // which).
         case .vpnLoginRejected, .otpNotReceived, .gmailRejected, .helper(.invalidRequest): .account
         case .helper: .advanced
-        case .otpRejected, .tunnelSetupFailed, .tunnelModeRejected, .droppedEarly, .certificateChangedAfterLogin,
-             .tooManyReconnects, .network: .log
+        case .otpRejected, .tunnelSetupFailed, .certificateChangedAfterLogin, .tooManyReconnects, .network: .log
         }
     }
 

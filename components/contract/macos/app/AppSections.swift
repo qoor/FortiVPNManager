@@ -77,8 +77,6 @@ extension AppInternal {
         case otpNotReceived(inSpam: Bool, waitedSeconds: Int)
         case otpRejected
         case tunnelSetupFailed
-        case tunnelModeRejected
-        case droppedEarly(withinSeconds: Int)
         case certificateChangedAfterLogin
         case gmailRejected(method: OtpMethod)
         case tooManyReconnects(windowSeconds: Int)

@@ -1,6 +1,6 @@
 //! The readiness gate, account changes and what the connection section shows.
 
-use fvm_contract::app_helper::{Milestone, SessionId};
+use fvm_contract::app_helper::{Milestone, SessionId, StopReason};
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{ConnectionIcon, ConnectionStatus};
 
@@ -169,7 +169,7 @@ fn a_username_change_resets_the_ledger_and_needs_setup_when_the_password_is_miss
     h.launch();
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::ConnectedToGateway);
-    h.exit(ended(Milestone::ConnectedToGateway));
+    h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
     let effects = connection_effects(&h.send(Input::SettingsChanged(with_account(bob()))));
     assert_eq!(
@@ -277,7 +277,7 @@ fn an_account_change_while_connected_keeps_the_session_until_it_ends() {
     assert!(h.connected().is_some());
     assert!(h.cm.connection_section().account_applies_next_connection);
     h.advance(3.0 * 3600.0);
-    h.exit(ended(Milestone::TunnelUp).up(3.0 * 3600.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     h.fire(TimerKind::Retry);
     assert!(
         h.effects.contains(&Effect::CheckReadiness),
@@ -400,7 +400,7 @@ fn the_icon_and_buttons_follow_the_state() {
     waiting.launch();
     let id = waiting.start_tunnel();
     waiting.run_milestones(&id, Milestone::OtpSubmitted);
-    waiting.exit(ended(Milestone::OtpSubmitted));
+    waiting.exit(ended(Milestone::OtpSubmitted).by_helper(StopReason::PromptRepeated));
     check(&waiting, InProgress, Hidden, Enabled, true);
 
     let mut offline_wait = Harness::with(settings(), Some(offline()));

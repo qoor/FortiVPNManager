@@ -295,10 +295,6 @@ fn connection_kinds() {
             },
             FailureReason::OtpRejected {},
             FailureReason::TunnelSetupFailed {},
-            FailureReason::TunnelModeRejected {},
-            FailureReason::DroppedEarly {
-                within_seconds: 120,
-            },
             FailureReason::CertificateChangedAfterLogin {},
             FailureReason::GmailRejected {
                 method: OtpMethod::Imap,

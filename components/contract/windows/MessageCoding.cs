@@ -104,8 +104,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.FailureReason.OtpNotReceived), TypeInfoPropertyName = "FailureReasonOtpNotReceived")]
 [JsonSerializable(typeof(AppInternal.FailureReason.OtpRejected), TypeInfoPropertyName = "FailureReasonOtpRejected")]
 [JsonSerializable(typeof(AppInternal.FailureReason.TunnelSetupFailed), TypeInfoPropertyName = "FailureReasonTunnelSetupFailed")]
-[JsonSerializable(typeof(AppInternal.FailureReason.TunnelModeRejected), TypeInfoPropertyName = "FailureReasonTunnelModeRejected")]
-[JsonSerializable(typeof(AppInternal.FailureReason.DroppedEarly), TypeInfoPropertyName = "FailureReasonDroppedEarly")]
 [JsonSerializable(typeof(AppInternal.FailureReason.CertificateChangedAfterLogin), TypeInfoPropertyName = "FailureReasonCertificateChangedAfterLogin")]
 [JsonSerializable(typeof(AppInternal.FailureReason.GmailRejected), TypeInfoPropertyName = "FailureReasonGmailRejected")]
 [JsonSerializable(typeof(AppInternal.FailureReason.TooManyReconnects), TypeInfoPropertyName = "FailureReasonTooManyReconnects")]

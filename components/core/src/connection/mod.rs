@@ -51,9 +51,6 @@ pub struct Startup {
     pub settings: Settings,
     /// The system time zone, which the schedule's times are read in.
     pub time_zone: TimeZone,
-    /// Whether a client killed by someone else shows it as a signal in its exit status (Unix).
-    /// Without signals (Windows) such a kill cannot be told from other ends.
-    pub kills_show_as_signals: bool,
 }
 
 /// The settings the manager acts on, as the settings file holds them.

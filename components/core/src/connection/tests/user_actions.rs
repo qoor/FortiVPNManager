@@ -41,11 +41,7 @@ fn a_disconnect_while_connected_finishes_on_the_exit() {
     h.advance(2.0);
     assert_eq!(
         connection_effects(
-            &h.exit(
-                ended(Milestone::TunnelUp)
-                    .by_helper(StopReason::UserDisconnect)
-                    .up(2.0)
-            )
+            &h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::UserDisconnect))
         ),
         [Effect::HoldActivity(false)]
     );
@@ -148,11 +144,7 @@ fn a_connect_during_a_user_disconnect_reconnects_after_the_exit() {
     );
     assert_eq!(after(&h), Some(AfterStop::Reconnect(AttemptReason::User)));
     assert!(h.cm.wants_connection);
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::UserDisconnect)
-            .up(30.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::UserDisconnect));
     assert_eq!(reason(&h), Some(AttemptReason::User));
 }
 
@@ -163,11 +155,7 @@ fn a_disconnect_during_a_planned_reconnect_ends_idle() {
     h.fire(TimerKind::ProactiveReconnect);
     h.send(Input::Disconnect);
     assert_eq!(after(&h), Some(AfterStop::Idle));
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::ProactiveReconnect)
-            .up(10_500.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::ProactiveReconnect));
     assert_eq!(h.cm.phase, Phase::Idle);
 }
 
@@ -202,13 +190,7 @@ fn a_quit_while_connected_stops_then_is_approved_on_the_exit() {
     assert!(!h.cm.wants_connection);
     h.advance(1.0);
     assert_eq!(
-        connection_effects(
-            &h.exit(
-                ended(Milestone::TunnelUp)
-                    .by_helper(StopReason::AppQuit)
-                    .up(20.0)
-            )
-        ),
+        connection_effects(&h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::AppQuit))),
         [
             Effect::CancelTimer(TimerKind::QuitDeadline),
             Effect::HoldActivity(false),
@@ -302,11 +284,7 @@ fn a_quit_during_a_user_disconnect_waits_for_the_same_exit() {
     h.send(Input::Disconnect);
     assert_eq!(after(&h), Some(AfterStop::Quit));
     let exit = connection_effects(
-        &h.exit(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::UserDisconnect)
-                .up(30.0),
-        ),
+        &h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::UserDisconnect)),
     );
     assert_eq!(exit.last(), Some(&Effect::ApproveQuit));
 }
@@ -317,7 +295,7 @@ fn reconnect_now_soon_after_an_auth_failure_waits_until_ninety_seconds() {
     h.launch();
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::ConnectedToGateway);
-    h.exit(ended(Milestone::ConnectedToGateway));
+    h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
     let failed_at = h.now;
     h.advance(20.0);
     let effects = h.send(Input::ReconnectNow);
@@ -338,7 +316,7 @@ fn a_reconnect_now_cooldown_delivered_slightly_early_still_starts_the_attempt() 
     h.launch();
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::ConnectedToGateway);
-    h.exit(ended(Milestone::ConnectedToGateway));
+    h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
     let failed_at = h.now;
     h.advance(20.0);
     h.send(Input::ReconnectNow);
@@ -421,11 +399,7 @@ fn the_proactive_timer_reconnects_right_after_the_exit() {
         Some(AfterStop::Reconnect(AttemptReason::Proactive))
     );
     h.advance(1.0);
-    let effects = h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::ProactiveReconnect)
-            .up(10_500.0),
-    );
+    let effects = h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::ProactiveReconnect));
     assert!(effects.contains(&Effect::CheckReadiness));
     assert_eq!(reason(&h), Some(AttemptReason::Proactive));
 }
@@ -438,8 +412,8 @@ fn the_proactive_timer_firing_first_then_a_server_cut_gives_one_reconnect() {
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
     h.fire(TimerKind::ProactiveReconnect);
-    // The server cut the session before our SIGTERM landed.
-    let effects = h.exit(ended(Milestone::TunnelUp).up(10_500.0));
+    // The server cut the session before our stop landed.
+    let effects = h.exit(ended(Milestone::TunnelUp));
     assert_eq!(
         effects
             .iter()
@@ -449,7 +423,7 @@ fn the_proactive_timer_firing_first_then_a_server_cut_gives_one_reconnect() {
     );
     assert_eq!(reason(&h), Some(AttemptReason::Proactive));
     assert_eq!(
-        connection_effects(&h.exit_for(&id, ended(Milestone::TunnelUp).up(10_500.0))),
+        connection_effects(&h.exit_for(&id, ended(Milestone::TunnelUp))),
         [],
         "a repeated exit is stale"
     );
@@ -461,7 +435,7 @@ fn a_server_cut_first_makes_the_proactive_timer_stale() {
     h.launch_connected();
     let proactive = h.timer_id(TimerKind::ProactiveReconnect);
     h.advance(10_499.0);
-    h.exit(ended(Milestone::TunnelUp).up(10_499.0));
+    h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
         Some(RetryReason::ServerSessionEnded)
@@ -570,7 +544,7 @@ fn helper_events_of_other_attempts_are_ignored() {
     assert!(h.connected().is_some());
     let connected = snapshot(&h);
     assert_eq!(
-        connection_effects(&h.exit_for(&stranger(), ended(Milestone::TunnelUp).up(5.0))),
+        connection_effects(&h.exit_for(&stranger(), ended(Milestone::TunnelUp))),
         []
     );
     assert_eq!(
@@ -592,7 +566,7 @@ fn the_exit_of_an_old_attempt_while_waiting_is_ignored() {
         []
     );
     assert_eq!(
-        connection_effects(&h.exit_for(&id, ended(Milestone::TunnelUp).up(9_999.0))),
+        connection_effects(&h.exit_for(&id, ended(Milestone::TunnelUp))),
         []
     );
     let late = Input::RunRejected(

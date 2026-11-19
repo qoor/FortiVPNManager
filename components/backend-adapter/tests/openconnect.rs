@@ -1,4 +1,4 @@
-use std::io::{ErrorKind, Read};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{self, Command};
 use std::sync::mpsc::{self, Receiver};
@@ -134,6 +134,41 @@ fn a_detach_while_the_gateway_never_answers_ends_the_session_at_once() {
     let waited = ended - detached;
     assert!(waited < Duration::from_secs(3), "{waited:?}");
     assert_ne!(end.code, 0);
+}
+
+#[test]
+fn a_gateway_that_fails_before_the_login_form_was_still_reached() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (link, events) = link();
+    let session = thread::spawn({
+        let link = Arc::clone(&link);
+        move || {
+            let mut request = request(port);
+            request.pins = vec![GATEWAY_PIN.to_owned()];
+            backend().run(request, &link)
+        }
+    });
+    let mut stream = accept(&listener);
+    let mut tls = ServerConnection::new(gateway_config()).unwrap();
+    let mut gateway = rustls::Stream::new(&mut tls, &mut stream);
+    let mut head = Vec::new();
+    let mut byte = [0];
+    while !head.ends_with(b"\r\n\r\n") {
+        gateway.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    gateway
+        .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        .unwrap();
+    gateway.flush().unwrap();
+    let end = session.join().unwrap();
+    assert_ne!(end.code, 0);
+    let reached: Vec<SessionEvent> = events
+        .try_iter()
+        .filter(|event| !matches!(event, SessionEvent::Line(..)))
+        .collect();
+    assert_eq!(reached, [SessionEvent::GatewayTrusted]);
 }
 
 #[test]

@@ -14,7 +14,7 @@ use super::harness::*;
 fn fail_at_gateway(h: &mut Harness) -> AttemptId {
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::ConnectedToGateway);
-    h.exit(ended(Milestone::ConnectedToGateway));
+    h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
     id
 }
 
@@ -27,7 +27,7 @@ fn wait_reason(h: &Harness) -> Option<RetryReason> {
 }
 
 #[test]
-fn a_server_end_reconnects_after_five_seconds_and_resets_the_counter() {
+fn a_server_end_reconnects_after_five_seconds() {
     let mut h = Harness::new();
     h.launch();
     fail_at_gateway(&mut h);
@@ -35,7 +35,7 @@ fn a_server_end_reconnects_after_five_seconds_and_resets_the_counter() {
     h.fire(TimerKind::Retry);
     h.run_to_connected();
     h.advance(3.0 * 3600.0);
-    let effects = h.exit(ended(Milestone::TunnelUp).up(3.0 * 3600.0));
+    let effects = h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
     assert_eq!(
         h.retry_wait(),
         Some((h.now + secs(5.0), RetryReason::ServerSessionEnded))
@@ -45,10 +45,141 @@ fn a_server_end_reconnects_after_five_seconds_and_resets_the_counter() {
         timer_set(&effects, TimerKind::Retry),
         Some(h.now + secs(5.0))
     );
-    assert_eq!(saved_ledger(&effects).unwrap().consecutive_auth_failures, 0);
+    assert_eq!(saved_ledger(&effects), None);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
     h.fire(TimerKind::Retry);
     assert_eq!(reason(&h), Some(retry(RetryReason::ServerSessionEnded)));
     h.run_to_connected();
+}
+
+#[test]
+fn each_counted_fact_waits_ninety_seconds_and_counts() {
+    let login = |h: &mut Harness, id: &AttemptId| {
+        h.run_milestones(id, Milestone::ConnectedToGateway);
+        h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
+        Failure::AuthenticationRejected
+    };
+    let otp = |h: &mut Harness, id: &AttemptId| {
+        h.run_milestones(id, Milestone::OtpSubmitted);
+        h.exit(ended(Milestone::OtpSubmitted).by_helper(StopReason::PromptRepeated));
+        Failure::OtpRejected
+    };
+    let certificate = |h: &mut Harness, id: &AttemptId| {
+        h.run_milestones(id, Milestone::Authenticated);
+        h.exit(
+            ended(Milestone::Authenticated).certs(&[digest('a')], Some(Milestone::Authenticated)),
+        );
+        Failure::CertificateRejectedAfterLogin
+    };
+    let tunnel = |h: &mut Harness, id: &AttemptId| {
+        h.run_milestones(id, Milestone::Authenticated);
+        h.exit(
+            ended(Milestone::Authenticated)
+                .tunnel_setup_failed()
+                .code(-EINTR),
+        );
+        Failure::TunnelSetupFailed
+    };
+    let fail_one: [fn(&mut Harness, &AttemptId) -> Failure; 4] = [login, otp, certificate, tunnel];
+    for fail in fail_one {
+        let mut h = Harness::new();
+        h.launch();
+        let id = h.start_tunnel();
+        let failure = fail(&mut h, &id);
+        assert_eq!(
+            h.retry_wait(),
+            Some((h.now + secs(90.0), RetryReason::AuthFailure(failure)))
+        );
+        assert_eq!(
+            saved_ledger(&h.effects).unwrap().consecutive_auth_failures,
+            1,
+            "{failure:?}"
+        );
+        assert_eq!(h.cm.ledger.last_auth_failure, Some(failure));
+        h.fire(TimerKind::Retry);
+        let id = h.start_tunnel();
+        fail(&mut h, &id);
+        assert_eq!(h.cm.phase, Phase::Failed(failure));
+    }
+}
+
+#[test]
+fn an_end_before_the_tunnel_without_a_fact_backs_off_uncounted() {
+    for furthest in [
+        Milestone::Spawned,
+        Milestone::ConnectedToGateway,
+        Milestone::OtpPrompted,
+        Milestone::OtpSubmitted,
+        Milestone::Authenticated,
+    ] {
+        for exit in [
+            ended(furthest),
+            ended(furthest).code(-EPERM),
+            ended(furthest).by_helper(StopReason::Watchdog),
+        ] {
+            let mut h = Harness::new();
+            h.launch();
+            let id = h.start_tunnel();
+            h.run_milestones(&id, furthest);
+            let effects = h.exit(exit);
+            assert_eq!(
+                h.retry_wait(),
+                Some((h.now + secs(10.0), RetryReason::Network)),
+                "{furthest:?}"
+            );
+            assert_eq!(saved_ledger(&effects), None, "{furthest:?}");
+            assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+            assert_eq!(h.cm.ledger.last_auth_failure, None);
+        }
+    }
+}
+
+#[test]
+fn the_counter_resets_when_the_tunnel_comes_up() {
+    let mut h = Harness::new();
+    h.launch();
+    fail_at_gateway(&mut h);
+    h.fire(TimerKind::Retry);
+    let id = h.start_tunnel();
+    h.run_milestones(&id, Milestone::Authenticated);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+    h.advance(2.0);
+    let effects = h.milestone_for(&id, Milestone::TunnelUp, Some(TUNNEL_IP));
+    assert_eq!(saved_ledger(&effects).unwrap().consecutive_auth_failures, 0);
+    assert_eq!(
+        h.cm.ledger.last_auth_failure,
+        Some(Failure::AuthenticationRejected)
+    );
+    h.advance(1.0);
+    h.send(Input::Disconnect);
+    let effects = h.exit(
+        ended(Milestone::TunnelUp)
+            .by_helper(StopReason::UserDisconnect)
+            .code(-EINTR),
+    );
+    assert_eq!(saved_ledger(&effects), None);
+    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+    assert_eq!(h.cm.phase, Phase::Idle);
+}
+
+#[test]
+fn a_quick_drop_after_the_tunnel_backs_off_uncounted() {
+    let mut h = Harness::new();
+    h.launch();
+    fail_at_gateway(&mut h);
+    h.fire(TimerKind::Retry);
+    h.run_to_connected();
+    for _ in 0..2 {
+        h.advance(1.0);
+        h.exit(ended(Milestone::TunnelUp));
+        assert_eq!(
+            h.retry_wait(),
+            Some((h.now + secs(10.0), RetryReason::Network))
+        );
+        assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+        h.fire(TimerKind::Retry);
+        h.run_to_connected();
+    }
 }
 
 #[test]
@@ -160,24 +291,6 @@ fn network_setup_failures_back_off_like_network_errors_without_counting() {
 }
 
 #[test]
-fn a_quick_drop_loop_counts_and_fails() {
-    let mut h = Harness::new();
-    h.launch_connected();
-    h.advance(30.0);
-    h.exit(ended(Milestone::TunnelUp).up(30.0));
-    assert_eq!(
-        wait_reason(&h),
-        Some(RetryReason::AuthFailure(Failure::SessionDroppedEarly))
-    );
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
-    h.fire(TimerKind::Retry);
-    h.run_to_connected();
-    h.advance(45.0);
-    h.exit(ended(Milestone::TunnelUp).up(45.0));
-    assert_eq!(h.cm.phase, Phase::Failed(Failure::SessionDroppedEarly));
-}
-
-#[test]
 fn network_failures_back_off_without_counting() {
     let mut h = Harness::new();
     h.launch();
@@ -196,11 +309,7 @@ fn network_failures_back_off_without_counting() {
     // A tunnel coming up resets the backoff.
     h.run_to_connected();
     h.advance(600.0);
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::HelperShutdown)
-            .up(600.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::HelperShutdown));
     assert_eq!(
         h.retry_wait(),
         Some((h.now + secs(10.0), RetryReason::Network))
@@ -261,8 +370,8 @@ fn a_retry_due_while_offline_waits_for_the_path_then_starts_at_once() {
 }
 
 #[test]
-fn a_gateway_failure_right_after_a_wake_is_a_network_error() {
-    for (seconds_after_wake, is_network) in [(10.0, true), (30.0, true), (31.0, false)] {
+fn a_gateway_end_right_after_a_wake_is_judged_by_its_facts() {
+    for rejected in [false, true] {
         let mut h = Harness::new();
         h.launch_with(false, None);
         h.sleep();
@@ -270,41 +379,56 @@ fn a_gateway_failure_right_after_a_wake_is_a_network_error() {
         h.wake();
         h.settle(observe().dead());
         assert_eq!(h.cm.phase, Phase::Idle);
-        let settled_at = h.now;
-        h.now = h.wake_time() + secs(seconds_after_wake);
-        assert!(h.now >= settled_at, "{seconds_after_wake}");
         h.send(Input::Connect);
-        fail_at_gateway(&mut h);
-        if is_network {
-            assert_eq!(
-                wait_reason(&h),
-                Some(RetryReason::Network),
-                "{seconds_after_wake}"
-            );
-            assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+        let id = h.start_tunnel();
+        h.run_milestones(&id, Milestone::ConnectedToGateway);
+        let exit = ended(Milestone::ConnectedToGateway);
+        h.exit(if rejected {
+            exit.by_helper(StopReason::PromptRepeated)
         } else {
+            exit
+        });
+        if rejected {
             assert_eq!(
                 wait_reason(&h),
                 Some(RetryReason::AuthFailure(Failure::AuthenticationRejected))
             );
             assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+        } else {
+            assert_eq!(wait_reason(&h), Some(RetryReason::Network));
+            assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
         }
     }
 }
 
 #[test]
-fn a_gateway_failure_after_a_path_change_is_a_network_error() {
-    let mut h = Harness::new();
-    h.launch();
-    let id = h.start_tunnel();
-    h.run_milestones(&id, Milestone::ConnectedToGateway);
-    assert_eq!(
-        connection_effects(&h.set_path(online_via(other_wifi()))),
-        []
-    );
-    h.exit(ended(Milestone::ConnectedToGateway));
-    assert_eq!(wait_reason(&h), Some(RetryReason::Network));
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+fn a_gateway_end_after_a_path_change_is_judged_by_its_facts() {
+    for rejected in [false, true] {
+        let mut h = Harness::new();
+        h.launch();
+        let id = h.start_tunnel();
+        h.run_milestones(&id, Milestone::ConnectedToGateway);
+        assert_eq!(
+            connection_effects(&h.set_path(online_via(other_wifi()))),
+            []
+        );
+        let exit = ended(Milestone::ConnectedToGateway);
+        h.exit(if rejected {
+            exit.by_helper(StopReason::PromptRepeated)
+        } else {
+            exit
+        });
+        if rejected {
+            assert_eq!(
+                wait_reason(&h),
+                Some(RetryReason::AuthFailure(Failure::AuthenticationRejected))
+            );
+            assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+        } else {
+            assert_eq!(wait_reason(&h), Some(RetryReason::Network));
+            assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
+        }
+    }
 }
 
 #[test]
@@ -407,7 +531,7 @@ fn the_rolling_cap_stops_a_reconnect_loop() {
     for attempt in 1..=12 {
         h.run_to_connected();
         h.advance(130.0);
-        h.exit(ended(Milestone::TunnelUp).up(130.0));
+        h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
         assert_eq!(wait_reason(&h), Some(RetryReason::ServerSessionEnded));
         h.fire(TimerKind::Retry);
         if attempt < 12 {
@@ -435,7 +559,7 @@ fn the_rolling_cap_window_slides() {
     for _ in 1..=20 {
         h.run_to_connected();
         h.advance(400.0);
-        h.exit(ended(Milestone::TunnelUp).up(400.0));
+        h.exit(ended(Milestone::TunnelUp).code(-EPIPE));
         h.fire(TimerKind::Retry);
         assert!(h.attempt().is_some());
     }
@@ -530,46 +654,6 @@ fn reconnect_now_clears_failed() {
 }
 
 #[test]
-fn a_stable_session_resets_the_counter_even_on_a_user_disconnect() {
-    let mut h = Harness::new();
-    h.launch();
-    fail_at_gateway(&mut h);
-    h.fire(TimerKind::Retry);
-    h.run_to_connected();
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
-    h.advance(200.0);
-    assert_eq!(
-        stop_reasons(&h.send(Input::Disconnect)),
-        [StopReason::UserDisconnect]
-    );
-    let effects = h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::UserDisconnect)
-            .up(200.0),
-    );
-    assert_eq!(saved_ledger(&effects).unwrap().consecutive_auth_failures, 0);
-    assert_eq!(h.cm.phase, Phase::Idle);
-}
-
-#[test]
-fn a_short_session_ended_by_the_user_keeps_the_counter() {
-    let mut h = Harness::new();
-    h.launch();
-    fail_at_gateway(&mut h);
-    h.fire(TimerKind::Retry);
-    h.run_to_connected();
-    h.advance(60.0);
-    h.send(Input::Disconnect);
-    let effects = h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::UserDisconnect)
-            .up(60.0),
-    );
-    assert_eq!(saved_ledger(&effects), None);
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
-}
-
-#[test]
 fn every_ledger_change_is_saved() {
     /// Sends `input`; true when the ledger changed, in which case it must be saved.
     fn step(h: &mut Harness, input: Input) -> bool {
@@ -609,7 +693,9 @@ fn every_ledger_change_is_saved() {
         Input::Helper(fvm_contract::app_helper::HelperEvent {
             attempt_id: first.clone(),
             kind: fvm_contract::app_helper::HelperEventKind::Exited {
-                facts: ended(Milestone::ConnectedToGateway).facts(),
+                facts: ended(Milestone::ConnectedToGateway)
+                    .by_helper(StopReason::PromptRepeated)
+                    .facts(),
             },
         }),
     ] {

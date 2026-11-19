@@ -37,7 +37,6 @@ pub struct ConnectionManager {
     last_session: Option<SessionId>,
     pub(super) settings: Settings,
     pub(super) time_zone: TimeZone,
-    kills_show_as_signals: bool,
     /// The time of the input being handled, or of the last one.
     pub(super) now: SystemTime,
     /// The effects of the input being handled.
@@ -64,8 +63,7 @@ pub struct ConnectionManager {
     /// The latest schedule start or end acted on.
     schedule_boundary: Option<SystemTime>,
     network_failure_streak: u32,
-    /// The immediate reconnect after a forced termination was used and no session has been stable
-    /// since.
+    /// The immediate reconnect after a forced termination was used and no tunnel has come up since.
     forced_retry_used: bool,
     /// The attempt whose failure the phase shows, for a late spam-folder finding.
     last_failure_attempt: Option<AttemptId>,
@@ -142,7 +140,6 @@ pub(super) struct Attempt {
     session: SessionId,
     pub(super) reason: AttemptReason,
     cert_retry_used: bool,
-    started_at: SystemTime,
     /// The attempt's time limit; the wait for an earlier attempt's code email does not count.
     deadline: SystemTime,
     pub(super) stage: Stage,
@@ -155,7 +152,6 @@ pub(super) struct Attempt {
     otp_session_open: bool,
     otp_failure: Option<OtpFailure>,
     otp_in_spam: bool,
-    path_changed: bool,
     /// The stop the app asked for; the exit is still classified.
     stop_requested: Option<StopReason>,
     /// The account when the attempt began: its readiness check was for it and its run uses it.
@@ -208,7 +204,7 @@ pub(super) struct Session {
     /// The route to the gateway when the tunnel came up, or the first one known after.
     underlay: Option<Underlay>,
     pub(super) renewal: Option<Renewal>,
-    pub(super) replaced: Option<(AttemptId, SystemTime)>,
+    pub(super) replaced: Option<AttemptId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -224,8 +220,6 @@ pub(super) struct Renewal {
 pub(super) struct Stop {
     attempt: AttemptId,
     pub(super) after: AfterStop,
-    /// Set when the run had a tunnel up.
-    connected_since: Option<SystemTime>,
     replacement: Option<AttemptId>,
 }
 
@@ -321,7 +315,6 @@ impl ConnectionManager {
             last_session: None,
             settings: startup.settings,
             time_zone: startup.time_zone,
-            kills_show_as_signals: startup.kills_show_as_signals,
             now: SystemTime::UNIX_EPOCH,
             effects: Vec::new(),
             wants_connection: false,
@@ -1066,8 +1059,8 @@ impl ConnectionManager {
         if previous.unwrap_or(Milestone::Spawned) < Milestone::ConnectedToGateway
             && milestone >= Milestone::ConnectedToGateway
         {
-            // The certificate check passed and the credentials go out: this counts toward the
-            // attempt limit.
+            // The certificate check passed and the credentials go out next: this counts toward
+            // the attempt limit.
             let counted = attempt
                 .replacing
                 .as_ref()
@@ -1103,6 +1096,8 @@ impl ConnectionManager {
         // Still open only when the gateway asked for no OTP.
         self.push_otp_close(attempt.close_otp_session(false, true));
         self.network_failure_streak = 0;
+        self.ledger.reset_consecutive_failures();
+        self.forced_retry_used = false;
         self.phase = Phase::Connected(Session {
             attempt: attempt.id,
             since: self.now,
@@ -1114,9 +1109,7 @@ impl ConnectionManager {
             ),
             underlay: self.path.as_ref().and_then(|path| path.underlay.clone()),
             renewal: None,
-            replaced: attempt
-                .replacing
-                .map(|replaced| (replaced.attempt, replaced.since)),
+            replaced: attempt.replacing.map(|replaced| replaced.attempt),
         });
     }
 
@@ -1131,10 +1124,6 @@ impl ConnectionManager {
                     app_stop: attempt.stop_requested,
                     otp_failure: attempt.otp_failure,
                     otp_in_spam: attempt.otp_in_spam,
-                    path_changed: attempt.path_changed,
-                    within_wake_grace: self.started_within_wake_grace(&attempt),
-                    observed_up: None,
-                    kills_show_as_signals: self.kills_show_as_signals,
                 });
                 // No code email follows a login the gateway rejected, and its counted failure keeps
                 // the next login 90 s away, past the prompt's arrival tolerance.
@@ -1157,41 +1146,15 @@ impl ConnectionManager {
                     .as_ref()
                     .is_some_and(|session| session.attempt == *id) =>
             {
-                let session = attempt.replacing.take().expect("matched above");
-                let up = facts
-                    .up_duration
-                    .unwrap_or_else(|| elapsed(session.since, self.now));
-                if up >= policy::STABLE_SESSION {
-                    self.ledger.reset_consecutive_failures();
-                    self.forced_retry_used = false;
-                }
+                attempt.replacing = None;
                 self.phase = Phase::Connecting(attempt);
             }
-            Phase::Connected(mut session)
-                if session
-                    .replaced
-                    .as_ref()
-                    .is_some_and(|(replaced, _)| replaced == id) =>
-            {
-                let (_, since) = session.replaced.take().expect("matched above");
-                let up = facts
-                    .up_duration
-                    .unwrap_or_else(|| elapsed(since, self.now));
-                if up >= policy::STABLE_SESSION {
-                    self.ledger.reset_consecutive_failures();
-                    self.forced_retry_used = false;
-                }
+            Phase::Connected(mut session) if session.replaced.as_ref() == Some(id) => {
+                session.replaced = None;
                 self.phase = Phase::Connected(session);
             }
             Phase::Connected(session) if session.attempt == *id => {
                 self.learn_certificates(facts);
-                let up = facts
-                    .up_duration
-                    .unwrap_or_else(|| elapsed(session.since, self.now));
-                if up >= policy::STABLE_SESSION {
-                    self.ledger.reset_consecutive_failures();
-                    self.forced_retry_used = false;
-                }
                 self.last_failure_attempt = Some(id.clone());
                 let outcome = classify(&ExitContext {
                     facts,
@@ -1200,10 +1163,6 @@ impl ConnectionManager {
                     app_stop: None,
                     otp_failure: None,
                     otp_in_spam: false,
-                    path_changed: false,
-                    within_wake_grace: false,
-                    observed_up: Some(up),
-                    kills_show_as_signals: self.kills_show_as_signals,
                 });
                 self.apply(outcome);
             }
@@ -1218,7 +1177,7 @@ impl ConnectionManager {
                         }
                         self.phase = Phase::Disconnecting(stop);
                     }
-                    None => self.finish_stop(stop, facts.up_duration),
+                    None => self.settle(stop.after),
                 }
             }
             // An attempt already finished with.
@@ -1262,7 +1221,7 @@ impl ConnectionManager {
                         }
                         self.phase = Phase::Disconnecting(stop);
                     }
-                    None => self.finish_stop(stop, None),
+                    None => self.settle(stop.after),
                 }
             }
             phase => self.phase = phase,
@@ -1274,11 +1233,7 @@ impl ConnectionManager {
     fn helper_connection_lost(&mut self) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.replacing.is_some() => {
-                let session = attempt.replacing.take().expect("matched above");
-                if elapsed(session.since, self.now) >= policy::STABLE_SESSION {
-                    self.ledger.reset_consecutive_failures();
-                    self.forced_retry_used = false;
-                }
+                attempt.replacing = None;
                 if attempt.stage == Stage::Run {
                     self.push_otp_close(attempt.close_otp_session(false, true));
                     self.forced_termination();
@@ -1294,14 +1249,8 @@ impl ConnectionManager {
                     self.forced_termination();
                 }
             }
-            Phase::Connected(session) => {
-                if elapsed(session.since, self.now) >= policy::STABLE_SESSION {
-                    self.ledger.reset_consecutive_failures();
-                    self.forced_retry_used = false;
-                }
-                self.forced_termination();
-            }
-            Phase::Disconnecting(stop) => self.finish_stop(stop, None),
+            Phase::Connected(_) => self.forced_termination(),
+            Phase::Disconnecting(stop) => self.settle(stop.after),
             phase => self.phase = phase,
         }
     }
@@ -1511,7 +1460,7 @@ impl ConnectionManager {
 
     pub(super) fn wake_settled(&mut self, observation: WakeObservation) {
         let slept_for = self.pending_wake.take().unwrap_or(Duration::ZERO);
-        self.record_path(PathSnapshot {
+        self.path = Some(PathSnapshot {
             satisfied: observation.path_satisfied,
             underlay: observation.underlay.clone(),
         });
@@ -1593,7 +1542,7 @@ impl ConnectionManager {
     }
 
     pub(super) fn path_changed(&mut self, snapshot: PathSnapshot, routing_incomplete: bool) {
-        self.record_path(snapshot.clone());
+        self.path = Some(snapshot.clone());
         if self.sleeping {
             return;
         }
@@ -1640,19 +1589,6 @@ impl ConnectionManager {
             };
             self.restart_session(session, AttemptReason::TunnelLost);
         }
-    }
-
-    /// Keeps the path and marks an attempt under way whose network changed beneath it.
-    fn record_path(&mut self, snapshot: PathSnapshot) {
-        if self
-            .path
-            .as_ref()
-            .is_some_and(|previous| *previous != snapshot)
-            && let Phase::Connecting(attempt) = &mut self.phase
-        {
-            attempt.path_changed = true;
-        }
-        self.path = Some(snapshot);
     }
 
     fn resume_from_network_wait(&mut self, reason: RetryReason, delay: Duration) {
@@ -1864,7 +1800,6 @@ impl ConnectionManager {
             session: self.next_session_id(),
             reason,
             cert_retry_used,
-            started_at: self.now,
             deadline: self.now + policy::ATTEMPT_TIMEOUT,
             stage: Stage::CheckingReadiness,
             milestone: None,
@@ -1874,7 +1809,6 @@ impl ConnectionManager {
             otp_session_open: false,
             otp_failure: None,
             otp_in_spam: false,
-            path_changed: false,
             stop_requested: None,
             account: self.settings.account.clone(),
             replacing: None,
@@ -1942,7 +1876,6 @@ impl ConnectionManager {
                 self.phase = Phase::Disconnecting(Stop {
                     attempt: attempt.id,
                     after,
-                    connected_since: None,
                     replacement: None,
                 });
             }
@@ -1965,7 +1898,6 @@ impl ConnectionManager {
         self.phase = Phase::Disconnecting(Stop {
             attempt: session.attempt,
             after,
-            connected_since: Some(session.since),
             replacement,
         });
     }
@@ -2024,7 +1956,6 @@ impl ConnectionManager {
             session: self.next_session_id(),
             reason,
             cert_retry_used,
-            started_at: self.now,
             deadline: self.now + policy::ATTEMPT_TIMEOUT,
             stage: Stage::CheckingReadiness,
             milestone: None,
@@ -2034,7 +1965,6 @@ impl ConnectionManager {
             otp_session_open: false,
             otp_failure: None,
             otp_in_spam: false,
-            path_changed: false,
             stop_requested: None,
             account: self.settings.account.clone(),
             replacing: Some(session),
@@ -2101,15 +2031,6 @@ impl ConnectionManager {
         self.phase = Phase::Connected(session);
     }
 
-    fn finish_stop(&mut self, stop: Stop, up: Option<Duration>) {
-        let up = up.or_else(|| stop.connected_since.map(|since| elapsed(since, self.now)));
-        if up.is_some_and(|up| up >= policy::STABLE_SESSION) {
-            self.ledger.reset_consecutive_failures();
-            self.forced_retry_used = false;
-        }
-        self.settle(stop.after);
-    }
-
     fn settle(&mut self, after: AfterStop) {
         match after {
             AfterStop::Idle => self.phase = Phase::Idle,
@@ -2122,11 +2043,6 @@ impl ConnectionManager {
                 self.terminated = true;
             }
         }
-    }
-
-    fn started_within_wake_grace(&self, attempt: &Attempt) -> bool {
-        self.last_wake_at
-            .is_some_and(|wake| attempt.started_at <= wake + policy::WAKE_GRACE)
     }
 
     /// The run that just ended talked to the gateway the settings name now.
@@ -2166,7 +2082,6 @@ impl ConnectionManager {
                 RetryReason::ServerSessionEnded,
                 policy::SERVER_SESSION_END_DELAY,
             ),
-            Outcome::ForcedTermination => self.forced_termination(),
             Outcome::NetworkError => self.network_failure(RetryReason::Network),
             Outcome::NetworkSetupFailed => self.network_failure(RetryReason::NetworkSetupFailed),
             Outcome::AuthFailure(failure) => self.auth_failure(failure),
@@ -2174,9 +2089,9 @@ impl ConnectionManager {
         }
     }
 
-    /// Reconnects at once through the gates of any retry, but once only until a session is
-    /// stable again: the Helper aborts on internal faults, and one that crashed on every run
-    /// would otherwise repeat VPN logins and OTP emails without end.
+    /// Reconnects at once through the gates of any retry, but once only until a tunnel comes up
+    /// again: the Helper aborts on internal faults, and one that crashed on every run would
+    /// otherwise repeat VPN logins and OTP emails without end.
     fn forced_termination(&mut self) {
         if self.forced_retry_used {
             self.network_failure(RetryReason::Network);

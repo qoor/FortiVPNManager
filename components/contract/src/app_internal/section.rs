@@ -165,11 +165,6 @@ pub enum FailureReason {
     },
     OtpRejected {},
     TunnelSetupFailed {},
-    TunnelModeRejected {},
-    DroppedEarly {
-        /// A session shorter than this counts as dropped early.
-        within_seconds: u64,
-    },
     CertificateChangedAfterLogin {},
     /// Gmail refused the credential the selected method uses.
     GmailRejected {

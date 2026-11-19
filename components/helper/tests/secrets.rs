@@ -76,7 +76,7 @@ fn a_session_that_ends_by_itself_is_not_logged_out_by_the_helper() {
     let secrets = Arc::clone(&setup.secrets);
     let mut session = Session::start(opened_then_returned(), setup);
     let facts = session.wait_for_exit();
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.settle(Duration::from_millis(200));
     assert!(gateway.connections().is_empty());
     let texts = session.texts();

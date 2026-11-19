@@ -115,8 +115,6 @@ public static partial class AppInternal
         public sealed record OtpNotReceived(bool InSpam, ulong WaitedSeconds) : FailureReason;
         public sealed record OtpRejected : FailureReason;
         public sealed record TunnelSetupFailed : FailureReason;
-        public sealed record TunnelModeRejected : FailureReason;
-        public sealed record DroppedEarly(ulong WithinSeconds) : FailureReason;
         public sealed record CertificateChangedAfterLogin : FailureReason;
         public sealed record GmailRejected(OtpMethod Method) : FailureReason;
         public sealed record TooManyReconnects(ulong WindowSeconds) : FailureReason;

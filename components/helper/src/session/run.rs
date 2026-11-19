@@ -8,8 +8,6 @@ mod network;
 
 use std::mem;
 use std::net::{IpAddr, Ipv4Addr};
-#[cfg(windows)]
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
@@ -18,7 +16,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
     ExitFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
-    ProcessExitStatus, RunRequest, StopInitiator, StopReason,
+    RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkChange, NetworkOutcome};
 use fvm_contract::validation;
@@ -141,9 +139,9 @@ impl Run {
             otp_submitted: false,
             furthest: Milestone::Spawned,
             tunnel_ip: None,
-            tunnel_up_at: None,
             rejected_certificates: Vec::new(),
             certificate_rejected_at: None,
+            tunnel_setup_failed: false,
             tunnel_address_in_use: false,
             stop: None,
             detach_at: None,
@@ -313,11 +311,9 @@ struct Watch<R> {
 
     furthest: Milestone,
     tunnel_ip: Option<Ipv4Addr>,
-    /// On the clock that counts sleep: the app compares the up duration with how long a session
-    /// counts as stable. The stage limits stay on `Instant`, which stops during sleep.
-    tunnel_up_at: Option<Duration>,
     rejected_certificates: Vec<String>,
     certificate_rejected_at: Option<Milestone>,
+    tunnel_setup_failed: bool,
     tunnel_address_in_use: bool,
     /// The first stop reason.
     stop: Option<StopReason>,
@@ -507,7 +503,6 @@ impl<R: FnMut(Report)> Watch<R> {
     fn reach(&mut self, milestone: Milestone) {
         self.furthest = milestone;
         let tunnel_ip = if milestone == Milestone::TunnelUp {
-            self.tunnel_up_at = Some(time_including_sleep());
             self.tunnel_ip
         } else {
             None
@@ -619,24 +614,22 @@ impl<R: FnMut(Report)> Watch<R> {
         let Phase::Returned(end) = mem::replace(&mut self.phase, Phase::Reported) else {
             unreachable!("a session ends once, after it returned")
         };
-        let exited_at = time_including_sleep();
         for failure in ended.failures {
             let message = format!("{}: {failure}", self.name);
             self.log(LogLevel::Error, LogCategory::Helper, message);
         }
         self.meta(format!("‹session ended: code {}›", end.code));
         let facts = ExitFacts {
-            furthest_milestone: Some(self.furthest),
+            furthest_milestone: self.furthest,
             stop_initiator: match self.stop {
                 Some(reason) => StopInitiator::Helper { reason },
                 None => StopInitiator::Client {},
             },
             cert_rejected_digests: mem::take(&mut self.rejected_certificates),
             cert_rejected_at: self.certificate_rejected_at,
-            tunnel_mode_rejected: false,
+            tunnel_setup_failed: self.tunnel_setup_failed,
             tunnel_address_in_use: self.tunnel_address_in_use,
-            up_duration: self.tunnel_up_at.map(|up| exited_at.saturating_sub(up)),
-            exit_status: ProcessExitStatus::Exited { code: end.code },
+            end_code: end.code,
         };
         self.revert_network_or_continue(facts);
     }
@@ -682,23 +675,6 @@ fn tunnel_ipv4(address: IpAddr) -> Ipv4Addr {
         unreachable!("the tunnel's IPv4 settings hold an IPv4 address")
     };
     address
-}
-
-/// Time that keeps counting while the Mac sleeps, unlike `Instant`.
-#[cfg(unix)]
-fn time_including_sleep() -> Duration {
-    Duration::try_from(rustix::time::clock_gettime(
-        rustix::time::ClockId::Monotonic,
-    ))
-    .expect("the monotonic clock is never negative")
-}
-
-/// The time since the Helper started; up times decide only whether a session was stable. `Instant`
-/// reads QueryPerformanceCounter.
-#[cfg(windows)]
-fn time_including_sleep() -> Duration {
-    static START: OnceLock<Instant> = OnceLock::new();
-    START.get_or_init(Instant::now).elapsed()
 }
 
 /// "30s", "0.25s".

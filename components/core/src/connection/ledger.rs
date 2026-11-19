@@ -9,20 +9,16 @@ use super::policy;
 /// Why the connection stopped, or the counted authentication failure it waits after.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Failure {
-    /// Rejected after reaching the gateway and before the OTP prompt.
+    /// The gateway asked for the password again.
     AuthenticationRejected,
     /// No OTP email matched in time; `in_spam` once it was found in the spam folder.
     OtpNotReceived {
         in_spam: bool,
     },
-    /// The OTP was submitted but the login did not complete.
+    /// The OTP was submitted but the gateway asked again.
     OtpRejected,
-    /// Logged in, but the tunnel never came up.
+    /// Logged in, but the tunnel device could not be set up.
     TunnelSetupFailed,
-    /// The gateway refused tunnel mode after the login.
-    TunnelModeRejected,
-    /// The tunnel came up but dropped before it was stable.
-    SessionDroppedEarly,
     /// The gateway certificate was rejected after the OTP was used.
     CertificateRejectedAfterLogin,
     /// Gmail refused the credential of the OTP session.
@@ -41,7 +37,7 @@ pub enum Failure {
 pub struct FailureLedger {
     /// [`super::VpnAccount::ledger_key`] of the account.
     pub account_key: String,
-    /// Counted authentication failures since the last stable session or user action.
+    /// Counted authentication failures since the last tunnel up or user action.
     pub consecutive_auth_failures: u32,
     pub last_auth_failure_at: Option<SystemTime>,
     pub last_auth_failure: Option<Failure>,
@@ -85,7 +81,7 @@ impl FailureLedger {
         self.last_auth_failure = Some(failure);
     }
 
-    /// A stable session proves the credentials work.
+    /// A tunnel up proves the credentials work.
     pub(super) fn reset_consecutive_failures(&mut self) {
         self.consecutive_auth_failures = 0;
     }

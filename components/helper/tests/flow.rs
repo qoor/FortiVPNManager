@@ -1,13 +1,10 @@
 mod common;
 
 use std::sync::{Arc, Mutex, mpsc};
-use std::thread;
-use std::time::Duration;
 
 use common::*;
 use fvm_contract::app_helper::{
-    ExitFacts, HelperEventKind, Milestone, OutputSource, ProcessExitStatus, StopInitiator,
-    StopReason,
+    ExitFacts, HelperEventKind, Milestone, OutputSource, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::NetworkOutcome;
 use fvm_helper_core::session::backend::SessionEvent;
@@ -16,14 +13,13 @@ const EPIPE: i32 = 32;
 
 fn client_exit(furthest: Milestone, code: i32) -> ExitFacts {
     ExitFacts {
-        furthest_milestone: Some(furthest),
+        furthest_milestone: furthest,
         stop_initiator: StopInitiator::Client {},
         cert_rejected_digests: Vec::new(),
         cert_rejected_at: None,
-        tunnel_mode_rejected: false,
+        tunnel_setup_failed: false,
         tunnel_address_in_use: false,
-        up_duration: None,
-        exit_status: ProcessExitStatus::Exited { code },
+        end_code: code,
     }
 }
 
@@ -75,12 +71,8 @@ fn a_session_goes_through_every_milestone_and_ends_on_the_users_stop() {
             reason: StopReason::UserDisconnect
         }
     );
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
-    assert!(facts.up_duration.is_some());
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::Exited { code: -EINTR }
-    );
+    assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
+    assert_eq!(facts.end_code, -EINTR);
     assert_eq!(
         *received.lock().unwrap(),
         Some((
@@ -171,10 +163,7 @@ fn a_certificate_rejected_after_the_gateway_was_trusted_is_told_where_it_came() 
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
     assert_eq!(facts.cert_rejected_at, Some(Milestone::ConnectedToGateway));
-    assert_eq!(
-        facts.furthest_milestone,
-        Some(Milestone::ConnectedToGateway)
-    );
+    assert_eq!(facts.furthest_milestone, Milestone::ConnectedToGateway);
 }
 
 #[test]
@@ -208,7 +197,13 @@ fn a_tunnel_that_cannot_be_set_up_ends_after_authentication() {
     });
     let mut session = Session::start(script, Setup::default());
     let facts = session.wait_for_exit();
-    assert_eq!(facts, client_exit(Milestone::Authenticated, -EIO));
+    assert_eq!(
+        facts,
+        ExitFacts {
+            tunnel_setup_failed: true,
+            ..client_exit(Milestone::Authenticated, -EIO)
+        }
+    );
     assert!(
         session.has_text(
             "‹the tunnel device could not be set up: Operation not permitted (os error 1)›"
@@ -230,23 +225,14 @@ fn the_gateway_ending_a_session_is_the_clients_end() {
     });
     let mut session = Session::start(script, Setup::default());
     session.bring_up(vec![gateway_route("192.0.2.1")]);
-    thread::sleep(Duration::from_millis(200));
     cut.send(()).unwrap();
     session
         .next_job()
         .finish(NetworkOutcome::Reverted { left: Vec::new() });
     let facts = session.wait_for_exit();
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.furthest_milestone, Some(Milestone::TunnelUp));
-    assert_eq!(
-        facts.exit_status,
-        ProcessExitStatus::Exited { code: -EPIPE }
-    );
-    let up = facts.up_duration.unwrap();
-    assert!(
-        up >= Duration::from_millis(150) && up < Duration::from_secs(5),
-        "{up:?}"
-    );
+    assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
+    assert_eq!(facts.end_code, -EPIPE);
     assert!(session.has_line(OutputSource::Stderr, "Server closed connection"));
     session.assert_finished_cleanly();
 }

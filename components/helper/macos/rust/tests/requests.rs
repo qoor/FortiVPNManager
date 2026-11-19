@@ -83,8 +83,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         facts["stopInitiator"],
         json!({"helper": {"_0": "userDisconnect"}})
     );
-    assert_eq!(facts["exitStatus"], json!({"exited": {"code": -EINTR}}));
-    assert!(facts["upDuration"].is_number(), "{facts}");
+    assert_eq!(facts["endCode"], -EINTR);
 
     assert_eq!(swift.milestones(1), [0, 1, 2, 3, 4, 5]);
     let tunnel_up = swift.events(1)[5].clone();
@@ -108,8 +107,8 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         format!("notice helper: 0277070470 run {ATTEMPT}: tunnel up"),
         format!("notice helper: 0277070470 run {ATTEMPT}: stop requested (userDisconnect)"),
         format!(
-            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: -4 }}, initiator \
-             Helper {{ reason: UserDisconnect }}, furthest Some(TunnelUp)"
+            "notice helper: 0277070470 run {ATTEMPT} exited: code -4, initiator \
+             Helper {{ reason: UserDisconnect }}, furthest TunnelUp"
         ),
     ] {
         assert!(swift.has_log(&line), "{line} not in {:#?}", swift.logs());
@@ -142,11 +141,11 @@ fn a_failed_login_is_reported_as_the_session_ending_the_run() {
     let facts = swift.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], CONNECTED_TO_GATEWAY);
     assert_eq!(facts["stopInitiator"], json!({"none": {}}));
-    assert_eq!(facts["exitStatus"], json!({"exited": {"code": -EPERM}}));
+    assert_eq!(facts["endCode"], -EPERM);
     swift.wait_until("the exit log", |swift| {
         swift.has_log(&format!(
-            "notice helper: 0277070470 run {ATTEMPT} exited: Exited {{ code: -1 }}, initiator \
-             Client, furthest Some(ConnectedToGateway)"
+            "notice helper: 0277070470 run {ATTEMPT} exited: code -1, initiator Client, furthest \
+             ConnectedToGateway"
         ))
     });
     assert!(swift.scratch.run_directory_names().is_empty());

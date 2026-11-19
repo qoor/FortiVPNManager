@@ -188,8 +188,7 @@ fn wake_rules_while_connected() {
                     "{}",
                     wake.name
                 );
-                let up = h.now.duration_since(t0()).unwrap().as_secs_f64();
-                h.exit_for(&id, ended(Milestone::TunnelUp).by_helper(stop).up(up));
+                h.exit_for(&id, ended(Milestone::TunnelUp).by_helper(stop));
                 assert_eq!(self::reason(&h), Some(reason), "{}", wake.name);
             }
             None => {
@@ -352,7 +351,7 @@ fn sleep_while_waiting_cancels_the_timer_but_keeps_the_auth_gap() {
     h.launch();
     let id = h.start_tunnel();
     h.run_milestones(&id, Milestone::ConnectedToGateway);
-    h.exit(ended(Milestone::ConnectedToGateway));
+    h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
     let failed_at = h.now;
     assert_eq!(
         connection_effects(&h.sleep()),
@@ -379,7 +378,7 @@ fn a_tunnel_that_dies_during_sleep_reconnects_after_the_wake() {
     h.launch_connected();
     h.sleep();
     h.advance(3.0 * 3600.0);
-    h.exit(ended(Milestone::TunnelUp).up(3.0 * 3600.0));
+    h.exit(ended(Milestone::TunnelUp));
     assert_eq!(
         h.network_wait().map(|(reason, _)| reason),
         Some(RetryReason::Sleep)
@@ -405,9 +404,7 @@ fn sleep_during_a_planned_reconnect_waits_for_the_wake() {
     assert_eq!(after(&h), Some(AfterStop::ResumeAfterSleep));
     h.exit_for(
         &id,
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::ProactiveReconnect)
-            .up(10_500.0),
+        ended(Milestone::TunnelUp).by_helper(StopReason::ProactiveReconnect),
     );
     assert_eq!(
         h.network_wait().map(|(reason, _)| reason),
@@ -437,11 +434,7 @@ fn an_underlay_change_reconnects() {
         after(&h),
         Some(AfterStop::Reconnect(AttemptReason::NetworkChanged))
     );
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(500.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect));
     assert_eq!(reason(&h), Some(AttemptReason::NetworkChanged));
 }
 
@@ -465,11 +458,7 @@ fn incomplete_routing_on_the_same_underlay_reconnects_as_a_lost_tunnel() {
         after(&h),
         Some(AfterStop::Reconnect(AttemptReason::TunnelLost))
     );
-    h.exit(
-        ended(Milestone::TunnelUp)
-            .by_helper(StopReason::Reconnect)
-            .up(500.0),
-    );
+    h.exit(ended(Milestone::TunnelUp).by_helper(StopReason::Reconnect));
     assert_eq!(reason(&h), Some(AttemptReason::TunnelLost));
 }
 

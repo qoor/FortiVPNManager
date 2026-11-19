@@ -1,8 +1,6 @@
 //! Why a run ended without the app asking.
 
-use std::time::Duration;
-
-use fvm_contract::app_helper::{ExitFacts, Milestone, ProcessExitStatus, StopReason};
+use fvm_contract::app_helper::{ExitFacts, Milestone, StopReason};
 
 use super::super::classify::{ExitContext, Outcome, classify};
 use super::super::{Failure, OtpFailure};
@@ -15,11 +13,6 @@ struct Case {
     app_stop: Option<StopReason>,
     otp_failure: Option<OtpFailure>,
     otp_in_spam: bool,
-    path_changed: bool,
-    within_wake_grace: bool,
-    observed_up: Option<f64>,
-    /// Windows: a kill shows no signal.
-    no_signals: bool,
 }
 
 fn outcome(facts: ExitFacts, case: Case) -> Outcome {
@@ -30,10 +23,6 @@ fn outcome(facts: ExitFacts, case: Case) -> Outcome {
         app_stop: case.app_stop,
         otp_failure: case.otp_failure,
         otp_in_spam: case.otp_in_spam,
-        path_changed: case.path_changed,
-        within_wake_grace: case.within_wake_grace,
-        observed_up: case.observed_up.map(Duration::from_secs_f64),
-        kills_show_as_signals: !case.no_signals,
     })
 }
 
@@ -49,6 +38,14 @@ fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> ExitFacts
 fn auth(failure: Failure) -> Outcome {
     Outcome::AuthFailure(failure)
 }
+
+const BEFORE_THE_TUNNEL: [Milestone; 5] = [
+    Milestone::Spawned,
+    Milestone::ConnectedToGateway,
+    Milestone::OtpPrompted,
+    Milestone::OtpSubmitted,
+    Milestone::Authenticated,
+];
 
 #[test]
 fn certificate_rejection_before_the_otp_was_submitted() {
@@ -78,23 +75,6 @@ fn certificate_rejection_before_the_otp_was_submitted() {
         Outcome::CertificateRetry,
         "no rejection milestone"
     );
-    // A rejection without a usable value cannot arrive: the Helper reports only values the client
-    // accepts (backend adapter output).
-    assert_eq!(
-        outcome(
-            cert(
-                Milestone::ConnectedToGateway,
-                &[a],
-                Some(Milestone::ConnectedToGateway)
-            ),
-            Case {
-                path_changed: true,
-                ..Case::default()
-            }
-        ),
-        Outcome::CertificateRetry,
-        "beats the path-change rule"
-    );
     assert_eq!(
         plain(cert(
             Milestone::OtpPrompted,
@@ -106,83 +86,62 @@ fn certificate_rejection_before_the_otp_was_submitted() {
 }
 
 #[test]
-fn a_stable_tunnel_ended_by_the_server() {
-    assert_eq!(
-        plain(ended(Milestone::TunnelUp).up(10_800.0).facts()),
-        Outcome::ServerSessionEnded
-    );
-    assert_eq!(
-        plain(ended(Milestone::TunnelUp).up(120.0).facts()),
-        Outcome::ServerSessionEnded
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::TunnelUp).facts(),
-            Case {
-                observed_up: Some(600.0),
-                ..Case::default()
-            }
-        ),
-        Outcome::ServerSessionEnded,
-        "the Helper did not report the up-time; the app measured it"
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::Authenticated).up(300.0).facts(),
-            Case {
-                seen: Some(Milestone::TunnelUp),
-                ..Case::default()
-            }
-        ),
-        Outcome::ServerSessionEnded,
-        "the facts lag behind"
-    );
+fn the_server_ending_or_rejecting_the_session_after_the_tunnel() {
+    for code in [-EPIPE, -EPERM] {
+        assert_eq!(
+            plain(ended(Milestone::TunnelUp).code(code).facts()),
+            Outcome::ServerSessionEnded,
+            "{code}"
+        );
+        assert_eq!(
+            outcome(
+                ended(Milestone::Authenticated).code(code).facts(),
+                Case {
+                    seen: Some(Milestone::TunnelUp),
+                    ..Case::default()
+                }
+            ),
+            Outcome::ServerSessionEnded,
+            "the facts lag behind: {code}"
+        );
+    }
+}
+
+#[test]
+fn any_other_end_after_the_tunnel_is_a_network_error() {
+    for code in [-EIO, -EINTR] {
+        assert_eq!(
+            plain(ended(Milestone::TunnelUp).code(code).facts()),
+            Outcome::NetworkError,
+            "{code}"
+        );
+    }
     assert_eq!(
         plain(
             ended(Milestone::TunnelUp)
                 .by_helper(StopReason::HelperShutdown)
-                .up(5_000.0)
+                .code(-EINTR)
                 .facts()
         ),
         Outcome::NetworkError,
         "stopped by the Helper itself"
     );
-}
-
-#[test]
-fn killed_after_the_tunnel_came_up() {
     assert_eq!(
-        plain(killed(Milestone::TunnelUp).up(180.0).facts()),
-        Outcome::ForcedTermination
-    );
-    assert_eq!(
-        plain(killed(Milestone::TunnelUp).up(30.0).facts()),
-        Outcome::ForcedTermination,
-        "not an early drop"
-    );
-    assert_eq!(
-        outcome(
-            killed(Milestone::TunnelUp).facts(),
-            Case {
-                observed_up: Some(5.0),
-                ..Case::default()
-            }
+        plain(
+            ended(Milestone::TunnelUp)
+                .by_helper(StopReason::Watchdog)
+                .code(-EPIPE)
+                .facts()
         ),
-        Outcome::ForcedTermination
+        Outcome::ServerSessionEnded,
+        "the code decides, whoever stopped the run"
     );
     assert_eq!(
         outcome(
-            killed(Milestone::Authenticated).up(2.0).facts(),
-            Case {
-                seen: Some(Milestone::TunnelUp),
-                ..Case::default()
-            }
-        ),
-        Outcome::ForcedTermination
-    );
-    assert_eq!(
-        outcome(
-            killed(Milestone::TunnelUp).up(1.0).facts(),
+            ended(Milestone::TunnelUp)
+                .by_helper(StopReason::AttemptTimeout)
+                .code(-EPIPE)
+                .facts(),
             Case {
                 app_stop: Some(StopReason::AttemptTimeout),
                 ..Case::default()
@@ -191,93 +150,15 @@ fn killed_after_the_tunnel_came_up() {
         Outcome::NetworkError,
         "our deadline stop raced the tunnel"
     );
-    let signaled = |signal| ProcessExitStatus::Signaled { signal };
+    let a = digest('a');
     assert_eq!(
-        plain(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::HelperShutdown)
-                .up(20.0)
-                .status(signaled(15))
-                .facts()
-        ),
-        auth(Failure::SessionDroppedEarly)
-    );
-    assert_eq!(
-        plain(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::HelperShutdown)
-                .up(5_000.0)
-                .status(signaled(9))
-                .facts()
-        ),
-        Outcome::NetworkError
-    );
-}
-
-/// Without signals a kill cannot be told from the server or a drop, so after the tunnel came up
-/// every end nobody here asked for reconnects at once.
-#[test]
-fn without_signals_every_unrequested_end_after_the_tunnel_is_forced() {
-    let windows = |facts, case: Case| {
-        outcome(
-            facts,
-            Case {
-                no_signals: true,
-                ..case
-            },
-        )
-    };
-    for up in [5.0, 180.0, 5_000.0] {
-        assert_eq!(
-            windows(ended(Milestone::TunnelUp).up(up).facts(), Case::default()),
-            Outcome::ForcedTermination,
-            "{up}"
-        );
-    }
-    assert_eq!(
-        windows(
-            ended(Milestone::TunnelUp).up(5_000.0).facts(),
-            Case {
-                seen: Some(Milestone::TunnelUp),
-                observed_up: Some(5_000.0),
-                ..Case::default()
-            }
-        ),
-        Outcome::ForcedTermination,
-        "a session ends the same way"
-    );
-    // Stops the app or the Helper asked for keep their rules.
-    assert_eq!(
-        windows(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::HelperShutdown)
-                .up(5_000.0)
-                .facts(),
-            Case::default()
-        ),
-        Outcome::NetworkError
-    );
-    assert_eq!(
-        windows(
-            ended(Milestone::TunnelUp).up(1.0).facts(),
-            Case {
-                app_stop: Some(StopReason::AttemptTimeout),
-                ..Case::default()
-            }
-        ),
-        Outcome::NetworkError
-    );
-    // Before the tunnel the stage rules stay, for the gateway's IP block.
-    assert_eq!(
-        windows(
-            ended(Milestone::ConnectedToGateway).facts(),
-            Case::default()
-        ),
-        auth(Failure::AuthenticationRejected)
-    );
-    assert_eq!(
-        windows(ended(Milestone::OtpSubmitted).facts(), Case::default()),
-        auth(Failure::OtpRejected)
+        plain(cert(
+            Milestone::TunnelUp,
+            &[a.as_str()],
+            Some(Milestone::TunnelUp)
+        )),
+        Outcome::NetworkError,
+        "a certificate change on the tunnel's reconnect"
     );
 }
 
@@ -292,201 +173,34 @@ fn a_repeated_prompt_is_a_rejected_login_or_otp() {
         ),
         auth(Failure::AuthenticationRejected)
     );
-    assert_eq!(
-        plain(
-            ended(Milestone::OtpSubmitted)
-                .by_helper(StopReason::PromptRepeated)
-                .facts()
-        ),
-        auth(Failure::OtpRejected)
-    );
-}
-
-#[test]
-fn a_network_setup_the_helper_gave_up_on_is_its_own_uncounted_outcome() {
-    for exit in [
-        ended(Milestone::Authenticated),
-        ended(Milestone::TunnelUp).up(600.0),
-        ended(Milestone::TunnelUp).up(30.0),
-    ] {
-        let facts = exit.by_helper(StopReason::NetworkSetupFailed).facts();
-        assert_eq!(plain(facts), Outcome::NetworkSetupFailed);
+    for furthest in [Milestone::OtpSubmitted, Milestone::Authenticated] {
+        assert_eq!(
+            plain(
+                ended(furthest)
+                    .by_helper(StopReason::PromptRepeated)
+                    .facts()
+            ),
+            auth(Failure::OtpRejected),
+            "{furthest:?}"
+        );
     }
     assert_eq!(
-        plain(killed(Milestone::Authenticated).facts()),
-        auth(Failure::TunnelSetupFailed),
-        "other ends after the login keep their rule"
-    );
-}
-
-#[test]
-fn killed_before_the_tunnel_came_up_keeps_the_stage_rules() {
-    assert_eq!(
-        plain(killed(Milestone::Spawned).facts()),
-        Outcome::NetworkError
-    );
-    assert_eq!(
-        plain(killed(Milestone::ConnectedToGateway).facts()),
-        auth(Failure::AuthenticationRejected)
-    );
-    assert_eq!(
-        plain(killed(Milestone::OtpPrompted).facts()),
-        auth(Failure::OtpNotReceived { in_spam: false })
-    );
-    assert_eq!(
-        plain(killed(Milestone::Authenticated).facts()),
-        auth(Failure::TunnelSetupFailed)
-    );
-}
-
-#[test]
-fn never_reached_the_gateway() {
-    assert_eq!(plain(spawn_failed().facts()), Outcome::NetworkError);
-    assert_eq!(
-        plain(ended(Milestone::Spawned).facts()),
-        Outcome::NetworkError
-    );
-    assert_eq!(
-        plain(
-            ended(Milestone::Spawned)
-                .by_helper(StopReason::Watchdog)
-                .facts()
-        ),
-        Outcome::NetworkError
-    );
-    assert_eq!(
         outcome(
-            ended(Milestone::Spawned)
-                .by_helper(StopReason::AttemptTimeout)
+            ended(Milestone::ConnectedToGateway)
+                .by_helper(StopReason::PromptRepeated)
                 .facts(),
-            Case {
-                app_stop: Some(StopReason::AttemptTimeout),
-                ..Case::default()
-            }
-        ),
-        Outcome::NetworkError
-    );
-}
-
-#[test]
-fn ended_at_the_gateway() {
-    assert_eq!(
-        plain(ended(Milestone::ConnectedToGateway).facts()),
-        auth(Failure::AuthenticationRejected)
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::ConnectedToGateway).facts(),
-            Case {
-                path_changed: true,
-                ..Case::default()
-            }
-        ),
-        Outcome::NetworkError
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::ConnectedToGateway).facts(),
-            Case {
-                within_wake_grace: true,
-                ..Case::default()
-            }
-        ),
-        Outcome::NetworkError
-    );
-}
-
-#[test]
-fn counted_failures_after_the_prompt() {
-    let otp_stop = Case {
-        app_stop: Some(StopReason::OtpTimeout),
-        ..Case::default()
-    };
-    assert_eq!(
-        outcome(
-            ended(Milestone::OtpPrompted)
-                .by_helper(StopReason::OtpTimeout)
-                .facts(),
-            otp_stop
-        ),
-        auth(Failure::OtpNotReceived { in_spam: false })
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::OtpPrompted)
-                .by_helper(StopReason::OtpTimeout)
-                .facts(),
-            Case {
-                app_stop: Some(StopReason::OtpTimeout),
-                otp_in_spam: true,
-                ..Case::default()
-            }
-        ),
-        auth(Failure::OtpNotReceived { in_spam: true })
-    );
-    assert_eq!(
-        plain(ended(Milestone::OtpPrompted).facts()),
-        auth(Failure::OtpNotReceived { in_spam: false })
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::OtpPrompted).facts(),
-            Case {
-                path_changed: true,
-                within_wake_grace: true,
-                ..Case::default()
-            }
-        ),
-        auth(Failure::OtpNotReceived { in_spam: false }),
-        "a path change does not excuse failures after the prompt"
-    );
-    assert_eq!(
-        plain(ended(Milestone::OtpSubmitted).facts()),
-        auth(Failure::OtpRejected)
-    );
-    assert_eq!(
-        plain(
-            ended(Milestone::OtpSubmitted)
-                .by_helper(StopReason::Watchdog)
-                .facts()
-        ),
-        auth(Failure::OtpRejected)
-    );
-    assert_eq!(
-        outcome(
-            ended(Milestone::Spawned).facts(),
             Case {
                 seen: Some(Milestone::OtpSubmitted),
                 ..Case::default()
             }
         ),
-        auth(Failure::OtpRejected)
+        auth(Failure::OtpRejected),
+        "the facts lag behind"
     );
-    assert_eq!(
-        plain(
-            ended(Milestone::Authenticated)
-                .by_helper(StopReason::Watchdog)
-                .facts()
-        ),
-        auth(Failure::TunnelSetupFailed)
-    );
-    assert_eq!(
-        plain(ended(Milestone::TunnelUp).up(30.0).facts()),
-        auth(Failure::SessionDroppedEarly)
-    );
-    assert_eq!(
-        plain(ended(Milestone::TunnelUp).up(119.9).facts()),
-        auth(Failure::SessionDroppedEarly)
-    );
-    assert_eq!(
-        plain(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::HelperShutdown)
-                .up(20.0)
-                .facts()
-        ),
-        auth(Failure::SessionDroppedEarly)
-    );
+}
+
+#[test]
+fn a_certificate_rejected_after_the_login_is_counted() {
     let a = digest('a');
     assert_eq!(
         plain(cert(
@@ -510,26 +224,105 @@ fn counted_failures_after_the_prompt() {
         ),
         auth(Failure::CertificateRejectedAfterLogin)
     );
+}
+
+#[test]
+fn a_tunnel_device_that_could_not_be_set_up_is_counted() {
     assert_eq!(
         plain(
             ended(Milestone::Authenticated)
-                .tunnel_mode_rejected()
+                .tunnel_setup_failed()
+                .code(-EINTR)
                 .facts()
         ),
-        auth(Failure::TunnelModeRejected)
+        auth(Failure::TunnelSetupFailed)
     );
+}
+
+#[test]
+fn an_otp_not_received_by_the_apps_deadline_is_counted() {
     assert_eq!(
         outcome(
-            ended(Milestone::TunnelUp)
-                .by_helper(StopReason::AttemptTimeout)
-                .up(1.0)
+            ended(Milestone::OtpPrompted)
+                .by_helper(StopReason::OtpTimeout)
+                .code(-EINTR)
                 .facts(),
             Case {
-                app_stop: Some(StopReason::AttemptTimeout),
+                app_stop: Some(StopReason::OtpTimeout),
                 ..Case::default()
             }
         ),
-        Outcome::NetworkError
+        auth(Failure::OtpNotReceived { in_spam: false })
+    );
+    assert_eq!(
+        outcome(
+            ended(Milestone::OtpPrompted)
+                .by_helper(StopReason::OtpTimeout)
+                .code(-EINTR)
+                .facts(),
+            Case {
+                app_stop: Some(StopReason::OtpTimeout),
+                otp_in_spam: true,
+                ..Case::default()
+            }
+        ),
+        auth(Failure::OtpNotReceived { in_spam: true })
+    );
+}
+
+#[test]
+fn a_network_setup_the_helper_gave_up_on_is_its_own_uncounted_outcome() {
+    for furthest in [Milestone::Authenticated, Milestone::TunnelUp] {
+        for code in [-EINTR, -EPIPE] {
+            let facts = ended(furthest)
+                .by_helper(StopReason::NetworkSetupFailed)
+                .code(code)
+                .facts();
+            assert_eq!(plain(facts), Outcome::NetworkSetupFailed, "{furthest:?}");
+        }
+    }
+}
+
+#[test]
+fn any_other_end_before_the_tunnel_is_a_network_error() {
+    for furthest in BEFORE_THE_TUNNEL {
+        for code in [-EIO, -EINTR, -EPERM, -EPIPE] {
+            assert_eq!(
+                plain(ended(furthest).code(code).facts()),
+                Outcome::NetworkError,
+                "{furthest:?} {code}"
+            );
+        }
+        assert_eq!(
+            plain(ended(furthest).by_helper(StopReason::Watchdog).facts()),
+            Outcome::NetworkError,
+            "{furthest:?}"
+        );
+        assert_eq!(
+            outcome(
+                ended(furthest)
+                    .by_helper(StopReason::AttemptTimeout)
+                    .code(-EINTR)
+                    .facts(),
+                Case {
+                    app_stop: Some(StopReason::AttemptTimeout),
+                    ..Case::default()
+                }
+            ),
+            Outcome::NetworkError,
+            "{furthest:?}"
+        );
+    }
+    assert_eq!(
+        outcome(
+            ended(Milestone::Spawned).facts(),
+            Case {
+                seen: Some(Milestone::OtpSubmitted),
+                ..Case::default()
+            }
+        ),
+        Outcome::NetworkError,
+        "the facts lag behind"
     );
 }
 

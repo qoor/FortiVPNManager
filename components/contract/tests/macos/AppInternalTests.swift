@@ -310,8 +310,6 @@ private extension AppInternal {
             .otpNotReceived(inSpam: false, waitedSeconds: 50),
             .otpRejected,
             .tunnelSetupFailed,
-            .tunnelModeRejected,
-            .droppedEarly(withinSeconds: 120),
             .certificateChangedAfterLogin,
             .gmailRejected(method: .imap),
             .tooManyReconnects(windowSeconds: 3600),

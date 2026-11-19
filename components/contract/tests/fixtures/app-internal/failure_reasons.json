@@ -15,14 +15,6 @@
     "tunnelSetupFailed": {}
   },
   {
-    "tunnelModeRejected": {}
-  },
-  {
-    "droppedEarly": {
-      "withinSeconds": 120
-    }
-  },
-  {
     "certificateChangedAfterLogin": {}
   },
   {

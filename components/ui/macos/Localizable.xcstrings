@@ -1281,16 +1281,6 @@
         }
       }
     },
-    "Dropped right after connecting": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "연결 직후 끊김"
-          }
-        }
-      }
-    },
     "Edit": {
       "localizations": {
         "ko": {
@@ -3161,16 +3151,6 @@
         }
       }
     },
-    "Server rejected tunnel mode": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "서버가 터널 모드를 거부함"
-          }
-        }
-      }
-    },
     "Server: %@:%@": {
       "localizations": {
         "ko": {
@@ -3581,16 +3561,6 @@
         }
       }
     },
-    "The connection dropped within %@.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "연결된 지 %@ 안에 끊겼습니다."
-          }
-        }
-      }
-    },
     "The connection request was rejected. Check the account and VPN password.": {
       "localizations": {
         "ko": {
@@ -3637,16 +3607,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "OAuth 클라이언트 JSON이라기에는 파일이 너무 큽니다."
-          }
-        }
-      }
-    },
-    "The gateway doesn't allow SSL VPN tunnel mode.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "게이트웨이가 SSL VPN 터널 모드를 허용하지 않습니다."
           }
         }
       }

@@ -18,13 +18,8 @@ pub(super) const AUTH_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(90);
 pub(super) const MAX_CONSECUTIVE_AUTH_FAILURES: u32 = 2;
 pub(super) const MAX_COUNTED_PREPARATIONS: u32 = 2;
 pub(super) const SERVER_SESSION_END_DELAY: Duration = Duration::from_secs(5);
-/// A session at least this long is stable: it clears the failure count, and a drop before it is
-/// counted as an authentication failure.
-pub(super) const STABLE_SESSION: Duration = Duration::from_secs(120);
 const NETWORK_BACKOFF_INITIAL: Duration = Duration::from_secs(10);
 const NETWORK_BACKOFF_MAX: Duration = Duration::from_secs(300);
-/// Failures at login this soon after a wake are network errors.
-pub(super) const WAKE_GRACE: Duration = Duration::from_secs(30);
 /// How long the network may take to come back after a wake before the wake is judged anyway.
 pub(super) const WAKE_SETTLE_TIMEOUT: Duration = Duration::from_secs(30);
 pub(super) const WAKE_SETTLE_POLL: Duration = Duration::from_secs(1);

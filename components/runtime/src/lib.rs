@@ -8,7 +8,6 @@
 
 mod account_form;
 mod bypass_sync;
-mod client;
 mod commands;
 mod config_file;
 mod files;

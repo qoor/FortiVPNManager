@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use common::*;
 use fvm_contract::app_helper::{
-    HelperError, HelperErrorCode, Milestone, ProcessExitStatus, StopInitiator, StopReason,
+    HelperError, HelperErrorCode, Milestone, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{
     AppRequest, FromEntry, LogCategory, LogLevel, NetworkOutcome, ToEntry,
@@ -91,8 +91,7 @@ fn a_stalled_stage_cancels_the_session() {
                     },
                     "{name}"
                 );
-                assert_eq!(facts.furthest_milestone, Some(furthest), "{name}");
-                assert_eq!(facts.up_duration, None);
+                assert_eq!(facts.furthest_milestone, furthest, "{name}");
                 let texts = session.texts();
                 let expired = format!("‹watchdog: {name} did not finish within 0.15s›");
                 let fired = texts
@@ -160,7 +159,7 @@ fn a_network_setup_that_outlasts_the_tunnel_stage_ends_the_run_as_a_network_setu
             reason: StopReason::NetworkSetupFailed
         }
     );
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     assert_eq!(
         session.count_text("‹watchdog: authToTunnel did not finish within 1s›"),
         1
@@ -180,7 +179,7 @@ fn a_second_stop_keeps_the_first_reason() {
             reason: StopReason::UserDisconnect
         }
     );
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: -EIO });
+    assert_eq!(facts.end_code, -EIO);
     assert_eq!(
         session
             .texts()
@@ -450,8 +449,8 @@ fn opened_then_returned() -> Script {
 fn assert_ended_by_the_client(session: &Session) {
     let facts = session.exit_facts().unwrap();
     assert_eq!(facts.stop_initiator, StopInitiator::Client {});
-    assert_eq!(facts.furthest_milestone, Some(Milestone::Authenticated));
-    assert_eq!(facts.exit_status, ProcessExitStatus::Exited { code: -EIO });
+    assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
+    assert_eq!(facts.end_code, -EIO);
     let texts = session.texts();
     assert!(
         !texts

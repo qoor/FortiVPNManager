@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{
     AttemptId, ClientStatus, ExitFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
-    ProcessExitStatus, StopInitiator, StopReason,
+    StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
 use fvm_contract::app_internal::port::InterfaceAddress;
@@ -23,6 +23,10 @@ use super::super::{
 };
 
 pub(super) const APP_BUILD: &str = "100";
+pub(super) const EPERM: i32 = 1;
+pub(super) const EINTR: i32 = 4;
+pub(super) const EIO: i32 = 5;
+pub(super) const EPIPE: i32 = 32;
 pub(super) const TUNNEL_IP: Ipv4Addr = Ipv4Addr::new(10, 212, 134, 5);
 
 pub(super) fn t0() -> SystemTime {
@@ -193,50 +197,31 @@ pub(super) fn ready() -> ReadinessFacts {
 /// How a run ended, for the exit facts.
 #[derive(Clone)]
 pub(super) struct Exit {
-    furthest: Option<Milestone>,
+    furthest: Milestone,
     initiator: StopInitiator,
-    up: Option<Duration>,
     certs: Vec<String>,
     cert_at: Option<Milestone>,
-    status: Option<ProcessExitStatus>,
-    tunnel_mode_rejected: bool,
+    code: i32,
+    tunnel_setup_failed: bool,
     address_in_use: bool,
 }
 
-/// The client exited on its own after reaching `furthest`.
+/// The session ended on its own after reaching `furthest`, with an error.
 pub(super) fn ended(furthest: Milestone) -> Exit {
     Exit {
-        furthest: Some(furthest),
+        furthest,
         initiator: StopInitiator::Client {},
-        up: None,
         certs: Vec::new(),
         cert_at: None,
-        status: None,
-        tunnel_mode_rejected: false,
+        code: -EIO,
+        tunnel_setup_failed: false,
         address_in_use: false,
     }
-}
-
-pub(super) fn spawn_failed() -> Exit {
-    Exit {
-        furthest: None,
-        ..ended(Milestone::Spawned)
-    }
-}
-
-/// Killed with SIGKILL by someone outside the app and the Helper.
-pub(super) fn killed(furthest: Milestone) -> Exit {
-    ended(furthest).status(ProcessExitStatus::Signaled { signal: 9 })
 }
 
 impl Exit {
     pub(super) fn by_helper(mut self, reason: StopReason) -> Self {
         self.initiator = StopInitiator::Helper { reason };
-        self
-    }
-
-    pub(super) fn up(mut self, seconds: f64) -> Self {
-        self.up = Some(secs(seconds));
         self
     }
 
@@ -246,13 +231,13 @@ impl Exit {
         self
     }
 
-    pub(super) fn status(mut self, status: ProcessExitStatus) -> Self {
-        self.status = Some(status);
+    pub(super) fn code(mut self, code: i32) -> Self {
+        self.code = code;
         self
     }
 
-    pub(super) fn tunnel_mode_rejected(mut self) -> Self {
-        self.tunnel_mode_rejected = true;
+    pub(super) fn tunnel_setup_failed(mut self) -> Self {
+        self.tunnel_setup_failed = true;
         self
     }
 
@@ -267,13 +252,9 @@ impl Exit {
             stop_initiator: self.initiator,
             cert_rejected_digests: self.certs,
             cert_rejected_at: self.cert_at,
-            tunnel_mode_rejected: self.tunnel_mode_rejected,
+            tunnel_setup_failed: self.tunnel_setup_failed,
             tunnel_address_in_use: self.address_in_use,
-            up_duration: self.up,
-            exit_status: self.status.unwrap_or(match self.furthest {
-                None => ProcessExitStatus::SpawnFailed { errno: 2 },
-                Some(_) => ProcessExitStatus::Exited { code: 1 },
-            }),
+            end_code: self.code,
         }
     }
 }
@@ -385,7 +366,6 @@ impl Harness {
                 attempt_seed: [0; 16],
                 settings,
                 time_zone: seoul(),
-                kills_show_as_signals: true,
             }),
             now: t0() - Duration::from_secs(3),
             effects: Vec::new(),
@@ -650,14 +630,11 @@ impl Harness {
         self.run_to_connected();
     }
 
-    /// Ends the session `up` seconds after it came up, the clock moved there first.
-    pub(super) fn forcibly_end(&mut self, end: ForcedEnd, up: f64) -> Vec<Effect> {
+    /// Loses the Helper `up` seconds after the session came up, the clock moved there first.
+    pub(super) fn lose_helper(&mut self, up: f64) -> Vec<Effect> {
         let since = self.connected().expect("connected").since;
         self.now = since + secs(up);
-        match end {
-            ForcedEnd::ClientKilled => self.exit(killed(Milestone::TunnelUp).up(up)),
-            ForcedEnd::HelperLost => self.send(Input::HelperConnectionLost),
-        }
+        self.send(Input::HelperConnectionLost)
     }
 
     /// The OS reports `path`; after it stayed unchanged long enough, the manager looks at it.
@@ -685,10 +662,6 @@ impl Harness {
 
     pub(super) fn sleep(&mut self) -> Vec<Effect> {
         self.send(Input::WillSleep { at: self.now })
-    }
-
-    pub(super) fn wake_time(&self) -> SystemTime {
-        self.wake_at.expect("woke")
     }
 
     pub(super) fn wake(&mut self) -> Vec<Effect> {
@@ -757,16 +730,6 @@ impl Harness {
         }))
     }
 }
-
-#[derive(Clone, Copy, Debug)]
-pub(super) enum ForcedEnd {
-    /// The VPN client killed with a signal.
-    ClientKilled,
-    /// The Helper process ended, killed or crashed.
-    HelperLost,
-}
-
-pub(super) const FORCED_ENDS: [ForcedEnd; 2] = [ForcedEnd::ClientKilled, ForcedEnd::HelperLost];
 
 fn stop_attempt(stop: &Stop) -> AttemptId {
     // The stop keeps its attempt private to the machine; its Debug output names it.

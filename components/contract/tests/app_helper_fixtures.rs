@@ -33,16 +33,15 @@ fn attempt() -> AttemptId {
 
 fn full_facts() -> ExitFacts {
     ExitFacts {
-        furthest_milestone: Some(Milestone::TunnelUp),
+        furthest_milestone: Milestone::TunnelUp,
         stop_initiator: StopInitiator::Helper {
             reason: StopReason::ProactiveReconnect,
         },
         cert_rejected_digests: vec![DIGEST_A.into()],
         cert_rejected_at: Some(Milestone::ConnectedToGateway),
-        tunnel_mode_rejected: false,
+        tunnel_setup_failed: false,
         tunnel_address_in_use: false,
-        up_duration: Some(Duration::from_millis(10_498_750)),
-        exit_status: ProcessExitStatus::Exited { code: 0 },
+        end_code: -4,
     }
 }
 
@@ -173,20 +172,6 @@ fn stop_initiators() {
 }
 
 #[test]
-fn process_exit_statuses() {
-    let statuses = [
-        ProcessExitStatus::Exited { code: 1 },
-        ProcessExitStatus::Signaled { signal: 9 },
-        ProcessExitStatus::SpawnFailed { errno: 13 },
-        ProcessExitStatus::Unknown {},
-    ];
-    both_ways(
-        statuses,
-        include_str!("fixtures/app-helper/process_exit_statuses.json"),
-    );
-}
-
-#[test]
 fn exit_facts() {
     both_ways(
         full_facts(),
@@ -195,38 +180,19 @@ fn exit_facts() {
 }
 
 #[test]
-fn exit_facts_spawn_failed() {
+fn exit_facts_tunnel_setup_failed() {
     let facts = ExitFacts {
-        furthest_milestone: None,
+        furthest_milestone: Milestone::Authenticated,
         stop_initiator: StopInitiator::Client {},
         cert_rejected_digests: vec![],
         cert_rejected_at: None,
-        tunnel_mode_rejected: false,
+        tunnel_setup_failed: true,
         tunnel_address_in_use: false,
-        up_duration: None,
-        exit_status: ProcessExitStatus::SpawnFailed { errno: 2 },
+        end_code: -4,
     };
     both_ways(
         facts,
-        include_str!("fixtures/app-helper/exit_facts_spawn_failed.json"),
-    );
-}
-
-#[test]
-fn exit_facts_tunnel_mode_rejected() {
-    let facts = ExitFacts {
-        furthest_milestone: Some(Milestone::Authenticated),
-        stop_initiator: StopInitiator::Client {},
-        cert_rejected_digests: vec![],
-        cert_rejected_at: None,
-        tunnel_mode_rejected: true,
-        tunnel_address_in_use: false,
-        up_duration: None,
-        exit_status: ProcessExitStatus::Signaled { signal: 15 },
-    };
-    both_ways(
-        facts,
-        include_str!("fixtures/app-helper/exit_facts_tunnel_mode_rejected.json"),
+        include_str!("fixtures/app-helper/exit_facts_tunnel_setup_failed.json"),
     );
 }
 

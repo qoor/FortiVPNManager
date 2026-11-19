@@ -144,7 +144,10 @@ impl<R: FnMut(Report)> Watch<R> {
         if in_use {
             self.tunnel_address_in_use = true;
             self.meta("‹the connection to replace has the same tunnel address›");
-        } else if let Some(reason) = reason {
+            return;
+        }
+        self.tunnel_setup_failed = true;
+        if let Some(reason) = reason {
             self.meta(format!("‹the tunnel device could not be set up: {reason}›"));
         } else {
             self.meta("‹the tunnel device could not be set up›");

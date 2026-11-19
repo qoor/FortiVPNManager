@@ -209,20 +209,21 @@ fn every_other_end_after_the_credentials_searches() {
     let effects = h.fire(TimerKind::AttemptDeadline);
     assert!(effects.contains(&search(&id, prompted_at)), "{effects:?}");
 
-    // The client's own exit after the prompt, an authentication failure whose next try waits 90 s:
-    // the search runs all the same.
+    // The session's own end after the prompt, a network error.
     let (mut h, id) = at_the_prompt();
     let effects = h.exit(ended(Milestone::OtpPrompted));
-    assert_eq!(h.cm.ledger.consecutive_auth_failures, 1);
+    assert_eq!(
+        h.retry_wait().map(|(_, reason)| reason),
+        Some(RetryReason::Network)
+    );
     assert!(
         effects.contains(&search(&id, t0() + secs(3.0))),
         "{effects:?}"
     );
 
-    // The client's own exit at login after the network changed: a network error, not a rejected
-    // login.
+    // The session's own end at login without the password asked again: a network error, not a
+    // rejected login.
     let (mut h, id) = after_the_credentials();
-    h.set_path(online_via(ethernet()));
     let effects = h.exit(ended(Milestone::ConnectedToGateway));
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
@@ -236,21 +237,17 @@ fn every_other_end_after_the_credentials_searches() {
 
 #[test]
 fn no_search_after_a_rejected_login() {
-    // The client asked for the password again, or ended at the login: the gateway sends no code
-    // email for a rejected password, and the next try is 90 s away.
-    for exit in [
-        ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated),
-        ended(Milestone::ConnectedToGateway),
-    ] {
-        let (mut h, id) = after_the_credentials();
-        let effects = h.exit(exit);
-        assert_eq!(
-            h.retry_wait().map(|(_, reason)| reason),
-            Some(RetryReason::AuthFailure(Failure::AuthenticationRejected))
-        );
-        assert!(effects.contains(&close(&id, false)), "{effects:?}");
-        assert_eq!(timer_set(&effects, TimerKind::StaleOtp), None);
-    }
+    // The client asked for the password again: the gateway sends no code email for a rejected
+    // password, and the next try is 90 s away.
+    let (mut h, id) = after_the_credentials();
+    let effects =
+        h.exit(ended(Milestone::ConnectedToGateway).by_helper(StopReason::PromptRepeated));
+    assert_eq!(
+        h.retry_wait().map(|(_, reason)| reason),
+        Some(RetryReason::AuthFailure(Failure::AuthenticationRejected))
+    );
+    assert!(effects.contains(&close(&id, false)), "{effects:?}");
+    assert_eq!(timer_set(&effects, TimerKind::StaleOtp), None);
 }
 
 #[test]
@@ -277,19 +274,24 @@ fn no_search_after_the_otp_time_limit() {
 
 #[test]
 fn the_wait_is_decided_at_the_next_login() {
-    // After the client's own exit at the prompt the next try comes 90 s later, when the search is
-    // long over.
+    // After the session's own end at the prompt the next try comes 10 s later, while the search
+    // still runs.
     let (mut h, id) = at_the_prompt();
     h.exit(ended(Milestone::OtpPrompted));
-    assert_eq!(
-        connection_effects(&h.fire(TimerKind::StaleOtp)),
-        [close(&id, false)]
-    );
     h.fire(TimerKind::Retry);
     let next = h.attempt().unwrap().id.clone();
     assert_eq!(
         connection_effects(&h.send(Input::ReadinessChecked(ready()))),
-        [Effect::OpenOtpSession { attempt: next }]
+        [Effect::Note {
+            attempt: Some(next.clone()),
+            note: Note::WaitingForStaleOtp
+        }]
+    );
+    let effects = connection_effects(&h.fire(TimerKind::StaleOtp));
+    assert!(effects.contains(&close(&id, false)), "{effects:?}");
+    assert!(
+        effects.contains(&Effect::OpenOtpSession { attempt: next }),
+        "{effects:?}"
     );
 
     // A login after the limit goes ahead although its timer has not fired yet.

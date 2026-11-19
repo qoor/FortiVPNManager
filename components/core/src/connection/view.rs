@@ -219,10 +219,6 @@ impl ConnectionManager {
             },
             Failure::OtpRejected => FailureReason::OtpRejected {},
             Failure::TunnelSetupFailed => FailureReason::TunnelSetupFailed {},
-            Failure::TunnelModeRejected => FailureReason::TunnelModeRejected {},
-            Failure::SessionDroppedEarly => FailureReason::DroppedEarly {
-                within_seconds: policy::STABLE_SESSION.as_secs(),
-            },
             Failure::CertificateRejectedAfterLogin => {
                 FailureReason::CertificateChangedAfterLogin {}
             }
