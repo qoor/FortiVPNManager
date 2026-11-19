@@ -265,7 +265,7 @@
 - Helper 승인 항목·VPN client 선택 없음, OpenConnect가 없으면 재설치 안내
 
 # 4. 외부 보장
-- 내부 오류: 즉시 중단과 crash report
+- 내부 오류: 즉시 중단과 crash report(Windows Helper는 이벤트 로그 오류 기록)
 - 앱·Helper 로그: 영어
 
 ## 4.1 보안
