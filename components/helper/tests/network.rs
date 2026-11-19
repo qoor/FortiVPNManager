@@ -741,7 +741,7 @@ fn a_queued_change_of_an_ended_session_is_not_sent(replacing: bool) {
     };
     assert_eq!(os.changes_sent(), sent);
     os.answer_network(NetworkOutcome::Reverted { left: Vec::new() });
-    os.wait_for_log("exited: code -5, initiator Client, furthest Authenticated");
+    os.wait_for_log("exited: code -5, initiator Session, furthest Authenticated");
     let failed = "‹network settings not applied: Network: the session ended›";
     assert!(
         os.received.iter().any(|message| {
@@ -849,21 +849,27 @@ fn the_next_connect_reverts_what_was_kept_before_its_session_starts() {
         Some(json!({"changes": [routes_only(vec![gateway_route("192.0.2.1")])]}))
     );
 
-    os.connect(3, &request(OTHER_ATTEMPT));
+    os.request(
+        3,
+        AppRequest::Connect {
+            json: serde_json::to_string(&request(OTHER_ATTEMPT)).unwrap(),
+        },
+    );
     let NetworkChange::Revert { changes } = os.change_network() else {
         panic!("not a revert: {:#?}", os.received);
     };
     assert_eq!(changes, routes_only(vec![gateway_route("192.0.2.1")]));
+    os.wait_for(|message| *message == FromEntry::Reply { id: 3, json: None });
     assert!(starts.recv_timeout(Duration::from_millis(300)).is_err());
     os.answer_network(NetworkOutcome::Reverted { left: Vec::new() });
     starts.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(os.kept(), None);
+
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
     assert!(os.has_log(
         LogLevel::Notice,
         "reverted again the network settings a revert left (1 route(s))"
     ));
-    assert_eq!(os.kept(), None);
-
-    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
     os.answer_network(looked_up(vec![gateway_route("192.0.2.1")]));
     assert!(matches!(os.change_network(), NetworkChange::Apply { .. }));
     os.answer_network(applied(vec![gateway_route("192.0.2.1")]));
@@ -876,12 +882,18 @@ fn a_revert_again_that_fails_keeps_what_is_left_logs_an_error_and_the_session_st
     let next = starting(started, up_without_otp(settings("utun10", "10.10.0.6")));
     let mut os = after_a_revert_that_left_the_gateway_route(vec![next]);
 
-    os.connect(3, &request(OTHER_ATTEMPT));
+    os.request(
+        3,
+        AppRequest::Connect {
+            json: serde_json::to_string(&request(OTHER_ATTEMPT)).unwrap(),
+        },
+    );
     os.revert(failed(
         NetworkStep::OutsideRoutes,
         "the routing table could not be read",
         vec![gateway_route("192.0.2.1")],
     ));
+    os.wait_for(|message| *message == FromEntry::Reply { id: 3, json: None });
     starts.recv_timeout(Duration::from_secs(10)).unwrap();
     assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
     assert!(os.has_log(
@@ -994,11 +1006,17 @@ fn what_is_still_left_at_the_start_is_reverted_again_before_the_next_session() {
     assert_eq!(os.kept(), Some(json!({"changes": [kept]})));
 
     os.admit();
-    os.connect(1, &request(ATTEMPT));
+    os.request(
+        1,
+        AppRequest::Connect {
+            json: serde_json::to_string(&request(ATTEMPT)).unwrap(),
+        },
+    );
     assert_eq!(
         os.revert(NetworkOutcome::Reverted { left: Vec::new() }),
         kept
     );
+    os.wait_for(|message| *message == FromEntry::Reply { id: 1, json: None });
     assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
     assert_eq!(os.kept(), None);
 }

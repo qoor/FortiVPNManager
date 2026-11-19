@@ -144,7 +144,7 @@ fn a_failed_login_is_reported_as_the_session_ending_the_run() {
     assert_eq!(facts["endCode"], -EPERM);
     swift.wait_until("the exit log", |swift| {
         swift.has_log(&format!(
-            "notice helper: 0277070470 run {ATTEMPT} exited: code -1, initiator Client, furthest \
+            "notice helper: 0277070470 run {ATTEMPT} exited: code -1, initiator Session, furthest \
              ConnectedToGateway"
         ))
     });
