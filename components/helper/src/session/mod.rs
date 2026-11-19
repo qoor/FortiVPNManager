@@ -14,6 +14,7 @@ mod run;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -153,15 +154,25 @@ impl Default for Timing {
 #[must_use = "the run waits for the answer to its network change"]
 pub struct NetworkJob {
     pub change: NetworkChange,
+    returned: Arc<AtomicBool>,
     answer: Option<Box<dyn FnOnce(NetworkOutcome) + Send>>,
 }
 
 impl NetworkJob {
-    fn new(change: NetworkChange, answer: impl FnOnce(NetworkOutcome) + Send + 'static) -> Self {
+    fn new(
+        change: NetworkChange,
+        returned: Arc<AtomicBool>,
+        answer: impl FnOnce(NetworkOutcome) + Send + 'static,
+    ) -> Self {
         Self {
             change,
+            returned,
             answer: Some(Box::new(answer)),
         }
+    }
+
+    pub fn session_running(&self) -> bool {
+        !self.returned.load(Ordering::Relaxed)
     }
 
     pub fn finish(mut self, outcome: NetworkOutcome) {

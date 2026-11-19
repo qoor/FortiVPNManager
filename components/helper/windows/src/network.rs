@@ -1,7 +1,8 @@
 use std::env;
+use std::fs::File;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::os::windows::process::CommandExt;
-use std::process::{Command, Stdio};
+use std::os::windows::process::ExitStatusExt;
+use std::process::ExitStatus;
 
 use fvm_common::os_api::{self, DadState, Family, Luid, Route};
 use fvm_contract::helper_internal::{
@@ -13,7 +14,6 @@ use crate::Log;
 use crate::routes::{self, BYPASS_ROUTE_METRIC};
 
 const NETSH: &str = r"C:\Windows\System32\netsh.exe";
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const FULL_TUNNEL_INTERFACE_METRIC: u32 = 1;
 const TUNNEL_ROUTE_METRIC: u32 = 0;
 const IPV6_FULL_TUNNEL: (Ipv6Addr, u8) = (Ipv6Addr::new(0x2000, 0, 0, 0, 0, 0, 0, 0), 3);
@@ -455,20 +455,31 @@ fn set_wins_servers(
 }
 
 fn netsh(args: &[&str]) -> Result<(), Failure> {
-    let status = Command::new(NETSH)
-        .args(args)
-        .env_clear()
-        .envs(
-            ["SystemRoot", "windir"]
-                .iter()
-                .filter_map(|&name| Some((name, env::var_os(name)?))),
-        )
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
+    let environment: Vec<_> = ["SystemRoot", "windir"]
+        .iter()
+        .filter_map(|&name| Some((name, env::var_os(name)?)))
+        .collect();
+    let process = File::options()
+        .read(true)
+        .write(true)
+        .open("NUL")
+        .and_then(|null| {
+            Ok([
+                null.try_clone()?.into(),
+                null.try_clone()?.into(),
+                null.into(),
+            ])
+        })
+        .map_err(|error| error.to_string())
+        .and_then(|stdio| {
+            os_api::spawn(NETSH, args, &environment, stdio).map_err(|error| error.to_string())
+        })
         .map_err(|error| failure(NetworkStep::Wins, format!("netsh: {error}")))?;
+    let status = ExitStatus::from_raw(
+        process
+            .wait()
+            .expect("netsh is this process's child and its handle open"),
+    );
     if status.success() {
         Ok(())
     } else {
@@ -827,6 +838,7 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
     use std::sync::{Arc, PoisonError};
 
     use super::*;

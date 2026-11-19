@@ -2,16 +2,19 @@ mod common;
 
 use std::fs;
 use std::sync::{Arc, mpsc};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use common::*;
-use fvm_contract::app_helper::{ExitFacts, Milestone, StopInitiator, StopReason};
-use fvm_contract::helper_internal::{
-    NetworkChange, NetworkOutcome, NetworkSettings, NetworkStep, OutsideChanges, OutsideRoute,
-    TunnelDevice,
+use fvm_contract::app_helper::{
+    BypassRoutesSnapshot, ExitFacts, Milestone, RunRequest, StopInitiator, StopReason,
 };
-use fvm_helper_core::session::NetworkJob;
+use fvm_contract::helper_internal::{
+    AppRequest, BypassRoutesOutcome, FromEntry, NetworkChange, NetworkOutcome, NetworkSettings,
+    NetworkStep, OutsideChanges, OutsideRoute, ToEntry, TunnelDevice,
+};
+use fvm_helper_core::entry::{self, Inbox};
 use fvm_helper_core::session::backend::{Link, SessionEvent};
+use fvm_helper_core::session::{NetworkJob, SessionManager};
 use serde_json::Value;
 
 fn apply_parts(
@@ -495,4 +498,204 @@ fn settings_with_the_replaced_runs_address_end_the_new_run_after_the_look_up() {
     old.run.stop(StopReason::UserDisconnect);
     revert(&mut old, vec![gateway_route("192.0.2.1")]);
     old.wait_for_exit();
+}
+
+struct OsSide {
+    inbox: Inbox,
+    messages: mpsc::Receiver<FromEntry>,
+    received: Vec<FromEntry>,
+    _directory: RunDirectory,
+}
+
+impl OsSide {
+    fn start(scripts: Vec<Script>) -> Self {
+        let directory = RunDirectory::new();
+        let sessions = SessionManager::new(
+            Arc::new(FakeBackend::new(scripts)),
+            Arc::new(FakeSecrets::default()),
+            directory.path.clone(),
+            timing(),
+        );
+        let (sender, messages) = mpsc::channel();
+        let inbox = entry::start(sessions, move |message| {
+            let _ = sender.send(message.clone());
+        });
+        let mut os = Self {
+            inbox,
+            messages,
+            received: Vec::new(),
+            _directory: directory,
+        };
+        os.wait_for(|message| *message == FromEntry::Ready {});
+        os.inbox.deliver(ToEntry::AppConnected { app: 1, uid: 1 });
+        os.wait_for(|message| {
+            *message
+                == FromEntry::Admitted {
+                    app: 1,
+                    accept: true,
+                }
+        });
+        os
+    }
+
+    fn wait_for(&mut self, wanted: impl Fn(&FromEntry) -> bool) -> FromEntry {
+        loop {
+            let message = self
+                .messages
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or_else(|error| panic!("{error}: {:#?}", self.received));
+            self.received.push(message.clone());
+            if wanted(&message) {
+                return message;
+            }
+        }
+    }
+
+    fn request(&self, id: u64, request: AppRequest) {
+        self.inbox.deliver(ToEntry::Request {
+            id,
+            app: 1,
+            request,
+        });
+    }
+
+    fn connect(&mut self, id: u64, request: &RunRequest) {
+        let json = serde_json::to_string(request).unwrap();
+        self.request(id, AppRequest::Connect { json });
+        self.wait_for(|message| *message == FromEntry::Reply { id, json: None });
+    }
+
+    fn change_network(&mut self) -> NetworkChange {
+        match self.wait_for(|message| matches!(message, FromEntry::ChangeNetwork { .. })) {
+            FromEntry::ChangeNetwork { change } => change,
+            _ => unreachable!("waited for a network change"),
+        }
+    }
+
+    fn answer_network(&self, outcome: NetworkOutcome) {
+        self.inbox.deliver(ToEntry::NetworkChanged { outcome });
+    }
+
+    fn wait_for_output(&mut self, text: &str) {
+        self.wait_for(|message| {
+            matches!(message, FromEntry::SendOutput { app: 1, json } if json.contains(text))
+        });
+    }
+
+    fn wait_for_log(&mut self, ending: &str) {
+        self.wait_for(|message| {
+            matches!(message, FromEntry::Log { message, .. } if message.ends_with(ending))
+        });
+    }
+
+    fn changes_sent(&self) -> Vec<&'static str> {
+        self.received
+            .iter()
+            .filter_map(|message| match message {
+                FromEntry::ChangeNetwork { change } => Some(match change {
+                    NetworkChange::LookUp { .. } => "lookUp",
+                    NetworkChange::Apply { .. } => "apply",
+                    NetworkChange::Prepare { .. } => "prepare",
+                    NetworkChange::Switch { .. } => "switch",
+                    NetworkChange::Revert { .. } => "revert",
+                    NetworkChange::Check { .. } => "check",
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+fn a_queued_change_of_an_ended_session_is_not_sent(replacing: bool) {
+    let (end, ends) = mpsc::channel::<()>();
+    let ending = script(move |_, link| {
+        trust_gateway(link);
+        open(link);
+        tunnel_ready(link, settings("utun9", "10.10.0.5"));
+        let _ = ends.recv();
+        ended(-EIO)
+    });
+    let mut scripts = Vec::new();
+    if replacing {
+        scripts.push(up_without_otp(settings("utun8", "10.10.0.4")));
+    }
+    scripts.push(ending);
+    let mut os = OsSide::start(scripts);
+    let mut ending_request = request(ATTEMPT);
+    if replacing {
+        os.connect(1, &request(OTHER_ATTEMPT));
+        os.change_network();
+        os.answer_network(looked_up(vec![gateway_route("192.0.2.1")]));
+        os.change_network();
+        os.answer_network(applied(vec![gateway_route("192.0.2.1")]));
+        os.wait_for_log(": tunnel up");
+        ending_request.replacing = Some(OTHER_ATTEMPT.parse().unwrap());
+    }
+    os.connect(2, &ending_request);
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
+    os.request(3, AppRequest::ReadBypassRoutes {});
+    os.answer_network(looked_up(vec![gateway_route("192.0.2.1")]));
+    os.wait_for(|message| matches!(message, FromEntry::ChangeBypassRoutes { .. }));
+    end.send(()).unwrap();
+    os.wait_for_output("‹session ended: code -5›");
+    let snapshot = BypassRoutesSnapshot {
+        service_id: "ethernet".to_owned(),
+        service_name: "Ethernet".to_owned(),
+        router: "192.0.2.1".to_owned(),
+        address: "192.0.2.20".to_owned(),
+        subnet_mask: "255.255.255.0".to_owned(),
+    };
+    os.inbox.deliver(ToEntry::BypassRoutesChanged {
+        outcome: BypassRoutesOutcome::Changed {
+            network: Some(snapshot),
+            added: Vec::new(),
+            found: Vec::new(),
+            left: Vec::new(),
+        },
+    });
+    os.wait_for(|message| {
+        matches!(
+            message,
+            FromEntry::Reply {
+                id: 3,
+                json: Some(_)
+            }
+        )
+    });
+    let dns_service_id = if replacing { "" } else { "svc" };
+    assert_eq!(
+        os.change_network(),
+        NetworkChange::Revert {
+            changes: OutsideChanges {
+                dns_service_id: dns_service_id.to_owned(),
+                routes: vec![gateway_route("192.0.2.1")],
+            },
+        }
+    );
+    let sent = if replacing {
+        vec!["lookUp", "apply", "lookUp", "revert"]
+    } else {
+        vec!["lookUp", "revert"]
+    };
+    assert_eq!(os.changes_sent(), sent);
+    os.answer_network(NetworkOutcome::Reverted { left: Vec::new() });
+    os.wait_for_log("exited: code -5, initiator Client, furthest Authenticated");
+    let failed = "‹network settings not applied: Network: the session ended›";
+    assert!(
+        os.received.iter().any(|message| {
+            matches!(message, FromEntry::SendOutput { app: 1, json } if json.contains(failed))
+        }),
+        "{:#?}",
+        os.received
+    );
+}
+
+#[test]
+fn an_apply_queued_when_its_session_ends_is_answered_as_failed_and_the_revert_still_sent() {
+    a_queued_change_of_an_ended_session_is_not_sent(false);
+}
+
+#[test]
+fn a_prepare_queued_when_its_session_ends_is_answered_as_failed_and_the_revert_still_sent() {
+    a_queued_change_of_an_ended_session_is_not_sent(true);
 }

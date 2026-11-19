@@ -15,7 +15,7 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, FromEntry, IpNetwork, LogCategory,
-    LogLevel, NetworkChange, NetworkCheck, NetworkOutcome, OutsideRoute,
+    LogLevel, NetworkChange, NetworkCheck, NetworkOutcome, NetworkStep, OutsideRoute,
 };
 
 use super::{Entry, error, to_json};
@@ -179,6 +179,25 @@ impl Entry {
     fn start_bypass_job(&mut self) {
         while let Some(job) = self.bypass_routes.jobs.pop_front() {
             if let Job::Network(job) = job {
+                let for_session = matches!(
+                    job.change,
+                    NetworkChange::Apply { .. }
+                        | NetworkChange::Prepare { .. }
+                        | NetworkChange::Switch { .. }
+                );
+                if for_session && !job.session_running() {
+                    let left = match &job.change {
+                        NetworkChange::Apply { remove, .. } => remove.clone(),
+                        _ => Vec::new(),
+                    };
+                    job.finish(NetworkOutcome::Failed {
+                        step: NetworkStep::Network,
+                        error: "the session ended".to_owned(),
+                        added: Vec::new(),
+                        left,
+                    });
+                    continue;
+                }
                 let change = job.change.clone();
                 return self.send_network_job(Job::Network(job), change);
             }

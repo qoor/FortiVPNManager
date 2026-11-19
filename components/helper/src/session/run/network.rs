@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::mem;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
@@ -205,7 +206,7 @@ impl<R: FnMut(Report)> Watch<R> {
     fn ask(&mut self, change: NetworkChange, asked: Asked) {
         self.network.asked.push_back(asked);
         let inputs = self.inputs.clone();
-        let job = NetworkJob::new(change, move |outcome| {
+        let job = NetworkJob::new(change, Arc::clone(&self.returned), move |outcome| {
             let _ = inputs.send(Input::NetworkChanged(outcome));
         });
         (self.on_report)(Report::ChangeNetwork(job));

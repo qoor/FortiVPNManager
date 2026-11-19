@@ -163,3 +163,42 @@ fn a_repeated_otp_form_ends_the_run_as_a_repeated_prompt() {
         }
     );
 }
+
+#[test]
+fn a_form_asked_again_while_a_stop_cancels_its_submission_is_not_called_a_rejection() {
+    for (kind, milestone, rejected) in [
+        (
+            FormKind::Login,
+            Milestone::ConnectedToGateway,
+            "‹password asked again: the gateway rejected the login›",
+        ),
+        (
+            FormKind::Otp,
+            Milestone::OtpSubmitted,
+            "‹OTP asked again: the gateway rejected the OTP›",
+        ),
+    ] {
+        let script = script(move |_, link| {
+            trust_gateway(link);
+            if kind == FormKind::Otp && ask_otp(link).is_none() {
+                return ended(-EIO);
+            }
+            wait_for_cancel(link);
+            link.report(SessionEvent::FormRepeated(kind));
+            ended(-EINTR)
+        });
+        let mut session = Session::start(script, Setup::default().submitting_otp());
+        session.wait_for(milestone);
+        session.run.stop(StopReason::UserDisconnect);
+        let facts = session.wait_for_exit();
+        assert!(!session.has_text(rejected), "{:#?}", session.texts());
+        assert_eq!(facts.furthest_milestone, milestone);
+        assert_eq!(
+            facts.stop_initiator,
+            StopInitiator::Helper {
+                reason: StopReason::UserDisconnect
+            }
+        );
+        session.assert_finished_cleanly();
+    }
+}

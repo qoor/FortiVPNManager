@@ -442,6 +442,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 }
             }
             SessionEvent::OtpPrompted => self.advance(Milestone::OtpPrompted),
+            SessionEvent::FormRepeated(_) if self.stop.is_some() => {}
             SessionEvent::FormRepeated(FormKind::Login) => {
                 self.meta("‹password asked again: the gateway rejected the login›");
                 self.stop(StopReason::PromptRepeated);

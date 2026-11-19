@@ -13,19 +13,38 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 log=$root/.build/install.log
 done_file=$root/.build/install.done
 previous=$root/.build/previous.app
-vpn_log=$HOME/Library/Logs/FortiVPNManager/vpn_backend.log
 tunnel_wait=90
 
-# vpn_backend.log lines start with ISO-8601 local timestamps, so the first 19 characters compare as strings.
-tunnel_up_since() {
-    awk -v start="$1" 'substr($0, 1, 19) > start &&
-        / \[▸\] ([0-9]+ )?‹network settings applied›$/ { up = 1; exit }
-        END { exit !up }' "$vpn_log" 2>/dev/null
+vpn_connected() {
+    { ifconfig; echo '#routes'; netstat -rn -f inet; } 2>/dev/null | awk '
+        $0 == "#routes" { routes = 1; next }
+        !routes && /^[^[:space:]]/ { name = $1; sub(/:$/, "", name); next }
+        !routes && $1 == "inet" {
+            if (!(($2, name) in held)) { held[$2, name] = 1; holders[$2]++ }
+            if (name ~ /^utun[0-9]+$/) address[name] = $2
+            next
+        }
+        routes && $4 ~ /^utun[0-9]+$/ {
+            if (($4 in address) && $1 == address[$4]) next
+            if (!(($1, $4) in via)) { via[$1, $4] = 1; carried[$4]++; carriers[$1]++ }
+        }
+        END {
+            for (tunnel in address) {
+                if (holders[address[tunnel]] != 1 || !carried[tunnel]) continue
+                alone = 1
+                for (key in via) {
+                    split(key, part, SUBSEP)
+                    if (part[2] == tunnel && carriers[part[1]] > 1) alone = 0
+                }
+                if (alone) found = 1
+            }
+            exit !found
+        }'
 }
 
 wait_for_tunnel() {
     for i in $(seq 1 "$tunnel_wait"); do
-        tunnel_up_since "$1" && return 0
+        vpn_connected && return 0
         sleep 1
     done
     return 1
@@ -40,14 +59,12 @@ quit_app() {
 swap() {
     set -x
     vpn_was_up=no
-    ifconfig | awk '/^[^[:space:]]/ { utun = $1 ~ /^utun[0-9]+:$/ } utun && $1 == "inet" { up = 1 } END { exit !up }' &&
-        vpn_was_up=yes
+    vpn_connected && vpn_was_up=yes
     quit_app
     rm -rf "$previous"
     if [ -e "$installed" ]; then
         mv "$installed" "$previous" || { open "$installed"; echo failed >"$done_file"; return; }
     fi
-    start=$(date +%Y-%m-%dT%H:%M:%S)
     # The old helper exits by itself once its binary is replaced (components/helper/macos/swift/SelfUpdateWatcher.swift).
     if ! ditto "$built" "$installed" || ! open "$installed"; then
         rm -rf "$installed"
@@ -55,7 +72,7 @@ swap() {
         echo failed >"$done_file"
         return
     fi
-    if wait_for_tunnel "$start"; then
+    if wait_for_tunnel; then
         echo installed >"$done_file"
     elif [ "$vpn_was_up" = yes ] && [ -e "$previous" ]; then
         quit_app
