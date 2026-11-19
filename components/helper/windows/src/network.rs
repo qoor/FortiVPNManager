@@ -3,6 +3,7 @@ use std::fs::File;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::windows::process::ExitStatusExt;
 use std::process::ExitStatus;
+use std::time::Duration;
 
 use fvm_common::os_api::{self, DadState, Family, Luid, Route};
 use fvm_contract::helper_internal::{
@@ -14,6 +15,7 @@ use crate::Log;
 use crate::routes::{self, BYPASS_ROUTE_METRIC};
 
 const NETSH: &str = r"C:\Windows\System32\netsh.exe";
+const NETSH_LIMIT: Duration = Duration::from_secs(10);
 const FULL_TUNNEL_INTERFACE_METRIC: u32 = 1;
 const TUNNEL_ROUTE_METRIC: u32 = 0;
 const IPV6_FULL_TUNNEL: (Ipv6Addr, u8) = (Ipv6Addr::new(0x2000, 0, 0, 0, 0, 0, 0, 0), 3);
@@ -475,6 +477,23 @@ fn netsh(args: &[&str]) -> Result<(), Failure> {
             os_api::spawn(NETSH, args, &environment, stdio).map_err(|error| error.to_string())
         })
         .map_err(|error| failure(NetworkStep::Wins, format!("netsh: {error}")))?;
+    let ended = process
+        .ended_within(NETSH_LIMIT)
+        .expect("netsh is this process's child and its handle open");
+    if !ended {
+        let _ = process.kill();
+        process
+            .wait()
+            .expect("netsh is this process's child and its handle open");
+        return Err(failure(
+            NetworkStep::Wins,
+            format!(
+                "netsh {} did not finish within {}s",
+                args.join(" "),
+                NETSH_LIMIT.as_secs()
+            ),
+        ));
+    }
     let status = ExitStatus::from_raw(
         process
             .wait()

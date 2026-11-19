@@ -6,13 +6,14 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::time::Duration;
 use std::{iter, mem, ptr, slice};
 
 use widestring::{U16CStr, U16CString};
 use windows_sys::Win32::Foundation::{
     ERROR_FILE_NOT_FOUND, ERROR_INVALID_PARAMETER, ERROR_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS,
     HANDLE_FLAG_INHERIT, LocalFree, NO_ERROR, SetHandleInformation, TRUE, WAIT_OBJECT_0,
-    WIN32_ERROR,
+    WAIT_TIMEOUT, WIN32_ERROR,
 };
 use windows_sys::Win32::NetworkManagement::IpHelper::{
     ConvertInterfaceAliasToLuid, ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToGuid,
@@ -679,6 +680,17 @@ impl Process {
         Ok(())
     }
 
+    pub fn ended_within(&self, limit: Duration) -> Result<bool, Error> {
+        let milliseconds =
+            u32::try_from(limit.as_millis()).expect("a wait limit is shorter than 49 days");
+        // SAFETY: As in `kill`.
+        match unsafe { WaitForSingleObject(self.0.as_raw_handle(), milliseconds) } {
+            WAIT_OBJECT_0 => Ok(true),
+            WAIT_TIMEOUT => Ok(false),
+            _ => Err(last_error("WaitForSingleObject")),
+        }
+    }
+
     pub fn wait(&self) -> Result<u32, Error> {
         // SAFETY: As in `kill`.
         if unsafe { WaitForSingleObject(self.0.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
@@ -928,11 +940,12 @@ mod tests {
     //! through the primary interface. Each puts back what it changed, also when it fails.
 
     use std::env;
+    use std::fs::File;
     use std::io::{Read, Write};
     use std::process::Command;
     use std::sync::{Mutex, PoisonError, mpsc};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use super::*;
 
@@ -1263,5 +1276,28 @@ mod tests {
             Ok(Vec::new()),
             "the child held the other pipe open"
         );
+    }
+
+    #[test]
+    fn a_process_still_running_at_the_wait_limit_is_ended_by_a_kill() {
+        let null = File::options().read(true).write(true).open("NUL").unwrap();
+        let process = spawn(
+            r"C:\Windows\System32\ping.exe",
+            &["-n", "30", "127.0.0.1"],
+            &[("SystemRoot", env::var_os("SystemRoot").unwrap())],
+            [
+                null.try_clone().unwrap().into(),
+                null.try_clone().unwrap().into(),
+                null.into(),
+            ],
+        )
+        .unwrap();
+        let started = Instant::now();
+        assert_eq!(process.ended_within(Duration::from_millis(300)), Ok(false));
+        let waited = started.elapsed();
+        assert!(waited < Duration::from_secs(5), "{waited:?}");
+        process.kill().unwrap();
+        assert_eq!(process.ended_within(Duration::from_secs(5)), Ok(true));
+        assert_eq!(process.wait(), Ok(1));
     }
 }
