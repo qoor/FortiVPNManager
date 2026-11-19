@@ -610,7 +610,7 @@ impl Entry {
             Some(Job::Status { id }) => {
                 let routing_complete = match outcome {
                     NetworkOutcome::Checked { complete } => Some(complete),
-                    NetworkOutcome::Failed { .. } => None,
+                    NetworkOutcome::Failed { .. } => Some(false),
                     other => panic!("the OS side answered a routing check with {other:?}"),
                 };
                 self.reply_status(id, routing_complete);

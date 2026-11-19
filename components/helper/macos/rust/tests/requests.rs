@@ -342,7 +342,7 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
         (json!({"checked": {"complete": false}}), Some(false)),
         (
             json!({"failed": {"step": "routes", "error": "the routing table could not be read", "added": [], "left": []}}),
-            None,
+            Some(false),
         ),
     ];
     for (outcome, routing_complete) in outcomes {
