@@ -182,7 +182,7 @@ impl Session {
             RecordSlot::First
         };
         let run = sessions
-            .start(&mut request, slot, replaced, move |report| {
+            .start(&mut request, slot, replaced, None, move |report| {
                 let _ = sender.send(report);
             })
             .unwrap_or_else(|failure| panic!("the run did not start: {failure:?}"));

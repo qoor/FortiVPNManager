@@ -9,13 +9,14 @@ use fvm_contract::app_helper::{
     BypassRoutesSnapshot, EndFacts, Milestone, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{
-    AppRequest, BypassRoutesOutcome, FromEntry, NetworkChange, NetworkOutcome, NetworkSettings,
-    NetworkStep, OutsideChanges, OutsideRoute, ToEntry, TunnelDevice,
+    AppRequest, BypassRoutesOutcome, FromEntry, LogCategory, LogLevel, NetworkChange,
+    NetworkOutcome, NetworkSettings, NetworkStep, OutsideChanges, OutsideRoute, ToEntry,
+    TunnelDevice,
 };
 use fvm_helper_core::entry::{self, Inbox};
 use fvm_helper_core::session::backend::{Link, SessionEvent};
 use fvm_helper_core::session::{NetworkJob, SessionManager};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn apply_parts(
     job: &NetworkJob,
@@ -504,12 +505,18 @@ struct OsSide {
     inbox: Inbox,
     messages: mpsc::Receiver<FromEntry>,
     received: Vec<FromEntry>,
-    _directory: RunDirectory,
+    directory: RunDirectory,
 }
 
 impl OsSide {
     fn start(scripts: Vec<Script>) -> Self {
-        let directory = RunDirectory::new();
+        let mut os = Self::launch(RunDirectory::new(), scripts);
+        os.wait_for(|message| *message == FromEntry::Ready {});
+        os.admit();
+        os
+    }
+
+    fn launch(directory: RunDirectory, scripts: Vec<Script>) -> Self {
         let sessions = SessionManager::new(
             Arc::new(FakeBackend::new(scripts)),
             Arc::new(FakeSecrets::default()),
@@ -520,22 +527,23 @@ impl OsSide {
         let inbox = entry::start(sessions, move |message| {
             let _ = sender.send(message.clone());
         });
-        let mut os = Self {
+        Self {
             inbox,
             messages,
             received: Vec::new(),
-            _directory: directory,
-        };
-        os.wait_for(|message| *message == FromEntry::Ready {});
-        os.inbox.deliver(ToEntry::AppConnected { app: 1, uid: 1 });
-        os.wait_for(|message| {
+            directory,
+        }
+    }
+
+    fn admit(&mut self) {
+        self.inbox.deliver(ToEntry::AppConnected { app: 1, uid: 1 });
+        self.wait_for(|message| {
             *message
                 == FromEntry::Admitted {
                     app: 1,
                     accept: true,
                 }
         });
-        os
     }
 
     fn wait_for(&mut self, wanted: impl Fn(&FromEntry) -> bool) -> FromEntry {
@@ -586,6 +594,60 @@ impl OsSide {
         self.wait_for(|message| {
             matches!(message, FromEntry::Log { message, .. } if message.ends_with(ending))
         });
+    }
+
+    fn has_log(&self, level: LogLevel, line: &str) -> bool {
+        self.received.iter().any(|message| {
+            *message
+                == FromEntry::Log {
+                    level,
+                    category: LogCategory::Helper,
+                    message: line.to_owned(),
+                }
+        })
+    }
+
+    fn bring_up(&mut self, id: u64, attempt: &str, routes: Vec<OutsideRoute>) {
+        self.connect(id, &request(attempt));
+        assert!(matches!(
+            self.change_network(),
+            NetworkChange::LookUp { .. }
+        ));
+        self.answer_network(looked_up(routes.clone()));
+        assert!(matches!(self.change_network(), NetworkChange::Apply { .. }));
+        self.answer_network(applied(routes));
+        self.wait_for_log(&format!("run {attempt}: tunnel up"));
+    }
+
+    fn disconnect(&mut self, id: u64, attempt: &str) {
+        self.request(
+            id,
+            AppRequest::Disconnect {
+                attempt: attempt.to_owned(),
+                reason: "userDisconnect".to_owned(),
+            },
+        );
+        self.wait_for(|message| *message == FromEntry::Reply { id, json: None });
+    }
+
+    fn revert(&mut self, outcome: NetworkOutcome) -> OutsideChanges {
+        let NetworkChange::Revert { changes } = self.change_network() else {
+            panic!("not a revert: {:#?}", self.received);
+        };
+        self.answer_network(outcome);
+        changes
+    }
+
+    fn wait_for_exit(&mut self, attempt: &str) {
+        let exited = format!("run {attempt} exited: ");
+        self.wait_for(|message| {
+            matches!(message, FromEntry::Log { message, .. } if message.contains(&exited))
+        });
+    }
+
+    fn kept(&self) -> Option<Value> {
+        let record = fs::read(self.directory.file("unreverted-changes.json")).ok()?;
+        Some(serde_json::from_slice(&record).unwrap())
     }
 
     fn changes_sent(&self) -> Vec<&'static str> {
@@ -698,4 +760,245 @@ fn an_apply_queued_when_its_session_ends_is_answered_as_failed_and_the_revert_st
 #[test]
 fn a_prepare_queued_when_its_session_ends_is_answered_as_failed_and_the_revert_still_sent() {
     a_queued_change_of_an_ended_session_is_not_sent(true);
+}
+
+fn starting(started: mpsc::Sender<()>, then: Script) -> Script {
+    script(move |request, link| {
+        started.send(()).unwrap();
+        then(request, link)
+    })
+}
+
+fn failed(step: NetworkStep, error: &str, left: Vec<OutsideRoute>) -> NetworkOutcome {
+    NetworkOutcome::Failed {
+        step,
+        error: error.to_owned(),
+        added: Vec::new(),
+        left,
+    }
+}
+
+fn routes_only(routes: Vec<OutsideRoute>) -> OutsideChanges {
+    OutsideChanges {
+        dns_service_id: String::new(),
+        routes,
+    }
+}
+
+fn after_a_revert_that_left_the_gateway_route(mut scripts: Vec<Script>) -> OsSide {
+    scripts.insert(0, up_without_otp(settings("utun9", "10.10.0.5")));
+    let mut os = OsSide::start(scripts);
+    os.bring_up(1, ATTEMPT, vec![gateway_route("192.0.2.1")]);
+    os.disconnect(2, ATTEMPT);
+    os.revert(NetworkOutcome::Reverted {
+        left: vec![gateway_route("192.0.2.1")],
+    });
+    os.wait_for_exit(ATTEMPT);
+    os
+}
+
+#[test]
+fn what_a_failed_revert_leaves_is_recorded_and_the_run_exits_as_before() {
+    let mut os = OsSide::start(vec![up_without_otp(settings("utun9", "10.10.0.5"))]);
+    os.bring_up(1, ATTEMPT, vec![gateway_route("192.0.2.1")]);
+    os.disconnect(2, ATTEMPT);
+    let reverted = os.revert(failed(
+        NetworkStep::Dns,
+        "the DNS settings under svc could not be removed",
+        vec![gateway_route("192.0.2.1")],
+    ));
+    assert_eq!(
+        reverted,
+        OutsideChanges {
+            dns_service_id: "svc".to_owned(),
+            routes: vec![gateway_route("192.0.2.1")],
+        }
+    );
+    os.wait_for(|message| {
+        matches!(message, FromEntry::SendEvent { app: 1, json } if json.contains("exited"))
+    });
+    os.wait_for_exit(ATTEMPT);
+    assert!(os.has_log(
+        LogLevel::Notice,
+        "kept what a revert left to revert it again: 1 route(s) and the DNS settings"
+    ));
+    assert_eq!(os.kept(), Some(json!({"changes": [reverted]})));
+    assert_eq!(os.directory.names(), ["unreverted-changes.json"]);
+
+    os.request(3, AppRequest::Status {});
+    let status = os.wait_for(|message| matches!(message, FromEntry::Reply { id: 3, .. }));
+    let FromEntry::Reply {
+        json: Some(status), ..
+    } = status
+    else {
+        panic!("a status reply carries JSON");
+    };
+    assert_eq!(
+        serde_json::from_str::<Value>(&status).unwrap()["sessionRunning"],
+        false
+    );
+}
+
+#[test]
+fn the_next_connect_reverts_what_was_kept_before_its_session_starts() {
+    let (started, starts) = mpsc::channel();
+    let next = starting(started, up_without_otp(settings("utun10", "10.10.0.6")));
+    let mut os = after_a_revert_that_left_the_gateway_route(vec![next]);
+    assert_eq!(
+        os.kept(),
+        Some(json!({"changes": [routes_only(vec![gateway_route("192.0.2.1")])]}))
+    );
+
+    os.connect(3, &request(OTHER_ATTEMPT));
+    let NetworkChange::Revert { changes } = os.change_network() else {
+        panic!("not a revert: {:#?}", os.received);
+    };
+    assert_eq!(changes, routes_only(vec![gateway_route("192.0.2.1")]));
+    assert!(starts.recv_timeout(Duration::from_millis(300)).is_err());
+    os.answer_network(NetworkOutcome::Reverted { left: Vec::new() });
+    starts.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(os.has_log(
+        LogLevel::Notice,
+        "reverted again the network settings a revert left (1 route(s))"
+    ));
+    assert_eq!(os.kept(), None);
+
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
+    os.answer_network(looked_up(vec![gateway_route("192.0.2.1")]));
+    assert!(matches!(os.change_network(), NetworkChange::Apply { .. }));
+    os.answer_network(applied(vec![gateway_route("192.0.2.1")]));
+    os.wait_for_log(&format!("run {OTHER_ATTEMPT}: tunnel up"));
+}
+
+#[test]
+fn a_revert_again_that_fails_keeps_what_is_left_logs_an_error_and_the_session_still_starts() {
+    let (started, starts) = mpsc::channel();
+    let next = starting(started, up_without_otp(settings("utun10", "10.10.0.6")));
+    let mut os = after_a_revert_that_left_the_gateway_route(vec![next]);
+
+    os.connect(3, &request(OTHER_ATTEMPT));
+    os.revert(failed(
+        NetworkStep::OutsideRoutes,
+        "the routing table could not be read",
+        vec![gateway_route("192.0.2.1")],
+    ));
+    starts.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
+    assert!(os.has_log(
+        LogLevel::Error,
+        "reverting again the network settings a revert left failed (OutsideRoutes): the routing \
+         table could not be read; 1 of 1 route(s) still in place"
+    ));
+    assert_eq!(
+        os.kept(),
+        Some(json!({"changes": [routes_only(vec![gateway_route("192.0.2.1")])]}))
+    );
+}
+
+#[test]
+fn both_runs_of_a_replacement_keep_what_their_failed_reverts_left() {
+    let mut new_settings = settings("utun10", "10.10.0.6");
+    new_settings.split_exclude = Vec::new();
+    let mut os = OsSide::start(vec![
+        up_without_otp(settings("utun9", "10.10.0.5")),
+        up_without_otp(new_settings),
+    ]);
+    os.bring_up(
+        1,
+        ATTEMPT,
+        vec![gateway_route("192.0.2.1"), excluded_route()],
+    );
+    let mut replacing = request(OTHER_ATTEMPT);
+    replacing.replacing = Some(ATTEMPT.parse().unwrap());
+    os.connect(2, &replacing);
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
+    os.answer_network(looked_up(Vec::new()));
+    assert!(matches!(os.change_network(), NetworkChange::Prepare { .. }));
+    os.answer_network(applied(Vec::new()));
+    assert!(matches!(os.change_network(), NetworkChange::Switch { .. }));
+    os.answer_network(applied(Vec::new()));
+    let old = os.revert(NetworkOutcome::Reverted {
+        left: vec![excluded_route()],
+    });
+    assert_eq!(old, routes_only(vec![excluded_route()]));
+    os.wait_for_exit(ATTEMPT);
+
+    os.disconnect(3, OTHER_ATTEMPT);
+    let new = os.revert(failed(
+        NetworkStep::Dns,
+        "the DNS settings under svc could not be removed",
+        vec![gateway_route("192.0.2.1")],
+    ));
+    os.wait_for_exit(OTHER_ATTEMPT);
+    assert_eq!(os.kept(), Some(json!({"changes": [old, new]})));
+}
+
+#[test]
+fn without_kept_settings_a_connect_starts_its_session_at_once() {
+    let mut os = OsSide::start(vec![up_without_otp(settings("utun9", "10.10.0.5"))]);
+    os.bring_up(1, ATTEMPT, vec![gateway_route("192.0.2.1")]);
+    assert_eq!(os.changes_sent(), ["lookUp", "apply"]);
+    assert_eq!(os.kept(), None);
+}
+
+#[test]
+fn the_network_settings_a_revert_left_are_reverted_again_before_ready() {
+    let directory = RunDirectory::new();
+    fs::create_dir(&directory.path).unwrap();
+    let kept = OutsideChanges {
+        dns_service_id: "svc".to_owned(),
+        routes: vec![gateway_route("192.0.2.1")],
+    };
+    fs::write(
+        directory.file("unreverted-changes.json"),
+        json!({"changes": [kept]}).to_string(),
+    )
+    .unwrap();
+    let mut os = OsSide::launch(directory, Vec::new());
+    let NetworkChange::Revert { changes } = os.change_network() else {
+        panic!("not a revert: {:#?}", os.received);
+    };
+    assert_eq!(changes, kept);
+    assert!(!os.received.contains(&FromEntry::Ready {}));
+    os.answer_network(NetworkOutcome::Reverted { left: Vec::new() });
+    os.wait_for(|message| *message == FromEntry::Ready {});
+    assert!(os.has_log(
+        LogLevel::Notice,
+        "reverted again the network settings a revert left (1 route(s))"
+    ));
+    assert!(os.directory.names().is_empty());
+}
+
+#[test]
+fn what_is_still_left_at_the_start_is_reverted_again_before_the_next_session() {
+    let directory = RunDirectory::new();
+    fs::create_dir(&directory.path).unwrap();
+    let kept = routes_only(vec![gateway_route("192.0.2.1")]);
+    fs::write(
+        directory.file("unreverted-changes.json"),
+        json!({"changes": [kept]}).to_string(),
+    )
+    .unwrap();
+    let mut os = OsSide::launch(
+        directory,
+        vec![up_without_otp(settings("utun9", "10.10.0.5"))],
+    );
+    os.revert(NetworkOutcome::Reverted {
+        left: vec![gateway_route("192.0.2.1")],
+    });
+    os.wait_for(|message| *message == FromEntry::Ready {});
+    assert!(os.has_log(
+        LogLevel::Error,
+        "reverting again the network settings a revert left: 1 of 1 route(s) still in place"
+    ));
+    assert_eq!(os.kept(), Some(json!({"changes": [kept]})));
+
+    os.admit();
+    os.connect(1, &request(ATTEMPT));
+    assert_eq!(
+        os.revert(NetworkOutcome::Reverted { left: Vec::new() }),
+        kept
+    );
+    assert!(matches!(os.change_network(), NetworkChange::LookUp { .. }));
+    assert_eq!(os.kept(), None);
 }

@@ -16,6 +16,8 @@ const SECOND_RECORD_DRAFT: &str = "run.json.2.tmp";
 /// Apart from the run record, whose name earlier Helpers clean up as their own.
 const BYPASS_RECORD: &str = "exception-routes.json";
 const BYPASS_RECORD_DRAFT: &str = "exception-routes.json.tmp";
+const UNREVERTED_RECORD: &str = "unreverted-changes.json";
+const UNREVERTED_RECORD_DRAFT: &str = "unreverted-changes.json.tmp";
 
 /// What a restarted Helper cleans up if this one dies during a run.
 #[derive(Default, Serialize, Deserialize)]
@@ -155,6 +157,41 @@ pub(crate) fn read_bypass_record(
 
 pub(crate) fn bypass_record_path(directory: &Path) -> PathBuf {
     directory.join(BYPASS_RECORD)
+}
+
+#[derive(Serialize, Deserialize)]
+struct UnrevertedRecord {
+    changes: Vec<OutsideChanges>,
+}
+
+pub(crate) fn write_unreverted_record(
+    directory: &Path,
+    changes: &[OutsideChanges],
+) -> Result<(), Failure> {
+    if changes.is_empty() {
+        let path = directory.join(UNREVERTED_RECORD);
+        return match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(Failure::new(format!("unlink {}", path.display()), error)),
+        };
+    }
+    let record = UnrevertedRecord {
+        changes: changes.to_vec(),
+    };
+    let json = serde_json::to_vec(&record).expect("an unreverted change record serializes");
+    replace(directory, UNREVERTED_RECORD, UNREVERTED_RECORD_DRAFT, &json)
+}
+
+pub(crate) fn read_unreverted_record(
+    directory: &Path,
+) -> Option<Result<Vec<OutsideChanges>, serde_json::Error>> {
+    let bytes = fs::read(directory.join(UNREVERTED_RECORD)).ok()?;
+    Some(serde_json::from_slice::<UnrevertedRecord>(&bytes).map(|record| record.changes))
+}
+
+pub(crate) fn unreverted_record_path(directory: &Path) -> PathBuf {
+    directory.join(UNREVERTED_RECORD)
 }
 
 pub(crate) fn read_records(

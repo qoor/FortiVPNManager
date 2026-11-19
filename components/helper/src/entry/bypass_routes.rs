@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::mpsc::Sender;
 
 use fvm_contract::app_helper::{
     BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperError,
@@ -15,10 +16,11 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, FromEntry, IpNetwork, LogCategory,
-    LogLevel, NetworkChange, NetworkCheck, NetworkOutcome, NetworkStep, OutsideRoute,
+    LogLevel, NetworkChange, NetworkCheck, NetworkOutcome, NetworkStep, OutsideChanges,
+    OutsideRoute,
 };
 
-use super::{Entry, error, to_json};
+use super::{Entry, error, left_after_revert, reverted_again, to_json};
 use crate::session::NetworkJob;
 
 /// Whether `added` and `route` through `service` are the same route in the routing table. On
@@ -48,6 +50,12 @@ pub(super) enum Job {
     Network(NetworkJob),
     Status {
         id: u64,
+    },
+    RevertAgain {
+        kept: Vec<OutsideChanges>,
+        answered: usize,
+        left: Vec<OutsideChanges>,
+        start_session: Sender<()>,
     },
     Read {
         app: u64,
@@ -210,6 +218,32 @@ impl Entry {
                     }
                 }
             }
+            if let Job::RevertAgain {
+                kept,
+                answered,
+                left,
+                start_session,
+            } = job
+            {
+                if let Some(changes) = kept.get(answered) {
+                    let change = NetworkChange::Revert {
+                        changes: changes.clone(),
+                    };
+                    let job = Job::RevertAgain {
+                        kept,
+                        answered,
+                        left,
+                        start_session,
+                    };
+                    return self.send_network_job(job, change);
+                }
+                self.unreverted.splice(..kept.len(), left);
+                self.record_unreverted();
+                start_session
+                    .send(())
+                    .expect("the session waits for the revert before it starts");
+                continue;
+            }
             if let Some((job, change)) = self.begin_bypass_job(job) {
                 self.send_bypass_job(job, change);
                 return;
@@ -228,7 +262,7 @@ impl Entry {
     fn begin_bypass_job(&mut self, job: Job) -> Option<(Job, BypassRoutesChange)> {
         let routes = &mut self.bypass_routes;
         match job {
-            Job::Network(_) | Job::Status { .. } => {
+            Job::Network(_) | Job::Status { .. } | Job::RevertAgain { .. } => {
                 unreachable!("network jobs are started apart")
             }
             Job::Read { app, id } | Job::Write { app, id, .. } | Job::Remove { app, id, .. }
@@ -300,7 +334,7 @@ impl Entry {
             .pop_front()
             .expect("the OS side answers only the change it was asked for");
         match (job, outcome) {
-            (Job::Network(_) | Job::Status { .. }, _) => {
+            (Job::Network(_) | Job::Status { .. } | Job::RevertAgain { .. }, _) => {
                 panic!("the OS side answered a network change with an exception-route outcome")
             }
             (Job::Read { id, .. }, BypassRoutesOutcome::Changed { network, found, .. }) => {
@@ -551,7 +585,28 @@ impl Entry {
 
     pub(super) fn network_changed(&mut self, outcome: NetworkOutcome) {
         match self.bypass_routes.jobs.pop_front() {
-            Some(Job::Network(job)) => job.finish(outcome),
+            Some(Job::Network(job)) => {
+                if let NetworkChange::Revert { changes } = &job.change
+                    && let Some(left) = left_after_revert(&changes.dns_service_id, &outcome)
+                {
+                    self.keep_unreverted(left);
+                }
+                job.finish(outcome);
+            }
+            Some(Job::RevertAgain {
+                kept,
+                answered,
+                mut left,
+                start_session,
+            }) => {
+                left.extend(reverted_again(&self.os, &kept[answered], &outcome));
+                self.bypass_routes.jobs.push_front(Job::RevertAgain {
+                    kept,
+                    answered: answered + 1,
+                    left,
+                    start_session,
+                });
+            }
             Some(Job::Status { id }) => {
                 let routing_complete = match outcome {
                     NetworkOutcome::Checked { complete } => Some(complete),
@@ -616,6 +671,34 @@ impl Entry {
         }
         let added = bypass.added.clone();
         self.record_added(&added);
+    }
+
+    fn keep_unreverted(&mut self, left: OutsideChanges) {
+        let dns = if left.dns_service_id.is_empty() {
+            ""
+        } else {
+            " and the DNS settings"
+        };
+        self.os.log(
+            LogLevel::Notice,
+            LogCategory::Helper,
+            format!(
+                "kept what a revert left to revert it again: {} route(s){dns}",
+                left.routes.len()
+            ),
+        );
+        self.unreverted.push(left);
+        self.record_unreverted();
+    }
+
+    fn record_unreverted(&self) {
+        if let Err(failure) = self.sessions.record_unreverted(&self.unreverted) {
+            self.os.log(
+                LogLevel::Error,
+                LogCategory::Helper,
+                format!("cannot record the network settings a revert left: {failure}"),
+            );
+        }
     }
 
     fn reply_bypass(&self, id: u64, reply: &BypassRoutesReply) {

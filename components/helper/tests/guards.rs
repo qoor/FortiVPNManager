@@ -18,7 +18,13 @@ fn start(script: Script, on_report: impl FnMut(Report) + Send + 'static) -> (Run
         timing(),
     );
     let run = sessions
-        .start(&mut request(ATTEMPT), RecordSlot::First, None, on_report)
+        .start(
+            &mut request(ATTEMPT),
+            RecordSlot::First,
+            None,
+            None,
+            on_report,
+        )
         .unwrap();
     (run, directory)
 }

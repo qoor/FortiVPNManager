@@ -14,7 +14,7 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
-    ToEntry,
+    NetworkStep, OutsideChanges, ToEntry,
 };
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
@@ -100,7 +100,7 @@ impl OsSide {
 }
 
 fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
-    let left = clean_up(&sessions, &os, &events);
+    let (left, unreverted) = clean_up(&sessions, &os, &events);
     os.send(&FromEntry::Ready {});
     Entry {
         sessions,
@@ -112,31 +112,42 @@ fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Re
         executable_replaced: false,
         lifecycle: Lifecycle::Serving,
         bypass_routes: BypassRoutes::new(left),
+        unreverted,
     }
     .run()
 }
 
 /// Has the session manager clean up after an earlier Helper, with the OS side reverting the network
-/// settings a run that did not finish changed and removing the exception routes the earlier Helper
-/// added, before any app connection is accepted. Returns the exception routes that could not be
-/// removed. Until "ready", the OS side accepts no app connection and passes on no stop request, so
-/// the answers to these requests are the only messages it sends.
-fn clean_up(sessions: &SessionManager, os: &OsSide, events: &Receiver<Event>) -> Vec<AddedRoute> {
+/// settings a run that did not finish changed and those a revert left, and removing the exception
+/// routes the earlier Helper added, before any app connection is accepted. Returns the exception
+/// routes that could not be removed and the network settings still left. Until "ready", the OS side
+/// accepts no app connection and passes on no stop request, so the answers to these requests are
+/// the only messages it sends.
+fn clean_up(
+    sessions: &SessionManager,
+    os: &OsSide,
+    events: &Receiver<Event>,
+) -> (Vec<AddedRoute>, Vec<OutsideChanges>) {
+    let revert = |changes: OutsideChanges| {
+        os.send(&FromEntry::ChangeNetwork {
+            change: NetworkChange::Revert { changes },
+        });
+        let Event::FromOs(ToEntry::NetworkChanged { outcome }) =
+            events.recv().expect("the entry holds a sender")
+        else {
+            panic!(
+                "the OS side sent something other than the network revert's answer before ready"
+            );
+        };
+        outcome
+    };
     sessions.clean_up(
         |level, category, message| os.log(level, category, message),
         |changes| {
             let routes = changes.routes.len();
-            os.send(&FromEntry::ChangeNetwork {
-                change: NetworkChange::Revert { changes },
-            });
-            let Event::FromOs(ToEntry::NetworkChanged { outcome }) =
-                events.recv().expect("the entry holds a sender")
-            else {
-                panic!(
-                    "the OS side sent something other than the network revert's answer before ready"
-                );
-            };
-            let (level, message) = match outcome {
+            let dns_service_id = changes.dns_service_id.clone();
+            let outcome = revert(changes);
+            let (level, message) = match &outcome {
                 NetworkOutcome::Reverted { left } => (
                     LogLevel::Notice,
                     format!(
@@ -153,6 +164,15 @@ fn clean_up(sessions: &SessionManager, os: &OsSide, events: &Receiver<Event>) ->
                 other => panic!("the OS side answered a network revert with {other:?}"),
             };
             os.log(level, LogCategory::Routes, message);
+            left_after_revert(&dns_service_id, &outcome)
+        },
+        |kept| {
+            kept.into_iter()
+                .filter_map(|changes| {
+                    let outcome = revert(changes.clone());
+                    reverted_again(os, &changes, &outcome)
+                })
+                .collect()
         },
         |recorded| {
             let change = bypass_routes::removal(&recorded);
@@ -197,6 +217,7 @@ struct Entry {
     executable_replaced: bool,
     lifecycle: Lifecycle,
     bypass_routes: BypassRoutes,
+    unreverted: Vec<OutsideChanges>,
 }
 
 struct HeldRun {
@@ -450,13 +471,21 @@ impl Entry {
         } else {
             RecordSlot::First
         };
+        let (start_session, start_after) = if replaced.is_none() && !self.unreverted.is_empty() {
+            let (start_session, start_after) = mpsc::channel();
+            (Some(start_session), Some(start_after))
+        } else {
+            (None, None)
+        };
         let reports = self.sender.clone();
         let attempt = request.attempt_id.clone();
-        let started = self.sessions.start(request, slot, replaced, move |report| {
-            reports
-                .send(Event::Run(attempt.clone(), report))
-                .expect("the event loop runs as long as the process");
-        });
+        let started = self
+            .sessions
+            .start(request, slot, replaced, start_after, move |report| {
+                reports
+                    .send(Event::Run(attempt.clone(), report))
+                    .expect("the event loop runs as long as the process");
+            });
         let run = started.map_err(|failure| match failure {
             StartFailure::InvalidRequest(reason) => error(HelperErrorCode::InvalidRequest, reason),
             StartFailure::RunDirectory(failure) => {
@@ -471,6 +500,14 @@ impl Entry {
                 )
             }
         })?;
+        if let Some(start_session) = start_session {
+            self.queue_bypass_job(Job::RevertAgain {
+                kept: self.unreverted.clone(),
+                answered: 0,
+                left: Vec::new(),
+                start_session,
+            });
+        }
         let replacing = match &request.replacing {
             Some(replacing) => format!(", replacing {}", self.runs[replacing].run.name()),
             None => String::new(),
@@ -707,6 +744,56 @@ impl Entry {
             | Lifecycle::Exiting => {}
         }
     }
+}
+
+fn left_after_revert(dns_service_id: &str, outcome: &NetworkOutcome) -> Option<OutsideChanges> {
+    let (dns_left, routes) = match outcome {
+        NetworkOutcome::Reverted { left } => (false, left),
+        NetworkOutcome::Failed { step, left, .. } => (*step != NetworkStep::OutsideRoutes, left),
+        other => panic!("the OS side answered a network revert with {other:?}"),
+    };
+    let left = OutsideChanges {
+        dns_service_id: if dns_left {
+            dns_service_id.to_owned()
+        } else {
+            String::new()
+        },
+        routes: routes.clone(),
+    };
+    (!left.dns_service_id.is_empty() || !left.routes.is_empty()).then_some(left)
+}
+
+fn reverted_again(
+    os: &OsSide,
+    changes: &OutsideChanges,
+    outcome: &NetworkOutcome,
+) -> Option<OutsideChanges> {
+    let left = left_after_revert(&changes.dns_service_id, outcome);
+    let routes = changes.routes.len();
+    match (&left, outcome) {
+        (None, _) => os.log(
+            LogLevel::Notice,
+            LogCategory::Helper,
+            format!("reverted again the network settings a revert left ({routes} route(s))"),
+        ),
+        (Some(left), NetworkOutcome::Failed { step, error, .. }) => os.log(
+            LogLevel::Error,
+            LogCategory::Helper,
+            format!(
+                "reverting again the network settings a revert left failed ({step:?}): {error}; {} of {routes} route(s) still in place",
+                left.routes.len()
+            ),
+        ),
+        (Some(left), _) => os.log(
+            LogLevel::Error,
+            LogCategory::Helper,
+            format!(
+                "reverting again the network settings a revert left: {} of {routes} route(s) still in place",
+                left.routes.len()
+            ),
+        ),
+    }
+    left
 }
 
 fn error(code: HelperErrorCode, message: impl Into<String>) -> HelperError {

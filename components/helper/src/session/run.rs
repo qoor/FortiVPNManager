@@ -49,12 +49,14 @@ impl Run {
     /// the `Exited` event. The run's first line names the client and its version. `on_report` must
     /// never wait for anything that may be held while `submit_otp` runs, since `submit_otp` waits
     /// for that thread; calling `submit_otp` or `stop` on it panics.
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn start(
         backend: Arc<dyn Backend>,
         secrets: Arc<dyn SecretStore>,
         request: &mut RunRequest,
         files: RunFiles,
         replaced: Option<Replaced>,
+        start_after: Option<Receiver<()>>,
         timing: Timing,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Self {
@@ -112,6 +114,11 @@ impl Run {
             thread::Builder::new()
                 .name("fvm-session".to_owned())
                 .spawn(move || {
+                    if let Some(start_after) = start_after {
+                        start_after
+                            .recv()
+                            .expect("the entry starts the session once the revert is answered");
+                    }
                     let end = backend.run(session, &link);
                     let _ = inputs.send(Input::Returned(end));
                     let saver = saving.lock().expect(LOCK).take();

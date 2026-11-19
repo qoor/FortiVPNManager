@@ -7,15 +7,25 @@ use std::sync::Arc;
 use common::*;
 use fvm_contract::helper_internal::{AddedRoute, LogCategory, LogLevel, OutsideChanges};
 use fvm_helper_core::session::SessionManager;
-use serde_json::json;
+use serde_json::{Value, json};
 
 struct CleanedUp {
     logs: Vec<(LogLevel, String)>,
     reverted: Vec<OutsideChanges>,
+    reverted_again: Vec<OutsideChanges>,
     left: Vec<AddedRoute>,
+    unreverted: Vec<OutsideChanges>,
 }
 
 fn clean_up(directory: &RunDirectory, secrets: &Arc<FakeSecrets>) -> CleanedUp {
+    clean_up_leaving(directory, secrets, |_| None)
+}
+
+fn clean_up_leaving(
+    directory: &RunDirectory,
+    secrets: &Arc<FakeSecrets>,
+    left: impl Fn(&OutsideChanges) -> Option<OutsideChanges>,
+) -> CleanedUp {
     let sessions = SessionManager::new(
         Arc::new(FakeBackend::default()),
         Arc::clone(secrets) as _,
@@ -24,19 +34,38 @@ fn clean_up(directory: &RunDirectory, secrets: &Arc<FakeSecrets>) -> CleanedUp {
     );
     let logs = RefCell::new(Vec::new());
     let mut reverted = Vec::new();
-    let left = sessions.clean_up(
+    let mut reverted_again = Vec::new();
+    let (left_routes, unreverted) = sessions.clean_up(
         |level, category, message| {
             assert_eq!(category, LogCategory::Helper);
             logs.borrow_mut().push((level, message));
         },
-        |changes| reverted.push(changes),
+        |changes| {
+            let remaining = left(&changes);
+            reverted.push(changes);
+            remaining
+        },
+        |kept| {
+            reverted_again.extend(kept.iter().cloned());
+            kept.iter().filter_map(&left).collect()
+        },
         |recorded| recorded,
     );
     CleanedUp {
         logs: logs.into_inner(),
         reverted,
-        left,
+        reverted_again,
+        left: left_routes,
+        unreverted,
     }
+}
+
+fn unreverted_record(changes: &[OutsideChanges]) -> String {
+    json!({"changes": changes}).to_string()
+}
+
+fn recorded_unreverted(directory: &RunDirectory) -> Value {
+    serde_json::from_slice(&fs::read(directory.file("unreverted-changes.json")).unwrap()).unwrap()
 }
 
 fn changes(dns_service_id: &str) -> OutsideChanges {
@@ -244,4 +273,79 @@ fn the_sessions_left_are_logged_out_even_when_the_run_directory_cannot_be_used()
         "{:?}",
         cleaned.logs
     );
+}
+
+#[test]
+fn the_network_settings_a_revert_left_are_reverted_again_and_their_record_removed() {
+    let secrets = Arc::new(FakeSecrets::default());
+    let directory = RunDirectory::new();
+    fs::create_dir(&directory.path).unwrap();
+    fs::write(
+        directory.file("unreverted-changes.json"),
+        unreverted_record(&[changes("first"), changes("second")]),
+    )
+    .unwrap();
+    let cleaned = clean_up(&directory, &secrets);
+    assert!(cleaned.reverted.is_empty());
+    assert_eq!(
+        cleaned.reverted_again,
+        [changes("first"), changes("second")]
+    );
+    assert!(cleaned.unreverted.is_empty());
+    assert!(cleaned.logs.is_empty(), "{:?}", cleaned.logs);
+    assert!(directory.names().is_empty());
+}
+
+#[test]
+fn what_a_revert_at_the_start_leaves_stays_recorded_and_is_not_reverted_again_at_once() {
+    let secrets = Arc::new(FakeSecrets::default());
+    let directory = RunDirectory::new();
+    fs::create_dir(&directory.path).unwrap();
+    let record = json!({"outsideChanges": changes("run")}).to_string();
+    fs::write(directory.file("run.json"), record).unwrap();
+    fs::write(
+        directory.file("unreverted-changes.json"),
+        unreverted_record(&[changes("kept"), changes("gone")]),
+    )
+    .unwrap();
+    let dns_left = |changes: &OutsideChanges| {
+        (changes.dns_service_id != "gone").then(|| dns_only(&changes.dns_service_id))
+    };
+    let cleaned = clean_up_leaving(&directory, &secrets, dns_left);
+    assert_eq!(cleaned.reverted, [changes("run")]);
+    assert_eq!(cleaned.reverted_again, [changes("kept"), changes("gone")]);
+    let left = [dns_only("kept"), dns_only("run")];
+    assert_eq!(cleaned.unreverted, left);
+    assert_eq!(recorded_unreverted(&directory), json!({"changes": left}));
+    assert_eq!(directory.names(), ["unreverted-changes.json"]);
+    assert!(cleaned.logs.is_empty(), "{:?}", cleaned.logs);
+}
+
+fn dns_only(dns_service_id: &str) -> OutsideChanges {
+    OutsideChanges {
+        dns_service_id: dns_service_id.to_owned(),
+        routes: Vec::new(),
+    }
+}
+
+#[test]
+fn an_unreadable_unreverted_change_record_is_logged_and_removed() {
+    let secrets = Arc::new(FakeSecrets::default());
+    let directory = RunDirectory::new();
+    fs::create_dir(&directory.path).unwrap();
+    fs::write(directory.file("unreverted-changes.json"), "not JSON").unwrap();
+    let cleaned = clean_up(&directory, &secrets);
+    assert!(cleaned.reverted_again.is_empty());
+    assert!(cleaned.unreverted.is_empty());
+    assert_eq!(
+        cleaned.logs,
+        [(
+            LogLevel::Error,
+            format!(
+                "ignoring unreadable unreverted change record {}",
+                directory.file("unreverted-changes.json").display()
+            )
+        )]
+    );
+    assert!(directory.names().is_empty());
 }

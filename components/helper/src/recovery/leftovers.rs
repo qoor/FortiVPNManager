@@ -1,6 +1,7 @@
 //! Cleaning up after an earlier Helper: if it died during a run, the network settings it changed
-//! outside the tunnel are still in place and its sessions are still open at the gateway; and the
-//! exception routes it added may still be in the routing table.
+//! outside the tunnel are still in place and its sessions are still open at the gateway; the
+//! network settings a revert could not remove may still be in place; and the exception routes it
+//! added may still be in the routing table.
 
 use std::path::Path;
 
@@ -14,9 +15,10 @@ pub(crate) fn clean_up(
     secrets: &dyn SecretStore,
     directory: &Path,
     log: impl Fn(LogLevel, LogCategory, String),
-    mut revert_network: impl FnMut(OutsideChanges),
+    mut revert_network: impl FnMut(OutsideChanges) -> Option<OutsideChanges>,
+    revert_again: impl FnOnce(Vec<OutsideChanges>) -> Vec<OutsideChanges>,
     remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
-) -> Vec<AddedRoute> {
+) -> (Vec<AddedRoute>, Vec<OutsideChanges>) {
     if let Err(failure) = run_directory::prepare(directory) {
         log(
             LogLevel::Error,
@@ -24,28 +26,55 @@ pub(crate) fn clean_up(
             format!("cannot prepare the run directory: {failure}"),
         );
         log_out_sessions(secrets, &log);
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
+    let mut unreverted = match run_directory::read_unreverted_record(directory) {
+        None => Vec::new(),
+        Some(Ok(changes)) => changes,
+        Some(Err(_)) => {
+            log(
+                LogLevel::Error,
+                LogCategory::Helper,
+                format!(
+                    "ignoring unreadable unreverted change record {}",
+                    run_directory::unreverted_record_path(directory).display()
+                ),
+            );
+            Vec::new()
+        }
+    };
+    let earlier = unreverted.len();
+    let mut records = Vec::new();
     for (path, record) in run_directory::read_records(directory) {
         match record {
-            Ok(record) => {
-                if let Some(changes) = record.outside_changes {
-                    revert_network(changes);
-                }
-            }
+            Ok(record) => unreverted.extend(record.outside_changes.and_then(&mut revert_network)),
             Err(_) => log(
                 LogLevel::Error,
                 LogCategory::Helper,
                 format!("ignoring unreadable run record {}", path.display()),
             ),
         }
+        records.push(path);
+    }
+    if earlier > 0 {
+        let left = revert_again(unreverted[..earlier].to_vec());
+        unreverted.splice(..earlier, left);
+    }
+    if let Err(failure) = run_directory::write_unreverted_record(directory, &unreverted) {
+        log(
+            LogLevel::Error,
+            LogCategory::Helper,
+            format!("cannot record the network settings a revert left: {failure}"),
+        );
+    }
+    for path in records {
         if let Err(line) = run_directory::remove(&path) {
             log(LogLevel::Error, LogCategory::Helper, line);
         }
     }
     log_out_sessions(secrets, &log);
     let recorded = match run_directory::read_bypass_record(directory) {
-        None => return Vec::new(),
+        None => return (Vec::new(), unreverted),
         Some(Ok(routes)) => routes,
         Some(Err(_)) => {
             log(
@@ -71,7 +100,7 @@ pub(crate) fn clean_up(
             format!("cannot record the exception routes: {failure}"),
         );
     }
-    left
+    (left, unreverted)
 }
 
 fn log_out_sessions(secrets: &dyn SecretStore, log: &impl Fn(LogLevel, LogCategory, String)) {

@@ -15,6 +15,7 @@ mod run;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 use std::thread;
 use std::time::Duration;
 
@@ -67,6 +68,7 @@ impl SessionManager {
         request: &mut RunRequest,
         slot: RecordSlot,
         replaced: Option<Replaced>,
+        start_after: Option<Receiver<()>>,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Result<Run, StartFailure> {
         self.backend
@@ -79,6 +81,7 @@ impl SessionManager {
             request,
             RunFiles::new(&self.run_directory, slot),
             replaced,
+            start_after,
             self.timing,
             on_report,
         ))
@@ -89,14 +92,16 @@ impl SessionManager {
     pub fn clean_up(
         &self,
         log: impl Fn(LogLevel, LogCategory, String),
-        revert_network: impl FnMut(OutsideChanges),
+        revert_network: impl FnMut(OutsideChanges) -> Option<OutsideChanges>,
+        revert_again: impl FnOnce(Vec<OutsideChanges>) -> Vec<OutsideChanges>,
         remove_bypass_routes: impl FnOnce(Vec<AddedRoute>) -> Vec<AddedRoute>,
-    ) -> Vec<AddedRoute> {
+    ) -> (Vec<AddedRoute>, Vec<OutsideChanges>) {
         recovery::clean_up(
             self.secrets.as_ref(),
             &self.run_directory,
             log,
             revert_network,
+            revert_again,
             remove_bypass_routes,
         )
     }
@@ -105,6 +110,10 @@ impl SessionManager {
     /// removes them if this one cannot; none removes the record.
     pub fn record_bypass_routes(&self, routes: &[AddedRoute]) -> Result<(), Failure> {
         recovery::write_bypass_record(&self.run_directory, routes)
+    }
+
+    pub fn record_unreverted(&self, changes: &[OutsideChanges]) -> Result<(), Failure> {
+        recovery::write_unreverted_record(&self.run_directory, changes)
     }
 }
 
