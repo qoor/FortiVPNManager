@@ -586,7 +586,7 @@ fn watched_timing() -> Timing {
 }
 
 fn report_faults_to_stdout() {
-    entry::report_panics(|line| {
+    entry::report_faults(|line| {
         io::stdout()
             .write_all(format!("{line}\n").as_bytes())
             .unwrap();

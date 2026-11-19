@@ -60,7 +60,7 @@ pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'stati
     inbox
 }
 
-pub fn report_panics(fault: impl Fn(&str) + Send + Sync + 'static) {
+pub fn report_faults(fault: impl Fn(&str) + Send + Sync + 'static) {
     let fault: Fault = Arc::new(fault);
     watchdog::report_to(Arc::clone(&fault));
     let default = panic::take_hook();
@@ -885,7 +885,7 @@ mod tests {
     }
 
     fn panic_on_a_named_thread(name: &str, panicking: fn()) {
-        report_panics(|line| {
+        report_faults(|line| {
             io::stdout()
                 .write_all(format!("{line}\n").as_bytes())
                 .unwrap();

@@ -9,7 +9,7 @@ use fvm_backend_adapter::openconnect::OpenConnect;
 use fvm_common::os_api;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
-use fvm_helper_core::entry::{end_for_restart, report_panics};
+use fvm_helper_core::entry::{end_for_restart, report_faults};
 use fvm_helper_core::session::{SessionManager, Timing};
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
@@ -53,7 +53,7 @@ pub fn run() -> windows_service::Result<()> {
 extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16) {
     let log = event_log();
     let fault = Arc::clone(&log);
-    report_panics(move |line| fault(LogLevel::Error, LogCategory::Helper, line));
+    report_faults(move |line| fault(LogLevel::Error, LogCategory::Helper, line));
     let helper: Arc<OnceLock<Helper>> = Arc::new(OnceLock::new());
     let control_side = Arc::clone(&helper);
     let status: Arc<OnceLock<service_control_handler::ServiceStatusHandle>> =

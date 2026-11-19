@@ -128,7 +128,7 @@ fn monitor(
     };
     let fault = FAULT
         .get()
-        .expect("report_panics set the fault channel before the Helper started");
+        .expect("report_faults set the fault channel before the Helper started");
     fault(&stalled);
     entry::end_for_restart();
 }
@@ -140,7 +140,7 @@ mod tests {
     use std::process::{Command, ExitStatus};
 
     use super::*;
-    use crate::entry::report_panics;
+    use crate::entry::report_faults;
 
     #[cfg(unix)]
     fn aborted(status: ExitStatus) -> bool {
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     #[ignore = "the child of a_monitor_that_could_not_judge_for_longer_than_the_resume_gap_restarts_every_count"]
     fn block_the_monitor_past_the_limit() {
-        report_panics(|line| {
+        report_faults(|line| {
             io::stdout()
                 .write_all(format!("{line}\n").as_bytes())
                 .unwrap();

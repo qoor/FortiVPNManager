@@ -28,7 +28,7 @@ const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn fvm_helper_entry_start(fault: unsafe extern "C" fn(*const u8, usize)) -> i32 {
-    fvm_helper_core::entry::report_panics(move |line| {
+    fvm_helper_core::entry::report_faults(move |line| {
         // SAFETY: Swift's function reads the `length` bytes at `text` during the call, which `line`
         // holds.
         unsafe { fault(line.as_ptr(), line.len()) }
