@@ -772,16 +772,18 @@ fn alias(luid: Luid) -> String {
 
 fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
     let mut failed = None;
-    for family in [Family::Ipv4, Family::Ipv6] {
-        if let Err(error) = os_api::set_dns_servers(&changes.dns_service_id, family, &[]) {
-            failed.get_or_insert(failure(NetworkStep::Dns, error));
+    if !changes.dns_service_id.is_empty() {
+        for family in [Family::Ipv4, Family::Ipv6] {
+            if let Err(error) = os_api::set_dns_servers(&changes.dns_service_id, family, &[]) {
+                failed.get_or_insert(failure(NetworkStep::Dns, error));
+            }
         }
-    }
-    match os_api::clear_wins_servers(&changes.dns_service_id) {
-        Ok(()) => {}
-        Err(error) if error.not_found() => {}
-        Err(error) => {
-            failed.get_or_insert(failure(NetworkStep::Wins, error));
+        match os_api::clear_wins_servers(&changes.dns_service_id) {
+            Ok(()) => {}
+            Err(error) if error.not_found() => {}
+            Err(error) => {
+                failed.get_or_insert(failure(NetworkStep::Wins, error));
+            }
         }
     }
     let destinations = || changes.routes.iter().map(|route| route.destination.address);
@@ -1049,6 +1051,33 @@ mod tests {
             os_api::dns_servers(loopback(), Family::Ipv4),
             Ok(Vec::new())
         );
+    }
+
+    #[test]
+    fn a_revert_without_a_dns_service_id_reverts_only_the_routes() {
+        let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+        let (_, gateway_route) = look_up_route(network("192.0.2.96", 32));
+        let physical = Physical::read(&quiet()).ok().unwrap();
+        let gateway_row = physical.os_route(&gateway_route);
+        let _undo = Undo(move || {
+            let _ = os_api::delete_route(&gateway_row);
+        });
+        os_api::add_route(&gateway_row).unwrap();
+
+        let reverted = super::change(
+            &NetworkChange::Revert {
+                changes: OutsideChanges {
+                    dns_service_id: String::new(),
+                    routes: vec![gateway_route],
+                },
+            },
+            &quiet(),
+        );
+        assert_eq!(reverted, NetworkOutcome::Reverted { left: Vec::new() });
+        assert!(!routes::has(
+            &os_api::routes(Family::Ipv4).unwrap(),
+            &gateway_row
+        ));
     }
 
     #[test]
