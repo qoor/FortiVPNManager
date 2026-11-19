@@ -244,6 +244,7 @@
 - VPN client가 비밀번호·OTP를 다시 물으면 즉시 종료(서버 거부)
 - 진행하지 못하는 연결: 단계별 시간 제한 후 종료
 - 중지: logout은 openconnect 처리, 중지 후 10초 안에 끝나지 않으면 logout 없이 종료, 30초 안에 세션이 끝나지 않으면 Helper 재시작
+- Helper 내부 멈춤: 30초 응답 없으면 Helper 재시작
 - VPN client가 없거나 쓸 수 없으면 안내, 검증되지 않은 버전이면 고급 pane에 경고
 - macOS 앱 업데이트: 연결이 없을 때 새 Helper로 교체
 - openconnect 네트워크 설정: 서버가 준 값의 Helper 적용

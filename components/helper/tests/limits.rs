@@ -1,19 +1,23 @@
 mod common;
 
+use std::env;
+use std::io::{self, Write};
+use std::process::{self, ExitStatus};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
 use fvm_contract::app_helper::{
-    HelperError, HelperErrorCode, Milestone, StopInitiator, StopReason,
+    HelperError, HelperErrorCode, HelperEventKind, Milestone, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{
     AppRequest, FromEntry, LogCategory, LogLevel, NetworkOutcome, ToEntry,
 };
 use fvm_helper_core::entry;
+use fvm_helper_core::recovery::RecordSlot;
 use fvm_helper_core::session::backend::{Command, Link};
-use fvm_helper_core::session::{SessionManager, StageLimits};
+use fvm_helper_core::session::{Report, SessionManager, StageLimits, Timing};
 
 const TINY: Duration = Duration::from_millis(150);
 
@@ -518,4 +522,218 @@ fn an_otp_while_a_returned_session_deletes_its_secret_is_refused_as_for_a_run_th
     assert!(!session.has_text("‹OTP sent›"));
     assert!(!session.reached(Milestone::OtpSubmitted));
     assert_ended_by_the_client(&session);
+}
+
+const STALLED_AFTER: Duration = Duration::from_secs(1);
+
+fn watched_timing() -> Timing {
+    Timing {
+        beat: Duration::from_millis(100),
+        stalled_after: STALLED_AFTER,
+        resume_gap: Duration::from_millis(500),
+        ..timing()
+    }
+}
+
+fn report_faults_to_stdout() {
+    entry::report_panics(|line| {
+        io::stdout()
+            .write_all(format!("{line}\n").as_bytes())
+            .unwrap();
+    });
+}
+
+fn run_child(test: &str) -> (ExitStatus, String) {
+    let child = process::Command::new(env::current_exe().unwrap())
+        .args(["--exact", test, "--ignored"])
+        .output()
+        .unwrap();
+    (child.status, String::from_utf8(child.stdout).unwrap())
+}
+
+#[cfg(unix)]
+fn aborted(status: ExitStatus) -> bool {
+    use std::os::unix::process::ExitStatusExt;
+    const SIGABRT: i32 = 6;
+    status.signal() == Some(SIGABRT)
+}
+
+#[cfg(windows)]
+fn aborted(status: ExitStatus) -> bool {
+    status.code() == Some(0xC000_0409_u32.cast_signed())
+}
+
+fn fault_lines(stdout: &str) -> Vec<&str> {
+    stdout
+        .lines()
+        .filter(|line| line.starts_with("watchdog: "))
+        .collect()
+}
+
+fn assert_aborted_naming(test: &str, name: &str) {
+    let (status, stdout) = run_child(test);
+    assert!(aborted(status), "{status} {stdout}");
+    let [line] = fault_lines(&stdout)[..] else {
+        panic!("{stdout}");
+    };
+    let silent: f64 = line
+        .strip_prefix(&format!("watchdog: {name} made no progress for "))
+        .and_then(|rest| rest.strip_suffix("s; aborting so the OS restarts the Helper"))
+        .and_then(|seconds| seconds.parse().ok())
+        .unwrap_or_else(|| panic!("{line}"));
+    assert!(silent >= STALLED_AFTER.as_secs_f64(), "{line}");
+}
+
+fn assert_not_aborted(test: &str) {
+    let (status, stdout) = run_child(test);
+    assert!(status.success(), "{status} {stdout}");
+    assert!(fault_lines(&stdout).is_empty(), "{stdout}");
+}
+
+#[test]
+fn a_run_loop_that_makes_no_progress_is_named_on_the_fault_channel_and_aborts_the_helper() {
+    assert_aborted_naming("stall_a_run_loop", &format!("0277070470 run {ATTEMPT}"));
+}
+
+#[test]
+#[ignore = "the child of a_run_loop_that_makes_no_progress_is_named_on_the_fault_channel_and_aborts_the_helper"]
+fn stall_a_run_loop() {
+    report_faults_to_stdout();
+    let (_release, held) = mpsc::channel::<()>();
+    let directory = RunDirectory::new();
+    let script = script(|_, link| {
+        trust_gateway(link);
+        wait_for_cancel(link);
+        ended(-EINTR)
+    });
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::new([script])),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        watched_timing(),
+    );
+    let mut run_request = request(ATTEMPT);
+    let _run = sessions
+        .start(
+            &mut run_request,
+            RecordSlot::First,
+            None,
+            None,
+            move |report| {
+                if matches!(
+                    report,
+                    Report::Event(HelperEventKind::Milestone {
+                        milestone: Milestone::ConnectedToGateway,
+                        ..
+                    })
+                ) {
+                    let _ = held.recv();
+                }
+            },
+        )
+        .unwrap();
+    thread::sleep(STALLED_AFTER * 10);
+}
+
+#[test]
+fn the_entry_loop_that_makes_no_progress_is_named_on_the_fault_channel_and_aborts_the_helper() {
+    assert_aborted_naming("stall_the_entry_loop", "entry");
+}
+
+#[test]
+#[ignore = "the child of the_entry_loop_that_makes_no_progress_is_named_on_the_fault_channel_and_aborts_the_helper"]
+fn stall_the_entry_loop() {
+    report_faults_to_stdout();
+    let (_release, held) = mpsc::channel::<()>();
+    let (ready, is_ready) = mpsc::channel();
+    let directory = RunDirectory::new();
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::default()),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        watched_timing(),
+    );
+    let inbox = entry::start(sessions, move |message| match message {
+        FromEntry::Ready {} => ready.send(()).unwrap(),
+        FromEntry::Admitted { .. } => {
+            let _ = held.recv();
+        }
+        _ => {}
+    });
+    is_ready.recv_timeout(Duration::from_secs(10)).unwrap();
+    inbox.deliver(ToEntry::AppConnected { app: 1, uid: 1 });
+    thread::sleep(STALLED_AFTER * 10);
+}
+
+#[test]
+fn idle_loops_keep_beating() {
+    assert_not_aborted("leave_the_entry_and_a_run_idle");
+}
+
+#[test]
+#[ignore = "the child of idle_loops_keep_beating"]
+fn leave_the_entry_and_a_run_idle() {
+    report_faults_to_stdout();
+    let (ready, is_ready) = mpsc::channel();
+    let directory = RunDirectory::new();
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::default()),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        watched_timing(),
+    );
+    let _inbox = entry::start(sessions, move |message| {
+        if matches!(message, FromEntry::Ready {}) {
+            ready.send(()).unwrap();
+        }
+    });
+    is_ready.recv_timeout(Duration::from_secs(10)).unwrap();
+    let setup = Setup {
+        timing: watched_timing(),
+        ..Setup::default()
+    };
+    let mut session = Session::start(up_without_otp(settings("utun9", "10.10.0.5")), setup);
+    session.bring_up(vec![gateway_route("192.0.2.1")]);
+    session.settle(STALLED_AFTER * 4);
+    session.stop_and_revert(StopReason::UserDisconnect);
+}
+
+#[test]
+fn a_run_that_exited_is_no_longer_watched() {
+    assert_not_aborted("let_a_run_exit_and_wait");
+}
+
+#[test]
+#[ignore = "the child of a_run_that_exited_is_no_longer_watched"]
+fn let_a_run_exit_and_wait() {
+    report_faults_to_stdout();
+    let directory = RunDirectory::new();
+    let script = script(|_, link| {
+        trust_gateway(link);
+        ended(-EIO)
+    });
+    let sessions = SessionManager::new(
+        Arc::new(FakeBackend::new([script])),
+        Arc::new(FakeSecrets::default()),
+        directory.path.clone(),
+        watched_timing(),
+    );
+    let (sender, reports) = mpsc::channel();
+    let mut run_request = request(ATTEMPT);
+    let _run = sessions
+        .start(
+            &mut run_request,
+            RecordSlot::First,
+            None,
+            None,
+            move |report| {
+                let _ = sender.send(report);
+            },
+        )
+        .unwrap();
+    while !matches!(
+        reports.recv_timeout(Duration::from_secs(10)).unwrap(),
+        Report::Event(HelperEventKind::Exited { .. })
+    ) {}
+    thread::sleep(STALLED_AFTER * 4);
 }

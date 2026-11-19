@@ -29,6 +29,7 @@ use crate::session::backend::{
     Backend, FormKind, LineLevel, Link, SessionEnd, SessionEvent, SessionRequest,
 };
 use crate::session::{Report, Timing};
+use crate::watchdog::{Beat, Watchdog};
 
 pub use network::{NotReplaceable, Replaced};
 
@@ -57,6 +58,7 @@ impl Run {
         files: RunFiles,
         replaced: Option<Replaced>,
         start_after: Option<Receiver<()>>,
+        watchdog: &Watchdog,
         timing: Timing,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Self {
@@ -139,6 +141,7 @@ impl Run {
             network: network::Network::default(),
             replaced,
             timing,
+            beat: watchdog.watch(name.clone()),
             on_report,
             inputs: inputs.clone(),
             returned: Arc::clone(&returned),
@@ -309,6 +312,7 @@ struct Watch<R> {
     network: network::Network,
     replaced: Option<Replaced>,
     timing: Timing,
+    beat: Beat,
     on_report: R,
     /// For the answers to the network changes.
     inputs: Sender<Input>,
@@ -351,17 +355,17 @@ impl<R: FnMut(Report)> Watch<R> {
         self.batch.push(client_line);
         self.reach(Milestone::Started);
         while !matches!(self.phase, Phase::Reported) {
-            let input = match self.next_deadline() {
-                None => Some(inputs.recv().expect("the run holds a sender")),
-                Some(deadline) => {
-                    match inputs.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
-                        Ok(input) => Some(input),
-                        Err(RecvTimeoutError::Timeout) => None,
-                        Err(RecvTimeoutError::Disconnected) => {
-                            unreachable!("the run holds a sender")
-                        }
-                    }
-                }
+            self.beat.beat();
+            let period = self.beat.period();
+            let wait = self.next_deadline().map_or(period, |deadline| {
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(period)
+            });
+            let input = match inputs.recv_timeout(wait) {
+                Ok(input) => Some(input),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => unreachable!("the run holds a sender"),
             };
             if let Some(input) = input {
                 self.handle(input);

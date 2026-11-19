@@ -17,3 +17,4 @@ pub mod entry;
 pub mod recovery;
 pub mod secrets;
 pub mod session;
+mod watchdog;

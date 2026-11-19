@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::env;
 use std::mem;
 use std::panic;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -21,6 +22,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::recovery::RecordSlot;
 use crate::session::{NotReplaceable, Replaced, Report, Run, SessionManager, StartFailure};
+use crate::watchdog::{self, Beat, Fault};
 
 use bypass_routes::{BypassRoutes, Job};
 
@@ -59,6 +61,8 @@ pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'stati
 }
 
 pub fn report_panics(fault: impl Fn(&str) + Send + Sync + 'static) {
+    let fault: Fault = Arc::new(fault);
+    watchdog::report_to(Arc::clone(&fault));
     let default = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let thread = thread::current();
@@ -101,9 +105,11 @@ impl OsSide {
 
 fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
     let (left, unreverted) = clean_up(&sessions, &os, &events);
+    let beat = sessions.watch("entry".to_owned());
     os.send(&FromEntry::Ready {});
     Entry {
         sessions,
+        beat,
         os,
         events,
         sender,
@@ -207,6 +213,7 @@ fn clean_up(
 
 struct Entry {
     sessions: SessionManager,
+    beat: Beat,
     os: OsSide,
     events: Receiver<Event>,
     /// For the run's reports.
@@ -254,16 +261,17 @@ impl Lifecycle {
 impl Entry {
     fn run(mut self) -> ! {
         loop {
-            let event = match self.lifecycle.deadline() {
-                None => Some(self.events.recv().expect("the entry holds a sender")),
-                Some(deadline) => match self
-                    .events
-                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                {
-                    Ok(event) => Some(event),
-                    Err(RecvTimeoutError::Timeout) => None,
-                    Err(RecvTimeoutError::Disconnected) => unreachable!("the entry holds a sender"),
-                },
+            self.beat.beat();
+            let period = self.beat.period();
+            let wait = self.lifecycle.deadline().map_or(period, |deadline| {
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(period)
+            });
+            let event = match self.events.recv_timeout(wait) {
+                Ok(event) => Some(event),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => unreachable!("the entry holds a sender"),
             };
             if let Some(event) = event {
                 self.handle(event);

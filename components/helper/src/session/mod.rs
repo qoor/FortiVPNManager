@@ -29,6 +29,7 @@ pub use run::{NotReplaceable, Replaced, Run};
 use crate::recovery::run_directory::{self, RunFiles};
 use crate::recovery::{self, Failure, RecordSlot};
 use crate::secrets::SecretStore;
+use crate::watchdog::{Beat, Watchdog};
 use backend::Backend;
 
 /// The VPN client the Helper runs, the store for its session secrets, and its runs' files in a
@@ -38,6 +39,7 @@ pub struct SessionManager {
     secrets: Arc<dyn SecretStore>,
     run_directory: PathBuf,
     timing: Timing,
+    watchdog: Watchdog,
 }
 
 impl SessionManager {
@@ -53,11 +55,16 @@ impl SessionManager {
             secrets,
             run_directory,
             timing,
+            watchdog: Watchdog::start(timing.beat, timing.stalled_after, timing.resume_gap),
         }
     }
 
     pub fn version(&self) -> &str {
         self.backend.version()
+    }
+
+    pub(crate) fn watch(&self, name: String) -> Beat {
+        self.watchdog.watch(name)
     }
 
     /// Starts a run for `request`, which the backend checks again, since the Helper does not trust
@@ -82,6 +89,7 @@ impl SessionManager {
             RunFiles::new(&self.run_directory, slot),
             replaced,
             start_after,
+            &self.watchdog,
             self.timing,
             on_report,
         ))
@@ -137,7 +145,7 @@ pub enum Report {
     Stuck,
 }
 
-/// The time values of a run. The defaults are the Helper's.
+/// The time values of a run and of the watchdog. The defaults are the Helper's.
 #[derive(Clone, Copy)]
 pub struct Timing {
     pub stages: StageLimits,
@@ -146,6 +154,9 @@ pub struct Timing {
     pub network_retry: Duration,
     pub detach_after: Duration,
     pub stuck_after: Duration,
+    pub beat: Duration,
+    pub stalled_after: Duration,
+    pub resume_gap: Duration,
 }
 
 impl Default for Timing {
@@ -156,6 +167,9 @@ impl Default for Timing {
             network_retry: Duration::from_secs(1),
             detach_after: Duration::from_secs(10),
             stuck_after: Duration::from_secs(30),
+            beat: Duration::from_secs(1),
+            stalled_after: Duration::from_secs(30),
+            resume_gap: Duration::from_secs(2),
         }
     }
 }

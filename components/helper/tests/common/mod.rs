@@ -52,6 +52,9 @@ pub fn timing() -> Timing {
         network_retry: RETRY,
         detach_after: Duration::from_secs(10),
         stuck_after: Duration::from_secs(30),
+        beat: Duration::from_secs(1),
+        stalled_after: Duration::from_secs(30),
+        resume_gap: Duration::from_secs(2),
     }
 }
 
