@@ -11,7 +11,7 @@ An app that keeps a FortiGate SSL VPN connected by reconnecting automatically.
 - **Minimal setup**: Automatic reconnection with only the VPN server details, the OTP details, and the Helper setup
 - **Schedules**: Automatic reconnection scheduled by time ranges for each day of the week
 - **Fast connection**: Fast reconnection and automatic OTP entry keep the impact on your traffic to a minimum
-- **VPN backends**: OpenConnect and openfortivpn
+- **VPN backend**: OpenConnect, built into the Helper
 
 ## What it does
 
@@ -45,6 +45,8 @@ Without the file, import the JSON in Settings, or use the app password (IMAP) me
 - macOS 15 or later, Apple Silicon
 - Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Rust (install with [rustup](https://rustup.rs))
+- Build tools for the OpenConnect library: autoconf, automake, libtool, pkgconf
+  - Installed with Homebrew
 - An **Apple Development** signing certificate created with a free Apple ID (no paid developer account required)
 
 ### One-time setup
@@ -53,8 +55,9 @@ Without the file, import the JSON in Settings, or use the app password (IMAP) me
 sudo xcode-select -s /Applications/Xcode.app
 sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
-brew install xcodegen
+brew install xcodegen autoconf automake libtool pkgconf
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git submodule update --init third_party/openconnect
 ```
 
 1. Add your Apple ID in Xcode > Settings > Accounts.
@@ -73,6 +76,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make pkg` | Installer package (`.build/FortiVPNManager-<version>.pkg`) from a Release build |
 | `make logs` | Live app and Helper logs |
 
+- **OpenConnect library**: built automatically on the first build.
+  - It downloads the sources of OpenSSL and the other libraries it needs.
+  - The result is kept in `~/.cache/fvm-openconnect` and reused by later builds.
 - **Install**: run the pkg from a GitHub Release. The pkg is unsigned, so macOS blocks it at first; click "Open Anyway" in System Settings > Privacy & Security, then install.
 - **Helper**: registered only from an app installed in `/Applications`; approve it on first launch in System Settings > General > Login Items & Extensions
 
@@ -83,7 +89,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | Settings | `~/.config/FortiVPNManager/config.yaml` |
 | Passwords, Google sign-in tokens | Login Keychain |
 | App state (failure counts, etc.) | `~/Library/Application Support/FortiVPNManager/state.json` |
-| Raw VPN client log | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
+| VPN log | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
 
 ## Windows
 
@@ -93,13 +99,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 - Rust (install with [rustup](https://rustup.rs))
 - .NET 10 SDK
 - The **Desktop development with C++** workload of Visual Studio Build Tools
+- The OpenConnect library zip, built on a Mac
+  - Needs the macOS build tools and Homebrew mingw-w64
 
 ### Build and install
 
 | Command | What it does |
 |---|---|
-| `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output |
-| `scripts/msi-windows.sh <folder>` | Rust built on a Mac, installer made on a Windows PC (over ssh) |
+| `packaging/openconnect/build.sh windows` | OpenConnect library zip, made on a Mac |
+| `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder> -OpenConnect <zip>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output and the OpenConnect library zip |
+| `scripts/msi-windows.sh <folder>` | Rust and the OpenConnect library built on a Mac, installer made on a Windows PC (over ssh) |
 
 - **Install**: run the MSI from a GitHub Release or your own build
 
@@ -110,12 +119,15 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | Settings | `%USERPROFILE%\.config\FortiVPNManager\config.yaml` |
 | Passwords, Google sign-in tokens | Credential Manager |
 | App state (failure counts, etc.) | `%LOCALAPPDATA%\FortiVPNManager\state.json` |
-| Raw VPN client log | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
+| VPN log | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
 
 ## Architecture
 
 - **Shared logic**: Rust
 - **macOS**: UI, OS integration, Helper OS area (Swift)
 - **Windows**: UI, OS integration (C#, WinUI 3), Helper OS area (Rust, a Windows service)
+- **VPN**: the OpenConnect library inside the Helper
+  - macOS: part of the Helper
+  - Windows: DLLs next to the Helper
 
 For the components and their roles, see [Specification §1](docs/SPEC.md#1-시스템-구성) (Korean).

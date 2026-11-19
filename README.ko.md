@@ -11,7 +11,7 @@ FortiGate SSL VPN 자동 재접속 관리 앱입니다.
 - **최소 설정**: VPN 서버 정보, OTP 인증 정보, Helper 구성만으로 자동 재연결 동작
 - **스케줄 관리**: 요일별 시간대로 자동 재연결 스케줄 관리
 - **고속 연결**: 빠른 재연결과 OTP 자동 인증으로 통신 영향 최소화
-- **VPN 백엔드**: OpenConnect, openfortivpn 지원
+- **VPN 백엔드**: Helper에 내장된 OpenConnect
 
 ## 주요 기능
 
@@ -45,6 +45,8 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 - macOS 15 이상, Apple Silicon
 - Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
 - Rust ([rustup](https://rustup.rs)으로 설치)
+- OpenConnect 라이브러리 빌드 도구: autoconf, automake, libtool, pkgconf
+  - Homebrew로 설치
 - 무료 Apple ID로 만든 **Apple Development** 서명 인증서 (유료 개발자 계정 불필요)
 
 ### 처음 한 번 준비
@@ -53,8 +55,9 @@ Gmail API 방식 OTP 인증에 쓰는 Google Cloud **데스크톱 앱 OAuth 클�
 sudo xcode-select -s /Applications/Xcode.app
 sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
-brew install xcodegen
+brew install xcodegen autoconf automake libtool pkgconf
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git submodule update --init third_party/openconnect
 ```
 
 1. Xcode > Settings > Accounts에서 Apple ID를 추가합니다.
@@ -73,6 +76,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | `make pkg` | Release 빌드로 설치 패키지(`.build/FortiVPNManager-<버전>.pkg`) 생성 |
 | `make logs` | 앱·Helper 로그 실시간 보기 |
 
+- **OpenConnect 라이브러리**: 첫 빌드 때 자동으로 빌드합니다.
+  - OpenSSL 등 의존 라이브러리 소스를 인터넷에서 내려받습니다.
+  - 결과는 `~/.cache/fvm-openconnect`에 보관하고 다음 빌드부터 다시 씁니다.
 - **설치**: GitHub Release의 pkg 실행. 서명하지 않은 pkg라 처음에는 macOS가 막으므로, 시스템 설정 > 개인정보 보호 및 보안에서 "그래도 열기"를 누른 뒤 설치합니다.
 - **Helper**: `/Applications`에 설치된 앱에서만 등록, 첫 실행 시 시스템 설정 > 일반 > 로그인 항목 및 확장 프로그램에서 승인 필요
 
@@ -83,7 +89,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | 설정 | `~/.config/FortiVPNManager/config.yaml` |
 | 비밀번호, Google 로그인 토큰 | 로그인 Keychain |
 | 앱 상태 (실패 횟수 등) | `~/Library/Application Support/FortiVPNManager/state.json` |
-| VPN client 원본 로그 | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
+| VPN 로그 | `~/Library/Logs/FortiVPNManager/vpn_backend.log` |
 
 ## Windows
 
@@ -93,13 +99,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 - Rust ([rustup](https://rustup.rs)으로 설치)
 - .NET 10 SDK
 - Visual Studio Build Tools의 **C++를 사용한 데스크톱 개발** 워크로드
+- OpenConnect 라이브러리 zip: Mac에서 빌드
+  - macOS 요구 사항의 도구와 Homebrew mingw-w64 필요
 
 ### 빌드와 설치
 
 | 명령 | 내용 |
 |---|---|
-| `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더>` | 미리 빌드한 Rust 결과물로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
-| `scripts/msi-windows.sh <폴더>` | Mac에서 Rust를 빌드하고 Windows PC(ssh)에서 설치 패키지 생성 |
+| `packaging/openconnect/build.sh windows` | Mac에서 OpenConnect 라이브러리 zip 생성 |
+| `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더> -OpenConnect <zip>` | 미리 빌드한 Rust 결과물과 OpenConnect 라이브러리 zip으로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
+| `scripts/msi-windows.sh <폴더>` | Mac에서 Rust와 OpenConnect 라이브러리를 빌드하고 Windows PC(ssh)에서 설치 패키지 생성 |
 
 - **설치**: GitHub Release 또는 직접 생성한 MSI 실행
 
@@ -110,12 +119,15 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 | 설정 | `%USERPROFILE%\.config\FortiVPNManager\config.yaml` |
 | 비밀번호, Google 로그인 토큰 | Credential Manager |
 | 앱 상태 (실패 횟수 등) | `%LOCALAPPDATA%\FortiVPNManager\state.json` |
-| VPN client 원본 로그 | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
+| VPN 로그 | `%LOCALAPPDATA%\FortiVPNManager\Logs\vpn_backend.log` |
 
 ## 구조
 
 - **공통 로직**: Rust
 - **macOS**: UI, OS 연동, Helper OS 영역 (Swift)
 - **Windows**: UI, OS 연동 (C#, WinUI 3), Helper OS 영역 (Rust, Windows 서비스)
+- **VPN**: Helper 안의 OpenConnect 라이브러리
+  - macOS: Helper에 포함
+  - Windows: Helper 옆 DLL
 
 구성 요소와 역할은 [기능 명세 §1](docs/SPEC.md#1-시스템-구성)을 보세요.

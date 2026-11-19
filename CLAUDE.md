@@ -15,7 +15,7 @@
 - 최소 설정: VPN 서버 정보, OTP 인증 정보, Helper 구성만으로 자동 재연결
 - 스케줄 관리: 요일별 시간대로 자동 재연결 관리
 - 고속 연결: 빠른 재연결과 OTP 자동 인증으로 통신 영향 최소화
-- VPN 백엔드: OpenConnect, openfortivpn 지원
+- VPN 백엔드: Helper에 내장된 OpenConnect 라이브러리
 
 # 작업 진행
 
