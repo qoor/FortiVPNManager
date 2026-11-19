@@ -44,10 +44,10 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::System::Threading::{
     CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
-    LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION,
-    STARTF_USESTDHANDLES, STARTUPINFOEXW, TerminateProcess, UpdateProcThreadAttribute,
-    WaitForSingleObject,
+    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess, INFINITE,
+    InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
+    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    TerminateProcess, UpdateProcThreadAttribute, WaitForSingleObject,
 };
 use windows_sys::core::GUID;
 
@@ -844,6 +844,12 @@ fn environment_block(environment: &[(&str, OsString)]) -> Vec<u16> {
     }
     block.push(0);
     block
+}
+
+pub fn terminate_this_process(exit_code: u32) -> ! {
+    // SAFETY: The call takes no pointers, and the pseudo handle stands for this process.
+    unsafe { TerminateProcess(GetCurrentProcess(), exit_code) };
+    unreachable!("TerminateProcess does not return when a process terminates itself")
 }
 
 pub fn keep_library_loaded(name: &str) -> Result<(), Error> {

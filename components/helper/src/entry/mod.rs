@@ -77,7 +77,22 @@ pub fn report_panics(fault: impl Fn(&str) + Send + Sync + 'static) {
         }
         fault(&line);
         default(info);
+        #[cfg(windows)]
+        end_for_restart();
     }));
+}
+
+#[cfg(windows)]
+pub const RESTART_EXIT_CODE: u32 = 4;
+
+#[cfg(unix)]
+pub fn end_for_restart() -> ! {
+    std::process::abort()
+}
+
+#[cfg(windows)]
+pub fn end_for_restart() -> ! {
+    fvm_common::os_api::terminate_this_process(RESTART_EXIT_CODE)
 }
 
 enum Event {
@@ -839,45 +854,61 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message() {
+    fn panicking_child_output(test: &str) -> String {
         let child = Command::new(env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "entry::tests::panic_on_named_threads",
-                "--ignored",
-            ])
+            .args(["--exact", test, "--ignored"])
             .output()
             .unwrap();
         let stdout = String::from_utf8(child.stdout).unwrap();
-        assert!(child.status.success(), "{stdout}");
+        #[cfg(unix)]
+        assert!(child.status.success(), "{} {stdout}", child.status);
+        #[cfg(windows)]
+        assert_eq!(
+            child.status.code(),
+            Some(RESTART_EXIT_CODE.cast_signed()),
+            "{stdout}"
+        );
+        stdout
+    }
+
+    #[test]
+    fn a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message() {
+        let stdout = panicking_child_output("entry::tests::panic_with_a_literal");
         let literal = after_file(&stdout, "fvm-literal");
         let (site, message) = literal
             .split_once(": ")
             .unwrap_or_else(|| panic!("{literal}"));
         assert_row_and_column(site);
         assert_eq!(message, "on purpose");
+        let stdout = panicking_child_output("entry::tests::panic_with_a_formatted_message");
         assert_row_and_column(after_file(&stdout, "fvm-formatted"));
     }
 
-    #[test]
-    #[ignore = "the panicking child of a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message"]
-    fn panic_on_named_threads() {
+    fn panic_on_a_named_thread(name: &str, panicking: fn()) {
         report_panics(|line| {
             io::stdout()
                 .write_all(format!("{line}\n").as_bytes())
                 .unwrap();
         });
-        let literal = thread::Builder::new()
-            .name("fvm-literal".into())
-            .spawn(|| panic!("on purpose"))
+        let panicked = thread::Builder::new()
+            .name(name.into())
+            .spawn(panicking)
             .unwrap()
             .join();
-        let formatted = thread::Builder::new()
-            .name("fvm-formatted".into())
-            .spawn(|| panic!("on purpose with {}", String::from("secret")))
-            .unwrap()
-            .join();
-        assert!(literal.is_err() && formatted.is_err());
+        assert!(panicked.is_err());
+    }
+
+    #[test]
+    #[ignore = "a panicking child of a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message"]
+    fn panic_with_a_literal() {
+        panic_on_a_named_thread("fvm-literal", || panic!("on purpose"));
+    }
+
+    #[test]
+    #[ignore = "a panicking child of a_panic_is_reported_with_its_thread_and_location_and_only_a_literal_message"]
+    fn panic_with_a_formatted_message() {
+        panic_on_a_named_thread("fvm-formatted", || {
+            panic!("on purpose with {}", String::from("secret"))
+        });
     }
 }

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use std::process;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use crate::entry;
 
 const LOCK: &str = "the watched loops are never held across a panic";
 
@@ -129,7 +130,7 @@ fn monitor(
         .get()
         .expect("report_panics set the fault channel before the Helper started");
     fault(&stalled);
-    process::abort();
+    entry::end_for_restart();
 }
 
 #[cfg(test)]
@@ -150,7 +151,7 @@ mod tests {
 
     #[cfg(windows)]
     fn aborted(status: ExitStatus) -> bool {
-        status.code() == Some(0xC000_0409_u32.cast_signed())
+        status.code() == Some(entry::RESTART_EXIT_CODE.cast_signed())
     }
 
     #[test]

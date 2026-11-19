@@ -25,6 +25,7 @@ use fake::{FakeBackend, FakeSecrets, VERSION};
 use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus};
 use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
+use fvm_helper_core::entry::{RESTART_EXIT_CODE, end_for_restart};
 use fvm_helper_core::session::{SessionManager, Timing};
 use fvm_helper_windows::{BUILD, Exit, Helper, Options};
 use interprocess::os::windows::named_pipe::{
@@ -302,7 +303,7 @@ fn a_message_written_before_the_writer_aborts_still_reaches_the_reader() {
     let status = writer.wait().unwrap();
     assert_eq!(
         status.code(),
-        Some(0xC000_0409_u32.cast_signed()),
+        Some(RESTART_EXIT_CODE.cast_signed()),
         "{status}"
     );
     let message: Value = stream::receive(&mut &connection).unwrap();
@@ -329,5 +330,5 @@ fn write_then_abort() {
     )
     .unwrap();
     (&connection).write_all(&frame).unwrap();
-    process::abort();
+    end_for_restart();
 }

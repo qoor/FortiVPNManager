@@ -560,7 +560,7 @@ fn aborted(status: ExitStatus) -> bool {
 
 #[cfg(windows)]
 fn aborted(status: ExitStatus) -> bool {
-    status.code() == Some(0xC000_0409_u32.cast_signed())
+    status.code() == Some(entry::RESTART_EXIT_CODE.cast_signed())
 }
 
 fn fault_lines(stdout: &str) -> Vec<&str> {

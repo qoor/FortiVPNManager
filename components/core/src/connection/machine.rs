@@ -2087,7 +2087,7 @@ impl ConnectionManager {
     }
 
     /// Reconnects at once through the gates of any retry, but once only until a tunnel comes up
-    /// again: the Helper aborts on internal faults, and one that crashed on every run would
+    /// again: the Helper ends itself on internal faults, and one that did so on every run would
     /// otherwise repeat VPN logins and OTP emails without end.
     fn forced_termination(&mut self) {
         if self.forced_retry_used {
