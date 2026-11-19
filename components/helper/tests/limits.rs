@@ -256,7 +256,6 @@ fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_del
     let detach_after = Duration::from_millis(100);
     let mut setup = Setup::default();
     setup.timing.detach_after = detach_after;
-    setup.timing.stuck_after = detach_after * 2;
     let release = setup.secrets.hold_deletes();
     let commands = Arc::new(Mutex::new(Vec::new()));
     let script = script({
@@ -358,6 +357,57 @@ fn a_session_still_running_after_its_cancel_is_reported_stuck_after_its_lines() 
     session.wait_for_exit();
     assert_eq!(stuck(&session), 1);
     session.assert_finished_cleanly();
+}
+
+#[test]
+fn a_returned_session_whose_secret_is_not_deleted_in_time_is_reported_stuck_after_its_lines() {
+    let stuck_after = Duration::from_millis(300);
+    let mut setup = Setup::default();
+    setup.timing.stuck_after = stuck_after;
+    let release = setup.secrets.hold_deletes();
+    let started = Instant::now();
+    let mut session = Session::start(opened_then_returned(), setup);
+    let stuck = |session: &Session| {
+        session
+            .delivered
+            .iter()
+            .filter(|delivered| matches!(delivered, Delivered::Stuck))
+            .count()
+    };
+    assert!(
+        session.wait(Duration::from_secs(5), |session| stuck(session) == 1),
+        "{:?}",
+        session.texts()
+    );
+    let waited = started.elapsed();
+    assert!(waited >= stuck_after, "{waited:?}");
+    assert!(!session.run.session_running());
+    assert_eq!(session.end_facts(), None);
+    let line = "‹saving and deleting the session secret did not finish within 0.3s after the session ended: restarting the Helper›";
+    let log = format!(
+        "0277070470 run {ATTEMPT}: saving and deleting the session secret did not finish within 0.3s after the session ended; aborting so the OS restarts the Helper"
+    );
+    let delivered = &session.delivered;
+    let shown = delivered.iter().position(|delivered| {
+        matches!(delivered, Delivered::Output(lines) if lines.iter().any(|shown| shown.text == line))
+    });
+    let logged = delivered.iter().position(|delivered| {
+        matches!(
+            delivered,
+            Delivered::Log(LogLevel::Error, LogCategory::Helper, message) if *message == log
+        )
+    });
+    let reported = delivered
+        .iter()
+        .position(|delivered| matches!(delivered, Delivered::Stuck));
+    assert!(
+        matches!((shown, logged, reported), (Some(shown), Some(logged), Some(reported)) if shown < logged && logged < reported),
+        "{delivered:?}"
+    );
+    release.send(()).unwrap();
+    session.wait_for_exit();
+    assert_eq!(stuck(&session), 1);
+    assert_ended_by_the_client(&session);
 }
 
 #[test]

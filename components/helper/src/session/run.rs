@@ -597,12 +597,17 @@ impl<R: FnMut(Report)> Watch<R> {
 
     fn stuck(&mut self) {
         let limit = seconds(self.timing.stuck_after);
-        self.meta(format!(
-            "‹session did not end within {limit} after the cancel: restarting the Helper›"
-        ));
+        let what = if self.running() {
+            format!("session did not end within {limit} after the cancel")
+        } else {
+            format!(
+                "saving and deleting the session secret did not finish within {limit} after the session ended"
+            )
+        };
+        self.meta(format!("‹{what}: restarting the Helper›"));
         self.flush_batch();
         let message = format!(
-            "{}: session did not end within {limit} after the cancel; aborting so the OS restarts the Helper",
+            "{}: {what}; aborting so the OS restarts the Helper",
             self.name
         );
         self.log(LogLevel::Error, LogCategory::Helper, message);
@@ -618,7 +623,7 @@ impl<R: FnMut(Report)> Watch<R> {
         self.returned.store(true, Ordering::Relaxed);
         self.stage = None;
         self.detach_at = None;
-        self.stuck_at = None;
+        self.stuck_at = Some(Instant::now() + self.timing.stuck_after);
         self.network.stop_watching();
     }
 
@@ -626,6 +631,7 @@ impl<R: FnMut(Report)> Watch<R> {
         let Phase::Returned(end) = mem::replace(&mut self.phase, Phase::Reported) else {
             unreachable!("a session ends once, after it returned")
         };
+        self.stuck_at = None;
         for failure in ended.failures {
             let message = format!("{}: {failure}", self.name);
             self.log(LogLevel::Error, LogCategory::Helper, message);
