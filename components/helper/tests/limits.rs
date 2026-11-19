@@ -252,10 +252,11 @@ fn a_session_that_outlasts_its_cancel_is_detached_once() {
 }
 
 #[test]
-fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_deleted() {
-    let detach_after = Duration::from_millis(100);
+fn a_session_that_returned_is_neither_detached_nor_stuck_at_its_cancel_deadlines_while_its_secret_is_deleted()
+ {
     let mut setup = Setup::default();
-    setup.timing.detach_after = detach_after;
+    setup.timing.detach_after = Duration::from_secs(1);
+    setup.timing.stuck_after = Duration::from_secs(1);
     let release = setup.secrets.hold_deletes();
     let commands = Arc::new(Mutex::new(Vec::new()));
     let script = script({
@@ -269,16 +270,25 @@ fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_del
                 let _ = written.send(());
             }));
             wait.recv().unwrap();
+            thread::sleep(Duration::from_millis(700));
             ended(-EINTR)
         }
     });
     let mut session = Session::start(script, setup);
     session.wait_for(Milestone::Authenticated);
+    let stopped = Instant::now();
     session.run.stop(StopReason::UserDisconnect);
     assert!(session.wait(Duration::from_secs(5), |session| {
         !session.run.session_running()
     }));
-    session.settle(detach_after * 5);
+    session.settle(Duration::from_millis(1300).saturating_sub(stopped.elapsed()));
+    let stuck = |session: &Session| {
+        session
+            .delivered
+            .iter()
+            .any(|delivered| matches!(delivered, Delivered::Stuck))
+    };
+    assert!(!stuck(&session), "{:?}", session.texts());
     assert_eq!(session.end_facts(), None);
     release.send(()).unwrap();
     session.wait_for_exit();
@@ -289,12 +299,7 @@ fn a_session_that_returned_is_neither_detached_nor_stuck_while_its_secret_is_del
         "{:?}",
         session.texts()
     );
-    assert!(
-        !session
-            .delivered
-            .iter()
-            .any(|delivered| matches!(delivered, Delivered::Stuck))
-    );
+    assert!(!stuck(&session));
     session.assert_finished_cleanly();
 }
 
