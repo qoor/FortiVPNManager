@@ -32,4 +32,8 @@
         <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
         <Setter Property="Padding" Value="4" />
     </Style>
+    <Style x:Key="UpdateCardStyle" TargetType="Border" BasedOn="{StaticResource ListCardStyle}">
+        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+        <Setter Property="Padding" Value="16,14,16,14" />
+    </Style>
 </ResourceDictionary>

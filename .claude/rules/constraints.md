@@ -62,6 +62,11 @@ paths:
   - 어댑터 끄면 제외, 다시 켜면 자동 복귀
   - VPN 정상 종료·강제 종료 뒤에도 유지
 
+# Windows UI
+- NativeAOT 빌드: 코드에서 테마 리소스 CornerRadius 형 변환 시 InvalidCastException
+  - 다른 값 형식 리소스(Thickness, double 등)의 같은 문제 여부 미확인
+  - 대안: XAML Style·ThemeResource로 지정
+
 # Windows 서비스·설치
 - 서비스 시작 기한: 서비스 프로세스의 서비스 관리자 연결 기본 30초
   - 기한 초과 시 서비스 시작 실패

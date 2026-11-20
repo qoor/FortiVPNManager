@@ -26,13 +26,13 @@ internal sealed class UpdatePane : IPane
     private readonly Button updateNow = new() { Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
     private readonly Button restart = new() { Content = L("Restart app"), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
     private readonly InfoBar failure = Cards.Notice(InfoBarSeverity.Error);
-    private readonly Border item = new() { Style = (Style)Application.Current.Resources["ListCardStyle"], Padding = new Thickness(16, 14, 16, 14), CornerRadius = (CornerRadius)Application.Current.Resources["ControlCornerRadius"] };
+    private readonly Border item = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
     private readonly TextBlock itemName = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock itemStatus = new() { Foreground = Cards.Brush("TextFillColorSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center };
     private readonly Button cancel = new() { Content = L("Cancel") };
     private readonly ProgressBar bar = new() { Maximum = 100 };
     private readonly TextBlock details = new() { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Cards.Brush("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap };
-    private readonly Border notes = new() { Style = (Style)Application.Current.Resources["ListCardStyle"], Padding = new Thickness(16, 14, 16, 14), CornerRadius = (CornerRadius)Application.Current.Resources["ControlCornerRadius"] };
+    private readonly Border notes = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
     private readonly StackPanel whatsNew = new() { Spacing = 4 };
     private readonly StackPanel noteTitles = new() { Spacing = 4 };
     private readonly HyperlinkButton releasePage = new() { Content = L("View on GitHub"), Padding = new Thickness(0), Margin = new Thickness(0, 6, 0, 0) };
