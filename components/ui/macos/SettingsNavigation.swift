@@ -7,25 +7,28 @@ import Observation
 @Observable
 final class SettingsNavigation {
     /// Reopens on the last pane shown, as System Settings does.
-    private(set) var pane = UserDefaults.standard.string(forKey: lastPaneKey).flatMap(SettingsPane.init(rawValue:)) ?? .general {
+    private(set) var page = SettingsPage.pane(
+        UserDefaults.standard.string(forKey: lastPaneKey).flatMap(SettingsPane.init(rawValue:)) ?? .general
+    ) {
         willSet {
-            onPaneWillChange?()
+            onPageWillChange?()
         }
         didSet {
-            UserDefaults.standard.set(pane.rawValue, forKey: Self.lastPaneKey)
-            onPaneChange?(pane)
+            UserDefaults.standard.set(page.pane.rawValue, forKey: Self.lastPaneKey)
+            onPageChange?(page)
         }
     }
-    /// The window's title follows the pane.
-    @ObservationIgnored var onPaneChange: ((SettingsPane) -> Void)?
-    /// Ends the typing in the pane being left, so it is kept as when the field loses focus: its views
-    /// go with the pane.
-    @ObservationIgnored var onPaneWillChange: (() -> Void)?
+    /// The window's title follows the page.
+    @ObservationIgnored var onPageChange: ((SettingsPage) -> Void)?
+    /// Ends the typing in the page being left, so it is kept as when the field loses focus: its views
+    /// go with the page.
+    @ObservationIgnored var onPageWillChange: (() -> Void)?
+    var isWindowOpen = false
     /// Whether the rows of settings shown only in some states are shown now; the search lists only
     /// the settings it can go to.
     @ObservationIgnored var isShown: (SettingsSearch.Condition) -> Bool = { _ in true }
-    private(set) var backHistory: [SettingsPane] = []
-    private(set) var forwardHistory: [SettingsPane] = []
+    private(set) var backHistory: [SettingsPage] = []
+    private(set) var forwardHistory: [SettingsPage] = []
 
     var searchText = ""
     /// The result last chosen in the sidebar; the sidebar marks it while it is listed.
@@ -49,29 +52,42 @@ final class SettingsNavigation {
 
     // MARK: - Panes
 
-    /// Goes to `pane`, after which Back returns to the one shown now.
+    var pane: SettingsPane {
+        page.pane
+    }
+
+    /// Goes to `pane`, after which Back returns to the page shown now.
     func select(_ pane: SettingsPane) {
         chosenResult = nil
         // Picking a pane while searching opens the groups its results are in.
         results(in: pane).forEach(reveal(groupOf:))
-        guard pane != self.pane else { return }
-        backHistory.append(self.pane)
-        forwardHistory.removeAll()
-        self.pane = pane
+        go(to: .pane(pane))
+    }
+
+    func showSoftwareUpdate() {
+        chosenResult = nil
+        go(to: .softwareUpdate)
     }
 
     func goBack() {
         guard let previous = backHistory.popLast() else { return }
         chosenResult = nil
-        forwardHistory.append(pane)
-        pane = previous
+        forwardHistory.append(page)
+        page = previous
     }
 
     func goForward() {
         guard let next = forwardHistory.popLast() else { return }
         chosenResult = nil
-        backHistory.append(pane)
-        pane = next
+        backHistory.append(page)
+        page = next
+    }
+
+    private func go(to page: SettingsPage) {
+        guard page != self.page else { return }
+        backHistory.append(self.page)
+        forwardHistory.removeAll()
+        self.page = page
     }
 
     // MARK: - Search
@@ -205,6 +221,7 @@ enum SettingsSearch {
                 item(pane, "Open at login"),
                 item(pane, "Connect automatically at launch"),
                 item(pane, "Import openfortivpn Settings…", row: importRow),
+                item(pane, "Software Update"),
             ]
         case .account:
             [

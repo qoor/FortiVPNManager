@@ -123,6 +123,17 @@
   {
     "portAction": {
       "_0": {
+        "log": {
+          "category": "update",
+          "level": "notice",
+          "message": "update available: 26.2.0"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
         "postNotification": {
           "notification": {
             "exceptionRulesNotApplied": {
@@ -130,6 +141,19 @@
                 "routesNotKept": {}
               },
               "retries": 3
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "postNotification": {
+          "notification": {
+            "updateAvailable": {
+              "version": "26.2.0"
             }
           }
         }
@@ -149,6 +173,22 @@
     "portAction": {
       "_0": {
         "openHelperApprovalSettings": {}
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "releaseUpdateWaiter": {
+          "installerProcessId": 4294967295
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "stopUpdateWaiter": {}
       }
     }
   },

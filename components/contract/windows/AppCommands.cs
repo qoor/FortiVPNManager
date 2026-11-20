@@ -53,6 +53,19 @@ public static partial class AppInternal
         public sealed record AddCurrentNetwork : Command;
         public sealed record DiscardBypassChanges : Command;
         public sealed record ApplyBypassRules : Command;
+
+        public sealed record CheckForUpdates : Command;
+
+        /// <summary>The Software Update section came into view.</summary>
+        public sealed record UpdatePageOpened : Command;
+
+        public sealed record UpdateNow : Command;
+
+        /// <summary>The update notification's button.</summary>
+        public sealed record UpdateNowFromNotification : Command;
+
+        public sealed record CancelUpdateDownload : Command;
+        public sealed record RestartToUpdate : Command;
     }
 
     /// <summary>An empty password field keeps the stored password.</summary>

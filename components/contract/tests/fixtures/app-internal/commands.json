@@ -367,5 +367,47 @@
         "applyBypassRules": {}
       }
     }
+  },
+  {
+    "command": {
+      "_0": {
+        "checkForUpdates": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "updatePageOpened": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "updateNow": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "updateNowFromNotification": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "cancelUpdateDownload": {}
+      }
+    }
+  },
+  {
+    "command": {
+      "_0": {
+        "restartToUpdate": {}
+      }
+    }
   }
 ]

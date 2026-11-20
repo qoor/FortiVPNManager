@@ -93,6 +93,49 @@ public class HelperRelayTests
         Assert.Equal(1, harness.Opened);
     }
 
+    private static readonly (HelperCall Call, Type Request)[] UpdateCalls =
+    [
+        (new HelperCall.PrepareUpdate("{}"), typeof(HelperPipe.Request.PrepareUpdate)),
+        (new HelperCall.InstallUpdate("{}"), typeof(HelperPipe.Request.InstallUpdate)),
+        (new HelperCall.ReadPreparedUpdate(), typeof(HelperPipe.Request.ReadPreparedUpdate)),
+        (new HelperCall.DiscardPreparedUpdate(), typeof(HelperPipe.Request.DiscardPreparedUpdate)),
+    ];
+
+    [Fact]
+    public async Task AnUpdateCallChecksTheBuildAndPassesTheReplyOnUnread()
+    {
+        foreach (var (call, request) in UpdateCalls)
+        {
+            var helper = new FakeHelper(AppBuild);
+            var harness = new Harness(helper);
+            Assert.Equal(new PortResponse.HelperReply(FakeHelper.UpdateReply), await harness.Call(call));
+            Assert.Equal([typeof(HelperPipe.Request.Build), request], helper.Received.Select(sent => sent.GetType()));
+        }
+    }
+
+    [Fact]
+    public async Task AHelperOfAnotherBuildGetsNoUpdateCall()
+    {
+        foreach (var (call, _) in UpdateCalls)
+        {
+            var helper = new FakeHelper("another build");
+            var harness = new Harness(helper);
+            Assert.Equal(new PortResponse.HelperBuildMismatch("another build"), await harness.Call(call));
+            Assert.Equal([typeof(HelperPipe.Request.Build)], helper.Received.Select(sent => sent.GetType()));
+        }
+    }
+
+    [Fact]
+    public async Task AnUpdateCallIsNeverRepeated()
+    {
+        foreach (var (call, _) in UpdateCalls)
+        {
+            var harness = new Harness(new FakeHelper(AppBuild, failing: true), new FakeHelper(AppBuild));
+            Assert.Equal(new PortResponse.HelperUnreachable(new HelperChannelFailure.ConnectionLost()), await harness.Call(call));
+            Assert.Equal(1, harness.Opened);
+        }
+    }
+
     [Fact]
     public async Task ExitWhenIdleDropsTheConnectionAfterTheReply()
     {
@@ -169,6 +212,8 @@ public class HelperRelayTests
     /// <summary>Answers like a Helper of <paramref name="build"/>, or fails every call like a Helper that stopped.</summary>
     private sealed class FakeHelper(string build, bool failing = false) : IHelperChannel
     {
+        public const string UpdateReply = "{\"done\":{}}";
+
         private ulong lastRequest;
 
         public List<HelperPipe.Request> Received { get; } = [];
@@ -191,6 +236,10 @@ public class HelperRelayTests
                 HelperPipe.Request.ExitWhenIdle exit => new HelperPipe.Message.ReplyFlag(exit.Id, false),
                 HelperPipe.Request.Status status => new HelperPipe.Message.Reply(status.Id, "{}"),
                 HelperPipe.Request.Connect connect => new HelperPipe.Message.Reply(connect.Id),
+                HelperPipe.Request.PrepareUpdate prepare => new HelperPipe.Message.Reply(prepare.Id, UpdateReply),
+                HelperPipe.Request.InstallUpdate install => new HelperPipe.Message.Reply(install.Id, UpdateReply),
+                HelperPipe.Request.ReadPreparedUpdate read => new HelperPipe.Message.Reply(read.Id, UpdateReply),
+                HelperPipe.Request.DiscardPreparedUpdate discard => new HelperPipe.Message.Reply(discard.Id, UpdateReply),
                 _ => throw new InvalidOperationException($"unexpected {sent}"),
             };
             return Task.FromResult(answer);

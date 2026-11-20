@@ -435,3 +435,174 @@ fn bypass_routes_replies() {
         include_str!("fixtures/app-helper/bypass_routes_reply_failure.json"),
     );
 }
+
+const INSTALL: u64 = 13_835_058_055_282_163_713;
+
+fn update_version() -> Version {
+    Version::parse("26.2.0").unwrap()
+}
+
+fn not_authorized() -> HelperError {
+    HelperError {
+        code: HelperErrorCode::NotAuthorized,
+        message: "the connection has not passed the build check".into(),
+    }
+}
+
+#[test]
+fn update_prepare_request() {
+    let folder = "/Users/alice/Library/Caches/FortiVPNManager/Update";
+    both_ways(
+        UpdatePrepareRequest {
+            installer_path: format!("{folder}/FortiVPNManager-26.2.0.pkg"),
+            checksums_path: format!("{folder}/SHA256SUMS.txt"),
+            signature_path: format!("{folder}/SHA256SUMS.txt.sig"),
+        },
+        include_str!("fixtures/app-helper/update_prepare_request.json"),
+    );
+}
+
+#[test]
+fn update_prepare_replies() {
+    use UpdateRefusal::*;
+    let refused = |reason, message: &str| UpdatePrepareReply::Refused {
+        reason,
+        message: message.into(),
+    };
+    let replies = [
+        UpdatePrepareReply::Prepared {
+            version: update_version(),
+        },
+        refused(SignatureInvalid, "SHA256SUMS.txt.sig does not verify"),
+        refused(
+            ChecksumMismatch,
+            "the installer does not match SHA256SUMS.txt",
+        ),
+        refused(VersionNotNewer, "26.1.0 is not newer than 26.1.0"),
+        refused(AlreadyInstalling, "an update is already being installed"),
+        refused(
+            FilesUnreadable,
+            "could not read the installer: No such file or directory",
+        ),
+        UpdatePrepareReply::Failure {
+            error: not_authorized(),
+        },
+    ];
+    both_ways(
+        replies,
+        include_str!("fixtures/app-helper/update_prepare_replies.json"),
+    );
+}
+
+#[test]
+fn update_install_request() {
+    both_ways(
+        UpdateInstallRequest {
+            install_id: INSTALL,
+        },
+        include_str!("fixtures/app-helper/update_install_request.json"),
+    );
+}
+
+#[test]
+fn update_install_replies() {
+    use UpdateRefusal::*;
+    let refused = |reason, message: &str| UpdateInstallReply::Refused {
+        reason,
+        message: message.into(),
+    };
+    let replies = [
+        UpdateInstallReply::Started {
+            installer_process_id: Some(4_294_967_295),
+        },
+        UpdateInstallReply::Started {
+            installer_process_id: None,
+        },
+        refused(NothingPrepared, "no update is prepared"),
+        refused(AlreadyInstalling, "an update is already being installed"),
+        UpdateInstallReply::Failure {
+            error: not_authorized(),
+        },
+    ];
+    both_ways(
+        replies,
+        include_str!("fixtures/app-helper/update_install_replies.json"),
+    );
+}
+
+#[test]
+fn prepared_update_replies() {
+    let replies = [
+        PreparedUpdateReply::Prepared {
+            version: update_version(),
+        },
+        PreparedUpdateReply::NotPrepared {},
+        PreparedUpdateReply::Failure {
+            error: not_authorized(),
+        },
+    ];
+    both_ways(
+        replies,
+        include_str!("fixtures/app-helper/prepared_update_replies.json"),
+    );
+}
+
+#[test]
+fn update_discard_replies() {
+    let replies = [
+        UpdateDiscardReply::Discarded {},
+        UpdateDiscardReply::Failure {
+            error: not_authorized(),
+        },
+    ];
+    both_ways(
+        replies,
+        include_str!("fixtures/app-helper/update_discard_replies.json"),
+    );
+}
+
+#[test]
+fn a_reply_with_an_invalid_version_is_unreadable() {
+    for version in ["26.2", "v26.2.0", "26.02.0", ""] {
+        let prepared = format!(r#"{{"prepared":{{"version":"{version}"}}}}"#);
+        assert!(serde_json::from_str::<UpdatePrepareReply>(&prepared).is_err());
+        assert!(serde_json::from_str::<PreparedUpdateReply>(&prepared).is_err());
+    }
+    assert!(serde_json::from_str::<PreparedUpdateReply>(r#"{"prepared":{"version":26}}"#).is_err());
+}
+
+#[test]
+fn update_results() {
+    let results = [
+        UpdateResult {
+            install_id: INSTALL,
+            exit_code: Some(0),
+        },
+        UpdateResult {
+            install_id: INSTALL,
+            exit_code: Some(1603),
+        },
+        UpdateResult {
+            install_id: INSTALL,
+            exit_code: None,
+        },
+    ];
+    both_ways(
+        results,
+        include_str!("fixtures/app-helper/update_results.json"),
+    );
+}
+
+#[test]
+fn update_records() {
+    let records = serde_json::json!({
+        "macosDirectory": UPDATE_RECORDS_DIRECTORY_MACOS,
+        "windowsDirectory": UPDATE_RECORDS_DIRECTORY_WINDOWS,
+        "startedSuffix": UPDATE_STARTED_SUFFIX,
+        "resultSuffix": UPDATE_RESULT_SUFFIX,
+    });
+    assert_eq!(
+        records,
+        fixture(include_str!("fixtures/app-helper/update_records.json"))
+    );
+}

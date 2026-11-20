@@ -118,12 +118,16 @@ extension AppInternal.UserNotification {
     var identifier: String {
         switch self {
         case .exceptionRulesNotApplied: "exception-rules-write-failed"
+        case .updateAvailable: Self.updateAvailableIdentifier
         }
     }
+
+    static let updateAvailableIdentifier = "update-available"
 
     var title: String {
         switch self {
         case .exceptionRulesNotApplied: String(localized: "Exception rules aren't being applied")
+        case .updateAvailable: String(localized: "Software Update Available")
         }
     }
 
@@ -131,6 +135,14 @@ extension AppInternal.UserNotification {
         switch self {
         case let .exceptionRulesNotApplied(retries, failure):
             String(localized: "Writing the routes still failed after \(retries) retries: \(failure.message)")
+        case let .updateAvailable(version): String(localized: "Update to FortiVPNManager \(version) to get the latest features.")
+        }
+    }
+
+    var actionTitle: String? {
+        switch self {
+        case .exceptionRulesNotApplied: nil
+        case .updateAvailable: String(localized: "Update Now")
         }
     }
 }

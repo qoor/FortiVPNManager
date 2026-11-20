@@ -10,4 +10,5 @@ mod schedule;
 mod session_ids;
 mod sleep_wake;
 mod stale_otp;
+mod update_stop;
 mod user_actions;

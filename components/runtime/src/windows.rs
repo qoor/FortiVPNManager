@@ -9,8 +9,10 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 
-use crate::link;
+use fvm_core::auto_update::LATEST_RELEASE_URL;
+
 use crate::orchestration::{self, ClientSettings, Input, Paths};
+use crate::{auto_update, link};
 
 /// The app's ends of the runtime's two pipes, which the app then owns.
 #[repr(C)]
@@ -45,7 +47,9 @@ pub fn start() -> (PipeReader, PipeWriter) {
     });
     thread::Builder::new()
         .name("fvm-runtime".into())
-        .spawn(move || orchestration::run(paths(), inputs, received, out))
+        .spawn(move || {
+            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out)
+        })
         .expect("starting the runtime thread");
     (app_reader, app_writer)
 }
@@ -66,6 +70,7 @@ fn paths() -> Paths {
         config: home.join(r".config\FortiVPNManager\config.yaml"),
         state: local.join(r"FortiVPNManager\state.json"),
         log: local.join(r"FortiVPNManager\Logs\vpn_backend.log"),
+        update_downloads: env::temp_dir().join(auto_update::DOWNLOAD_FOLDER),
         client_settings: ClientSettings::FortiClient,
     }
 }

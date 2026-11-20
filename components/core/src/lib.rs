@@ -3,6 +3,7 @@
 //! client's name nor any sentence the user sees. Given the same inputs in the same order it gives
 //! the same results, so the runtime feeds it every input and carries out what it decides.
 
+pub mod auto_update;
 pub mod bypass_rules;
 pub mod config;
 pub mod connection;

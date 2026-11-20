@@ -34,6 +34,7 @@ nonisolated enum AppInternal {
     struct AppFacts: Encodable, Sendable {
         /// `CFBundleVersion`, which the Helper must also report.
         var appBuild: String
+        var appVersion: String
         /// The app runs from /Applications, the only copy allowed to register the Helper and the
         /// login item.
         var installedCopy: Bool

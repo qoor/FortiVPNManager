@@ -26,8 +26,8 @@ use crate::orchestration::Runtime;
 const SETTLE_DELAY: Duration = Duration::from_secs(1);
 const WRITE_RETRY_DELAY: Duration = Duration::from_secs(10);
 const MAX_WRITE_RETRIES: u32 = 3;
-/// How long a quit waits for the Helper to remove the routes. One that does not answer removes
-/// them anyway when the app's connection goes away, or a later Helper does.
+/// How long a quit or an update waits for the Helper to remove the routes. One that does not
+/// answer removes them anyway when the app's connection goes away, or a later Helper does.
 const QUIT_REMOVAL_LIMIT: Duration = Duration::from_secs(5);
 
 pub(crate) struct Bypass {
@@ -42,8 +42,11 @@ pub(crate) struct Bypass {
     settle_generation: u64,
     /// The Helper answered with this build; a Helper that becomes ready later starts a sync.
     pub(crate) helper_ready: bool,
-    /// The app quits: nothing is synced any more, and the quit waits for the routes' removal.
+    /// The app quits or installs an update: nothing is synced any more, and the quit or the
+    /// update waits for the routes' removal.
     quitting: bool,
+    after_removal: Option<fn(&mut Runtime)>,
+    removal_generation: u64,
     /// The Helper connection was lost and no sync has succeeded since.
     connection_lost: bool,
 }
@@ -62,6 +65,8 @@ impl Default for Bypass {
             settle_generation: 0,
             helper_ready: false,
             quitting: false,
+            after_removal: None,
+            removal_generation: 0,
             connection_lost: false,
         }
     }
@@ -428,26 +433,46 @@ impl Runtime {
     /// app's build, which never got any. A sync under way finishes first, since the Helper takes
     /// one route request of a connection at a time.
     pub(crate) fn quit_after_removing_bypass_routes(&mut self) {
+        self.remove_bypass_routes_then(Runtime::approve_quit);
+    }
+
+    pub(crate) fn remove_bypass_routes_then(&mut self, then: fn(&mut Runtime)) {
         self.bypass.quitting = true;
         if !self.bypass.helper_ready {
-            return self.approve_quit();
+            return then(self);
         }
+        self.bypass.removal_generation += 1;
+        self.bypass.after_removal = Some(then);
+        let generation = self.bypass.removal_generation;
         let queue = self.queue();
         self.tasks.spawn(async move {
             tokio::time::sleep(QUIT_REMOVAL_LIMIT).await;
-            queue.run(Runtime::approve_quit);
+            queue.run(move |runtime| runtime.bypass_routes_removed(generation));
         });
         if !self.bypass.syncing {
             self.remove_routes_for_quit();
         }
     }
 
+    fn bypass_routes_removed(&mut self, generation: u64) {
+        if generation == self.bypass.removal_generation
+            && let Some(then) = self.bypass.after_removal.take()
+        {
+            then(self);
+        }
+    }
+
+    pub(crate) fn resume_bypass_routes(&mut self) {
+        self.bypass.quitting = false;
+    }
+
     fn remove_routes_for_quit(&mut self) {
         let json = serde_json::to_string(&BypassRoutesRequest::Remove {})
             .expect("a route request encodes");
+        let generation = self.bypass.removal_generation;
         self.call_helper(
             HelperCall::WriteBypassRoutes { json },
-            |runtime, response| {
+            move |runtime, response| {
                 let removed = matches!(
                     &response,
                     PortResponse::HelperReply { json: Some(json) }
@@ -461,7 +486,7 @@ impl Runtime {
                         format!("removing the exception routes on quit failed: {response:?}"),
                     );
                 }
-                runtime.approve_quit();
+                runtime.bypass_routes_removed(generation);
             },
         );
     }

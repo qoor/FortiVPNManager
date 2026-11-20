@@ -58,6 +58,7 @@ public static partial class AppInternal
     /// <param name="TimeZone">The system time zone's IANA name, such as <c>Asia/Seoul</c>.</param>
     public sealed record AppFacts(
         string AppBuild,
+        string AppVersion,
         bool InstalledCopy,
         string TimeZone,
         SignInPages SignInPages,
@@ -65,7 +66,7 @@ public static partial class AppInternal
     {
         /// <summary>The OAuth client's secret is not confidential, but it stays out of debug output all the same.</summary>
         public override string ToString() =>
-            $"AppFacts {{ AppBuild = {AppBuild}, InstalledCopy = {InstalledCopy}, TimeZone = {TimeZone}, BuiltInOauthClient = {(BuiltInOauthClient is null ? "none" : "<redacted>")} }}";
+            $"AppFacts {{ AppBuild = {AppBuild}, AppVersion = {AppVersion}, InstalledCopy = {InstalledCopy}, TimeZone = {TimeZone}, BuiltInOauthClient = {(BuiltInOauthClient is null ? "none" : "<redacted>")} }}";
     }
 
     /// <summary>The pages the Google sign-in listener shows in the browser, in the UI's language.</summary>

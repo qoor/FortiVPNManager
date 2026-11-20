@@ -1,6 +1,10 @@
-//! The runtime's connections to Google: HTTPS for OAuth and the Gmail API, and IMAP over TLS. TLS is
-//! rustls with the ring provider and the OS's trust store; HTTPS follows the OS's proxy settings.
+//! The runtime's connections to Google and GitHub: HTTPS for OAuth, the Gmail API and the app's
+//! releases, and IMAP over TLS. TLS is rustls with the ring provider and the OS's trust store; HTTPS
+//! follows the OS's proxy settings.
 
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -43,6 +47,17 @@ fn http() -> &'static reqwest::Client {
             .timeout(HTTP_TIMEOUT)
             .build()
             .expect("building the HTTP client")
+    })
+}
+
+fn downloads() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .tls_backend_preconfigured((*tls_config()).clone())
+            .read_timeout(HTTP_TIMEOUT)
+            .build()
+            .expect("building the download client")
     })
 }
 
@@ -98,6 +113,39 @@ pub(crate) async fn gmail(
         Method::Post => http().post(&request.url).header("Content-Length", "0"),
     };
     finish(builder.bearer_auth(&access_token.0)).await
+}
+
+pub(crate) async fn latest_release(url: &str, user_agent: &str) -> Result<Reply, NetworkError> {
+    let without_url = |error: reqwest::Error| describe(&error.without_url());
+    let response = http()
+        .get(url)
+        .header("User-Agent", user_agent)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(without_url)?;
+    let status = response.status().as_u16();
+    let body = response.bytes().await.map_err(without_url)?.to_vec();
+    Ok(Reply { status, body })
+}
+
+pub(crate) async fn download(
+    url: &str,
+    path: &Path,
+    mut received: impl FnMut(usize),
+) -> Result<(), String> {
+    let without_url = |error: reqwest::Error| describe(&error.without_url());
+    let mut response = downloads().get(url).send().await.map_err(without_url)?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("HTTP {}", status.as_u16()));
+    }
+    let mut file = File::create(path).map_err(|error| error.to_string())?;
+    while let Some(chunk) = response.chunk().await.map_err(without_url)? {
+        file.write_all(&chunk).map_err(|error| error.to_string())?;
+        received(chunk.len());
+    }
+    Ok(())
 }
 
 // MARK: IMAP
@@ -354,5 +402,39 @@ impl Rejection {
             },
             Rejection::Failed(failure) => failure,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_release_request_leaves_the_url_out() {
+        let url = "http://127.0.0.1:1/x";
+        let detail = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(latest_release(url, "FortiVPNManager/26.1.0"))
+            .err()
+            .expect("nothing listens on port 1");
+        assert!(!detail.contains("127.0.0.1"), "{detail}");
+        assert!(!detail.contains("for url"), "{detail}");
+    }
+
+    #[test]
+    fn a_failed_download_leaves_the_url_out() {
+        let url = "http://127.0.0.1:1/x";
+        let path = std::env::temp_dir().join("fvm-net-download-test");
+        let detail = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(download(url, &path, |_| {}))
+            .expect_err("nothing listens on port 1");
+        assert!(!detail.contains("127.0.0.1"), "{detail}");
+        assert!(!detail.contains("for url"), "{detail}");
+        assert!(!path.exists());
     }
 }

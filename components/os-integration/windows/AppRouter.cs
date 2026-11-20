@@ -30,6 +30,7 @@ public sealed class AppRouter
     private readonly Action<ToRuntime> send;
     private readonly HelperRelay relay;
     private readonly SystemEvents events;
+    private readonly UpdateWaiter waiter = new();
 
     /// <param name="quit">Ends the app once the runtime approves a quit.</param>
     public AppRouter(string appBuild, IAppUi ui, Action quit, Action<ToRuntime> send)
@@ -131,6 +132,9 @@ public sealed class AppRouter
             case PortRequest.FortiClientConnections:
                 reply(new PortResponse.FortiClientConnections(FortiClientSettings.Connections()));
                 break;
+            case PortRequest.StartUpdateWaiter:
+                reply(waiter.Start());
+                break;
         }
     }
 
@@ -146,6 +150,12 @@ public sealed class AppRouter
                 break;
             // Windows neither suspends a desktop app nor asks the user to approve the Helper.
             case PortAction.HoldActivity or PortAction.OpenHelperApprovalSettings:
+                break;
+            case PortAction.ReleaseUpdateWaiter release:
+                waiter.Release(release.InstallerProcessId);
+                break;
+            case PortAction.StopUpdateWaiter:
+                waiter.Stop();
                 break;
             case PortAction.ApproveQuit:
                 Lifetime.ApproveQuit();
@@ -184,7 +194,8 @@ public static class CurrentAppFacts
 {
     /// <summary>
     /// The build comes from the app's informational version, which the build script sets for the app
-    /// and the Helper alike. The built-in OAuth client is a file the build script puts next to the
+    /// and the Helper alike, and the version from its assembly version, which the build script sets to
+    /// the installer's. The built-in OAuth client is a file the build script puts next to the
     /// app (packaging/GoogleOAuthClient.json, gitignored), the one the macOS build uses.
     /// </summary>
     /// <param name="signInPages">The pages the Google sign-in listener shows, in the UI's language.</param>
@@ -197,6 +208,7 @@ public static class CurrentAppFacts
         var client = Path.Combine(Path.GetDirectoryName(executable) ?? "", "GoogleOAuthClient.json");
         return new AppFacts(
             build,
+            Assembly.GetEntryAssembly()!.GetName().Version!.ToString(3),
             ServiceRegistration.IsInstalledCopy(executable),
             SystemEvents.IanaTimeZone(),
             signInPages,

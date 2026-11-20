@@ -67,6 +67,13 @@ public sealed partial class SettingsWindow : Window
         Search.UpdateTextOnSelect = false;
         FlyoutSearch.UpdateTextOnSelect = false;
         AddKeyboardShortcuts();
+        Navigation.ItemInvoked += (_, args) =>
+        {
+            if (args.InvokedItemContainer is NavigationViewItem { Tag: SettingsPane pane } && ContentFrame.Content is PanePage { Subpage: not null })
+            {
+                ContentFrame.Navigate(typeof(PanePage), pane);
+            }
+        };
         var placement = Placement.Load();
         lastPane = placement?.Pane ?? SettingsPane.General;
         Place(placement);
@@ -91,6 +98,19 @@ public sealed partial class SettingsWindow : Window
             shown = true;
             ui.Send(new AppInternal.Command.SettingsOpened());
         }
+    }
+
+    public void ShowUpdates()
+    {
+        if (ContentFrame.Content is not PanePage { Subpage: not null })
+        {
+            if (ContentFrame.Content is not PanePage { Pane: SettingsPane.General })
+            {
+                ContentFrame.Navigate(typeof(PanePage), SettingsPane.General);
+            }
+            ContentFrame.Navigate(typeof(PanePage), SettingsSubpage.SoftwareUpdate);
+        }
+        Show(null);
     }
 
     /// <summary>
@@ -130,11 +150,20 @@ public sealed partial class SettingsWindow : Window
     /// <summary>The window's title stays the app's name, as Windows Settings keeps its own; the back button follows the history.</summary>
     private void OnNavigated(object sender, NavigationEventArgs e)
     {
-        var pane = (SettingsPane)e.Parameter;
-        ((PanePage)e.Content).Show(ui, pane, L(pane.TitleKey()));
-        lastPane = pane;
+        var page = (PanePage)e.Content;
+        if (e.Parameter is SettingsSubpage subpage)
+        {
+            page.Show(ui, subpage);
+            lastPane = SettingsPane.General;
+        }
+        else
+        {
+            var pane = (SettingsPane)e.Parameter;
+            page.Show(ui, pane, L(pane.TitleKey()));
+            lastPane = pane;
+        }
         AppTitleBar.IsBackButtonEnabled = ContentFrame.CanGoBack;
-        Select(pane);
+        Select(lastPane);
     }
 
     private void OnBackRequested(TitleBar sender, object args) => GoBack();
@@ -213,7 +242,14 @@ public sealed partial class SettingsWindow : Window
     /// </summary>
     private void Reveal(SearchResult result)
     {
-        Select(result.Pane);
+        if (ContentFrame.Content is PanePage { Subpage: not null })
+        {
+            ContentFrame.Navigate(typeof(PanePage), result.Pane);
+        }
+        else
+        {
+            Select(result.Pane);
+        }
         if (result.Item?.Row is { } row)
         {
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => (ContentFrame.Content as PanePage)?.Reveal(row));

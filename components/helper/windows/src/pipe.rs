@@ -15,7 +15,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode};
+use fvm_contract::app_helper::{
+    BypassRoutesReply, HelperError, HelperErrorCode, PreparedUpdateReply, UpdateDiscardReply,
+    UpdateInstallReply, UpdatePrepareReply,
+};
 use fvm_contract::helper_internal::{
     AppRequest, BypassRoutesChange, FromEntry, LogCategory, LogLevel, NetworkChange, ToEntry,
 };
@@ -190,6 +193,7 @@ struct Connection {
     same_build: bool,
     /// An exception-route request of this connection waits for the entry's answer.
     routing: bool,
+    preparing_or_installing: bool,
 }
 
 /// A request passed on to the entry.
@@ -197,8 +201,53 @@ struct Pending {
     app: u64,
     /// The app's number for it.
     id: u64,
-    /// An exception-route request, of which a connection has one at a time.
-    route: bool,
+    limit: Option<Limit>,
+}
+
+#[derive(Clone, Copy)]
+enum Limit {
+    Route,
+    PrepareOrInstall,
+}
+
+impl Limit {
+    fn still_running(self) -> &'static str {
+        match self {
+            Limit::Route => "the connection's previous route request is still running",
+            Limit::PrepareOrInstall => {
+                "the connection's previous update prepare or install request is still running"
+            }
+        }
+    }
+}
+
+fn limit(request: &AppRequest) -> Option<Limit> {
+    match request {
+        AppRequest::ReadBypassRoutes {} | AppRequest::WriteBypassRoutes { .. } => {
+            Some(Limit::Route)
+        }
+        AppRequest::PrepareUpdate { .. } | AppRequest::InstallUpdate { .. } => {
+            Some(Limit::PrepareOrInstall)
+        }
+        _ => None,
+    }
+}
+
+impl Connection {
+    fn start(&mut self, limit: Limit) -> bool {
+        let running = match limit {
+            Limit::Route => &mut self.routing,
+            Limit::PrepareOrInstall => &mut self.preparing_or_installing,
+        };
+        !std::mem::replace(running, true)
+    }
+
+    fn finish(&mut self, limit: Limit) {
+        match limit {
+            Limit::Route => self.routing = false,
+            Limit::PrepareOrInstall => self.preparing_or_installing = false,
+        }
+    }
 }
 
 enum Outgoing {
@@ -288,11 +337,10 @@ impl Relay {
                 .replies
                 .remove(&id)
                 .expect("the entry answers each request once");
-            // Cleared before the answer leaves, so the app's next route request is taken.
-            if pending.route
+            if let Some(limit) = pending.limit
                 && let Some(connection) = state.connections.get_mut(&pending.app)
             {
-                connection.routing = false;
+                connection.finish(limit);
             }
             pending
         };
@@ -382,6 +430,7 @@ impl Relay {
                 writer,
                 same_build: false,
                 routing: false,
+                preparing_or_installing: false,
             },
         );
         self.log(
@@ -470,21 +519,57 @@ impl Relay {
                 let failure = BypassRoutesReply::Failure { error: unchecked() };
                 self.send(app, reply(id, &failure));
             }
+            PipeRequest::PrepareUpdate { .. } if !same_build => {
+                let failure = UpdatePrepareReply::Failure { error: unchecked() };
+                self.send(app, reply(id, &failure));
+            }
+            PipeRequest::InstallUpdate { .. } if !same_build => {
+                let failure = UpdateInstallReply::Failure { error: unchecked() };
+                self.send(app, reply(id, &failure));
+            }
+            PipeRequest::ReadPreparedUpdate { .. } if !same_build => {
+                let failure = PreparedUpdateReply::Failure { error: unchecked() };
+                self.send(app, reply(id, &failure));
+            }
+            PipeRequest::DiscardPreparedUpdate { .. } if !same_build => {
+                let failure = UpdateDiscardReply::Failure { error: unchecked() };
+                self.send(app, reply(id, &failure));
+            }
             PipeRequest::Connect { json, .. } => {
-                self.forward(app, id, AppRequest::Connect { json }, false)
+                self.forward(app, id, AppRequest::Connect { json })
             }
             PipeRequest::SubmitOtp { attempt, code, .. } => {
-                self.forward(app, id, AppRequest::SubmitOtp { attempt, code }, false);
+                self.forward(app, id, AppRequest::SubmitOtp { attempt, code });
             }
             PipeRequest::Disconnect {
                 attempt, reason, ..
-            } => self.forward(app, id, AppRequest::Disconnect { attempt, reason }, false),
-            PipeRequest::Status { .. } => self.forward(app, id, AppRequest::Status {}, false),
+            } => self.forward(app, id, AppRequest::Disconnect { attempt, reason }),
+            PipeRequest::Status { .. } => self.forward(app, id, AppRequest::Status {}),
             PipeRequest::ReadBypassRoutes { .. } => {
-                self.forward_route(app, id, AppRequest::ReadBypassRoutes {});
+                self.forward_one(app, id, AppRequest::ReadBypassRoutes {}, |error| {
+                    reply(id, &BypassRoutesReply::Failure { error })
+                });
             }
             PipeRequest::WriteBypassRoutes { json, .. } => {
-                self.forward_route(app, id, AppRequest::WriteBypassRoutes { json });
+                self.forward_one(app, id, AppRequest::WriteBypassRoutes { json }, |error| {
+                    reply(id, &BypassRoutesReply::Failure { error })
+                });
+            }
+            PipeRequest::PrepareUpdate { json, .. } => {
+                self.forward_one(app, id, AppRequest::PrepareUpdate { json }, |error| {
+                    reply(id, &UpdatePrepareReply::Failure { error })
+                });
+            }
+            PipeRequest::InstallUpdate { json, .. } => {
+                self.forward_one(app, id, AppRequest::InstallUpdate { json }, |error| {
+                    reply(id, &UpdateInstallReply::Failure { error })
+                });
+            }
+            PipeRequest::ReadPreparedUpdate { .. } => {
+                self.forward(app, id, AppRequest::ReadPreparedUpdate {});
+            }
+            PipeRequest::DiscardPreparedUpdate { .. } => {
+                self.forward(app, id, AppRequest::DiscardPreparedUpdate {});
             }
         }
     }
@@ -492,8 +577,7 @@ impl Relay {
     /// Passes a request to the entry under a number of the relay's own, since the apps' numbers
     /// may repeat across connections.
     /// Delivered under the lock, so it never follows the connection's AppDisconnected.
-    /// `route` tells an exception-route request, of which a connection has one at a time.
-    fn forward(&self, app: u64, id: u64, request: AppRequest, route: bool) {
+    fn forward(&self, app: u64, id: u64, request: AppRequest) {
         let mut state = self.lock();
         if !state.connections.contains_key(&app) {
             // It does not reach the entry, which would wipe the password and the OTP.
@@ -506,7 +590,8 @@ impl Relay {
         }
         state.last_request += 1;
         let number = state.last_request;
-        state.replies.insert(number, Pending { app, id, route });
+        let limit = limit(&request);
+        state.replies.insert(number, Pending { app, id, limit });
         self.inbox().deliver(ToEntry::Request {
             id: number,
             app,
@@ -514,24 +599,28 @@ impl Relay {
         });
     }
 
-    /// Passes on an exception-route request. A connection may have one at a time, as the app
-    /// sends them, so another program cannot pile them up.
-    fn forward_route(&self, app: u64, id: u64, request: AppRequest) {
-        let busy = match self.lock().connections.get_mut(&app) {
-            Some(connection) => std::mem::replace(&mut connection.routing, true),
-            None => return,
-        };
-        if busy {
-            let failure = BypassRoutesReply::Failure {
-                error: HelperError {
-                    code: HelperErrorCode::InvalidRequest,
-                    message: "the connection's previous route request is still running".to_owned(),
-                },
+    fn forward_one(
+        &self,
+        app: u64,
+        id: u64,
+        request: AppRequest,
+        refused: impl FnOnce(HelperError) -> PipeMessage,
+    ) {
+        if let Some(limit) = limit(&request) {
+            let started = match self.lock().connections.get_mut(&app) {
+                Some(connection) => connection.start(limit),
+                None => return,
             };
-            self.send(app, reply(id, &failure));
-            return;
+            if !started {
+                let error = HelperError {
+                    code: HelperErrorCode::InvalidRequest,
+                    message: limit.still_running().to_owned(),
+                };
+                self.send(app, refused(error));
+                return;
+            }
         }
-        self.forward(app, id, request, true);
+        self.forward(app, id, request);
     }
 
     fn serve_routes(&self, changes: Receiver<RouteChange>) {
@@ -594,4 +683,73 @@ fn write_messages(sender: SendPipeStream<pipe_mode::Bytes>, outgoing: Receiver<O
     }
     // Nothing is left to send; the app does not need to read what follows the last flush.
     sender.assume_flushed();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn connection() -> Connection {
+        Connection {
+            writer: mpsc::sync_channel(1).0,
+            same_build: true,
+            routing: false,
+            preparing_or_installing: false,
+        }
+    }
+
+    #[test]
+    fn route_requests_and_update_preparations_and_installs_are_limited() {
+        for request in [
+            AppRequest::ReadBypassRoutes {},
+            AppRequest::WriteBypassRoutes { json: "{}".into() },
+        ] {
+            assert!(matches!(limit(&request), Some(Limit::Route)), "{request:?}");
+        }
+        for request in [
+            AppRequest::PrepareUpdate { json: "{}".into() },
+            AppRequest::InstallUpdate { json: "{}".into() },
+        ] {
+            assert!(
+                matches!(limit(&request), Some(Limit::PrepareOrInstall)),
+                "{request:?}"
+            );
+        }
+        for request in [
+            AppRequest::ReadPreparedUpdate {},
+            AppRequest::DiscardPreparedUpdate {},
+            AppRequest::Status {},
+            AppRequest::Connect { json: "{}".into() },
+        ] {
+            assert!(limit(&request).is_none(), "{request:?}");
+        }
+    }
+
+    #[test]
+    fn a_running_request_refuses_another_of_its_limit_until_it_finishes() {
+        for limit in [Limit::Route, Limit::PrepareOrInstall] {
+            let mut connection = connection();
+            assert!(connection.start(limit), "{}", limit.still_running());
+            assert!(!connection.start(limit), "{}", limit.still_running());
+            assert!(!connection.start(limit), "{}", limit.still_running());
+            connection.finish(limit);
+            assert!(connection.start(limit), "{}", limit.still_running());
+        }
+    }
+
+    #[test]
+    fn a_route_request_and_an_update_preparation_or_install_do_not_block_each_other() {
+        for (running, other) in [
+            (Limit::Route, Limit::PrepareOrInstall),
+            (Limit::PrepareOrInstall, Limit::Route),
+        ] {
+            let mut connection = connection();
+            assert!(connection.start(running));
+            assert!(connection.start(other), "{}", other.still_running());
+            connection.finish(other);
+            assert!(!connection.start(running), "{}", running.still_running());
+            connection.finish(running);
+            assert!(connection.start(running), "{}", running.still_running());
+        }
+    }
 }

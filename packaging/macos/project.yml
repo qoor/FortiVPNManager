@@ -22,7 +22,8 @@ settings:
     ENABLE_APP_SANDBOX: NO
     # Bumped on every `make build`; app and helper compare it as their BuildID.
     CURRENT_PROJECT_VERSION: "1"
-    # MARKETING_VERSION, the app's version, comes from VERSION at the repository root through `make build`.
+    # The app's version, from VERSION at the repository root, which `make gen` passes as FVM_VERSION.
+    MARKETING_VERSION: ${FVM_VERSION}
 
 targets:
   FortiVPNManager:

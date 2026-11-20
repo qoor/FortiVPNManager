@@ -2,9 +2,10 @@
 //! (`XPCCoding`), so the Helper's Swift side can write the few answers it gives itself, such as a
 //! `HelperError` for a payload it cannot pass on: an enum value with data is an object keyed by its
 //! case name, data without a label uses the key `_0`, a case without data is `{}`, dates are seconds
-//! since 1970, and absent optional values are left out. The Helper receives the run request and the
-//! exception-route request and sends everything else, and the app's runtime does the opposite; the
-//! Helper entry, in Rust, reads and writes them on every OS.
+//! since 1970, and absent optional values are left out. The Helper receives the run request, the
+//! exception-route request and the update prepare and install requests and sends everything else,
+//! and the app's runtime does the opposite; the Helper entry, in Rust, reads and writes them on
+//! every OS.
 
 use std::fmt;
 use std::net::Ipv4Addr;
@@ -382,6 +383,182 @@ pub enum BypassRoutesReply {
         #[serde(rename = "_0")]
         error: HelperError,
     },
+}
+
+pub const UPDATE_RECORDS_DIRECTORY_MACOS: &str = "/var/run/com.qoor.FortiVPNManager.Helper.update";
+pub const UPDATE_RECORDS_DIRECTORY_WINDOWS: &str = r"C:\Program Files\FortiVPNManager\AutoUpdate";
+pub const UPDATE_STARTED_SUFFIX: &str = ".started";
+pub const UPDATE_RESULT_SUFFIX: &str = ".result";
+
+/// Sent as its text, such as `26.2.0`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Version {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+
+impl Version {
+    pub fn parse(text: &str) -> Option<Self> {
+        let number = |part: &str| {
+            let plain = !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit())
+                && (part.len() == 1 || !part.starts_with('0'));
+            if plain { part.parse().ok() } else { None }
+        };
+        let parts: Vec<&str> = text.split('.').collect();
+        let [major, minor, patch] = parts[..] else {
+            return None;
+        };
+        Some(Self {
+            major: number(major)?,
+            minor: number(minor)?,
+            patch: number(patch)?,
+        })
+    }
+
+    pub fn from_tag(tag: &str) -> Option<Self> {
+        Self::parse(tag.strip_prefix('v')?)
+    }
+}
+
+impl fmt::Display for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct InvalidVersion;
+
+impl fmt::Display for InvalidVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("not a version of three numbers")
+    }
+}
+
+impl std::error::Error for InvalidVersion {}
+
+impl TryFrom<String> for Version {
+    type Error = InvalidVersion;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        Self::parse(&text).ok_or(InvalidVersion)
+    }
+}
+
+impl From<Version> for String {
+    fn from(version: Version) -> Self {
+        version.to_string()
+    }
+}
+
+pub fn installer_version(file_name: &str, extension: &str) -> Option<Version> {
+    let version = file_name
+        .strip_prefix("FortiVPNManager-")?
+        .strip_suffix(extension)?
+        .strip_suffix('.')?;
+    Version::parse(version)
+}
+
+/// The downloaded update for the Helper to copy into a folder only administrators can change and to
+/// check there: the checksum list's signature, the installer's checksum and that the installer's
+/// version is newer than the Helper's. Files prepared before are replaced.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePrepareRequest {
+    pub installer_path: String,
+    pub checksums_path: String,
+    pub signature_path: String,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdatePrepareReply {
+    /// The version of the installer now prepared.
+    Prepared { version: Version },
+    Refused {
+        reason: UpdateRefusal,
+        message: String,
+    },
+    Failure {
+        #[serde(rename = "_0")]
+        error: HelperError,
+    },
+}
+
+/// Starts the prepared installer. `install_id` names the update records of this install.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct UpdateInstallRequest {
+    #[serde(rename = "installID")]
+    pub install_id: u64,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateInstallReply {
+    Started {
+        #[serde(
+            rename = "installerProcessID",
+            default,
+            skip_serializing_if = "Option::is_none"
+        )]
+        installer_process_id: Option<u32>,
+    },
+    Refused {
+        reason: UpdateRefusal,
+        message: String,
+    },
+    Failure {
+        #[serde(rename = "_0")]
+        error: HelperError,
+    },
+}
+
+/// Answers the question which update the Helper holds prepared.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PreparedUpdateReply {
+    Prepared {
+        version: Version,
+    },
+    NotPrepared {},
+    Failure {
+        #[serde(rename = "_0")]
+        error: HelperError,
+    },
+}
+
+/// Answers the request to delete the prepared update.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateDiscardReply {
+    Discarded {},
+    Failure {
+        #[serde(rename = "_0")]
+        error: HelperError,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UpdateRefusal {
+    SignatureInvalid,
+    ChecksumMismatch,
+    VersionNotNewer,
+    AlreadyInstalling,
+    FilesUnreadable,
+    NothingPrepared,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateResult {
+    #[serde(rename = "installID")]
+    pub install_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
 }
 
 /// Seconds since 1970, as numbers.

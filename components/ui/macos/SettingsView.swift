@@ -42,13 +42,14 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var pane: some View {
-        switch navigation.pane {
-        case .general: GeneralPane(ui: ui, navigation: navigation)
-        case .account: AccountPane(ui: ui, navigation: navigation)
-        case .connection: ConnectionPane(ui: ui, navigation: navigation)
-        case .exceptionRules: ExceptionRulesPane(ui: ui, navigation: navigation)
-        case .advanced: AdvancedPane(ui: ui, navigation: navigation)
-        case .log: LogPane(ui: ui, navigation: navigation, logView: logView)
+        switch navigation.page {
+        case .pane(.general): GeneralPane(ui: ui, navigation: navigation)
+        case .pane(.account): AccountPane(ui: ui, navigation: navigation)
+        case .pane(.connection): ConnectionPane(ui: ui, navigation: navigation)
+        case .pane(.exceptionRules): ExceptionRulesPane(ui: ui, navigation: navigation)
+        case .pane(.advanced): AdvancedPane(ui: ui, navigation: navigation)
+        case .pane(.log): LogPane(ui: ui, navigation: navigation, logView: logView)
+        case .softwareUpdate: SoftwareUpdatePage(ui: ui, navigation: navigation)
         }
     }
 }

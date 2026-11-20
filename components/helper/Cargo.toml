@@ -5,16 +5,21 @@ publish.workspace = true
 
 [dependencies]
 fvm-contract.workspace = true
+ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["process"] }
+nix = { workspace = true, features = ["process", "signal"] }
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
 fvm-common.workspace = true
+sysinfo.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { workspace = true, features = ["fs"] }
 
 [lints]
 workspace = true

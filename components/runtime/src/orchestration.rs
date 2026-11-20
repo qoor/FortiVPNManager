@@ -20,19 +20,19 @@ use fvm_contract::app_internal::{
     AppFacts, FromRuntime, LogLine, LogSource, SecretText, ToRuntime,
 };
 use fvm_core::config;
-use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup, TimerId};
+use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup};
 use jiff::tz::TimeZone;
 
 use crate::config_file::ConfigFile;
 use crate::log_file::{self, LogFile};
 use crate::state_file::StateFile;
-use crate::timers::Timers;
+use crate::timers::{Timer, Timers};
 
 /// One thing for the runtime to take in turn.
 pub(crate) enum Input {
     /// From the app's OS side: Swift on macOS.
     App(ToRuntime),
-    Timer(TimerId),
+    Timer(Timer),
     /// Work that finished elsewhere, carried on in the queue.
     Done(Box<dyn FnOnce(&mut Runtime) + Send>),
 }
@@ -72,6 +72,7 @@ pub(crate) struct Paths {
     pub(crate) config: PathBuf,
     pub(crate) state: PathBuf,
     pub(crate) log: PathBuf,
+    pub(crate) update_downloads: PathBuf,
     pub(crate) client_settings: ClientSettings,
 }
 
@@ -100,10 +101,10 @@ pub(crate) struct Runtime {
     pub(crate) cm: ConnectionManager,
     pub(crate) config: ConfigFile,
     pub(crate) state: StateFile,
-    log: LogFile,
+    pub(crate) log: LogFile,
     out: Sender<FromRuntime>,
     pub(crate) inputs: Sender<Input>,
-    timers: Timers,
+    pub(crate) timers: Timers,
     pub(crate) tasks: tokio::runtime::Runtime,
     next_port_id: u64,
     port_replies: HashMap<u64, PortReply>,
@@ -124,11 +125,13 @@ pub(crate) struct Runtime {
     pub(crate) gmail: crate::otp_session::Gmail,
     pub(crate) google: crate::google_account::Google,
     pub(crate) bypass: crate::bypass_sync::Bypass,
+    pub(crate) updates: crate::auto_update::Updates,
 }
 
 /// Takes the inputs until the process ends. The first message from the app is always the launch.
 pub(crate) fn run(
     paths: Paths,
+    update_url: String,
     inputs: Sender<Input>,
     received: Receiver<Input>,
     out: Sender<FromRuntime>,
@@ -137,7 +140,7 @@ pub(crate) fn run(
         Input::App(ToRuntime::Launched { facts }) => facts,
         _ => panic!("the first message from the app is the launch"),
     };
-    let mut runtime = Runtime::launch(facts, paths, inputs, out);
+    let mut runtime = Runtime::launch(facts, paths, update_url, inputs, out);
     runtime.publish();
     for input in received {
         runtime.take(input);
@@ -149,6 +152,7 @@ impl Runtime {
     fn launch(
         facts: AppFacts,
         paths: Paths,
+        update_url: String,
         inputs: Sender<Input>,
         out: Sender<FromRuntime>,
     ) -> Self {
@@ -201,14 +205,21 @@ impl Runtime {
             gmail: crate::otp_session::Gmail::default(),
             google: crate::google_account::Google::default(),
             bypass: crate::bypass_sync::Bypass::default(),
+            updates: crate::auto_update::Updates::new(
+                update_url,
+                &facts.app_version,
+                paths.update_downloads,
+            ),
             facts,
         };
         if let Some(problem) = state_problem {
             runtime.system_log(LogLevel::Error, LogCategory::State, problem);
         }
+        let connected_before_update = runtime.take_update_record();
+        runtime.check_for_updates();
         runtime.start_polling_config();
         runtime.register_login_item_once();
-        runtime.import_on_first_launch(|runtime, import_report_shown| {
+        runtime.import_on_first_launch(move |runtime, import_report_shown| {
             runtime
                 .forms
                 .reset_account(&runtime.config.settings().clone());
@@ -217,6 +228,7 @@ impl Runtime {
                 auto_connect: runtime.config.settings().connection.auto_connect_on_launch,
                 restored_ledger: runtime.state.state().ledger.clone(),
                 import_report_shown,
+                connected_before_update,
             };
             runtime.feed(connection::Input::Launched(launch));
             runtime.sync_bypass_routes();
@@ -236,7 +248,10 @@ impl Runtime {
                 reply(self, response);
             }
             Input::App(ToRuntime::Event { event }) => self.system_event(event),
-            Input::Timer(timer) => self.feed(connection::Input::TimerFired(timer)),
+            Input::Timer(Timer::Connection(timer)) => {
+                self.feed(connection::Input::TimerFired(timer))
+            }
+            Input::Timer(Timer::UpdateCheck) => self.check_for_updates(),
             Input::Done(work) => work(self),
         }
     }
@@ -302,7 +317,7 @@ impl Runtime {
     // MARK: Helper calls
 
     /// Calls the Helper. Tunnel calls wait for the previous one's answer;
-    /// route calls go at once.
+    /// route and update calls go at once.
     pub(crate) fn call_helper(
         &mut self,
         call: HelperCall,
@@ -310,7 +325,12 @@ impl Runtime {
     ) {
         if matches!(
             call,
-            HelperCall::ReadBypassRoutes {} | HelperCall::WriteBypassRoutes { .. }
+            HelperCall::ReadBypassRoutes {}
+                | HelperCall::WriteBypassRoutes { .. }
+                | HelperCall::PrepareUpdate { .. }
+                | HelperCall::InstallUpdate { .. }
+                | HelperCall::ReadPreparedUpdate {}
+                | HelperCall::DiscardPreparedUpdate {}
         ) {
             // An answer after the quit's approval changes nothing: the app may end at any moment,
             // and its log was written out.
@@ -413,7 +433,7 @@ impl Runtime {
                     self.system_log(LogLevel::Error, LogCategory::State, problem);
                 }
             }
-            Effect::SetTimer { timer, at } => self.timers.set(timer, at),
+            Effect::SetTimer { timer, at } => self.timers.set(Timer::Connection(timer), at),
             Effect::CancelTimer(kind) => self.timers.cancel(kind),
             Effect::HoldActivity(hold) => self.action(PortAction::HoldActivity { hold }),
             Effect::ReadRouter => {
@@ -471,6 +491,7 @@ impl Runtime {
                 }
             }
             Effect::OpenSettings => self.open_settings = true,
+            Effect::StoppedForUpdate => self.update_vpn_stopped(),
             Effect::ApproveQuit => self.quit_after_removing_bypass_routes(),
         }
     }
@@ -580,6 +601,7 @@ impl Runtime {
             SystemEvent::WillSleep { at } => connection::Input::WillSleep { at },
             SystemEvent::DidWake {} => {
                 self.timers.nudge();
+                self.check_for_updates_if_due();
                 connection::Input::DidWake
             }
             SystemEvent::ScreenLocked { at } => connection::Input::ScreenLocked { at },
@@ -589,21 +611,28 @@ impl Runtime {
             SystemEvent::NetworkPathChanged {
                 satisfied,
                 interfaces,
-            } => connection::Input::NetworkPathChanged {
-                satisfied,
-                interfaces,
-            },
+            } => {
+                if satisfied {
+                    self.check_for_updates_after_network_failure();
+                }
+                connection::Input::NetworkPathChanged {
+                    satisfied,
+                    interfaces,
+                }
+            }
             SystemEvent::NetworkSettingsChanged {} => {
                 self.sync_bypass_routes_soon();
                 return;
             }
             SystemEvent::ClockChanged {} => {
                 self.timers.nudge();
+                self.check_for_updates_if_due();
                 return;
             }
             SystemEvent::TimeZoneChanged { time_zone } => {
                 self.time_zone = TimeZone::get(&time_zone).unwrap_or(TimeZone::UTC);
                 self.timers.nudge();
+                self.check_for_updates_if_due();
                 connection::Input::TimeZoneChanged(self.time_zone.clone())
             }
             SystemEvent::AppActivated {} => {
@@ -709,7 +738,7 @@ impl Runtime {
         }
     }
 
-    fn flush_log_lines(&mut self) {
+    pub(crate) fn flush_log_lines(&mut self) {
         if self.pending_lines.is_empty() {
             return;
         }
@@ -733,6 +762,7 @@ fn section_key(section: &Section) -> &'static str {
         Section::Gmail { .. } => "gmail",
         Section::BypassRules { .. } => "bypass",
         Section::Config { .. } => "config",
+        Section::AutoUpdate { .. } => "update",
     }
 }
 

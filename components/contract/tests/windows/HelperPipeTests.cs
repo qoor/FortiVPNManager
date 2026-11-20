@@ -14,7 +14,7 @@ public class HelperPipeTests
     {
         var requests = Fixtures.RoundTrip<HelperPipe.Request>("helper-pipe/requests.json");
         Assert.Equal(new HelperPipe.Request.Build(1, "20261112.1"), requests[0]);
-        Assert.Equal(8, requests.Count);
+        Assert.Equal(12, requests.Count);
     }
 
     [Fact]

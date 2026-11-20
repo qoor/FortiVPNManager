@@ -39,11 +39,21 @@ fn requests_from_the_app() {
                 id: 8,
                 json: r#"{"routes":[]}"#.into(),
             },
+            PipeRequest::PrepareUpdate {
+                id: 9,
+                json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
+            },
+            PipeRequest::InstallUpdate {
+                id: 10,
+                json: r#"{"installID":13835058055282163713}"#.into(),
+            },
+            PipeRequest::ReadPreparedUpdate { id: 11 },
+            PipeRequest::DiscardPreparedUpdate { id: 12 },
         ]
     );
     assert_eq!(
         requests.iter().map(PipeRequest::id).collect::<Vec<_>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     );
 }
 

@@ -1,35 +1,46 @@
 //! The runtime as the app drives it: a fake app side answers the port requests from an in-memory
 //! secret store, a fake Helper and a fake network, with the runtime's files in a scratch folder.
 
+use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
     AttemptId, BackendStatus, BypassRoute, BypassRoutesReply, BypassRoutesRequest,
-    BypassRoutesSnapshot, EndFacts, HelperEvent, HelperEventKind, HelperStatus, Milestone,
-    OutputBatch, OutputLine, OutputSource, RunRequest, StopInitiator, StopReason,
+    BypassRoutesSnapshot, EndFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
+    HelperStatus, Milestone, OutputBatch, OutputLine, OutputSource, PreparedUpdateReply,
+    RunRequest, StopInitiator, StopReason, UpdateDiscardReply, UpdateInstallReply,
+    UpdateInstallRequest, UpdatePrepareReply, UpdatePrepareRequest, UpdateRefusal,
 };
 use fvm_contract::app_internal::command::{AccountForm, Command};
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
-    FortiClientConnection, HelperCall, HelperChannelFailure, PortAction, PortRequest, PortResponse,
-    RegistrationStatus, SecretItem,
+    FortiClientConnection, HelperCall, HelperChannelFailure, LogCategory, PortAction, PortRequest,
+    PortResponse, RegistrationStatus, SecretItem, UserNotification,
 };
 use fvm_contract::app_internal::section::{
-    AccountFeedback, BypassFailure, BypassStatus, ClientSettingsImport, ConfigSection,
-    ConnectProgress, ConnectionStatus, HelperState, ImportError, ImportedPassword, Section,
+    AccountFeedback, AutoUpdateSection, BypassFailure, BypassStatus, ClientSettingsImport,
+    ConfigSection, ConnectProgress, ConnectionStatus, HelperState, ImportError, ImportedPassword,
+    InstallFailure, RemainingTime, Section, UpdateCheckFailure, UpdateProgress, UpdateStatus,
 };
 use fvm_contract::app_internal::{
-    AppFacts, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
+    AppFacts, ButtonState, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
 };
-use serde_json::json;
+use fvm_core::auto_update::{Check, Release, Version};
+use serde_json::{Value, json};
 
+use crate::net::Reply;
 use crate::orchestration::{self, ClientSettings, Input, Paths, Runtime};
+use crate::timers::Timer;
 
 const APP_BUILD: &str = "100";
+const APP_VERSION: &str = "26.1.0";
 /// No message for this long: the runtime has nothing more to do on its own.
 const QUIET: Duration = Duration::from_millis(400);
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -67,6 +78,8 @@ struct App {
     /// The route calls wait for `answer_held_route_calls`.
     holds_route_calls: bool,
     held_route_calls: Vec<(u64, HelperCall)>,
+    holds_update_calls: bool,
+    held_update_calls: Vec<(u64, HelperCall)>,
     holds_gmail_reads: bool,
     held_gmail_reads: usize,
     /// The app's exception routes when the quit was approved, once it was.
@@ -79,6 +92,13 @@ struct App {
     /// FortiClient's SSL VPN connections, which make the runtime import from FortiClient as on
     /// Windows; `None` imports openfortivpn's settings file as on macOS.
     forticlient: Option<Vec<FortiClientConnection>>,
+    waiter_failure: Option<String>,
+    prepare_answer: PortResponse,
+    install_answer: PortResponse,
+    prepared_answer: PortResponse,
+    update_url: String,
+    update_sections: Vec<(Instant, AutoUpdateSection)>,
+    log_at_waiter: Option<String>,
 }
 
 fn scratch() -> PathBuf {
@@ -121,6 +141,8 @@ impl App {
             routes_unreachable: false,
             holds_route_calls: false,
             held_route_calls: Vec::new(),
+            holds_update_calls: false,
+            held_update_calls: Vec::new(),
             holds_gmail_reads: false,
             held_gmail_reads: 0,
             routes_at_quit: None,
@@ -130,6 +152,17 @@ impl App {
             log: Vec::new(),
             open_settings: 0,
             forticlient: None,
+            waiter_failure: None,
+            prepare_answer: helper_reply(&UpdatePrepareReply::Prepared {
+                version: version("26.2.0"),
+            }),
+            install_answer: helper_reply(&UpdateInstallReply::Started {
+                installer_process_id: None,
+            }),
+            prepared_answer: helper_reply(&PreparedUpdateReply::NotPrepared {}),
+            update_url: String::new(),
+            update_sections: Vec::new(),
+            log_at_waiter: None,
         }
     }
 
@@ -153,6 +186,7 @@ impl App {
             config: self.config_path(),
             state: self.folder.join("state/state.json"),
             log: self.folder.join("logs/vpn_backend.log"),
+            update_downloads: self.downloads(),
             client_settings: match self.forticlient {
                 Some(_) => ClientSettings::FortiClient,
                 None => ClientSettings::OpenFortiVpn {
@@ -161,12 +195,14 @@ impl App {
             },
         };
         let runtime_inputs = inputs.clone();
-        thread::spawn(move || orchestration::run(paths, runtime_inputs, received, out));
+        let update_url = self.update_url.clone();
+        thread::spawn(move || orchestration::run(paths, update_url, runtime_inputs, received, out));
         self.inputs = inputs;
         self.out = from_runtime;
         self.send(ToRuntime::Launched {
             facts: AppFacts {
                 app_build: APP_BUILD.into(),
+                app_version: APP_VERSION.into(),
                 installed_copy: false,
                 built_in_oauth_client: None,
                 time_zone: "Asia/Seoul".into(),
@@ -312,6 +348,10 @@ impl App {
     fn take(&mut self, message: FromRuntime) {
         match message {
             FromRuntime::Section { section } => {
+                if let Section::AutoUpdate { section } = &section {
+                    self.update_sections
+                        .push((Instant::now(), section.as_ref().clone()));
+                }
                 self.sections.retain(|other| {
                     std::mem::discriminant(other) != std::mem::discriminant(&section)
                 });
@@ -332,6 +372,13 @@ impl App {
                     && self.holds_route_calls
                 {
                     self.held_route_calls.push((id, call.clone()));
+                    return;
+                }
+                if let PortRequest::CallHelper { call } = &request
+                    && is_update_call(call)
+                    && self.holds_update_calls
+                {
+                    self.held_update_calls.push((id, call.clone()));
                     return;
                 }
                 let response = self.answer(request);
@@ -401,6 +448,16 @@ impl App {
             PortRequest::FortiClientConnections {} => PortResponse::FortiClientConnections {
                 connections: self.forticlient.clone().unwrap_or_default(),
             },
+            PortRequest::StartUpdateWaiter { .. } => {
+                self.log_at_waiter =
+                    fs::read_to_string(self.folder.join("logs/vpn_backend.log")).ok();
+                match &self.waiter_failure {
+                    Some(description) => PortResponse::UpdateWaiterFailed {
+                        description: description.clone(),
+                    },
+                    None => PortResponse::UpdateWaiterStarted {},
+                }
+            }
         }
     }
 
@@ -489,6 +546,10 @@ impl App {
             HelperCall::Connect { .. }
             | HelperCall::SubmitOtp { .. }
             | HelperCall::Disconnect { .. } => PortResponse::HelperReply { json: None },
+            HelperCall::PrepareUpdate { .. } => self.prepare_answer.clone(),
+            HelperCall::InstallUpdate { .. } => self.install_answer.clone(),
+            HelperCall::ReadPreparedUpdate {} => self.prepared_answer.clone(),
+            HelperCall::DiscardPreparedUpdate {} => helper_reply(&UpdateDiscardReply::Discarded {}),
         }
     }
 
@@ -1437,4 +1498,1783 @@ fn importing_from_forticlient_tells_why_nothing_was_taken() {
         );
         assert_eq!(app.config_text(), ACCOUNT);
     }
+}
+
+fn is_update_call(call: &HelperCall) -> bool {
+    matches!(
+        call,
+        HelperCall::PrepareUpdate { .. }
+            | HelperCall::InstallUpdate { .. }
+            | HelperCall::ReadPreparedUpdate {}
+            | HelperCall::DiscardPreparedUpdate {}
+    )
+}
+
+fn helper_reply(reply: &impl serde::Serialize) -> PortResponse {
+    PortResponse::HelperReply {
+        json: Some(serde_json::to_string(reply).unwrap()),
+    }
+}
+
+const INSTALLER_BYTES: usize = 4_000;
+fn installer_name() -> String {
+    let release = Release::from_json(&full_release("26.2.0")).unwrap();
+    match fvm_core::auto_update::check(version(APP_VERSION), &release, crate::auto_update::PLATFORM)
+    {
+        Check::Available(update) => update.installer_file_name,
+        other => panic!("26.2.0 is not available: {other:?}"),
+    }
+}
+
+fn installer() -> Vec<u8> {
+    (0..INSTALLER_BYTES)
+        .map(|index| u8::try_from(index % 251).unwrap())
+        .collect()
+}
+
+fn release(version: &str, assets: &[&str]) -> Vec<u8> {
+    let assets: Vec<Value> = assets
+        .iter()
+        .map(|name| json!({"name": name, "size": INSTALLER_BYTES}))
+        .collect();
+    json!({"tag_name": format!("v{version}"), "body": "", "assets": assets})
+        .to_string()
+        .into_bytes()
+}
+
+fn full_release(version: &str) -> Vec<u8> {
+    release(
+        version,
+        &[
+            &format!("FortiVPNManager-{version}.pkg"),
+            &format!("FortiVPNManager-{version}.msi"),
+            "SHA256SUMS.txt",
+            "SHA256SUMS.txt.sig",
+        ],
+    )
+}
+
+fn update_available(version: &str) -> UpdateStatus {
+    UpdateStatus::Available {
+        version: version.into(),
+        release_page_url: format!(
+            "https://github.com/qoor/FortiVPNManager/releases/tag/v{version}"
+        ),
+        installer_bytes: INSTALLER_BYTES as u64,
+        release_note_titles: Default::default(),
+    }
+}
+
+fn version(text: &str) -> Version {
+    Version::parse(text).unwrap()
+}
+
+fn ready_to_restart() -> UpdateProgress {
+    UpdateProgress::ReadyToRestart {
+        version: "26.2.0".into(),
+    }
+}
+
+#[derive(Clone)]
+struct Route {
+    status: u16,
+    body: Vec<u8>,
+    held_after: Option<usize>,
+    closes: bool,
+}
+
+impl Route {
+    fn ok(body: Vec<u8>) -> Self {
+        Self {
+            status: 200,
+            body,
+            held_after: None,
+            closes: false,
+        }
+    }
+
+    fn status(status: u16) -> Self {
+        Self {
+            status,
+            ..Self::ok(Vec::new())
+        }
+    }
+
+    fn held_after(bytes: usize, body: Vec<u8>) -> Self {
+        Self {
+            held_after: Some(bytes),
+            ..Self::ok(body)
+        }
+    }
+
+    fn closed() -> Self {
+        Self {
+            closes: true,
+            ..Self::ok(Vec::new())
+        }
+    }
+}
+
+struct Server {
+    url: String,
+    routes: Arc<Mutex<HashMap<String, Route>>>,
+    hits: Arc<Mutex<Vec<String>>>,
+    release: Sender<()>,
+}
+
+impl Server {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let routes = Arc::new(Mutex::new(HashMap::new()));
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let (release, released) = mpsc::channel();
+        let released = Arc::new(Mutex::new(released));
+        let (served_routes, served_hits) = (Arc::clone(&routes), Arc::clone(&hits));
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let (routes, hits, released) = (
+                    Arc::clone(&served_routes),
+                    Arc::clone(&served_hits),
+                    Arc::clone(&released),
+                );
+                thread::spawn(move || serve(stream, &routes, &hits, &released));
+            }
+        });
+        Self {
+            url,
+            routes,
+            hits,
+            release,
+        }
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.url)
+    }
+
+    fn route(&self, path: &str, route: Route) {
+        self.routes.lock().unwrap().insert(path.into(), route);
+    }
+
+    fn hits(&self, path: &str) -> usize {
+        self.hits
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|hit| *hit == path)
+            .count()
+    }
+
+    fn release(&self) {
+        self.release.send(()).unwrap();
+    }
+}
+
+fn serve(
+    mut stream: TcpStream,
+    routes: &Mutex<HashMap<String, Route>>,
+    hits: &Mutex<Vec<String>>,
+    released: &Mutex<Receiver<()>>,
+) {
+    let mut reader = BufReader::new(stream.try_clone().unwrap());
+    let mut request = String::new();
+    if reader.read_line(&mut request).is_err() {
+        return;
+    }
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => return,
+            Ok(_) if line == "\r\n" => break,
+            Ok(_) => {}
+        }
+    }
+    let path = request
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_default()
+        .to_owned();
+    hits.lock().unwrap().push(path.clone());
+    let route = routes
+        .lock()
+        .unwrap()
+        .get(&path)
+        .cloned()
+        .unwrap_or_else(|| Route::status(404));
+    if route.closes {
+        return;
+    }
+    let head = format!(
+        "HTTP/1.1 {} Reply\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        route.status,
+        route.body.len()
+    );
+    let first = route.held_after.unwrap_or(route.body.len());
+    let sent = stream
+        .write_all(head.as_bytes())
+        .and_then(|()| stream.write_all(&route.body[..first]))
+        .and_then(|()| stream.flush());
+    if sent.is_err() || first == route.body.len() {
+        return;
+    }
+    if released.lock().unwrap().recv().is_ok() {
+        let _ = stream.write_all(&route.body[first..]);
+    }
+}
+
+fn update_server() -> Server {
+    let server = Server::start();
+    server.route("/latest", Route::ok(full_release("26.2.0")));
+    server.route("/installer", Route::ok(installer()));
+    server.route("/sums", Route::ok(b"checksums".to_vec()));
+    server.route("/sig", Route::ok(b"signature".to_vec()));
+    server
+}
+
+impl App {
+    fn downloads(&self) -> PathBuf {
+        self.folder.join("downloads")
+    }
+
+    fn state_path(&self) -> PathBuf {
+        self.folder.join("state/state.json")
+    }
+
+    fn write_state(&self, state: &Value) {
+        fs::create_dir_all(self.state_path().parent().unwrap()).unwrap();
+        fs::write(self.state_path(), state.to_string()).unwrap();
+    }
+
+    fn state(&self) -> Value {
+        serde_json::from_slice(&fs::read(self.state_path()).unwrap()).unwrap()
+    }
+
+    fn update_section(&self) -> &AutoUpdateSection {
+        self.sections
+            .iter()
+            .find_map(|section| match section {
+                Section::AutoUpdate { section } => Some(section.as_ref()),
+                _ => None,
+            })
+            .expect("an auto update section")
+    }
+
+    fn update_progress(&self) -> &UpdateProgress {
+        &self.update_section().progress
+    }
+
+    fn settle_until_progress(&mut self, what: &str, wanted: impl Fn(&UpdateProgress) -> bool) {
+        self.settle_until(what, |app| wanted(app.update_progress()));
+    }
+
+    fn settle_for(&mut self, duration: Duration) {
+        let deadline = Instant::now() + duration;
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            match self.out.recv_timeout(left) {
+                Ok(message) => self.take(message),
+                Err(RecvTimeoutError::Timeout) => return,
+                Err(RecvTimeoutError::Disconnected) => panic!("the runtime stopped"),
+            }
+        }
+    }
+
+    fn checked(&mut self, status: u16, body: Vec<u8>) {
+        self.ask(move |runtime| runtime.update_checked(Ok(Reply { status, body })));
+        self.settle();
+    }
+
+    fn update_notifications(&self) -> Vec<&UserNotification> {
+        self.actions
+            .iter()
+            .filter_map(|action| match action {
+                PortAction::PostNotification {
+                    notification: notification @ UserNotification::UpdateAvailable { .. },
+                } => Some(notification),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn update_logs(&self) -> usize {
+        self.actions
+            .iter()
+            .filter(|action| {
+                matches!(
+                    action,
+                    PortAction::Log {
+                        category: LogCategory::Update,
+                        ..
+                    }
+                )
+            })
+            .count()
+    }
+
+    fn logged_update(&self, text: &str) -> bool {
+        self.actions.iter().any(|action| {
+            matches!(
+                action,
+                PortAction::Log { category: LogCategory::Update, message, .. } if message.contains(text)
+            )
+        })
+    }
+
+    fn stopped_update_waiters(&self) -> usize {
+        self.actions
+            .iter()
+            .filter(|action| **action == PortAction::StopUpdateWaiter {})
+            .count()
+    }
+
+    fn helper_calls(&self, wanted: impl Fn(&HelperCall) -> bool) -> usize {
+        self.requests
+            .iter()
+            .filter(|request| matches!(request, PortRequest::CallHelper { call } if wanted(call)))
+            .count()
+    }
+
+    fn prepare_requests(&self) -> Vec<UpdatePrepareRequest> {
+        self.requests
+            .iter()
+            .filter_map(|request| match request {
+                PortRequest::CallHelper {
+                    call: HelperCall::PrepareUpdate { json },
+                } => Some(serde_json::from_str(json).unwrap()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn discards(&self) -> usize {
+        self.helper_calls(|call| matches!(call, HelperCall::DiscardPreparedUpdate {}))
+    }
+
+    fn update_sections_since(&self, since: usize) -> Vec<&AutoUpdateSection> {
+        self.update_sections[since..]
+            .iter()
+            .map(|(_, section)| section)
+            .collect()
+    }
+
+    fn download_from(&self, server: &Server) {
+        let (installer, checksums, signature) = (
+            server.url("/installer"),
+            server.url("/sums"),
+            server.url("/sig"),
+        );
+        self.ask(move |runtime| {
+            let Ok(Some(update)) = &mut runtime.updates.found else {
+                panic!("an update was found")
+            };
+            update.installer_url = installer;
+            update.checksums_url = checksums;
+            update.checksums_signature_url = signature;
+        });
+    }
+
+    fn launch_until_helper_runs(&mut self) {
+        self.launch();
+        self.settle_until("the Helper's build", |app| {
+            matches!(app.helper_state(), Some(HelperState::Running { .. }))
+        });
+        self.settle();
+    }
+
+    fn answer_held_update_calls(&mut self) {
+        self.holds_update_calls = false;
+        for (id, call) in std::mem::take(&mut self.held_update_calls) {
+            let response = self.helper(call);
+            self.send(ToRuntime::PortResponse { id, response });
+        }
+    }
+
+    fn prepared_questions(&self) -> usize {
+        self.helper_calls(|call| matches!(call, HelperCall::ReadPreparedUpdate {}))
+    }
+
+    fn update_now_until_ready(&mut self) {
+        self.command(Command::UpdateNow {});
+        self.settle_until_progress("the prepared update", |progress| {
+            *progress == ready_to_restart()
+        });
+    }
+
+    fn quit_approved(&self) -> bool {
+        self.actions.contains(&PortAction::ApproveQuit {})
+    }
+
+    fn position(&self, wanted: impl Fn(&PortRequest) -> bool) -> usize {
+        self.requests
+            .iter()
+            .position(wanted)
+            .expect("the request was made")
+    }
+
+    fn update_stops(&self) -> Vec<(AttemptId, StopReason)> {
+        self.requests
+            .iter()
+            .filter_map(|request| match request {
+                PortRequest::CallHelper {
+                    call: HelperCall::Disconnect { attempt, reason },
+                } => Some((attempt.clone(), *reason)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn connection_buttons(&self) -> [ButtonState; 3] {
+        let section = self
+            .sections
+            .iter()
+            .find_map(|section| match section {
+                Section::Connection { section } => Some(section.as_ref()),
+                _ => None,
+            })
+            .expect("a connection section");
+        [section.connect, section.disconnect, section.reconnect_now]
+    }
+
+    fn exited(&self, attempt: &AttemptId, furthest: Milestone) {
+        self.helper_event(
+            attempt,
+            HelperEventKind::Exited {
+                facts: EndFacts {
+                    furthest_milestone: furthest,
+                    stop_initiator: StopInitiator::Helper {
+                        reason: StopReason::AppQuit,
+                    },
+                    cert_rejected_digests: Vec::new(),
+                    cert_rejected_at: None,
+                    tunnel_setup_failed: false,
+                    tunnel_address_in_use: false,
+                    end_code: -4,
+                },
+            },
+        );
+    }
+}
+
+fn app_with_a_served_update(server: &Server) -> App {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.update_url = server.url("/latest");
+    app.launch_until_helper_runs();
+    assert_eq!(app.update_section().status, update_available("26.2.0"));
+    app.download_from(server);
+    app
+}
+
+fn app_ready_to_restart(server: &Server) -> App {
+    let mut app = app_with_a_served_update(server);
+    app.update_now_until_ready();
+    app
+}
+
+#[test]
+fn without_a_url_the_section_shows_the_running_version_and_nothing_is_checked() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let initial = AutoUpdateSection {
+        current_version: APP_VERSION.into(),
+        status: UpdateStatus::UpToDate {},
+        failed_install_version: None,
+        progress: UpdateProgress::Idle {},
+        check: ButtonState::Enabled,
+        update_now: ButtonState::Hidden,
+        cancel: ButtonState::Hidden,
+        restart: ButtonState::Hidden,
+        card_dot: false,
+        menu_badge: false,
+    };
+    assert_eq!(*app.update_section(), initial);
+    for command in [
+        Command::CheckForUpdates {},
+        Command::UpdatePageOpened {},
+        Command::UpdateNow {},
+        Command::UpdateNowFromNotification {},
+        Command::CancelUpdateDownload {},
+        Command::RestartToUpdate {},
+    ] {
+        app.command(command);
+    }
+    app.send(ToRuntime::Event {
+        event: SystemEvent::DidWake {},
+    });
+    app.inputs.send(Input::Timer(Timer::UpdateCheck)).unwrap();
+    app.settle();
+    assert_eq!(*app.update_section(), initial);
+    assert!(
+        !app.requests
+            .iter()
+            .any(|request| matches!(request, PortRequest::StartUpdateWaiter { .. }))
+    );
+    assert!(!app.asked_helper(|call| matches!(
+        call,
+        HelperCall::PrepareUpdate { .. } | HelperCall::InstallUpdate { .. }
+    )));
+
+    app.ask(|runtime| runtime.update_checked(Err("dns error".into())));
+    app.send(ToRuntime::Event {
+        event: SystemEvent::NetworkPathChanged {
+            satisfied: true,
+            interfaces: Vec::new(),
+        },
+    });
+    app.settle();
+    assert_eq!(
+        app.update_section().status,
+        UpdateStatus::CheckFailed {
+            reason: UpdateCheckFailure::Network {
+                detail: "dns error".into()
+            },
+        }
+    );
+    assert!(!app.update_section().card_dot);
+    assert!(!app.update_section().menu_badge);
+}
+
+#[test]
+fn a_launch_after_an_install_of_a_newer_version_shows_it_failed_and_clears_the_record() {
+    for (target, failed) in [
+        ("26.2.0", Some("26.2.0")),
+        ("26.1.0", None),
+        ("26.0.9", None),
+    ] {
+        let mut app = App::new();
+        app.write_config(ACCOUNT);
+        app.write_state(&json!({"loginItemRegistered": true, "updateTargetVersion": target}));
+        app.launch();
+        app.settle();
+        assert_eq!(
+            app.update_section().failed_install_version.as_deref(),
+            failed,
+            "{target}"
+        );
+        assert_eq!(
+            app.state(),
+            json!({"loginItemRegistered": true}),
+            "{target}"
+        );
+    }
+}
+
+#[test]
+fn a_launch_after_an_install_that_began_connected_connects_where_a_launch_would_not() {
+    for connected_before_update in [true, false] {
+        let mut app = App::new();
+        app.write_config(ACCOUNT);
+        app.secrets
+            .push((vpn_password_item(), SecretText("vpn secret".into())));
+        app.secrets
+            .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+        app.holds_gmail_reads = true;
+        let mut state = json!({"loginItemRegistered": false, "updateTargetVersion": "26.1.0"});
+        if connected_before_update {
+            state["connectedBeforeUpdate"] = json!(true);
+        }
+        app.write_state(&state);
+        app.launch();
+        if connected_before_update {
+            app.settle_until("the attempt's OTP session", |app| app.held_gmail_reads > 0);
+        } else {
+            app.settle();
+            assert_eq!(app.held_gmail_reads, 0);
+            assert_eq!(
+                app.connection_status(),
+                Some(&ConnectionStatus::NotConnected {})
+            );
+        }
+        let state = app.state();
+        assert_eq!(state.get("connectedBeforeUpdate"), None, "{state}");
+        assert_eq!(state.get("updateTargetVersion"), None, "{state}");
+    }
+}
+
+#[test]
+fn each_check_outcome_shows_in_the_section_and_failures_are_logged() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    for (status, body, shown) in [
+        (
+            403,
+            Vec::new(),
+            UpdateStatus::CheckFailed {
+                reason: UpdateCheckFailure::HttpStatus { code: 403 },
+            },
+        ),
+        (
+            200,
+            b"{}".to_vec(),
+            UpdateStatus::CheckFailed {
+                reason: UpdateCheckFailure::InvalidReply {},
+            },
+        ),
+        (
+            200,
+            release("26.2.0", &["SHA256SUMS.txt", "SHA256SUMS.txt.sig"]),
+            UpdateStatus::CheckFailed {
+                reason: UpdateCheckFailure::InstallerMissing {},
+            },
+        ),
+        (200, release(APP_VERSION, &[]), UpdateStatus::UpToDate {}),
+    ] {
+        let logs = app.update_logs();
+        app.checked(status, body);
+        assert_eq!(app.update_section().status, shown);
+        assert_eq!(app.update_section().update_now, ButtonState::Hidden);
+        let failed = matches!(shown, UpdateStatus::CheckFailed { .. });
+        assert_eq!(app.update_logs(), logs + usize::from(failed), "{shown:?}");
+    }
+    app.ask(|runtime| runtime.update_checked(Err("dns error".into())));
+    app.settle();
+    assert_eq!(
+        app.update_section().status,
+        UpdateStatus::CheckFailed {
+            reason: UpdateCheckFailure::Network {
+                detail: "dns error".into()
+            },
+        }
+    );
+    assert!(app.update_notifications().is_empty());
+}
+
+#[test]
+fn a_version_is_announced_once_even_across_launches() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.write_state(&json!({"loginItemRegistered": false, "lastNotifiedUpdateVersion": "26.2.0"}));
+    app.launch();
+    app.settle();
+    app.checked(200, full_release("26.2.0"));
+    assert_eq!(app.update_section().status, update_available("26.2.0"));
+    assert!(app.update_notifications().is_empty());
+
+    for _ in 0..2 {
+        app.checked(200, full_release("26.3.0"));
+    }
+    assert_eq!(app.update_section().status, update_available("26.3.0"));
+    assert_eq!(
+        app.update_notifications(),
+        [&UserNotification::UpdateAvailable {
+            version: "26.3.0".into()
+        }]
+    );
+    assert_eq!(app.state()["lastNotifiedUpdateVersion"], json!("26.3.0"));
+}
+
+#[test]
+fn updating_needs_the_helper_running() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.helper_registration = RegistrationStatus::NotRegistered;
+    app.launch();
+    app.settle();
+    app.checked(200, full_release("26.2.0"));
+    let section = app.update_section();
+    assert_eq!(section.update_now, ButtonState::Disabled);
+    assert!(section.card_dot);
+    assert!(section.menu_badge);
+    app.command(Command::UpdateNow {});
+    app.settle();
+    assert_eq!(*app.update_progress(), UpdateProgress::Idle {});
+}
+
+#[test]
+fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
+    let server = update_server();
+    server.route(
+        "/installer",
+        Route::held_after(INSTALLER_BYTES / 2, installer()),
+    );
+    let mut app = app_with_a_served_update(&server);
+    let section = app.update_section();
+    assert_eq!(
+        (
+            section.check,
+            section.update_now,
+            section.cancel,
+            section.restart
+        ),
+        (
+            ButtonState::Enabled,
+            ButtonState::Enabled,
+            ButtonState::Hidden,
+            ButtonState::Hidden
+        )
+    );
+    assert!(section.card_dot && section.menu_badge);
+    let before = app.update_sections.len();
+
+    app.command(Command::UpdateNow {});
+    app.settle_until_progress("half the installer", |progress| {
+        matches!(progress, UpdateProgress::Downloading { received_bytes, .. } if *received_bytes == INSTALLER_BYTES as u64 / 2)
+    });
+    app.settle_for(Duration::from_millis(2_500));
+    let section = app.update_section().clone();
+    assert_eq!(
+        section.progress,
+        UpdateProgress::Downloading {
+            received_bytes: INSTALLER_BYTES as u64 / 2,
+            total_bytes: INSTALLER_BYTES as u64,
+            percent: 30,
+            remaining: RemainingTime::Seconds { seconds: 5 },
+        }
+    );
+    assert_eq!(section.status, update_available("26.2.0"));
+    assert_eq!(
+        (
+            section.check,
+            section.update_now,
+            section.cancel,
+            section.restart
+        ),
+        (
+            ButtonState::Disabled,
+            ButtonState::Hidden,
+            ButtonState::Enabled,
+            ButtonState::Hidden
+        )
+    );
+    assert!(!section.card_dot && section.menu_badge);
+    let downloads: Vec<(Instant, &UpdateProgress)> = app.update_sections[before..]
+        .iter()
+        .map(|(at, section)| (*at, &section.progress))
+        .collect();
+    assert_eq!(
+        downloads[0].1,
+        &UpdateProgress::Downloading {
+            received_bytes: 0,
+            total_bytes: INSTALLER_BYTES as u64,
+            percent: 0,
+            remaining: RemainingTime::Calculating {},
+        }
+    );
+    assert!(downloads.len() >= 3, "{downloads:?}");
+    for pair in downloads.windows(2) {
+        assert!(
+            pair[1].0 - pair[0].0 >= Duration::from_millis(800),
+            "{downloads:?}"
+        );
+    }
+
+    let before = app.update_sections.len();
+    app.holds_update_calls = true;
+    server.release();
+    app.settle_until("the held preparation", |app| {
+        app.held_update_calls
+            .iter()
+            .any(|(_, call)| matches!(call, HelperCall::PrepareUpdate { .. }))
+    });
+    let downloads = app.downloads();
+    let path = |name: &str| downloads.join(name).display().to_string();
+    let prepared = app.prepare_requests();
+    assert_eq!(
+        prepared,
+        [UpdatePrepareRequest {
+            installer_path: path(&installer_name()),
+            checksums_path: path("SHA256SUMS.txt"),
+            signature_path: path("SHA256SUMS.txt.sig"),
+        }]
+    );
+    assert_eq!(fs::read(&prepared[0].installer_path).unwrap(), installer());
+    assert_eq!(fs::read(&prepared[0].checksums_path).unwrap(), b"checksums");
+    assert_eq!(fs::read(&prepared[0].signature_path).unwrap(), b"signature");
+    app.answer_held_update_calls();
+    app.settle_until_progress("the prepared update", |progress| {
+        *progress == ready_to_restart()
+    });
+    let preparing = app
+        .update_sections_since(before)
+        .into_iter()
+        .find(|section| matches!(section.progress, UpdateProgress::Preparing { .. }))
+        .expect("a preparing section")
+        .clone();
+    assert_eq!(
+        preparing.progress,
+        UpdateProgress::Preparing { percent: 60 }
+    );
+    assert_eq!(
+        (
+            preparing.check,
+            preparing.update_now,
+            preparing.cancel,
+            preparing.restart
+        ),
+        (
+            ButtonState::Disabled,
+            ButtonState::Hidden,
+            ButtonState::Hidden,
+            ButtonState::Hidden
+        )
+    );
+    assert!(!preparing.card_dot && preparing.menu_badge);
+    let section = app.update_section();
+    assert_eq!(
+        (
+            section.check,
+            section.update_now,
+            section.cancel,
+            section.restart
+        ),
+        (
+            ButtonState::Enabled,
+            ButtonState::Hidden,
+            ButtonState::Hidden,
+            ButtonState::Enabled
+        )
+    );
+    assert!(section.card_dot && section.menu_badge);
+    assert!(!downloads.exists());
+    assert!(app.logged_update("update 26.2.0 prepared"));
+    assert!(!app.asked_helper(|call| matches!(call, HelperCall::InstallUpdate { .. })));
+    assert!(
+        !app.requests
+            .iter()
+            .any(|request| matches!(request, PortRequest::StartUpdateWaiter { .. }))
+    );
+}
+
+#[test]
+fn cancelling_the_download_deletes_it_and_shows_the_update_again() {
+    let server = update_server();
+    server.route(
+        "/installer",
+        Route::held_after(INSTALLER_BYTES / 2, installer()),
+    );
+    let mut app = app_with_a_served_update(&server);
+    app.command(Command::UpdateNow {});
+    app.settle_until_progress("half the installer", |progress| {
+        matches!(progress, UpdateProgress::Downloading { received_bytes, .. } if *received_bytes == INSTALLER_BYTES as u64 / 2)
+    });
+    assert_eq!(
+        fs::read(app.downloads().join(installer_name()))
+            .unwrap()
+            .len(),
+        INSTALLER_BYTES / 2
+    );
+    app.ask(|runtime| runtime.updates.last_check = Some(SystemTime::UNIX_EPOCH));
+    for command in [
+        Command::CheckForUpdates {},
+        Command::UpdatePageOpened {},
+        Command::UpdateNowFromNotification {},
+        Command::UpdateNow {},
+        Command::RestartToUpdate {},
+    ] {
+        app.command(command);
+    }
+    app.settle();
+    assert_eq!(server.hits("/latest"), 1);
+    assert_eq!(server.hits("/installer"), 1);
+    assert!(matches!(
+        app.update_progress(),
+        UpdateProgress::Downloading { .. }
+    ));
+    app.ask(|runtime| runtime.updates.last_check = Some(SystemTime::now()));
+
+    app.command(Command::CancelUpdateDownload {});
+    app.settle_until_progress("the cancelled download", |progress| {
+        *progress == UpdateProgress::Idle {}
+    });
+    assert!(!app.downloads().exists());
+    let section = app.update_section();
+    assert_eq!(section.status, update_available("26.2.0"));
+    assert_eq!(section.failed_install_version, None);
+    assert_eq!(
+        (section.check, section.update_now, section.cancel),
+        (
+            ButtonState::Enabled,
+            ButtonState::Enabled,
+            ButtonState::Hidden
+        )
+    );
+    assert!(section.card_dot && section.menu_badge);
+    assert!(app.prepare_requests().is_empty());
+    assert!(app.logged_update("downloading update 26.2.0 cancelled"));
+
+    server.route("/installer", Route::ok(installer()));
+    let before = app.update_sections.len();
+    app.update_now_until_ready();
+    assert_eq!(server.hits("/installer"), 2);
+    assert!(matches!(
+        app.update_sections_since(before)[0].progress,
+        UpdateProgress::Downloading {
+            received_bytes: 0,
+            ..
+        }
+    ));
+    assert_eq!(app.prepare_requests().len(), 1);
+    assert!(!app.downloads().exists());
+}
+
+#[test]
+fn a_failed_download_shows_why_and_offers_to_try_again() {
+    let server = update_server();
+    server.route("/sums", Route::status(404));
+    let mut app = app_with_a_served_update(&server);
+    let logs = app.update_logs();
+    app.command(Command::UpdateNow {});
+    app.settle_until_progress("the failed download", |progress| {
+        matches!(progress, UpdateProgress::Failed { .. })
+    });
+    let section = app.update_section();
+    assert_eq!(
+        section.progress,
+        UpdateProgress::Failed {
+            reason: InstallFailure::DownloadFailed {
+                detail: "SHA256SUMS.txt: HTTP 404".into()
+            }
+        }
+    );
+    assert_eq!(
+        (
+            section.check,
+            section.update_now,
+            section.cancel,
+            section.restart
+        ),
+        (
+            ButtonState::Enabled,
+            ButtonState::Enabled,
+            ButtonState::Hidden,
+            ButtonState::Hidden
+        )
+    );
+    assert!(section.card_dot && section.menu_badge);
+    assert_eq!(app.update_logs(), logs + 1);
+    assert!(app.prepare_requests().is_empty());
+    assert!(!app.downloads().exists());
+
+    server.route("/sums", Route::ok(b"checksums".to_vec()));
+    app.update_now_until_ready();
+}
+
+#[test]
+fn a_failed_preparation_shows_why_and_offers_to_try_again() {
+    let unreadable = serde_json::from_str::<UpdatePrepareReply>("{}").unwrap_err();
+    let server = update_server();
+    let mut app = app_with_a_served_update(&server);
+    for (answer, expected) in [
+        (
+            PortResponse::HelperReply { json: None },
+            InstallFailure::HelperFailed {
+                message: "the Helper sent an empty reply".into(),
+            },
+        ),
+        (
+            PortResponse::HelperReply {
+                json: Some("{}".into()),
+            },
+            InstallFailure::HelperFailed {
+                message: format!("the Helper sent an unreadable reply: {unreadable}"),
+            },
+        ),
+        (
+            helper_reply(&UpdatePrepareReply::Refused {
+                reason: UpdateRefusal::SignatureInvalid,
+                message: "SHA256SUMS.txt.sig does not verify".into(),
+            }),
+            InstallFailure::HelperRefused {
+                reason: UpdateRefusal::SignatureInvalid,
+                message: "SHA256SUMS.txt.sig does not verify".into(),
+            },
+        ),
+        (
+            helper_reply(&UpdatePrepareReply::Failure {
+                error: HelperError {
+                    code: HelperErrorCode::InternalError,
+                    message: "could not copy the installer".into(),
+                },
+            }),
+            InstallFailure::HelperFailed {
+                message: "could not copy the installer".into(),
+            },
+        ),
+        (
+            PortResponse::HelperUnreachable {
+                failure: HelperChannelFailure::NoReply {},
+            },
+            InstallFailure::HelperUnreachable {
+                failure: HelperChannelFailure::NoReply {},
+            },
+        ),
+        (
+            PortResponse::HelperBuildMismatch {
+                helper_build: "99".into(),
+            },
+            InstallFailure::HelperBuildMismatch {
+                helper_build: "99".into(),
+                app_build: APP_BUILD.into(),
+            },
+        ),
+    ] {
+        app.prepare_answer = answer;
+        let logs = app.update_logs();
+        app.command(Command::UpdateNow {});
+        let failed = UpdateProgress::Failed {
+            reason: expected.clone(),
+        };
+        app.settle_until_progress("the failed preparation", |progress| *progress == failed);
+        app.settle();
+        let section = app.update_section();
+        assert_eq!(section.update_now, ButtonState::Enabled, "{expected:?}");
+        assert_eq!(section.restart, ButtonState::Hidden, "{expected:?}");
+        assert_eq!(app.update_logs(), logs + 1, "{expected:?}");
+        assert!(!app.downloads().exists(), "{expected:?}");
+    }
+    assert_eq!(app.stopped_update_waiters(), 0);
+    assert_eq!(app.state().get("updateTargetVersion"), None);
+    app.prepare_answer = helper_reply(&UpdatePrepareReply::Prepared {
+        version: version("26.2.0"),
+    });
+    app.update_now_until_ready();
+}
+
+fn minutes_ago(minutes: u64, seconds: u64) -> SystemTime {
+    SystemTime::now() - Duration::from_secs(minutes * 60 + seconds)
+}
+
+#[test]
+fn opening_the_page_checks_when_the_last_check_is_five_minutes_old() {
+    let server = update_server();
+    let mut app = app_with_a_served_update(&server);
+    assert_eq!(server.hits("/latest"), 1);
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 1);
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(4, 50)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 1);
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(5, 0)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 2);
+
+    server.route("/latest", Route::held_after(0, full_release("26.3.0")));
+    app.command(Command::CheckForUpdates {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 3);
+    assert_eq!(app.update_section().status, UpdateStatus::Checking {});
+    assert_eq!(app.update_section().check, ButtonState::Disabled);
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(6, 0)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 3);
+    server.release();
+    app.settle_until("the check", |app| {
+        app.update_section().status == update_available("26.3.0")
+    });
+}
+
+#[test]
+fn a_check_in_ready_to_restart_discards_the_files_when_the_latest_differs() {
+    let server = update_server();
+    let mut app = app_ready_to_restart(&server);
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(5, 0)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 2);
+    assert_eq!(*app.update_progress(), ready_to_restart());
+    assert_eq!(app.discards(), 0);
+
+    server.route("/latest", Route::ok(full_release("26.3.0")));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 2);
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(5, 0)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 3);
+    assert_eq!(app.discards(), 1);
+    assert!(app.logged_update("discarded the prepared update 26.2.0"));
+    let section = app.update_section();
+    assert_eq!(section.progress, UpdateProgress::Idle {});
+    assert_eq!(section.status, update_available("26.3.0"));
+    assert_eq!(section.update_now, ButtonState::Enabled);
+    assert_eq!(section.restart, ButtonState::Hidden);
+}
+
+#[test]
+fn update_now_from_the_notification_checks_and_starts_an_available_update() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.update_url = server.url("/latest");
+    fs::write(app.downloads(), b"").unwrap();
+    app.launch_until_helper_runs();
+    assert_eq!(server.hits("/latest"), 1);
+    let before = app.update_sections.len();
+    app.command(Command::UpdateNowFromNotification {});
+    app.settle_until_progress("the started update", |progress| {
+        matches!(progress, UpdateProgress::Failed { .. })
+    });
+    assert_eq!(server.hits("/latest"), 2);
+    let sections = app.update_sections_since(before);
+    assert_eq!(sections[0].status, UpdateStatus::Checking {});
+    assert!(
+        sections
+            .iter()
+            .any(|section| matches!(section.progress, UpdateProgress::Downloading { .. }))
+    );
+    assert!(matches!(
+        app.update_progress(),
+        UpdateProgress::Failed {
+            reason: InstallFailure::DownloadFailed { detail }
+        } if detail.starts_with(&app.downloads().display().to_string())
+    ));
+}
+
+#[test]
+fn update_now_from_the_notification_starts_nothing_without_an_update() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.update_url = server.url("/latest");
+    server.route("/latest", Route::ok(full_release(APP_VERSION)));
+    app.launch_until_helper_runs();
+    app.command(Command::UpdateNowFromNotification {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 2);
+    assert_eq!(app.update_section().status, UpdateStatus::UpToDate {});
+
+    server.route("/latest", Route::status(500));
+    app.command(Command::UpdateNowFromNotification {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 3);
+    assert_eq!(
+        app.update_section().status,
+        UpdateStatus::CheckFailed {
+            reason: UpdateCheckFailure::HttpStatus { code: 500 }
+        }
+    );
+
+    server.route("/latest", Route::ok(full_release("26.2.0")));
+    app.command(Command::CheckForUpdates {});
+    app.settle();
+    assert_eq!(app.update_section().status, update_available("26.2.0"));
+    assert!(
+        !app.update_sections
+            .iter()
+            .any(|(_, section)| !matches!(section.progress, UpdateProgress::Idle {}))
+    );
+}
+
+fn relaunch_with_prepared_files(server: &Server, route: Route) -> App {
+    server.route("/latest", route);
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.update_url = server.url("/latest");
+    app.prepared_answer = helper_reply(&PreparedUpdateReply::Prepared {
+        version: version("26.2.0"),
+    });
+    app.launch_until_helper_runs();
+    app
+}
+
+#[test]
+fn a_relaunch_with_the_latest_update_prepared_is_ready_to_restart_after_a_check() {
+    let server = update_server();
+    let mut app =
+        relaunch_with_prepared_files(&server, Route::held_after(0, full_release("26.2.0")));
+    assert!(app.asked_helper(|call| matches!(call, HelperCall::ReadPreparedUpdate {})));
+    let section = app.update_section();
+    assert_eq!(section.status, UpdateStatus::Checking {});
+    assert_eq!(section.progress, UpdateProgress::Idle {});
+    assert_eq!(
+        (section.update_now, section.restart),
+        (ButtonState::Hidden, ButtonState::Hidden)
+    );
+    server.release();
+    app.settle_until_progress("the restored update", |progress| {
+        *progress == ready_to_restart()
+    });
+    let section = app.update_section();
+    assert_eq!(section.status, update_available("26.2.0"));
+    assert_eq!(section.restart, ButtonState::Enabled);
+    assert!(section.card_dot && section.menu_badge);
+    assert_eq!(server.hits("/latest"), 1);
+    assert_eq!(app.discards(), 0);
+    assert!(app.logged_update("update 26.2.0 was prepared before this launch"));
+
+    app.ask(|runtime| runtime.feed(fvm_core::connection::Input::RecheckReadiness));
+    app.settle();
+    assert_eq!(app.prepared_questions(), 1);
+}
+
+#[test]
+fn a_relaunch_with_an_outdated_update_prepared_discards_it() {
+    for (latest, status) in [
+        ("26.3.0", update_available("26.3.0")),
+        (APP_VERSION, UpdateStatus::UpToDate {}),
+    ] {
+        let server = update_server();
+        let mut app = relaunch_with_prepared_files(&server, Route::ok(full_release(latest)));
+        app.settle_until("the discard", |app| app.discards() == 1);
+        app.settle();
+        let section = app.update_section();
+        assert_eq!(section.progress, UpdateProgress::Idle {}, "{latest}");
+        assert_eq!(section.status, status, "{latest}");
+        assert_eq!(section.restart, ButtonState::Hidden, "{latest}");
+    }
+}
+
+#[test]
+fn a_relaunch_offline_keeps_the_prepared_update_until_a_check_finds_another() {
+    for (latest, discards) in [("26.2.0", 0), ("26.3.0", 1)] {
+        let server = update_server();
+        let mut app = relaunch_with_prepared_files(&server, Route::closed());
+        app.settle_until_progress("the restored update", |progress| {
+            *progress == ready_to_restart()
+        });
+        assert!(matches!(
+            app.update_section().status,
+            UpdateStatus::CheckFailed {
+                reason: UpdateCheckFailure::Network { .. }
+            }
+        ));
+        assert_eq!(app.update_section().restart, ButtonState::Enabled);
+        assert_eq!(app.discards(), 0);
+
+        let hits = server.hits("/latest");
+        server.route("/latest", Route::ok(full_release(latest)));
+        app.send(ToRuntime::Event {
+            event: SystemEvent::NetworkPathChanged {
+                satisfied: true,
+                interfaces: Vec::new(),
+            },
+        });
+        app.settle_until("the recheck", |app| {
+            app.update_section().status == update_available(latest)
+        });
+        app.settle();
+        assert_eq!(server.hits("/latest"), hits + 1, "{latest}");
+        assert_eq!(app.discards(), discards, "{latest}");
+        let expected = if discards == 0 {
+            ready_to_restart()
+        } else {
+            UpdateProgress::Idle {}
+        };
+        assert_eq!(*app.update_progress(), expected, "{latest}");
+    }
+}
+
+#[test]
+fn a_failed_question_for_prepared_files_is_logged_and_changes_nothing() {
+    for answer in [
+        helper_reply(&PreparedUpdateReply::Failure {
+            error: HelperError {
+                code: HelperErrorCode::InternalError,
+                message: "could not read the update folder".into(),
+            },
+        }),
+        PortResponse::HelperUnreachable {
+            failure: HelperChannelFailure::ConnectionLost {},
+        },
+    ] {
+        let mut app = App::new();
+        app.write_config(ACCOUNT);
+        app.prepared_answer = answer;
+        app.launch_until_helper_runs();
+        assert!(app.logged_update("asking for a prepared update failed"));
+        assert_eq!(*app.update_progress(), UpdateProgress::Idle {});
+        assert_eq!(app.discards(), 0);
+        app.ask(|runtime| runtime.feed(fvm_core::connection::Input::RecheckReadiness));
+        app.settle();
+        assert_eq!(app.prepared_questions(), 1);
+    }
+}
+
+#[test]
+fn checking_by_hand_asks_again_for_prepared_files_until_answered() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.update_url = server.url("/latest");
+    app.prepared_answer = PortResponse::HelperUnreachable {
+        failure: HelperChannelFailure::NoReply {},
+    };
+    app.launch_until_helper_runs();
+    assert_eq!(app.prepared_questions(), 1);
+    assert_eq!(app.update_section().status, update_available("26.2.0"));
+    app.ask(|runtime| runtime.updates.last_check = Some(minutes_ago(5, 0)));
+    app.command(Command::UpdatePageOpened {});
+    app.settle();
+    assert_eq!(server.hits("/latest"), 2);
+    assert_eq!(app.prepared_questions(), 1);
+
+    app.prepared_answer = helper_reply(&PreparedUpdateReply::Prepared {
+        version: version("26.2.0"),
+    });
+    app.command(Command::CheckForUpdates {});
+    app.settle_until_progress("the restored update", |progress| {
+        *progress == ready_to_restart()
+    });
+    app.settle();
+    assert_eq!(app.prepared_questions(), 2);
+    assert_eq!(server.hits("/latest"), 3);
+
+    app.command(Command::CheckForUpdates {});
+    app.settle();
+    assert_eq!(app.prepared_questions(), 2);
+    assert_eq!(server.hits("/latest"), 4);
+    assert_eq!(*app.update_progress(), ready_to_restart());
+}
+
+#[test]
+fn update_calls_never_hold_up_the_connections_helper_calls() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    app.holds_gmail_reads = true;
+    app.holds_update_calls = true;
+    app.update_url = server.url("/latest");
+    app.launch_until_helper_runs();
+    app.download_from(&server);
+    app.command(Command::UpdateNow {});
+    app.settle_until("the held preparation", |app| {
+        app.held_update_calls.len() == 2
+    });
+    app.settle();
+    assert_eq!(
+        *app.update_progress(),
+        UpdateProgress::Preparing { percent: 60 }
+    );
+
+    app.start_run(Command::Connect {});
+    app.command(Command::Disconnect {});
+    app.settle_until("the disconnect", |app| {
+        app.asked_helper(|call| matches!(call, HelperCall::Disconnect { .. }))
+    });
+    assert_eq!(app.held_update_calls.len(), 2);
+    assert_eq!(
+        *app.update_progress(),
+        UpdateProgress::Preparing { percent: 60 }
+    );
+
+    app.answer_held_update_calls();
+    app.settle_until_progress("the prepared update", |progress| {
+        *progress == ready_to_restart()
+    });
+}
+
+fn removes_routes(request: &PortRequest) -> bool {
+    matches!(
+        request,
+        PortRequest::CallHelper { call: HelperCall::WriteBypassRoutes { json } }
+            if serde_json::from_str::<BypassRoutesRequest>(json).unwrap() == BypassRoutesRequest::Remove {}
+    )
+}
+
+fn starts_waiter(request: &PortRequest) -> bool {
+    matches!(request, PortRequest::StartUpdateWaiter { .. })
+}
+
+fn installs(request: &PortRequest) -> bool {
+    matches!(
+        request,
+        PortRequest::CallHelper {
+            call: HelperCall::InstallUpdate { .. }
+        }
+    )
+}
+
+fn app_on_the_office_wifi_with_a_served_update(server: &Server) -> App {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.secrets
+        .push((vpn_password_item(), SecretText("vpn secret".into())));
+    app.secrets
+        .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
+    app.holds_gmail_reads = true;
+    app.update_url = server.url("/latest");
+    app.launch_until_helper_runs();
+    app.download_from(server);
+    app.update_now_until_ready();
+    app
+}
+
+fn assert_quit_after_cleanup(app: &App) {
+    let waiter = app.position(starts_waiter);
+    assert!(app.quit_approved());
+    assert!(app.position(removes_routes) < waiter);
+    assert!(waiter < app.position(installs));
+    assert_eq!(app.routes_at_quit, Some(Vec::new()));
+    assert_eq!(app.actions.last(), Some(&PortAction::ApproveQuit {}));
+}
+
+fn releases_waiter(action: &PortAction) -> bool {
+    matches!(action, PortAction::ReleaseUpdateWaiter { .. })
+}
+
+#[test]
+fn an_installer_the_helper_names_is_passed_to_the_waiter_before_the_quit() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    app.install_answer = helper_reply(&UpdateInstallReply::Started {
+        installer_process_id: Some(4321),
+    });
+    app.command(Command::RestartToUpdate {});
+    app.settle_until("the approved quit", App::quit_approved);
+    assert_quit_after_cleanup(&app);
+    let released: Vec<usize> = app
+        .actions
+        .iter()
+        .enumerate()
+        .filter(|(_, action)| releases_waiter(action))
+        .map(|(position, _)| position)
+        .collect();
+    assert_eq!(released.len(), 1);
+    assert_eq!(
+        app.actions[released[0]],
+        PortAction::ReleaseUpdateWaiter {
+            installer_process_id: 4321
+        }
+    );
+    let quit = app
+        .actions
+        .iter()
+        .position(|action| *action == PortAction::ApproveQuit {})
+        .unwrap();
+    assert!(released[0] < quit);
+}
+
+#[test]
+fn an_installer_the_helper_does_not_name_releases_no_waiter() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    app.command(Command::RestartToUpdate {});
+    app.settle_until("the approved quit", App::quit_approved);
+    assert_quit_after_cleanup(&app);
+    assert!(!app.actions.iter().any(releases_waiter));
+}
+
+#[test]
+fn restarting_while_connected_stops_the_vpn_cleans_up_and_quits_once_the_install_started() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    let attempt = app.start_run(Command::Connect {});
+    app.bring_up(&attempt, std::net::Ipv4Addr::new(10, 212, 134, 5));
+    app.settle_until("the applied rules", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+    app.output_of(&attempt, "‹before the update›");
+    app.settle();
+    let runs = app.run_requests().len();
+
+    app.command(Command::RestartToUpdate {});
+    app.settle();
+    assert_eq!(app.update_stops(), [(attempt.clone(), StopReason::AppQuit)]);
+    assert_eq!(
+        *app.update_progress(),
+        UpdateProgress::Installing {
+            version: "26.2.0".into()
+        }
+    );
+    assert_eq!(app.update_section().restart, ButtonState::Disabled);
+    assert!(
+        app.connection_buttons()
+            .iter()
+            .all(|button| *button != ButtonState::Enabled),
+        "{:?}",
+        app.connection_buttons()
+    );
+    assert!(!app.requests.iter().any(starts_waiter));
+    for command in [
+        Command::Connect {},
+        Command::Disconnect {},
+        Command::ReconnectNow {},
+    ] {
+        app.command(command);
+    }
+    app.settle();
+    assert_eq!(app.update_stops().len(), 1);
+    assert_eq!(app.run_requests().len(), runs);
+    assert!(!app.quit_approved());
+
+    app.exited(&attempt, Milestone::TunnelUp);
+    app.settle_until("the approved quit", App::quit_approved);
+    assert_quit_after_cleanup(&app);
+    assert!(
+        app.log_at_waiter
+            .as_deref()
+            .is_some_and(|log| log.contains("‹before the update›"))
+    );
+    assert_eq!(app.state()["updateTargetVersion"], json!("26.2.0"));
+    assert_eq!(app.state()["connectedBeforeUpdate"], json!(true));
+}
+
+#[test]
+fn restarting_during_an_attempt_stops_it_and_records_the_reconnect() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    let attempt = app.start_run(Command::Connect {});
+    app.command(Command::RestartToUpdate {});
+    app.settle();
+    assert_eq!(app.update_stops(), [(attempt.clone(), StopReason::AppQuit)]);
+    assert!(!app.requests.iter().any(starts_waiter));
+    app.exited(&attempt, Milestone::Started);
+    app.settle_until("the approved quit", App::quit_approved);
+    assert_quit_after_cleanup(&app);
+    assert_eq!(app.state()["connectedBeforeUpdate"], json!(true));
+}
+
+#[test]
+fn restarting_while_disconnected_installs_at_once_without_a_reconnect() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    app.command(Command::RestartToUpdate {});
+    app.settle_until("the approved quit", App::quit_approved);
+    assert!(app.update_stops().is_empty());
+    assert_quit_after_cleanup(&app);
+    let waiter = app
+        .requests
+        .iter()
+        .find_map(|request| match request {
+            PortRequest::StartUpdateWaiter { install_id } => Some(*install_id),
+            _ => None,
+        })
+        .unwrap();
+    assert!(app.asked_helper(|call| matches!(
+        call,
+        HelperCall::InstallUpdate { json }
+            if serde_json::from_str::<UpdateInstallRequest>(json).unwrap() == UpdateInstallRequest { install_id: waiter }
+    )));
+    assert_eq!(
+        app.state(),
+        json!({"loginItemRegistered": false, "lastNotifiedUpdateVersion": "26.2.0", "updateTargetVersion": "26.2.0"})
+    );
+}
+
+#[test]
+fn a_quit_during_the_restart_is_a_normal_quit_and_records_nothing() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    let attempt = app.start_run(Command::Connect {});
+    app.command(Command::RestartToUpdate {});
+    app.settle();
+    app.send(ToRuntime::Event {
+        event: SystemEvent::QuitRequested {},
+    });
+    app.settle();
+    assert!(!app.quit_approved());
+    app.exited(&attempt, Milestone::Started);
+    app.settle_until("the approved quit", App::quit_approved);
+    assert!(!app.requests.iter().any(starts_waiter));
+    assert_eq!(app.state().get("updateTargetVersion"), None);
+    assert_eq!(app.state().get("connectedBeforeUpdate"), None);
+}
+
+fn failed_restarts() -> Vec<(Option<String>, PortResponse, InstallFailure)> {
+    let unreachable = HelperChannelFailure::NoReply {};
+    vec![
+        (
+            Some("The application could not be launched.".into()),
+            helper_reply(&UpdateInstallReply::Started {
+                installer_process_id: None,
+            }),
+            InstallFailure::WaiterFailed {
+                description: "The application could not be launched.".into(),
+            },
+        ),
+        (
+            None,
+            helper_reply(&UpdateInstallReply::Refused {
+                reason: UpdateRefusal::NothingPrepared,
+                message: "no update is prepared".into(),
+            }),
+            InstallFailure::HelperRefused {
+                reason: UpdateRefusal::NothingPrepared,
+                message: "no update is prepared".into(),
+            },
+        ),
+        (
+            None,
+            helper_reply(&UpdateInstallReply::Failure {
+                error: HelperError {
+                    code: HelperErrorCode::InternalError,
+                    message: "could not start the installer".into(),
+                },
+            }),
+            InstallFailure::HelperFailed {
+                message: "could not start the installer".into(),
+            },
+        ),
+        (
+            None,
+            PortResponse::HelperUnreachable {
+                failure: unreachable.clone(),
+            },
+            InstallFailure::HelperUnreachable {
+                failure: unreachable,
+            },
+        ),
+        (
+            None,
+            PortResponse::HelperBuildMismatch {
+                helper_build: "99".into(),
+            },
+            InstallFailure::HelperBuildMismatch {
+                helper_build: "99".into(),
+                app_build: APP_BUILD.into(),
+            },
+        ),
+    ]
+}
+
+#[test]
+fn a_failed_restart_shows_why_and_reconnects_the_vpn_it_stopped() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.update_url = server.url("/latest");
+    app.launch_until_helper_runs();
+    app.download_from(&server);
+    want_the_vpn(&mut app);
+    app.settle_until("the applied rules", |app| {
+        app.exception_routes == vec![rule_route()]
+    });
+    for (waiter_failure, install_answer, expected) in failed_restarts() {
+        app.waiter_failure = waiter_failure.clone();
+        app.install_answer = install_answer;
+        app.update_now_until_ready();
+        let (logs, stopped) = (app.update_logs(), app.stopped_update_waiters());
+        app.command(Command::RestartToUpdate {});
+        let failed = UpdateProgress::Failed {
+            reason: expected.clone(),
+        };
+        app.settle_until_progress("the failed restart", |progress| *progress == failed);
+        app.settle_until("the routes again", |app| {
+            app.exception_routes == vec![rule_route()]
+        });
+        app.settle();
+        assert!(!app.quit_approved(), "{expected:?}");
+        assert_eq!(
+            app.connection_status(),
+            Some(&ConnectionStatus::WaitingForNetwork {}),
+            "{expected:?}"
+        );
+        assert_eq!(
+            app.connection_buttons()[1],
+            ButtonState::Enabled,
+            "{expected:?}"
+        );
+        let section = app.update_section();
+        assert_eq!(section.update_now, ButtonState::Enabled, "{expected:?}");
+        assert_eq!(section.restart, ButtonState::Hidden, "{expected:?}");
+        assert_eq!(app.update_logs(), logs + 1, "{expected:?}");
+        let installed = waiter_failure.is_none();
+        assert_eq!(
+            app.stopped_update_waiters(),
+            stopped + usize::from(installed),
+            "{expected:?}"
+        );
+        assert_eq!(app.state().get("updateTargetVersion"), None, "{expected:?}");
+        assert_eq!(
+            app.state().get("connectedBeforeUpdate"),
+            None,
+            "{expected:?}"
+        );
+    }
+}
+
+#[test]
+fn a_failed_restart_without_a_vpn_leaves_it_off() {
+    let server = update_server();
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.update_url = server.url("/latest");
+    app.launch_until_helper_runs();
+    app.download_from(&server);
+    let status = app.connection_status().cloned();
+    for (waiter_failure, install_answer, expected) in failed_restarts() {
+        app.waiter_failure = waiter_failure;
+        app.install_answer = install_answer;
+        app.update_now_until_ready();
+        app.command(Command::RestartToUpdate {});
+        let failed = UpdateProgress::Failed {
+            reason: expected.clone(),
+        };
+        app.settle_until_progress("the failed restart", |progress| *progress == failed);
+        app.settle();
+        assert!(!app.quit_approved(), "{expected:?}");
+        assert_eq!(app.connection_status(), status.as_ref(), "{expected:?}");
+        assert_eq!(
+            app.connection_buttons()[0],
+            ButtonState::Enabled,
+            "{expected:?}"
+        );
+        assert!(app.exception_routes.is_empty(), "{expected:?}");
+        assert_eq!(app.update_section().update_now, ButtonState::Enabled);
+        assert_eq!(app.state().get("updateTargetVersion"), None, "{expected:?}");
+    }
+    assert!(app.run_requests().is_empty());
+}
+
+#[test]
+fn a_reconnect_after_a_failed_restart_waits_for_the_stopped_attempts_late_code() {
+    let server = update_server();
+    let mut app = app_on_the_office_wifi_with_a_served_update(&server);
+    app.install_answer = helper_reply(&UpdateInstallReply::Refused {
+        reason: UpdateRefusal::NothingPrepared,
+        message: "no update is prepared".into(),
+    });
+    let attempt = app.start_run(Command::Connect {});
+    for milestone in [
+        Milestone::Started,
+        Milestone::ConnectedToGateway,
+        Milestone::OtpPrompted,
+    ] {
+        app.helper_event(
+            &attempt,
+            HelperEventKind::Milestone {
+                milestone,
+                tunnel_ip: None,
+            },
+        );
+    }
+    app.settle();
+    let (reads, runs) = (app.held_gmail_reads, app.run_requests().len());
+
+    app.command(Command::RestartToUpdate {});
+    app.settle();
+    app.exited(&attempt, Milestone::OtpPrompted);
+    app.settle_until_progress("the failed restart", |progress| {
+        matches!(progress, UpdateProgress::Failed { .. })
+    });
+    app.settle();
+    let waits = |app: &App| {
+        app.log.iter().any(|line| {
+            line.text
+                .contains("waiting for the stopped attempt's OTP email")
+        })
+    };
+    assert!(waits(&app));
+    assert!(matches!(
+        app.connection_status(),
+        Some(ConnectionStatus::Connecting { .. })
+    ));
+    assert_eq!(app.held_gmail_reads, reads);
+    assert_eq!(app.run_requests().len(), runs);
+
+    let stopped = attempt.clone();
+    app.ask(move |runtime| {
+        runtime.feed(fvm_core::connection::Input::StaleOtpTrashed(stopped));
+    });
+    app.settle_until("the new attempt's OTP session", |app| {
+        app.held_gmail_reads > reads
+    });
+    assert!(!app.quit_approved());
 }

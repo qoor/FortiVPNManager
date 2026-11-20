@@ -4,27 +4,42 @@ using Microsoft.Windows.AppNotifications.Builder;
 namespace FortiVPNManager.App;
 
 /// <summary>
-/// Windows notifications, for problems the user should see while Settings is closed
+/// Windows notifications, for problems and updates the user should see while Settings is closed
 /// (components/os-integration/macos/UserNotifier.swift). The text comes from the UI's sentences;
-/// clicking a notification calls <paramref name="onOpen"/>, or starts the app when it is not running.
+/// clicking a notification or its button calls <paramref name="onOpen"/> with its identifier and
+/// whether the button was clicked, or starts the app when it is not running.
 /// </summary>
 internal sealed class Notifier : IDisposable
 {
     private const string Group = "FortiVPNManager";
+    private const string IdentifierArgument = "identifier";
+    private const string ButtonArgument = "button";
 
-    public Notifier(Action onOpen)
+    public Notifier(Action<string?, bool> onOpen)
     {
-        AppNotificationManager.Default.NotificationInvoked += (_, _) => onOpen();
+        AppNotificationManager.Default.NotificationInvoked += (_, args) => onOpen(Identifier(args), FromButton(args));
         AppNotificationManager.Default.Register();
     }
 
+    public static string? Identifier(AppNotificationActivatedEventArgs args) =>
+        args.Arguments.TryGetValue(IdentifierArgument, out var identifier) ? identifier : null;
+
+    public static bool FromButton(AppNotificationActivatedEventArgs args) => args.Arguments.ContainsKey(ButtonArgument);
+
     /// <summary>Replaces an earlier notification with the same <paramref name="identifier"/>.</summary>
-    public void Post(string identifier, string title, string body)
+    public void Post(string identifier, string title, string body, string? button)
     {
-        var notification = new AppNotificationBuilder()
+        var builder = new AppNotificationBuilder()
+            .AddArgument(IdentifierArgument, identifier)
             .AddText(title)
-            .AddText(body)
-            .BuildNotification();
+            .AddText(body);
+        if (button is not null)
+        {
+            builder.AddButton(new AppNotificationButton(button)
+                .AddArgument(IdentifierArgument, identifier)
+                .AddArgument(ButtonArgument, ButtonArgument));
+        }
+        var notification = builder.BuildNotification();
         notification.Tag = identifier;
         notification.Group = Group;
         AppNotificationManager.Default.Show(notification);

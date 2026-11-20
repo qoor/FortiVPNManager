@@ -35,13 +35,15 @@ impl ConnectionManager {
                 }
                 _ => None,
             },
-            connect: shown(!self.wants_connection || attention),
-            disconnect: shown(self.wants_connection),
-            reconnect_now: if matches!(phase, Phase::Connected(_) | Phase::WaitingRetry { .. }) {
-                ButtonState::Enabled
-            } else {
-                ButtonState::Disabled
-            },
+            connect: self.during_update(shown(!self.wants_connection || attention)),
+            disconnect: self.during_update(shown(self.wants_connection)),
+            reconnect_now: self.during_update(
+                if matches!(phase, Phase::Connected(_) | Phase::WaitingRetry { .. }) {
+                    ButtonState::Enabled
+                } else {
+                    ButtonState::Disabled
+                },
+            ),
             account_applies_next_connection: self.account_applies_next_connection(),
         }
     }
@@ -183,7 +185,7 @@ impl ConnectionManager {
                     AfterStop::Idle => AfterDisconnect::Idle,
                     AfterStop::Reconnect(_) => AfterDisconnect::Reconnect,
                     AfterStop::ResumeAfterSleep => AfterDisconnect::Sleep,
-                    AfterStop::Quit => AfterDisconnect::Quit,
+                    AfterStop::Quit | AfterStop::Update => AfterDisconnect::Quit,
                 },
             },
             Phase::Failed(failure) => ConnectionStatus::Failed {
@@ -243,6 +245,14 @@ impl ConnectionManager {
             },
             SetupNeed::HelperApproval => SetupItem::HelperApproval {},
             SetupNeed::HelperVersion => SetupItem::HelperVersion {},
+        }
+    }
+
+    fn during_update(&self, button: ButtonState) -> ButtonState {
+        if self.update_stop.is_some() && button == ButtonState::Enabled {
+            ButtonState::Disabled
+        } else {
+            button
         }
     }
 

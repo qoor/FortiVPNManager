@@ -19,6 +19,7 @@ public static partial class AppInternal
         public sealed record Gmail([property: JsonPropertyName("_0")] GmailSection Value) : Section;
         public sealed record BypassRules([property: JsonPropertyName("_0")] BypassRulesSection Value) : Section;
         public sealed record Config([property: JsonPropertyName("_0")] ConfigSection Value) : Section;
+        public sealed record AutoUpdate([property: JsonPropertyName("_0")] AutoUpdateSection Value) : Section;
     }
 
     // Connection
@@ -556,5 +557,117 @@ public static partial class AppInternal
         public sealed record Config(ConfigFileError Error) : ImportError;
         public sealed record NoFortiClientConnection : ImportError;
         public sealed record InvalidFortiClientServer(string Connection) : ImportError;
+    }
+
+    // Auto update
+
+    /// <param name="UpdateNow">Also "Try Again" after a failure.</param>
+    /// <param name="Cancel">Cancels the download.</param>
+    /// <param name="CardDot">The dot on the Software Update card.</param>
+    /// <param name="MenuBadge">The badge in the menu.</param>
+    public sealed record AutoUpdateSection(
+        string CurrentVersion,
+        UpdateStatus Status,
+        UpdateProgress Progress,
+        ButtonState Check,
+        ButtonState UpdateNow,
+        ButtonState Cancel,
+        ButtonState Restart,
+        bool CardDot,
+        bool MenuBadge,
+        string? FailedInstallVersion = null);
+
+    [JsonConverter(typeof(CasesConverter<UpdateStatus>))]
+    public abstract record UpdateStatus
+    {
+        private UpdateStatus() { }
+
+        public sealed record Checking : UpdateStatus;
+        public sealed record UpToDate : UpdateStatus;
+
+        public sealed record Available(
+            string Version,
+            string ReleasePageUrl,
+            ulong InstallerBytes,
+            IReadOnlyDictionary<string, IReadOnlyList<string>> ReleaseNoteTitles) : UpdateStatus;
+
+        public sealed record CheckFailed(UpdateCheckFailure Reason) : UpdateStatus;
+    }
+
+    [JsonConverter(typeof(CasesConverter<UpdateCheckFailure>))]
+    public abstract record UpdateCheckFailure
+    {
+        private UpdateCheckFailure() { }
+
+        public sealed record HttpStatus(ushort Code) : UpdateCheckFailure;
+        public sealed record Network(string Detail) : UpdateCheckFailure;
+        public sealed record InvalidReply : UpdateCheckFailure;
+        public sealed record InstallerMissing : UpdateCheckFailure;
+    }
+
+    /// <summary><c>Percent</c> is the progress bar's value; there is no bar without it.</summary>
+    [JsonConverter(typeof(CasesConverter<UpdateProgress>))]
+    public abstract record UpdateProgress
+    {
+        private UpdateProgress() { }
+
+        public sealed record Idle : UpdateProgress;
+
+        /// <summary>Counts the installer's bytes.</summary>
+        public sealed record Downloading(
+            ulong ReceivedBytes,
+            ulong TotalBytes,
+            byte Percent,
+            RemainingTime Remaining) : UpdateProgress;
+
+        /// <summary>The Helper checks the downloaded files.</summary>
+        public sealed record Preparing(byte Percent) : UpdateProgress;
+
+        public sealed record ReadyToRestart(string Version) : UpdateProgress;
+
+        /// <summary>From Restart App until the app quits for the installer, or the install fails.</summary>
+        public sealed record Installing(string Version) : UpdateProgress;
+
+        public sealed record Failed(InstallFailure Reason) : UpdateProgress;
+    }
+
+    [JsonConverter(typeof(CasesConverter<RemainingTime>))]
+    public abstract record RemainingTime
+    {
+        private RemainingTime() { }
+
+        public sealed record Calculating : RemainingTime;
+
+        /// <summary>Whole minutes, rounded up; over 55 seconds.</summary>
+        public sealed record Minutes([property: JsonPropertyName("minutes")] ulong Value) : RemainingTime;
+
+        /// <summary>Rounded up to a multiple of 5, from 5 to 55.</summary>
+        public sealed record Seconds([property: JsonPropertyName("seconds")] ulong Value) : RemainingTime;
+    }
+
+    [JsonConverter(typeof(CasesConverter<InstallFailure>))]
+    public abstract record InstallFailure
+    {
+        private InstallFailure() { }
+
+        public sealed record DownloadFailed(string Detail) : InstallFailure;
+        public sealed record WaiterFailed(string Description) : InstallFailure;
+        public sealed record HelperUnreachable(HelperChannelFailure Failure) : InstallFailure;
+        public sealed record HelperBuildMismatch(string HelperBuild, string AppBuild) : InstallFailure;
+        public sealed record HelperFailed(string Message) : InstallFailure;
+        public sealed record HelperRefused(UpdateRefusal Reason, string Message) : InstallFailure;
+    }
+
+    [JsonConverter(typeof(EnumNameConverter<UpdateRefusal>))]
+    public enum UpdateRefusal
+    {
+        SignatureInvalid,
+        ChecksumMismatch,
+        VersionNotNewer,
+        AlreadyInstalling,
+        FilesUnreadable,
+
+        /// <summary>An install was asked for with no update prepared.</summary>
+        NothingPrepared,
     }
 }

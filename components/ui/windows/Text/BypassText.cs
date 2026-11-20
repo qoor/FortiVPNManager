@@ -102,16 +102,20 @@ public static class BypassText
 
     private static string SettingsNotChanged(string detail) => L("Couldn't change the Windows network settings (%@).", detail);
 
+    public const string UpdateAvailableIdentifier = "update-available";
+
     /// <summary>Notifications of the same kind replace each other.</summary>
     public static string Identifier(this UserNotification notification) => notification switch
     {
         UserNotification.ExceptionRulesNotApplied => "exception-rules-write-failed",
+        UserNotification.UpdateAvailable => UpdateAvailableIdentifier,
         _ => throw new InvalidOperationException($"unknown notification {notification}"),
     };
 
     public static string Title(this UserNotification notification) => notification switch
     {
         UserNotification.ExceptionRulesNotApplied => L("Exception rules aren't being applied"),
+        UserNotification.UpdateAvailable => L("Software Update Available"),
         _ => throw new InvalidOperationException($"unknown notification {notification}"),
     };
 
@@ -119,6 +123,14 @@ public static class BypassText
     {
         UserNotification.ExceptionRulesNotApplied notApplied =>
             L("Writing the routes still failed after %lld retries: %@", notApplied.Retries, notApplied.Failure.Message()),
+        UserNotification.UpdateAvailable available => L("Update to FortiVPNManager %@ to get the latest features.", available.Version),
+        _ => throw new InvalidOperationException($"unknown notification {notification}"),
+    };
+
+    public static string? ButtonTitle(this UserNotification notification) => notification switch
+    {
+        UserNotification.ExceptionRulesNotApplied => null,
+        UserNotification.UpdateAvailable => L("Update Now"),
         _ => throw new InvalidOperationException($"unknown notification {notification}"),
     };
 }

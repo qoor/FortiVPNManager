@@ -69,6 +69,7 @@ struct MenuContent: View {
         Divider()
         Button("Show Log") { ui.settings.show(.log) }
         Button("Settings…") { ui.settings.show() }
+            .badge(ui.autoUpdate?.menuBadge == true ? Text("Update") : nil)
             .keyboardShortcut(",")
         Divider()
         Button("Quit FortiVPNManager") { NSApp.terminate(nil) }

@@ -9,7 +9,8 @@ namespace FortiVPNManager.Ui.Settings;
 
 /// <summary>
 /// The General pane (components/ui/macos/GeneralPane.swift): the connection's status with its
-/// buttons, as in the menu, how the app starts, and importing FortiClient's server address.
+/// buttons, as in the menu, how the app starts, importing FortiClient's server address, and
+/// software updates.
 /// </summary>
 internal sealed class GeneralPane : IPane
 {
@@ -46,6 +47,8 @@ internal sealed class GeneralPane : IPane
     private readonly InfoBar openAtLoginError = Cards.Notice(InfoBarSeverity.Error);
     private readonly ToggleSwitch autoConnect = new();
     private readonly SettingsCard autoConnectCard;
+    private readonly SettingsCard update = new() { Header = L("Software Update"), HeaderIcon = new FontIcon { Glyph = "\uE72C" }, IsClickEnabled = true, Margin = new Thickness(0, 30, 0, 0) };
+    private readonly InfoBadge updateDot = new() { Style = (Style)Application.Current.Resources["AttentionDotInfoBadgeStyle"] };
     private IReadOnlyList<SetupItem> shownItems = [];
     private FailureReason? shownFailure;
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
@@ -112,6 +115,9 @@ internal sealed class GeneralPane : IPane
         page.BodyPanel.Children.Add(startup);
         AddImportRows();
         page.BodyPanel.Children.Add(import);
+        update.Content = updateDot;
+        update.Click += (_, _) => ui.Settings.ShowUpdates();
+        page.BodyPanel.Children.Add(rows["Software Update"] = update);
     }
 
     /// <summary>
@@ -157,6 +163,8 @@ internal sealed class GeneralPane : IPane
             ShowStartup(config);
             ShowImport(config.Account.ImportReport);
         }
+        update.Visible(ui.AutoUpdate is not null);
+        updateDot.Visible(ui.AutoUpdate?.CardDot == true);
         refreshing = false;
     }
 

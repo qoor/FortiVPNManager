@@ -2,6 +2,7 @@
 //! draws them as they are; only sentences, relative times and which pane a button opens are
 //! left to it.
 
+use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::time::SystemTime;
 
@@ -12,7 +13,7 @@ use super::problem::{
     AccountValueProblem, AddressProblem, ConfigFileError, ConfigWarning, FileProblem,
 };
 use super::{ButtonState, MinutesSetting, OtpMethod, TimeOfDay, Weekday, millis};
-use crate::app_helper::HelperErrorCode;
+use crate::app_helper::{HelperErrorCode, UpdateRefusal};
 
 /// Boxed, as the sections differ much in size.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -45,6 +46,10 @@ pub enum Section {
     Config {
         #[serde(rename = "_0")]
         section: Box<ConfigSection>,
+    },
+    AutoUpdate {
+        #[serde(rename = "_0")]
+        section: Box<AutoUpdateSection>,
     },
 }
 
@@ -149,6 +154,7 @@ pub enum AfterDisconnect {
     Idle,
     Reconnect,
     Sleep,
+    /// Also before an update's install.
     Quit,
 }
 
@@ -843,5 +849,119 @@ pub enum ImportError {
     /// The connection's server is not `host` or `host:port`.
     InvalidFortiClientServer {
         connection: String,
+    },
+}
+
+// MARK: Auto update
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoUpdateSection {
+    pub current_version: String,
+    pub status: UpdateStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_install_version: Option<String>,
+    pub progress: UpdateProgress,
+    pub check: ButtonState,
+    /// Also "Try Again" after a failure.
+    pub update_now: ButtonState,
+    /// Cancels the download.
+    pub cancel: ButtonState,
+    pub restart: ButtonState,
+    /// The dot on the Software Update card.
+    pub card_dot: bool,
+    /// The badge in the menu.
+    pub menu_badge: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum UpdateStatus {
+    Checking {},
+    UpToDate {},
+    Available {
+        version: String,
+        release_page_url: String,
+        installer_bytes: u64,
+        release_note_titles: BTreeMap<String, Vec<String>>,
+    },
+    CheckFailed {
+        reason: UpdateCheckFailure,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum UpdateCheckFailure {
+    HttpStatus { code: u16 },
+    Network { detail: String },
+    InvalidReply {},
+    InstallerMissing {},
+}
+
+/// `percent` is the progress bar's value; there is no bar without it.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum UpdateProgress {
+    Idle {},
+    /// Counts the installer's bytes.
+    Downloading {
+        received_bytes: u64,
+        total_bytes: u64,
+        percent: u8,
+        remaining: RemainingTime,
+    },
+    /// The Helper checks the downloaded files.
+    Preparing {
+        percent: u8,
+    },
+    ReadyToRestart {
+        version: String,
+    },
+    /// From Restart App until the app quits for the installer, or the install fails.
+    Installing {
+        version: String,
+    },
+    Failed {
+        reason: InstallFailure,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum RemainingTime {
+    Calculating {},
+    /// Whole minutes, rounded up; over 55 seconds.
+    Minutes {
+        minutes: u64,
+    },
+    /// Rounded up to a multiple of 5, from 5 to 55.
+    Seconds {
+        seconds: u64,
+    },
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum InstallFailure {
+    DownloadFailed {
+        detail: String,
+    },
+    WaiterFailed {
+        description: String,
+    },
+    HelperUnreachable {
+        failure: HelperChannelFailure,
+    },
+    HelperBuildMismatch {
+        helper_build: String,
+        app_build: String,
+    },
+    HelperFailed {
+        message: String,
+    },
+    HelperRefused {
+        reason: UpdateRefusal,
+        message: String,
     },
 }

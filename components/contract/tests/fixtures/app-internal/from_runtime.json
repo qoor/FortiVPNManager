@@ -176,6 +176,29 @@
     }
   },
   {
+    "section": {
+      "_0": {
+        "autoUpdate": {
+          "_0": {
+            "cancel": "hidden",
+            "cardDot": false,
+            "check": "enabled",
+            "currentVersion": "26.1.0",
+            "menuBadge": false,
+            "progress": {
+              "idle": {}
+            },
+            "restart": "hidden",
+            "status": {
+              "checking": {}
+            },
+            "updateNow": "hidden"
+          }
+        }
+      }
+    }
+  },
+  {
     "logLines": {
       "lines": [
         {

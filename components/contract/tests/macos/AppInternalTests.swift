@@ -84,6 +84,15 @@ struct AppInternalTests {
         #expect(sections == AppInternal.Expected.configSections)
     }
 
+    @Test func autoUpdateSections() throws {
+        let sections: [AppInternal.AutoUpdateSection] = try decoded("auto_update_sections.json")
+        #expect(sections == AppInternal.Expected.autoUpdateSections)
+        let failures: [AppInternal.InstallFailure] = try decoded("install_failures.json")
+        #expect(failures == AppInternal.Expected.installFailures)
+        let checkFailures: [AppInternal.UpdateCheckFailure] = try decoded("update_check_failures.json")
+        #expect(checkFailures == AppInternal.Expected.updateCheckFailures)
+    }
+
     @Test func settingsFileProblems() throws {
         let errors: [AppInternal.ConfigFileError] = try decoded("config_file_errors.json")
         #expect(errors == AppInternal.Expected.configFileErrors)
@@ -240,6 +249,32 @@ private extension AppInternal {
             )
         }
 
+        static func autoUpdateSection(
+            _ status: UpdateStatus, progress: UpdateProgress, failedInstallVersion: String? = nil,
+            check: ButtonState = .enabled, updateNow: ButtonState = .hidden, cancel: ButtonState = .hidden,
+            restart: ButtonState = .hidden, cardDot: Bool = false, menuBadge: Bool = false
+        ) -> AutoUpdateSection {
+            AutoUpdateSection(
+                currentVersion: "26.1.0", status: status, failedInstallVersion: failedInstallVersion,
+                progress: progress, check: check, updateNow: updateNow, cancel: cancel, restart: restart,
+                cardDot: cardDot, menuBadge: menuBadge
+            )
+        }
+
+        static func busyUpdate(_ progress: UpdateProgress, cancel: ButtonState) -> AutoUpdateSection {
+            autoUpdateSection(updateAvailable, progress: progress, check: .disabled, cancel: cancel, menuBadge: true)
+        }
+
+        static let releasePage = "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0"
+
+        static let updateAvailable = UpdateStatus.available(
+            version: "26.2.0", releasePageUrl: releasePage, installerBytes: 21_733_376,
+            releaseNoteTitles: [
+                "en": ["Automatic updates", "Faster reconnects after sleep"],
+                "ko": ["자동 업데이트", "잠자기 후 더 빠른 재연결"],
+            ]
+        )
+
         static func importReport(_ password: ImportedPassword?) -> ImportReport {
             ImportReport(
                 source: "/Users/alice/.config/openfortivpn/config", host: "vpn.example.com", port: 10443,
@@ -257,6 +292,7 @@ private extension AppInternal {
             .section(.gmail(gmailSection(.idle))),
             .section(.bypassRules(bypassSection(.checking, notice: nil))),
             .section(.config(configSection(accountForm(0)))),
+            .section(.autoUpdate(autoUpdateSection(.checking, progress: .idle))),
             .logLines(lines: [
                 LogLine(time: at(t0), source: .info, text: "INFO:   Connected to gateway.", startsAttempt: false),
                 LogLine(time: at(t0 + 750), source: .error, text: "Using interface ppp0", startsAttempt: false),
@@ -633,6 +669,73 @@ private extension AppInternal {
             ConfigWarning(kind: .permissionsCorrected(previousMode: 0o640), location: nil),
         ]
 
+        static let autoUpdateSections: [AutoUpdateSection] = [
+            autoUpdateSection(
+                updateAvailable, progress: .idle, failedInstallVersion: "26.2.0", updateNow: .enabled, cardDot: true,
+                menuBadge: true
+            ),
+            busyUpdate(
+                .downloading(receivedBytes: 0, totalBytes: 21_733_376, percent: 0, remaining: .calculating),
+                cancel: .enabled
+            ),
+            busyUpdate(
+                .downloading(receivedBytes: 4_194_304, totalBytes: 21_733_376, percent: 11, remaining: .minutes(minutes: 2)),
+                cancel: .enabled
+            ),
+            busyUpdate(
+                .downloading(
+                    receivedBytes: 19_922_944, totalBytes: 21_733_376, percent: 55, remaining: .seconds(seconds: 5)
+                ),
+                cancel: .enabled
+            ),
+            busyUpdate(.preparing(percent: 60), cancel: .hidden),
+            autoUpdateSection(
+                updateAvailable, progress: .readyToRestart(version: "26.2.0"), restart: .enabled, cardDot: true,
+                menuBadge: true
+            ),
+            autoUpdateSection(
+                updateAvailable, progress: .installing(version: "26.2.0"), check: .disabled, restart: .disabled
+            ),
+            autoUpdateSection(
+                updateAvailable,
+                progress: .failed(reason: .helperRefused(
+                    reason: .checksumMismatch, message: "the installer does not match SHA256SUMS.txt"
+                )),
+                updateNow: .enabled, cardDot: true, menuBadge: true
+            ),
+            autoUpdateSection(
+                .available(version: "26.2.0", releasePageUrl: releasePage, installerBytes: 48_431_104, releaseNoteTitles: [:]),
+                progress: .idle, updateNow: .disabled, cardDot: true, menuBadge: true
+            ),
+            autoUpdateSection(.checking, progress: .idle),
+            autoUpdateSection(.upToDate, progress: .idle),
+            autoUpdateSection(
+                .checkFailed(reason: .httpStatus(code: 403)), progress: .readyToRestart(version: "26.2.0"),
+                restart: .enabled, cardDot: true, menuBadge: true
+            ),
+        ]
+
+        static let updateCheckFailures: [UpdateCheckFailure] = [
+            .httpStatus(code: 403),
+            .network(detail: "error sending request: dns error"),
+            .invalidReply,
+            .installerMissing,
+        ]
+
+        static let installFailures: [InstallFailure] = [
+            .downloadFailed(detail: "connection reset by peer"),
+            .waiterFailed(description: "The application “FortiVPNManager” could not be launched."),
+            .helperUnreachable(failure: .noReply),
+            .helperBuildMismatch(helperBuild: "20261108090000", appBuild: "20261109120000"),
+            .helperFailed(message: "could not start the installer: permission denied"),
+            .helperRefused(reason: .signatureInvalid, message: "SHA256SUMS.txt.sig does not verify"),
+            .helperRefused(reason: .checksumMismatch, message: "the installer does not match SHA256SUMS.txt"),
+            .helperRefused(reason: .versionNotNewer, message: "26.1.0 is not newer than 26.1.0"),
+            .helperRefused(reason: .alreadyInstalling, message: "an update is already being installed"),
+            .helperRefused(reason: .filesUnreadable, message: "could not read the installer: No such file or directory"),
+            .helperRefused(reason: .nothingPrepared, message: "no update is prepared"),
+        ]
+
         static let portRequests: [FromRuntime] = [
             .portRequest(id: 1, request: .readSecret(item: .vpnPassword(username: "alice", host: "vpn.example.com"))),
             .portRequest(id: 2, request: .hasSecret(item: .gmailAppPassword(address: "alice@example.com"))),
@@ -655,6 +758,9 @@ private extension AppInternal {
             .portRequest(id: 13, request: .callHelper(call: .exitWhenIdle)),
             .portRequest(id: 14, request: .callHelper(call: .readBypassRoutes)),
             .portRequest(id: 15, request: .callHelper(call: .writeBypassRoutes(json: #"{"expected":{},"routes":[]}"#))),
+            .portRequest(id: 16, request: .callHelper(call: .prepareUpdate(
+                json: #"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#
+            ))),
             .portRequest(id: 17, request: .routeInterface(destination: "203.0.113.10")),
             .portRequest(id: 18, request: .interfaceAddresses),
             .portRequest(id: 19, request: .primaryRouter),
@@ -665,6 +771,10 @@ private extension AppInternal {
             .portRequest(id: 22, request: .loginItemRegistration),
             .portRequest(id: 23, request: .setLoginItem(enabled: false)),
             .portRequest(id: 24, request: .fortiClientConnections),
+            .portRequest(id: 25, request: .startUpdateWaiter(installId: 13_835_058_055_282_163_713)),
+            .portRequest(id: 26, request: .callHelper(call: .installUpdate(json: #"{"installID":13835058055282163713}"#))),
+            .portRequest(id: 27, request: .callHelper(call: .readPreparedUpdate)),
+            .portRequest(id: 28, request: .callHelper(call: .discardPreparedUpdate)),
         ]
 
         static let portActions: [FromRuntime] = [
@@ -679,9 +789,13 @@ private extension AppInternal {
             .portAction(.log(level: .info, category: .otp, message: "code found")),
             .portAction(.log(level: .info, category: .bypassRoutes, message: "routes written")),
             .portAction(.log(level: .info, category: .loginItem, message: "registered")),
+            .portAction(.log(level: .notice, category: .update, message: "update available: 26.2.0")),
             .portAction(.postNotification(notification: .exceptionRulesNotApplied(retries: 3, failure: .routesNotKept))),
+            .portAction(.postNotification(notification: .updateAvailable(version: "26.2.0"))),
             .portAction(.holdActivity(hold: true)),
             .portAction(.openHelperApprovalSettings),
+            .portAction(.releaseUpdateWaiter(installerProcessId: 4_294_967_295)),
+            .portAction(.stopUpdateWaiter),
             .portAction(.approveQuit),
         ]
 
@@ -689,7 +803,7 @@ private extension AppInternal {
 
         static let launched: [ToRuntime] = [
             .launched(facts: AppFacts(
-                appBuild: "20261109120000", installedCopy: true,
+                appBuild: "20261109120000", appVersion: "26.1.0", installedCopy: true,
                 builtInOauthClient: #"{"installed":{"client_id":"123-abc.apps.googleusercontent.com"}}"#,
                 timeZone: "Asia/Seoul",
                 signInPages: SignInPages(
@@ -742,6 +856,12 @@ private extension AppInternal {
             .command(.addCurrentNetwork),
             .command(.discardBypassChanges),
             .command(.applyBypassRules),
+            .command(.checkForUpdates),
+            .command(.updatePageOpened),
+            .command(.updateNow),
+            .command(.updateNowFromNotification),
+            .command(.cancelUpdateDownload),
+            .command(.restartToUpdate),
         ]
 
         static let portResponses: [ToRuntime] = [
@@ -785,6 +905,10 @@ private extension AppInternal {
                 FortiClientConnection(name: "Office", server: "vpn.example.com:10443"),
             ])),
             .portResponse(id: 22, response: .fortiClientConnections(connections: [])),
+            .portResponse(id: 25, response: .updateWaiterStarted),
+            .portResponse(id: 25, response: .updateWaiterFailed(
+                description: "The application “FortiVPNManager” could not be launched."
+            )),
         ]
 
         static let systemEvents: [ToRuntime] = [

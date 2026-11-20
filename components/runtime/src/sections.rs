@@ -39,6 +39,9 @@ impl Runtime {
             Section::Config {
                 section: Box::new(self.config_section()),
             },
+            Section::AutoUpdate {
+                section: Box::new(self.auto_update_section()),
+            },
         ]
     }
 

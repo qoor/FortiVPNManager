@@ -473,6 +473,20 @@ impl Harness {
             auto_connect,
             restored_ledger,
             import_report_shown: false,
+            connected_before_update: false,
+        }))
+    }
+
+    pub(super) fn launch_after_update(
+        &mut self,
+        auto_connect: bool,
+        restored_ledger: Option<FailureLedger>,
+    ) -> Vec<Effect> {
+        self.send(Input::Launched(Launch {
+            auto_connect,
+            restored_ledger,
+            import_report_shown: false,
+            connected_before_update: true,
         }))
     }
 

@@ -680,6 +680,7 @@ fn every_ledger_change_is_saved() {
             auto_connect: true,
             restored_ledger: None,
             import_report_shown: false,
+            connected_before_update: false,
         }),
         Input::ReadinessChecked(ready()),
         Input::OtpSessionReady(first.clone()),
@@ -772,6 +773,44 @@ fn a_launch_enforces_the_restored_rolling_cap() {
     ));
     assert_eq!(h.cm.phase, Phase::Failed(Failure::TooManyReconnects));
     assert!(effects.is_empty(), "{effects:?}");
+}
+
+#[test]
+fn a_launch_after_an_update_connects_and_clears_a_used_up_restored_counter() {
+    let mut h = Harness::new();
+    let ledger = super::super::FailureLedger {
+        consecutive_auth_failures: 2,
+        last_auth_failure_at: Some(h.now - secs(86_400.0)),
+        last_auth_failure: Some(Failure::OtpRejected),
+        recent_auth_attempts: vec![h.now - secs(600.0)],
+        ..empty_ledger()
+    };
+    let effects = h.launch_after_update(true, Some(ledger.clone()));
+    assert_eq!(reason(&h), Some(AttemptReason::User));
+    let reset = super::super::FailureLedger {
+        consecutive_auth_failures: 0,
+        recent_auth_attempts: Vec::new(),
+        ..ledger
+    };
+    assert_eq!(h.cm.ledger, reset);
+    assert_eq!(saved_ledger(&effects), Some(reset));
+}
+
+#[test]
+fn a_launch_after_an_update_connects_and_clears_the_restored_rolling_cap() {
+    let mut h = Harness::new();
+    let mut attempts: Vec<_> = (1..=12).map(|n| h.now - secs(n as f64 * 60.0)).collect();
+    attempts.reverse();
+    let effects = h.launch_after_update(
+        true,
+        Some(super::super::FailureLedger {
+            recent_auth_attempts: attempts,
+            ..empty_ledger()
+        }),
+    );
+    assert_eq!(reason(&h), Some(AttemptReason::User));
+    assert_eq!(h.cm.ledger, empty_ledger());
+    assert_eq!(saved_ledger(&effects), Some(empty_ledger()));
 }
 
 #[test]

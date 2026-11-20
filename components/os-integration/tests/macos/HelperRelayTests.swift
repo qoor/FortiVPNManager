@@ -3,11 +3,18 @@ import Synchronization
 import Testing
 
 /// The Keychain names, which must match the items already saved, and the Helper relay's rules
-/// for the build check, retries and Exit When Idle.
+/// for the build check, retries, Exit When Idle and the update calls.
 /// Outgoing messages are only encoded, so they are compared as the JSON the runtime reads.
 private func json(_ value: some Encodable) -> String {
     String(decoding: try! MessageCoding.encoder().encode(value), as: UTF8.self)
 }
+
+private let updateCalls: [(AppInternal.HelperCall, String, String)] = [
+    (.prepareUpdate(json: "{}"), "prepareUpdate", FakeHelper.prepareReply),
+    (.installUpdate(json: "{}"), "installUpdate", #"{"started":{}}"#),
+    (.readPreparedUpdate, "preparedUpdate", #"{"prepared":null}"#),
+    (.discardPreparedUpdate, "discardPreparedUpdate", #"{"discarded":{}}"#),
+]
 
 @MainActor
 struct HelperRelayTests {
@@ -55,6 +62,45 @@ struct HelperRelayTests {
             return
         }
         #expect(relay.opened == 1)
+    }
+
+    @Test(arguments: updateCalls)
+    func anUpdateCallChecksTheBuildThenRelaysTheReplyUnread(call: AppInternal.HelperCall, method: String, reply: String) async {
+        let helper = FakeHelper(build: "100")
+        let relay = Relay(helpers: [helper])
+        #expect(json(await relay.call(call)) == json(AppInternal.PortResponse.helperReply(json: reply)))
+        #expect(helper.calls.withLock { $0 } == ["getVersion", method])
+    }
+
+    @Test(arguments: updateCalls)
+    func aHelperOfAnotherBuildGetsNoUpdateCall(call: AppInternal.HelperCall, method: String, reply: String) async {
+        let helper = FakeHelper(build: "99")
+        let relay = Relay(helpers: [helper])
+        #expect(json(await relay.call(call)) == json(AppInternal.PortResponse.helperBuildMismatch(helperBuild: "99")))
+        #expect(helper.calls.withLock { $0 } == ["getVersion"])
+    }
+
+    @Test(arguments: updateCalls)
+    func anUpdateCallIsNeverRepeated(call: AppInternal.HelperCall, method: String, reply: String) async {
+        let relay = Relay(helpers: [FakeHelper(build: "100", fails: true), FakeHelper(build: "100")])
+        guard case .helperUnreachable = await relay.call(call) else {
+            Issue.record("expected unreachable")
+            return
+        }
+        #expect(relay.opened == 1)
+    }
+
+    @Test func anUpdateCallRunsAlongsideTheOtherCalls() async {
+        let helper = FakeHelper(build: "100", holdsPrepare: true)
+        let relay = Relay(helpers: [helper])
+        async let prepared = relay.call(.prepareUpdate(json: "{}"))
+        for _ in 0..<1000 where !helper.calls.withLock({ $0.contains("prepareUpdate") }) {
+            await Task.yield()
+        }
+        #expect(json(await relay.call(.status)) == json(AppInternal.PortResponse.helperReply(json: "{}")))
+        helper.releaseHeldPrepare()
+        #expect(json(await prepared) == json(AppInternal.PortResponse.helperReply(json: FakeHelper.prepareReply)))
+        #expect(helper.calls.withLock { $0 } == ["getVersion", "prepareUpdate", "status"])
     }
 
     @Test func exitWhenIdleDropsTheConnectionAfterTheReply() async {
@@ -117,14 +163,23 @@ private final class FakeChannel: HelperChannel {
 
 /// Answers like a Helper of `build`, or fails every call like a Helper that exited.
 private final class FakeHelper: NSObject, HelperXPCProtocol, @unchecked Sendable {
+    static let prepareReply = #"{"prepared":{"version":"26.2.0"}}"#
+
     let build: String
     let fails: Bool
+    let holdsPrepare: Bool
     let calls = Mutex<[String]>([])
     var onError: (@Sendable (any Error) -> Void)?
+    private let heldPrepare = Mutex<(@Sendable () -> Void)?>(nil)
 
-    init(build: String, fails: Bool = false) {
+    init(build: String, fails: Bool = false, holdsPrepare: Bool = false) {
         self.build = build
         self.fails = fails
+        self.holdsPrepare = holdsPrepare
+    }
+
+    func releaseHeldPrepare() {
+        heldPrepare.withLock { $0 }?()
     }
 
     private func answer(_ name: String, _ reply: () -> Void) {
@@ -166,5 +221,28 @@ private final class FakeHelper: NSObject, HelperXPCProtocol, @unchecked Sendable
 
     func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
         answer("setBypassRoutes") { reply(Data("{}".utf8)) }
+    }
+
+    func prepareUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        answer("prepareUpdate") {
+            let send: @Sendable () -> Void = { reply(Data(Self.prepareReply.utf8)) }
+            if holdsPrepare {
+                heldPrepare.withLock { $0 = send }
+            } else {
+                send()
+            }
+        }
+    }
+
+    func installUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        answer("installUpdate") { reply(Data(#"{"started":{}}"#.utf8)) }
+    }
+
+    func preparedUpdate(reply: @escaping @Sendable (Data) -> Void) {
+        answer("preparedUpdate") { reply(Data(#"{"prepared":null}"#.utf8)) }
+    }
+
+    func discardPreparedUpdate(reply: @escaping @Sendable (Data) -> Void) {
+        answer("discardPreparedUpdate") { reply(Data(#"{"discarded":{}}"#.utf8)) }
     }
 }

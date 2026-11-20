@@ -55,6 +55,7 @@ pub struct ConnectionManager {
     pending_wake: Option<Duration>,
     quit_requested_at: Option<SystemTime>,
     terminated: bool,
+    pub(super) update_stop: Option<UpdateStop>,
     /// Since when the user has been away; `None` while present.
     pub(super) away_since: Option<SystemTime>,
     /// The away limit was reached: no automatic reconnect until Connect, Reconnect Now or the next
@@ -229,6 +230,13 @@ pub(super) enum AfterStop {
     Reconnect(AttemptReason),
     ResumeAfterSleep,
     Quit,
+    Update,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct UpdateStop {
+    requested_at: SystemTime,
+    stopped: bool,
 }
 
 /// Why the connection waits before the next attempt.
@@ -327,6 +335,7 @@ impl ConnectionManager {
             pending_wake: None,
             quit_requested_at: None,
             terminated: false,
+            update_stop: None,
             away_since: None,
             reconnect_suspended: false,
             schedule_boundary: None,
@@ -384,10 +393,14 @@ impl ConnectionManager {
             Input::Launched(launch) => self.launched(launch),
             Input::SettingsChanged(settings) => self.settings_changed(settings),
             Input::TimeZoneChanged(time_zone) => self.time_zone_changed(time_zone),
+            Input::Connect | Input::Disconnect | Input::ReconnectNow
+                if self.update_stop.is_some() => {}
             Input::Connect => self.connect_requested(AttemptReason::User),
             Input::Disconnect => self.disconnect_requested(),
             Input::ReconnectNow => self.reconnect_now_requested(),
             Input::QuitRequested => self.quit_requested(),
+            Input::StopForUpdate => self.stop_for_update(),
+            Input::UpdateFailed { reconnect } => self.update_failed(reconnect),
             Input::SettingsOpened | Input::RecheckReadiness => self.check_readiness(),
             Input::AppActivated => {
                 self.effects.push(Effect::ReadScreenState);
@@ -555,11 +568,16 @@ impl ConnectionManager {
         if let Some(stale) = &self.stale_otp {
             wanted.insert(TimerKind::StaleOtp, stale.until);
         }
-        if let Some(requested) = self.quit_requested_at {
+        let stopping_for_update = self
+            .update_stop
+            .filter(|stop| !stop.stopped)
+            .map(|stop| stop.requested_at);
+        if let Some(requested) = self.quit_requested_at.or(stopping_for_update) {
             wanted.insert(TimerKind::QuitDeadline, requested + policy::QUIT_TIMEOUT);
         }
         if let Some(schedule) = &self.settings.connection.schedule
             && self.quit_requested_at.is_none()
+            && self.update_stop.is_none()
         {
             if let Some(handled) = self.schedule_boundary
                 && let Some(next) = schedule.next_boundary(handled, &self.time_zone)
@@ -657,19 +675,22 @@ impl ConnectionManager {
         if !launch.auto_connect || !self.within_schedule() {
             self.wants_connection = false;
             self.check_readiness();
-            return;
+        } else {
+            self.wants_connection = true;
+            if self.ledger.consecutive_auth_failures >= policy::MAX_CONSECUTIVE_AUTH_FAILURES {
+                // The retries had stopped before the relaunch; only the user clears that.
+                let failure = self
+                    .ledger
+                    .last_auth_failure
+                    .unwrap_or(Failure::AuthenticationRejected);
+                self.fail(failure);
+            } else {
+                self.begin_attempt(AttemptReason::Launch, false, false);
+            }
         }
-        self.wants_connection = true;
-        if self.ledger.consecutive_auth_failures >= policy::MAX_CONSECUTIVE_AUTH_FAILURES {
-            // The retries had stopped before the relaunch; only the user clears that.
-            let failure = self
-                .ledger
-                .last_auth_failure
-                .unwrap_or(Failure::AuthenticationRejected);
-            self.fail(failure);
-            return;
+        if launch.connected_before_update {
+            self.connect_requested(AttemptReason::User);
         }
-        self.begin_attempt(AttemptReason::Launch, false, false);
     }
 
     fn settings_changed(&mut self, settings: Settings) {
@@ -831,6 +852,60 @@ impl ConnectionManager {
                 self.phase = phase;
                 self.terminated = true;
             }
+        }
+    }
+
+    fn stop_for_update(&mut self) {
+        if self.quit_requested_at.is_some() {
+            return;
+        }
+        self.wants_connection = false;
+        self.update_stop = Some(UpdateStop {
+            requested_at: self.now,
+            stopped: false,
+        });
+        match self.take_phase() {
+            Phase::Connecting(attempt) => {
+                self.abort_attempt(*attempt, StopReason::AppQuit, AfterStop::Update);
+            }
+            Phase::Connected(session) => {
+                self.stop_session(session, StopReason::AppQuit, AfterStop::Update, None);
+            }
+            Phase::Disconnecting(mut stop) => {
+                stop.after = AfterStop::Update;
+                self.phase = Phase::Disconnecting(stop);
+            }
+            Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } => {
+                self.settle(AfterStop::Update);
+            }
+            phase @ (Phase::Idle | Phase::SetupRequired(_) | Phase::Failed(_)) => {
+                self.phase = phase;
+                self.stopped_for_update();
+            }
+        }
+    }
+
+    fn stopped_for_update(&mut self) {
+        if let Some(stop) = &mut self.update_stop
+            && !stop.stopped
+        {
+            stop.stopped = true;
+            self.effects.push(Effect::StoppedForUpdate);
+        }
+    }
+
+    fn update_failed(&mut self, reconnect: bool) {
+        if self.quit_requested_at.is_some() {
+            return;
+        }
+        self.update_stop = None;
+        if let Phase::Disconnecting(stop) = &mut self.phase
+            && stop.after == AfterStop::Update
+        {
+            stop.after = AfterStop::Idle;
+        }
+        if reconnect {
+            self.connect_requested(AttemptReason::User);
         }
     }
 
@@ -1337,7 +1412,8 @@ impl ConnectionManager {
                 phase => self.phase = phase,
             },
             TimerKind::ProactiveReconnect => self.proactive_reconnect_due(),
-            TimerKind::QuitDeadline => self.terminated = true,
+            TimerKind::QuitDeadline if self.quit_requested_at.is_some() => self.terminated = true,
+            TimerKind::QuitDeadline => self.stopped_for_update(),
             TimerKind::Schedule => self.schedule_boundary_due(),
             TimerKind::AwayLimit => self.check_away_limit(),
             TimerKind::PathSettle => self.path_settled(),
@@ -1856,7 +1932,8 @@ impl ConnectionManager {
     }
 
     fn abort_attempt(&mut self, mut attempt: Attempt, stop: StopReason, after: AfterStop) {
-        let search = !matches!(stop, StopReason::AppQuit | StopReason::Sleep);
+        let search =
+            after == AfterStop::Update || !matches!(stop, StopReason::AppQuit | StopReason::Sleep);
         let running = attempt.stage == Stage::Run;
         if running && attempt.stop_requested.is_none() {
             self.effects.push(Effect::StopRun {
@@ -2038,6 +2115,10 @@ impl ConnectionManager {
             AfterStop::Quit => {
                 self.phase = Phase::Idle;
                 self.terminated = true;
+            }
+            AfterStop::Update => {
+                self.phase = Phase::Idle;
+                self.stopped_for_update();
             }
         }
     }

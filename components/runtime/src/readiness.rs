@@ -94,6 +94,9 @@ impl Runtime {
             // A Helper registered, approved, updated or back since: the routes can be synced now.
             self.sync_bypass_routes();
         }
+        if answered {
+            self.read_prepared_update_once();
+        }
         self.bypass.helper_ready = answered;
         let settings = self.config.settings().clone();
         let vpn = &settings.vpn;

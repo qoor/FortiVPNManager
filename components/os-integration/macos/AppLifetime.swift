@@ -27,7 +27,11 @@ final class AppLifetime {
 
     func approveQuit() {
         quitApproved = true
-        NSApp.reply(toApplicationShouldTerminate: true)
+        if quitRequested {
+            NSApp.reply(toApplicationShouldTerminate: true)
+        } else {
+            NSApp.terminate(nil)
+        }
     }
 
     /// Keeps the app from being suspended or throttled; the system may still sleep.

@@ -11,6 +11,7 @@ final class AppRouter {
     private let send: @Sendable (AppInternal.ToRuntime) -> Void
     private let events: SystemEvents
     private let userNotifier = UserNotifier()
+    private let updateWaiter = UpdateWaiter()
     private let relay: HelperRelay
 
     init(appBuild: String, send: @escaping @Sendable (AppInternal.ToRuntime) -> Void) {
@@ -26,8 +27,18 @@ final class AppRouter {
     /// the system's events.
     func start(_ facts: AppInternal.AppFacts) {
         send(.launched(facts: facts))
-        // The only notification is about exception-rule routes that could not be written.
-        userNotifier.onOpen = { [ui] in ui.settings.show(.exceptionRules) }
+        // The other notification is about exception-rule routes that could not be written.
+        userNotifier.onOpen = { [ui] identifier in
+            if identifier == AppInternal.UserNotification.updateAvailableIdentifier {
+                ui.settings.showSoftwareUpdate()
+            } else {
+                ui.settings.show(.exceptionRules)
+            }
+        }
+        userNotifier.onAction = { [ui] _ in
+            ui.settings.showSoftwareUpdate()
+            ui.send(.updateNowFromNotification)
+        }
         userNotifier.start()
         events.start()
     }
@@ -63,6 +74,7 @@ final class AppRouter {
         case let .setLoginItem(enabled): reply(ServiceRegistration.setLoginItem(enabled))
         // macOS imports openfortivpn's settings file instead.
         case .fortiClientConnections: reply(.fortiClientConnections(connections: []))
+        case let .startUpdateWaiter(installId): reply(updateWaiter.start(installId: installId))
         }
     }
 
@@ -70,9 +82,14 @@ final class AppRouter {
         switch action {
         case let .log(level, category, message): SystemLog.write(level, category, message)
         case let .postNotification(notification):
-            userNotifier.post(identifier: notification.identifier, title: notification.title, body: notification.body)
+            userNotifier.post(
+                identifier: notification.identifier, title: notification.title, body: notification.body,
+                action: notification.actionTitle
+            )
         case let .holdActivity(hold): lifetime.holdActivity(hold)
         case .openHelperApprovalSettings: ServiceRegistration.openApprovalSettings()
+        case .releaseUpdateWaiter: break
+        case .stopUpdateWaiter: updateWaiter.stop()
         case .approveQuit: lifetime.approveQuit()
         }
     }
@@ -86,6 +103,7 @@ extension AppInternal.AppFacts {
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
         return Self(
             appBuild: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            appVersion: bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String,
             installedCopy: ServiceRegistration.isInstalledCopy(at: bundle.bundleURL),
             builtInOauthClient: client,
             timeZone: TimeZone.current.identifier,

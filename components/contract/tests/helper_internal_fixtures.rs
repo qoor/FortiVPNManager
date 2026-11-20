@@ -167,6 +167,20 @@ fn messages_to_the_entry() {
                     json: r#"{"remove":{}}"#.into(),
                 },
             ),
+            request(
+                8,
+                AppRequest::PrepareUpdate {
+                    json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
+                },
+            ),
+            request(
+                9,
+                AppRequest::InstallUpdate {
+                    json: r#"{"installID":13835058055282163713}"#.into(),
+                },
+            ),
+            request(10, AppRequest::ReadPreparedUpdate {}),
+            request(11, AppRequest::DiscardPreparedUpdate {}),
             ToEntry::AppDisconnected { app: 1 },
             ToEntry::ExecutableReplaced {},
             ToEntry::TerminationRequested {},

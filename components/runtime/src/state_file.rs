@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::HelperErrorCode;
+use fvm_core::auto_update::Version;
 use fvm_core::connection::{Failure, FailureLedger};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -18,6 +19,9 @@ const MAX_FILE_BYTES: u64 = 1 << 20;
 pub(crate) struct State {
     pub(crate) ledger: Option<FailureLedger>,
     pub(crate) login_item_registered: bool,
+    pub(crate) last_notified_update: Option<Version>,
+    pub(crate) update_target: Option<Version>,
+    pub(crate) connected_before_update: bool,
 }
 
 pub(crate) struct StateFile {
@@ -88,6 +92,24 @@ struct Wire {
     ledger: Option<WireLedger>,
     #[serde(default, deserialize_with = "or_absent")]
     login_item_registered: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "optional_version"
+    )]
+    last_notified_update_version: Option<Version>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "optional_version"
+    )]
+    update_target_version: Option<Version>,
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "or_absent"
+    )]
+    connected_before_update: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -146,6 +168,9 @@ impl Wire {
                 recent_auth_attempts: ledger.recent_auth_attempts,
             }),
             login_item_registered: self.login_item_registered,
+            last_notified_update: self.last_notified_update_version,
+            update_target: self.update_target_version,
+            connected_before_update: self.connected_before_update,
         }
     }
 
@@ -159,6 +184,9 @@ impl Wire {
                 recent_auth_attempts: ledger.recent_auth_attempts.clone(),
             }),
             login_item_registered: state.login_item_registered,
+            last_notified_update_version: state.last_notified_update,
+            update_target_version: state.update_target,
+            connected_before_update: state.connected_before_update,
         }
     }
 }
@@ -236,6 +264,26 @@ mod optional_time {
     ) -> Result<Option<SystemTime>, D::Error> {
         let value = serde_json::Value::deserialize(deserializer)?;
         Ok(value.as_str().and_then(super::parse_time))
+    }
+}
+
+mod optional_version {
+    use fvm_core::auto_update::Version;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        version: &Option<Version>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let version = version.expect("skipped when absent");
+        serializer.collect_str(&version)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Version>, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(value.as_str().and_then(Version::parse))
     }
 }
 
@@ -460,6 +508,84 @@ mod tests {
     fn sub_second_times_are_written_in_whole_seconds() {
         let time = at("2026-11-09T04:08:26Z") + Duration::from_millis(750);
         assert_eq!(format_time(time), "2026-11-09T04:08:26Z");
+    }
+
+    #[test]
+    fn a_file_without_the_update_fields_reads_them_empty() {
+        let state = serde_json::from_str::<Wire>(SAVED_FILE)
+            .unwrap()
+            .into_state();
+        assert_eq!(state.last_notified_update, None);
+        assert_eq!(state.update_target, None);
+        assert!(!state.connected_before_update);
+    }
+
+    #[test]
+    fn the_update_fields_round_trip() {
+        let version = |text| Version::parse(text).unwrap();
+        let state = State {
+            last_notified_update: Some(version("26.3.0")),
+            update_target: Some(version("26.2.0")),
+            connected_before_update: true,
+            ..State::default()
+        };
+        let written = serde_json::to_value(Wire::from_state(&state)).unwrap();
+        assert_eq!(
+            written,
+            serde_json::json!({
+                "loginItemRegistered": false,
+                "lastNotifiedUpdateVersion": "26.3.0",
+                "updateTargetVersion": "26.2.0",
+                "connectedBeforeUpdate": true,
+            })
+        );
+        let read = serde_json::from_value::<Wire>(written)
+            .unwrap()
+            .into_state();
+        assert_eq!(read, state);
+    }
+
+    #[test]
+    fn a_malformed_update_value_is_absent_and_the_others_are_read() {
+        let version = |text| Version::parse(text).unwrap();
+        let read = |malformed: &str, value: &str| {
+            let mut file = serde_json::json!({
+                "ledger": {
+                    "consecutiveAuthFailures": 2,
+                    "profileKey": "alice@vpn.example.com"
+                },
+                "loginItemRegistered": true,
+                "lastNotifiedUpdateVersion": "26.3.0",
+                "updateTargetVersion": "26.2.0",
+                "connectedBeforeUpdate": true
+            });
+            file[malformed] = serde_json::from_str(value).unwrap();
+            serde_json::from_value::<Wire>(file).unwrap().into_state()
+        };
+        for value in [r#""soon""#, "7", "null", r#"{"major":26}"#] {
+            let state = read("lastNotifiedUpdateVersion", value);
+            assert_eq!(state.last_notified_update, None, "{value}");
+            assert_eq!(state.update_target, Some(version("26.2.0")));
+            assert!(state.connected_before_update);
+            assert!(state.login_item_registered);
+            assert_eq!(
+                state.ledger.map(|ledger| ledger.consecutive_auth_failures),
+                Some(2)
+            );
+
+            let state = read("updateTargetVersion", value);
+            assert_eq!(state.update_target, None, "{value}");
+            assert_eq!(state.last_notified_update, Some(version("26.3.0")));
+            assert!(state.connected_before_update);
+            assert!(state.login_item_registered);
+        }
+        for value in [r#""yes""#, "1", "null", "[]"] {
+            let state = read("connectedBeforeUpdate", value);
+            assert!(!state.connected_before_update, "{value}");
+            assert_eq!(state.last_notified_update, Some(version("26.3.0")));
+            assert_eq!(state.update_target, Some(version("26.2.0")));
+            assert!(state.login_item_registered);
+        }
     }
 
     #[test]

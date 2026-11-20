@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v5
       - run: xcodebuild -version
       - run: brew install xcodegen
-      - run: xcodegen generate --spec packaging/macos/project.yml
+      - run: FVM_VERSION="$(cat VERSION)" xcodegen generate --spec packaging/macos/project.yml
       # The test bundles need no signing identity.
       - run: |
           for scheme in ContractTests HelperTests AppSwiftTests; do

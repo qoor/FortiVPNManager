@@ -76,6 +76,16 @@ pub enum AppRequest {
     WriteBypassRoutes {
         json: String,
     },
+    /// `json` is the app's `UpdatePrepareRequest` payload.
+    PrepareUpdate {
+        json: String,
+    },
+    /// `json` is the app's `UpdateInstallRequest` payload.
+    InstallUpdate {
+        json: String,
+    },
+    ReadPreparedUpdate {},
+    DiscardPreparedUpdate {},
 }
 
 /// Redacts the connect payload, which holds the password, and the OTP: Debug output can reach panic
@@ -102,6 +112,14 @@ impl fmt::Debug for AppRequest {
                 .debug_struct("WriteBypassRoutes")
                 .field("json", json)
                 .finish(),
+            Self::PrepareUpdate { json } => {
+                f.debug_struct("PrepareUpdate").field("json", json).finish()
+            }
+            Self::InstallUpdate { json } => {
+                f.debug_struct("InstallUpdate").field("json", json).finish()
+            }
+            Self::ReadPreparedUpdate {} => f.write_str("ReadPreparedUpdate"),
+            Self::DiscardPreparedUpdate {} => f.write_str("DiscardPreparedUpdate"),
         }
     }
 }
@@ -119,8 +137,8 @@ pub enum FromEntry {
         app: u64,
         accept: bool,
     },
-    /// Answers a connect, submitOtp, disconnect, status or exception-route request with the data
-    /// for the app; `None` is the empty (success) reply.
+    /// Answers a connect, submitOtp, disconnect, status, exception-route or update request with the
+    /// data for the app; `None` is the empty (success) reply.
     Reply {
         id: u64,
         #[serde(skip_serializing_if = "Option::is_none")]

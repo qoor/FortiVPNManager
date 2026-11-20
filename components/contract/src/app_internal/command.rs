@@ -71,6 +71,19 @@ pub enum Command {
     AddCurrentNetwork {},
     DiscardBypassChanges {},
     ApplyBypassRules {},
+
+    CheckForUpdates {},
+    /// The Software Update section came into view.
+    UpdatePageOpened {},
+    /// Downloads the available update and has the Helper prepare it.
+    UpdateNow {},
+    /// The update notification's button: checks, then updates if an update is available.
+    UpdateNowFromNotification {},
+    /// Stops the download and deletes what was downloaded.
+    CancelUpdateDownload {},
+    /// Stops the VPN as a quit does, starts the prepared update's installer and quits; the app opens
+    /// again after the install.
+    RestartToUpdate {},
 }
 
 /// The Account pane as typed. An empty password field keeps the stored password.

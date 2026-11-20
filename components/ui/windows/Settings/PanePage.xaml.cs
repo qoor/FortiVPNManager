@@ -2,6 +2,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
 
@@ -20,6 +21,8 @@ public sealed partial class PanePage : Page
     }
 
     public SettingsPane? Pane { get; private set; }
+
+    public SettingsSubpage? Subpage { get; private set; }
 
     internal StackPanel BodyPanel => Body;
 
@@ -112,10 +115,8 @@ public sealed partial class PanePage : Page
 
     public void Show(AppUi ui, SettingsPane pane, string title)
     {
-        this.ui = ui;
-        Pane = pane;
         Title.Text = title;
-        content = pane switch
+        Show(ui, pane, pane switch
         {
             SettingsPane.General => new GeneralPane(ui, this),
             SettingsPane.Account => new AccountPane(ui, this),
@@ -124,7 +125,28 @@ public sealed partial class PanePage : Page
             SettingsPane.Advanced => new AdvancedPane(ui, this),
             SettingsPane.Log => new LogPane(ui, this),
             _ => throw new InvalidOperationException($"unknown pane {pane}"),
-        };
+        });
+    }
+
+    public void Show(AppUi ui, SettingsSubpage subpage)
+    {
+        Subpage = subpage;
+        Title.Visibility = Visibility.Collapsed;
+        Breadcrumb.Visibility = Visibility.Visible;
+        Breadcrumb.ItemsSource = new List<object> { L(SettingsPane.General.TitleKey()), L("Software Update") };
+        Breadcrumb.ItemClicked += (_, _) => Frame.GoBack();
+        Show(ui, SettingsPane.General, subpage switch
+        {
+            SettingsSubpage.SoftwareUpdate => new UpdatePane(ui, this),
+            _ => throw new InvalidOperationException($"unknown subpage {subpage}"),
+        });
+    }
+
+    private void Show(AppUi ui, SettingsPane pane, IPane shown)
+    {
+        this.ui = ui;
+        Pane = pane;
+        content = shown;
         Refresh();
         ui.Changed += Refresh;
     }

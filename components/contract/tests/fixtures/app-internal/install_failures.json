@@ -1,0 +1,66 @@
+[
+  {
+    "downloadFailed": {
+      "detail": "connection reset by peer"
+    }
+  },
+  {
+    "waiterFailed": {
+      "description": "The application “FortiVPNManager” could not be launched."
+    }
+  },
+  {
+    "helperUnreachable": {
+      "failure": {
+        "noReply": {}
+      }
+    }
+  },
+  {
+    "helperBuildMismatch": {
+      "appBuild": "20261109120000",
+      "helperBuild": "20261108090000"
+    }
+  },
+  {
+    "helperFailed": {
+      "message": "could not start the installer: permission denied"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "SHA256SUMS.txt.sig does not verify",
+      "reason": "signatureInvalid"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "the installer does not match SHA256SUMS.txt",
+      "reason": "checksumMismatch"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "26.1.0 is not newer than 26.1.0",
+      "reason": "versionNotNewer"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "an update is already being installed",
+      "reason": "alreadyInstalling"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "could not read the installer: No such file or directory",
+      "reason": "filesUnreadable"
+    }
+  },
+  {
+    "helperRefused": {
+      "message": "no update is prepared",
+      "reason": "nothingPrepared"
+    }
+  }
+]

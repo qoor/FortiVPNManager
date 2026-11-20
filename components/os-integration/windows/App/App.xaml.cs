@@ -5,6 +5,7 @@ using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Microsoft.Windows.AppNotifications;
 using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.App;
@@ -35,7 +36,7 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        notifier = new Notifier(() => dispatcher.TryEnqueue(() => ui?.Settings.Show(SettingsPane.ExceptionRules)));
+        notifier = new Notifier((identifier, button) => dispatcher.TryEnqueue(() => ui?.OpenNotification(identifier, button)));
         var facts = CurrentAppFacts.Read(GmailText.SignInPages());
         RuntimeLink? link = null;
         ui = new AppUi(dispatcher, command => router!.Send(command), notifier.Post);
@@ -55,16 +56,28 @@ public partial class App : Application
             router.Lifetime.RequestQuit();
         });
         router.Start(facts);
-        if (AppInstance.GetCurrent().GetActivatedEventArgs().Kind == ExtendedActivationKind.AppNotification)
+        var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
+        if (activation.Kind == ExtendedActivationKind.AppNotification)
         {
-            ui.Settings.Show(SettingsPane.ExceptionRules);
+            var notification = (AppNotificationActivatedEventArgs)activation.Data;
+            ui.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
         }
         Program.Launched(this);
     }
 
-    /// <summary>The app was started again: a notification opens its pane, anything else the settings window.</summary>
+    /// <summary>The app was started again: a notification opens what it is about, anything else the settings window.</summary>
     public void Reopened(AppActivationArguments activation) => dispatcher.TryEnqueue(() =>
-        ui?.Settings.Show(activation.Kind == ExtendedActivationKind.AppNotification ? SettingsPane.ExceptionRules : null));
+    {
+        if (activation.Kind == ExtendedActivationKind.AppNotification)
+        {
+            var notification = (AppNotificationActivatedEventArgs)activation.Data;
+            ui?.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
+        }
+        else
+        {
+            ui?.Settings.Show(null);
+        }
+    });
 
     /// <summary>Ends the app once the runtime approved the quit; called from the runtime's reader thread.</summary>
     private void Quit() => dispatcher.TryEnqueue(() =>

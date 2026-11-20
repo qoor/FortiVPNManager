@@ -11,8 +11,8 @@ namespace FortiVPNManager.App;
 /// <summary>
 /// The entry: one copy per user. Starting the app again, from the Start menu or a notification,
 /// hands the start to the running copy, which shows its settings window (as reopening the app does
-/// on macOS), and ends. The running copy shows nothing until the Helper's service runs; when it
-/// cannot be made to, a message box says why and the app quits.
+/// on macOS) or what the notification is about, and ends. The running copy shows nothing until the
+/// Helper's service runs; when it cannot be made to, a message box says why and the app quits.
 /// </summary>
 public static class Program
 {

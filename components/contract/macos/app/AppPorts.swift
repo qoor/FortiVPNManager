@@ -27,6 +27,8 @@ extension AppInternal {
 
         /// The official FortiClient's SSL VPN connections; Windows imports its settings from them.
         case fortiClientConnections
+
+        case startUpdateWaiter(installId: UInt64)
     }
 
     enum PortResponse: Encodable, Sendable {
@@ -54,6 +56,9 @@ extension AppInternal {
         case browserOpened(opened: Bool)
 
         case fortiClientConnections(connections: [FortiClientConnection])
+
+        case updateWaiterStarted
+        case updateWaiterFailed(description: String)
     }
 
     /// A FortiClient SSL VPN connection: its name and its `Server` value, usually `host:port`.
@@ -70,7 +75,10 @@ extension AppInternal {
         case postNotification(notification: UserNotification)
         case holdActivity(hold: Bool)
         case openHelperApprovalSettings
-        /// The runtime's last message.
+        case releaseUpdateWaiter(installerProcessId: UInt32)
+        case stopUpdateWaiter
+        /// The runtime's last message. Also comes unasked once an update's installer started: then
+        /// the app quits.
         case approveQuit
     }
 
@@ -88,13 +96,13 @@ extension AppInternal {
     /// One call on the Helper over the one connection the OS integration keeps (see
     /// components/contract/src/app_internal/port.rs). JSON payloads and the attempt and reason
     /// values are relayed as they are, never read.
-    /// - `connect`, `submitOtp`, `readBypassRoutes` and `writeBypassRoutes` go only over a verified
-    ///   connection; ask for the build first when it is not verified, and answer
-    ///   `helperBuildMismatch` if it differs.
+    /// - `connect`, `submitOtp`, `readBypassRoutes`, `writeBypassRoutes` and the update calls go
+    ///   only over a verified connection; ask for the build first when it is not verified, and
+    ///   answer `helperBuildMismatch` if it differs.
     /// - `status`, `readBypassRoutes` and `writeBypassRoutes` are retried once on a fresh connection
     ///   when the connection fails; the other calls never are.
-    /// - Rust sends the next call only after the previous one was answered, except the route calls,
-    ///   which may run alongside.
+    /// - Rust sends the next call only after the previous one was answered, except the route and
+    ///   update calls, which may run alongside.
     enum HelperCall: Decodable, Equatable, Sendable {
         case connect(json: String)
         case submitOtp(attempt: String, code: String)
@@ -105,6 +113,10 @@ extension AppInternal {
         case exitWhenIdle
         case readBypassRoutes
         case writeBypassRoutes(json: String)
+        case prepareUpdate(json: String)
+        case installUpdate(json: String)
+        case readPreparedUpdate
+        case discardPreparedUpdate
     }
 
     enum HelperChannelFailure: Codable, Equatable, Sendable {
@@ -152,10 +164,12 @@ extension AppInternal {
         case otp
         case bypassRoutes = "bypass-routes"
         case loginItem = "login-item"
+        case update
     }
 
     enum UserNotification: Decodable, Equatable, Sendable {
         case exceptionRulesNotApplied(retries: Int, failure: BypassFailure)
+        case updateAvailable(version: String)
     }
 }
 

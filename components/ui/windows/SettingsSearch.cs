@@ -95,6 +95,7 @@ public static class SettingsSearch
             Item(pane, "Connect automatically at launch"),
             Item(pane, "FortiClient settings"),
             Item(pane, "Import Settings", row: ImportRow),
+            Item(pane, "Software Update"),
         ],
         SettingsPane.Account =>
         [

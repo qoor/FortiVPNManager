@@ -4,12 +4,13 @@
 //! cases `tests/macos/AppInternalTests.swift` checks the Swift types the opposite way against the
 //! same files. Every case of every enum appears at least once.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use fvm_contract::app_helper::{AttemptId, HelperErrorCode, StopReason};
+use fvm_contract::app_helper::{AttemptId, HelperErrorCode, StopReason, UpdateRefusal};
 use fvm_contract::app_internal::command::*;
 use fvm_contract::app_internal::event::*;
 use fvm_contract::app_internal::port::*;
@@ -140,6 +141,14 @@ fn messages_from_the_runtime() {
             FromRuntime::Section {
                 section: Section::Config {
                     section: Box::new(config_section(account_form(0), None)),
+                },
+            },
+            FromRuntime::Section {
+                section: Section::AutoUpdate {
+                    section: Box::new(auto_update_section(
+                        UpdateStatus::Checking {},
+                        UpdateProgress::Idle {},
+                    )),
                 },
             },
             FromRuntime::LogLines {
@@ -1136,6 +1145,219 @@ fn config_sections() {
     );
 }
 
+fn auto_update_section(status: UpdateStatus, progress: UpdateProgress) -> AutoUpdateSection {
+    AutoUpdateSection {
+        current_version: "26.1.0".into(),
+        status,
+        failed_install_version: None,
+        progress,
+        check: ButtonState::Enabled,
+        update_now: ButtonState::Hidden,
+        cancel: ButtonState::Hidden,
+        restart: ButtonState::Hidden,
+        card_dot: false,
+        menu_badge: false,
+    }
+}
+
+fn update_available() -> UpdateStatus {
+    UpdateStatus::Available {
+        version: "26.2.0".into(),
+        release_page_url: "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0".into(),
+        installer_bytes: 21_733_376,
+        release_note_titles: BTreeMap::from([
+            (
+                "en".into(),
+                vec![
+                    "Automatic updates".into(),
+                    "Faster reconnects after sleep".into(),
+                ],
+            ),
+            (
+                "ko".into(),
+                vec!["자동 업데이트".into(), "잠자기 후 더 빠른 재연결".into()],
+            ),
+        ]),
+    }
+}
+
+fn downloading(received_bytes: u64, percent: u8, remaining: RemainingTime) -> UpdateProgress {
+    UpdateProgress::Downloading {
+        received_bytes,
+        total_bytes: 21_733_376,
+        percent,
+        remaining,
+    }
+}
+
+fn busy_update(progress: UpdateProgress, cancel: ButtonState, card_dot: bool) -> AutoUpdateSection {
+    AutoUpdateSection {
+        check: ButtonState::Disabled,
+        cancel,
+        card_dot,
+        menu_badge: true,
+        ..auto_update_section(update_available(), progress)
+    }
+}
+
+#[test]
+fn auto_update_sections() {
+    pin(
+        "auto_update_sections.json",
+        [
+            AutoUpdateSection {
+                failed_install_version: Some("26.2.0".into()),
+                update_now: ButtonState::Enabled,
+                card_dot: true,
+                menu_badge: true,
+                ..auto_update_section(update_available(), UpdateProgress::Idle {})
+            },
+            busy_update(
+                downloading(0, 0, RemainingTime::Calculating {}),
+                ButtonState::Enabled,
+                false,
+            ),
+            busy_update(
+                downloading(4_194_304, 11, RemainingTime::Minutes { minutes: 2 }),
+                ButtonState::Enabled,
+                false,
+            ),
+            busy_update(
+                downloading(19_922_944, 55, RemainingTime::Seconds { seconds: 5 }),
+                ButtonState::Enabled,
+                false,
+            ),
+            busy_update(
+                UpdateProgress::Preparing { percent: 60 },
+                ButtonState::Hidden,
+                false,
+            ),
+            AutoUpdateSection {
+                restart: ButtonState::Enabled,
+                card_dot: true,
+                menu_badge: true,
+                ..auto_update_section(
+                    update_available(),
+                    UpdateProgress::ReadyToRestart {
+                        version: "26.2.0".into(),
+                    },
+                )
+            },
+            AutoUpdateSection {
+                check: ButtonState::Disabled,
+                restart: ButtonState::Disabled,
+                ..auto_update_section(
+                    update_available(),
+                    UpdateProgress::Installing {
+                        version: "26.2.0".into(),
+                    },
+                )
+            },
+            AutoUpdateSection {
+                update_now: ButtonState::Enabled,
+                card_dot: true,
+                menu_badge: true,
+                ..auto_update_section(
+                    update_available(),
+                    UpdateProgress::Failed {
+                        reason: InstallFailure::HelperRefused {
+                            reason: UpdateRefusal::ChecksumMismatch,
+                            message: "the installer does not match SHA256SUMS.txt".into(),
+                        },
+                    },
+                )
+            },
+            AutoUpdateSection {
+                update_now: ButtonState::Disabled,
+                card_dot: true,
+                menu_badge: true,
+                ..auto_update_section(
+                    UpdateStatus::Available {
+                        version: "26.2.0".into(),
+                        release_page_url:
+                            "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0".into(),
+                        installer_bytes: 48_431_104,
+                        release_note_titles: BTreeMap::new(),
+                    },
+                    UpdateProgress::Idle {},
+                )
+            },
+            auto_update_section(UpdateStatus::Checking {}, UpdateProgress::Idle {}),
+            auto_update_section(UpdateStatus::UpToDate {}, UpdateProgress::Idle {}),
+            AutoUpdateSection {
+                restart: ButtonState::Enabled,
+                card_dot: true,
+                menu_badge: true,
+                ..auto_update_section(
+                    UpdateStatus::CheckFailed {
+                        reason: UpdateCheckFailure::HttpStatus { code: 403 },
+                    },
+                    UpdateProgress::ReadyToRestart {
+                        version: "26.2.0".into(),
+                    },
+                )
+            },
+        ],
+    );
+    pin(
+        "update_check_failures.json",
+        [
+            UpdateCheckFailure::HttpStatus { code: 403 },
+            UpdateCheckFailure::Network {
+                detail: "error sending request: dns error".into(),
+            },
+            UpdateCheckFailure::InvalidReply {},
+            UpdateCheckFailure::InstallerMissing {},
+        ],
+    );
+    let refused = |reason, message: &str| InstallFailure::HelperRefused {
+        reason,
+        message: message.into(),
+    };
+    pin(
+        "install_failures.json",
+        [
+            InstallFailure::DownloadFailed {
+                detail: "connection reset by peer".into(),
+            },
+            InstallFailure::WaiterFailed {
+                description: "The application “FortiVPNManager” could not be launched.".into(),
+            },
+            InstallFailure::HelperUnreachable {
+                failure: HelperChannelFailure::NoReply {},
+            },
+            InstallFailure::HelperBuildMismatch {
+                helper_build: "20261108090000".into(),
+                app_build: "20261109120000".into(),
+            },
+            InstallFailure::HelperFailed {
+                message: "could not start the installer: permission denied".into(),
+            },
+            refused(
+                UpdateRefusal::SignatureInvalid,
+                "SHA256SUMS.txt.sig does not verify",
+            ),
+            refused(
+                UpdateRefusal::ChecksumMismatch,
+                "the installer does not match SHA256SUMS.txt",
+            ),
+            refused(
+                UpdateRefusal::VersionNotNewer,
+                "26.1.0 is not newer than 26.1.0",
+            ),
+            refused(
+                UpdateRefusal::AlreadyInstalling,
+                "an update is already being installed",
+            ),
+            refused(
+                UpdateRefusal::FilesUnreadable,
+                "could not read the installer: No such file or directory",
+            ),
+            refused(UpdateRefusal::NothingPrepared, "no update is prepared"),
+        ],
+    );
+}
+
 #[test]
 fn settings_file_problems() {
     let config = "/Users/alice/.config/FortiVPNManager/config.yaml";
@@ -1436,6 +1658,12 @@ fn port_requests() {
                     json: r#"{"expected":{},"routes":[]}"#.into(),
                 },
             ),
+            call(
+                16,
+                HelperCall::PrepareUpdate {
+                    json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
+                },
+            ),
             request(
                 17,
                 PortRequest::RouteInterface {
@@ -1454,6 +1682,20 @@ fn port_requests() {
             request(22, PortRequest::LoginItemRegistration {}),
             request(23, PortRequest::SetLoginItem { enabled: false }),
             request(24, PortRequest::FortiClientConnections {}),
+            request(
+                25,
+                PortRequest::StartUpdateWaiter {
+                    install_id: 13_835_058_055_282_163_713,
+                },
+            ),
+            call(
+                26,
+                HelperCall::InstallUpdate {
+                    json: r#"{"installID":13835058055282163713}"#.into(),
+                },
+            ),
+            call(27, HelperCall::ReadPreparedUpdate {}),
+            call(28, HelperCall::DiscardPreparedUpdate {}),
         ],
     );
 }
@@ -1483,14 +1725,24 @@ fn port_actions() {
             log(LogLevel::Info, Otp, "code found"),
             log(LogLevel::Info, BypassRoutes, "routes written"),
             log(LogLevel::Info, LoginItem, "registered"),
+            log(LogLevel::Notice, Update, "update available: 26.2.0"),
             action(PortAction::PostNotification {
                 notification: UserNotification::ExceptionRulesNotApplied {
                     retries: 3,
                     failure: BypassFailure::RoutesNotKept {},
                 },
             }),
+            action(PortAction::PostNotification {
+                notification: UserNotification::UpdateAvailable {
+                    version: "26.2.0".into(),
+                },
+            }),
             action(PortAction::HoldActivity { hold: true }),
             action(PortAction::OpenHelperApprovalSettings {}),
+            action(PortAction::ReleaseUpdateWaiter {
+                installer_process_id: 4_294_967_295,
+            }),
+            action(PortAction::StopUpdateWaiter {}),
             action(PortAction::ApproveQuit {}),
         ],
     );
@@ -1505,6 +1757,7 @@ fn launched() {
         &[ToRuntime::Launched {
             facts: AppFacts {
                 app_build: "20261109120000".into(),
+                app_version: "26.1.0".into(),
                 installed_copy: true,
                 built_in_oauth_client: Some(secret(
                     r#"{"installed":{"client_id":"123-abc.apps.googleusercontent.com"}}"#,
@@ -1602,6 +1855,12 @@ fn commands() {
             command(Command::AddCurrentNetwork {}),
             command(Command::DiscardBypassChanges {}),
             command(Command::ApplyBypassRules {}),
+            command(Command::CheckForUpdates {}),
+            command(Command::UpdatePageOpened {}),
+            command(Command::UpdateNow {}),
+            command(Command::UpdateNowFromNotification {}),
+            command(Command::CancelUpdateDownload {}),
+            command(Command::RestartToUpdate {}),
         ],
     );
 }
@@ -1736,6 +1995,13 @@ fn port_responses() {
                 22,
                 PortResponse::FortiClientConnections {
                     connections: vec![],
+                },
+            ),
+            response(25, PortResponse::UpdateWaiterStarted {}),
+            response(
+                25,
+                PortResponse::UpdateWaiterFailed {
+                    description: "The application “FortiVPNManager” could not be launched.".into(),
                 },
             ),
         ],

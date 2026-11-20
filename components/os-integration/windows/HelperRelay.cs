@@ -33,7 +33,7 @@ internal delegate IHelperChannel OpenHelperChannel(ulong id, HelperInbound inbou
 /// which marks its connection verified when it is the app's. A new connection is opened when there
 /// is none or the last one was lost.
 /// <list type="bullet">
-/// <item>Calls that send secrets or change routes go only over a verified connection.</item>
+/// <item>Calls that send secrets, change routes or handle an update go only over a verified connection.</item>
 /// <item>The build, the status and the route calls are tried once more on a fresh connection when
 /// the connection fails or cannot be opened. Other calls are never repeated or moved.</item>
 /// </list>
@@ -93,6 +93,14 @@ internal sealed class HelperRelay
             Relay(verified: true, retrying: true, id => new HelperPipe.Request.ReadBypassRoutes(id), reply),
         HelperCall.WriteBypassRoutes write =>
             Relay(verified: true, retrying: true, id => new HelperPipe.Request.WriteBypassRoutes(id, write.Json), reply),
+        HelperCall.PrepareUpdate prepare =>
+            Relay(verified: true, retrying: false, id => new HelperPipe.Request.PrepareUpdate(id, prepare.Json), reply),
+        HelperCall.InstallUpdate install =>
+            Relay(verified: true, retrying: false, id => new HelperPipe.Request.InstallUpdate(id, install.Json), reply),
+        HelperCall.ReadPreparedUpdate =>
+            Relay(verified: true, retrying: false, id => new HelperPipe.Request.ReadPreparedUpdate(id), reply),
+        HelperCall.DiscardPreparedUpdate =>
+            Relay(verified: true, retrying: false, id => new HelperPipe.Request.DiscardPreparedUpdate(id), reply),
         _ => throw new UnreachableException(),
     };
 

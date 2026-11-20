@@ -192,6 +192,20 @@
   },
   {
     "portRequest": {
+      "id": 16,
+      "request": {
+        "callHelper": {
+          "call": {
+            "prepareUpdate": {
+              "json": "{\"installerPath\":\"/tmp/FortiVPNManager-26.2.0.pkg\"}"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
       "id": 17,
       "request": {
         "routeInterface": {
@@ -257,6 +271,54 @@
       "id": 24,
       "request": {
         "fortiClientConnections": {}
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 25,
+      "request": {
+        "startUpdateWaiter": {
+          "installId": 13835058055282163713
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 26,
+      "request": {
+        "callHelper": {
+          "call": {
+            "installUpdate": {
+              "json": "{\"installID\":13835058055282163713}"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 27,
+      "request": {
+        "callHelper": {
+          "call": {
+            "readPreparedUpdate": {}
+          }
+        }
+      }
+    }
+  },
+  {
+    "portRequest": {
+      "id": 28,
+      "request": {
+        "callHelper": {
+          "call": {
+            "discardPreparedUpdate": {}
+          }
+        }
       }
     }
   }

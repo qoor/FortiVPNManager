@@ -35,6 +35,15 @@ extension AppInternal {
         case addCurrentNetwork
         case discardBypassChanges
         case applyBypassRules
+
+        case checkForUpdates
+        /// The Software Update section came into view.
+        case updatePageOpened
+        case updateNow
+        /// The update notification's button.
+        case updateNowFromNotification
+        case cancelUpdateDownload
+        case restartToUpdate
     }
 
     /// An empty password field keeps the stored password.

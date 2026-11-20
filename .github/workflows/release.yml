@@ -61,6 +61,15 @@ jobs:
           path: release
       - working-directory: release
         run: sha256sum FortiVPNManager-* > SHA256SUMS.txt
+      - working-directory: release
+        env:
+          KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo '::error::the repository secret UPDATE_SIGNING_KEY is not set'
+            exit 1
+          fi
+          printf '%s' "$KEY" | openssl pkeyutl -sign -rawin -inkey /dev/stdin -in SHA256SUMS.txt -out SHA256SUMS.txt.sig
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |

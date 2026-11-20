@@ -43,6 +43,25 @@ enum SettingsPane: String, CaseIterable {
     }
 }
 
+enum SettingsPage: Hashable {
+    case pane(SettingsPane)
+    case softwareUpdate
+
+    var pane: SettingsPane {
+        switch self {
+        case let .pane(pane): pane
+        case .softwareUpdate: .general
+        }
+    }
+
+    var title: String {
+        switch self {
+        case let .pane(pane): pane.title
+        case .softwareUpdate: String(localized: "Software Update")
+        }
+    }
+}
+
 /// The settings window in the style of macOS System Settings (`SettingsView`). Like System Settings it
 /// keeps one size on every pane, can't go full screen, opens centered the first time and then where it
 /// was left, on the last pane shown. While it is open the app is a regular app (Dock icon, key focus,
@@ -65,17 +84,26 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
     /// Opens (or brings forward) the window on `pane`, or on the last pane shown. Deferred to the
     /// next main-queue turn so a menu that is still tracking cannot swallow the activation.
     func show(_ pane: SettingsPane? = nil) {
-        DispatchQueue.main.async { [self] in present(pane) }
+        DispatchQueue.main.async { [self] in present(pane.map(SettingsPage.pane)) }
+    }
+
+    func showSoftwareUpdate() {
+        DispatchQueue.main.async { [self] in present(.softwareUpdate) }
     }
 
     @objc func showFromMenu(_ sender: Any?) {
         show()
     }
 
-    private func present(_ pane: SettingsPane?) {
+    private func present(_ page: SettingsPage?) {
         let window = self.window ?? makeWindow()
         self.window = window
-        if let pane { navigation.select(pane) }
+        switch page {
+        case let .pane(pane)?: navigation.select(pane)
+        case .softwareUpdate?: navigation.showSoftwareUpdate()
+        case nil: break
+        }
+        navigation.isWindowOpen = true
         ui.send(.settingsOpened)
 
         if NSApp.mainMenu !== menus { NSApp.mainMenu = menus }
@@ -110,9 +138,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
         window.collectionBehavior.insert(.fullScreenNone)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.title = navigation.pane.title
-        navigation.onPaneChange = { [weak window] in window?.title = $0.title }
-        navigation.onPaneWillChange = { [weak window] in
+        window.title = navigation.page.title
+        navigation.onPageChange = { [weak window] in window?.title = $0.title }
+        navigation.onPageWillChange = { [weak window] in
             // Not the search field's typing, which goes on in the sidebar.
             guard let window, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
                   !(editor.delegate is NSSearchField) else { return }
@@ -139,6 +167,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
     }
 
     func windowWillClose(_ notification: Notification) {
+        navigation.isWindowOpen = false
         ui.send(.settingsClosed)
         NSApp.setActivationPolicy(.accessory)
     }

@@ -1,6 +1,6 @@
-//! The core's timers on the wall clock. A timer is due when the wall clock
-//! reaches its time, so it also fires after a sleep or a clock change; the thread looks again at
-//! least every few seconds and whenever it is nudged.
+//! The core's timers and the next update check on the wall clock. A timer is due when the wall
+//! clock reaches its time, so it also fires after a sleep or a clock change; the thread looks again
+//! at least every few seconds and whenever it is nudged.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex};
@@ -12,9 +12,30 @@ use fvm_core::connection::{TimerId, TimerKind};
 /// How late a timer may fire after the wall clock jumped forward without a nudge.
 const LONGEST_NAP: Duration = Duration::from_secs(5);
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Timer {
+    Connection(TimerId),
+    UpdateCheck,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Slot {
+    Connection(TimerKind),
+    UpdateCheck,
+}
+
+impl Timer {
+    fn slot(self) -> Slot {
+        match self {
+            Self::Connection(timer) => Slot::Connection(timer.kind),
+            Self::UpdateCheck => Slot::UpdateCheck,
+        }
+    }
+}
+
 #[derive(Default)]
 struct Pending {
-    timers: BTreeMap<TimerKind, (TimerId, SystemTime)>,
+    timers: BTreeMap<Slot, (Timer, SystemTime)>,
 }
 
 pub(crate) struct Timers {
@@ -23,7 +44,7 @@ pub(crate) struct Timers {
 
 impl Timers {
     /// Starts the timer thread; `fire` runs on it for each due timer.
-    pub(crate) fn start(fire: impl Fn(TimerId) + Send + 'static) -> Self {
+    pub(crate) fn start(fire: impl Fn(Timer) + Send + 'static) -> Self {
         let shared = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let thread_shared = Arc::clone(&shared);
         thread::Builder::new()
@@ -34,19 +55,23 @@ impl Timers {
     }
 
     /// Sets `timer` to `at`, replacing a timer of the same kind.
-    pub(crate) fn set(&self, timer: TimerId, at: SystemTime) {
+    pub(crate) fn set(&self, timer: Timer, at: SystemTime) {
         let (pending, wake) = &*self.shared;
         pending
             .lock()
             .expect("the timer lock")
             .timers
-            .insert(timer.kind, (timer, at));
+            .insert(timer.slot(), (timer, at));
         wake.notify_one();
     }
 
     pub(crate) fn cancel(&self, kind: TimerKind) {
         let (pending, wake) = &*self.shared;
-        pending.lock().expect("the timer lock").timers.remove(&kind);
+        pending
+            .lock()
+            .expect("the timer lock")
+            .timers
+            .remove(&Slot::Connection(kind));
         wake.notify_one();
     }
 
@@ -56,19 +81,19 @@ impl Timers {
     }
 }
 
-fn run(shared: &(Mutex<Pending>, Condvar), fire: &impl Fn(TimerId)) {
+fn run(shared: &(Mutex<Pending>, Condvar), fire: &impl Fn(Timer)) {
     let (pending, wake) = shared;
     let mut guard = pending.lock().expect("the timer lock");
     loop {
         let now = SystemTime::now();
-        let due: Vec<TimerId> = guard
+        let due: Vec<Timer> = guard
             .timers
             .values()
             .filter(|(_, at)| *at <= now)
             .map(|(timer, _)| *timer)
             .collect();
         for timer in &due {
-            guard.timers.remove(&timer.kind);
+            guard.timers.remove(&timer.slot());
         }
         if !due.is_empty() {
             drop(guard);
@@ -92,8 +117,8 @@ mod tests {
 
     use super::*;
 
-    fn timer(kind: TimerKind, generation: u64) -> TimerId {
-        TimerId { kind, generation }
+    fn timer(kind: TimerKind, generation: u64) -> Timer {
+        Timer::Connection(TimerId { kind, generation })
     }
 
     #[test]
@@ -126,5 +151,21 @@ mod tests {
             timer(TimerKind::Retry, 2)
         );
         assert!(received.recv_timeout(Duration::from_millis(200)).is_err());
+    }
+
+    #[test]
+    fn the_update_check_keeps_its_own_slot() {
+        let (fired, received) = mpsc::channel();
+        let timers = Timers::start(move |timer| fired.send(timer).unwrap());
+        let now = SystemTime::now();
+        timers.set(Timer::UpdateCheck, now + Duration::from_secs(60));
+        timers.set(Timer::UpdateCheck, now + Duration::from_millis(80));
+        timers.set(timer(TimerKind::Retry, 1), now + Duration::from_millis(40));
+        timers.cancel(TimerKind::Retry);
+        assert_eq!(
+            received.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Timer::UpdateCheck
+        );
+        assert!(received.recv_timeout(Duration::from_millis(300)).is_err());
     }
 }

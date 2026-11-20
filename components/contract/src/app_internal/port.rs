@@ -54,6 +54,9 @@ pub enum PortRequest {
     /// The SSL VPN connections the official FortiClient keeps, read only; Windows imports its
     /// settings from them. Answered by `FortiClientConnections`.
     FortiClientConnections {},
+
+    /// Answered by `UpdateWaiterStarted`, or `UpdateWaiterFailed`.
+    StartUpdateWaiter { install_id: u64 },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
@@ -118,6 +121,11 @@ pub enum PortResponse {
     FortiClientConnections {
         connections: Vec<FortiClientConnection>,
     },
+
+    UpdateWaiterStarted {},
+    UpdateWaiterFailed {
+        description: String,
+    },
 }
 
 /// An SSL VPN connection of FortiClient: its name and its `Server` value as FortiClient keeps it,
@@ -140,12 +148,22 @@ pub enum PortAction {
     },
     /// Shows a notification, replacing an earlier one of the same kind. The UI's string code
     /// builds its text; the OS integration only posts it.
-    PostNotification { notification: UserNotification },
+    PostNotification {
+        notification: UserNotification,
+    },
     /// Keeps the app from being suspended or throttled while a connection is wanted.
-    HoldActivity { hold: bool },
+    HoldActivity {
+        hold: bool,
+    },
     /// Opens the system settings where the Helper is approved.
     OpenHelperApprovalSettings {},
-    /// Lets the app quit, after `SystemEvent::QuitRequested`. The runtime's last message.
+    ReleaseUpdateWaiter {
+        installer_process_id: u32,
+    },
+    /// Stops the waiter that `StartUpdateWaiter` started.
+    StopUpdateWaiter {},
+    /// Lets the app quit, after `SystemEvent::QuitRequested`, or quits it unasked once an update's
+    /// installer started. The runtime's last message.
     ApproveQuit {},
 }
 
@@ -180,14 +198,15 @@ pub struct SecretStoreFailure {
 /// when the connection that carries the runs goes away.
 ///
 /// - JSON payloads are the `app_helper` messages, written and read by the runtime only.
-/// - `Connect`, `SubmitOtp`, `ReadBypassRoutes` and `WriteBypassRoutes` go only over a verified
-///   connection. When it is not verified yet, the OS integration asks for the build first and
-///   answers `HelperBuildMismatch` if it differs.
+/// - `Connect`, `SubmitOtp`, `ReadBypassRoutes`, `WriteBypassRoutes` and the update calls go only
+///   over a verified connection. When it is not verified yet, the OS integration asks for the
+///   build first and answers `HelperBuildMismatch` if it differs.
 /// - `Status`, `ReadBypassRoutes` and `WriteBypassRoutes` are retried once on a fresh connection
 ///   when the connection fails, since repeating them is harmless. The other calls are never
 ///   retried or moved to another connection.
 /// - The runtime sends the next call only after the previous one was answered, except the route
-///   calls: the Helper handles routes apart from the tunnel, so they may run alongside.
+///   and update calls: the Helper handles routes and updates apart from the tunnel, so they may run
+///   alongside, and a tunnel call never waits for one of them.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum HelperCall {
@@ -216,6 +235,14 @@ pub enum HelperCall {
     /// `json` is a `BypassRoutesRequest`, which also removes the app's exception routes when it
     /// quits. Replied to with a `BypassRoutesReply`.
     WriteBypassRoutes { json: String },
+    /// `json` is an `UpdatePrepareRequest`. Replied to with an `UpdatePrepareReply`.
+    PrepareUpdate { json: String },
+    /// `json` is an `UpdateInstallRequest`. Replied to with an `UpdateInstallReply`.
+    InstallUpdate { json: String },
+    /// Replied to with a `PreparedUpdateReply`.
+    ReadPreparedUpdate {},
+    /// Replied to with an `UpdateDiscardReply`.
+    DiscardPreparedUpdate {},
 }
 
 /// Why a Helper call got no reply.
@@ -285,6 +312,7 @@ pub enum LogCategory {
     Otp,
     BypassRoutes,
     LoginItem,
+    Update,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -294,5 +322,8 @@ pub enum UserNotification {
     ExceptionRulesNotApplied {
         retries: u32,
         failure: BypassFailure,
+    },
+    UpdateAvailable {
+        version: String,
     },
 }

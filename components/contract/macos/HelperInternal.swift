@@ -30,6 +30,12 @@ nonisolated enum HelperInternal {
         case readBypassRoutes
         /// `json` is the app's exception-route request.
         case writeBypassRoutes(json: String)
+        /// `json` is the app's update prepare request.
+        case prepareUpdate(json: String)
+        /// `json` is the app's update install request.
+        case installUpdate(json: String)
+        case readPreparedUpdate
+        case discardPreparedUpdate
     }
 
     /// What came of a `BypassRoutesChange`.
@@ -57,8 +63,8 @@ nonisolated enum HelperInternal {
         case ready
         /// Answers `ToEntry.appConnected`. A refused connection is dropped without `appDisconnected`.
         case admitted(app: UInt64, accept: Bool)
-        /// Answers a connect, submitOtp, disconnect, status or exception-route request; nil is the
-        /// empty reply.
+        /// Answers a connect, submitOtp, disconnect, status, exception-route or update request; nil
+        /// is the empty reply.
         case reply(id: UInt64, json: String?)
         /// Answers an exitWhenIdle request.
         case replyFlag(id: UInt64, value: Bool)

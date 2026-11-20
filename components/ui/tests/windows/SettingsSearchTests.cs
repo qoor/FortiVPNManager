@@ -83,6 +83,14 @@ public class SettingsSearchTests
     }
 
     [Fact]
+    public void TheSoftwareUpdateCardIsFoundByItsName()
+    {
+        var update = Assert.Single(Search("software update"), result => result.Item?.Key == "Software Update");
+        Assert.Equal(SettingsPane.General, update.Pane);
+        Assert.Equal("Software Update", update.Item!.Row);
+    }
+
+    [Fact]
     public void EverySettingIsInACatalog()
     {
         var missing = Enum.GetValues<SettingsPane>()

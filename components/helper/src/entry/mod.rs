@@ -1,9 +1,12 @@
 mod bypass_routes;
+#[cfg(test)]
+mod update_tests;
 
 use std::collections::HashMap;
 use std::env;
 use std::mem;
 use std::panic;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
@@ -11,7 +14,9 @@ use std::time::{Duration, Instant};
 
 use fvm_contract::app_helper::{
     AttemptId, BackendStatus, EndFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
-    HelperStatus, Milestone, OutputBatch, RunRequest, StopReason,
+    HelperStatus, Milestone, OutputBatch, PreparedUpdateReply, RunRequest, StopReason,
+    UpdateDiscardReply, UpdateInstallReply, UpdateInstallRequest, UpdatePrepareReply,
+    UpdatePrepareRequest,
 };
 use fvm_contract::helper_internal::{
     AddedRoute, AppRequest, FromEntry, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
@@ -20,6 +25,7 @@ use fvm_contract::helper_internal::{
 use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::auto_update::{self, Installer, Log, NotDone};
 use crate::recovery::RecordSlot;
 use crate::session::{NotReplaceable, Replaced, Report, Run, SessionManager, StartFailure};
 use crate::watchdog::{self, Beat, Fault};
@@ -49,12 +55,16 @@ impl Inbox {
 /// messages for the OS side, in order, on the entry's thread; the first is "ready", once the
 /// session manager cleaned up after an earlier Helper.
 pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox {
+    let installer = Installer::new(
+        PathBuf::from(auto_update::RECORDS_DIRECTORY),
+        auto_update::PUBLIC_KEY,
+    );
     let (sender, events) = mpsc::channel();
     let inbox = Inbox(sender.clone());
     thread::Builder::new()
         .name("fvm-entry".into())
         .spawn(move || {
-            serve(sessions, OsSide(Box::new(send)), sender, events);
+            serve(sessions, installer, OsSide(Box::new(send)), sender, events);
         })
         .expect("starting the entry thread");
     inbox
@@ -98,6 +108,12 @@ pub fn end_for_restart() -> ! {
 enum Event {
     FromOs(ToEntry),
     Run(AttemptId, Report),
+    Updated {
+        id: u64,
+        log: Option<(LogLevel, String)>,
+        json: String,
+    },
+    UpdateLog(LogLevel, String),
 }
 
 /// Where the entry's messages for the OS side go, in order.
@@ -118,10 +134,22 @@ impl OsSide {
     }
 }
 
-fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Receiver<Event>) {
+fn serve(
+    sessions: SessionManager,
+    installer: Installer,
+    os: OsSide,
+    sender: Sender<Event>,
+    events: Receiver<Event>,
+) {
     let (left, unreverted) = clean_up(&sessions, &os, &events);
     let beat = sessions.watch("entry".to_owned());
     os.send(&FromEntry::Ready {});
+    let (updates, requests) = mpsc::channel();
+    let replies = sender.clone();
+    thread::Builder::new()
+        .name("fvm-update".into())
+        .spawn(move || serve_updates(installer, &requests, &replies))
+        .expect("starting the update thread");
     Entry {
         sessions,
         beat,
@@ -134,6 +162,7 @@ fn serve(sessions: SessionManager, os: OsSide, sender: Sender<Event>, events: Re
         lifecycle: Lifecycle::Serving,
         bypass_routes: BypassRoutes::new(left),
         unreverted,
+        updates,
     }
     .run()
 }
@@ -240,6 +269,7 @@ struct Entry {
     lifecycle: Lifecycle,
     bypass_routes: BypassRoutes,
     unreverted: Vec<OutsideChanges>,
+    updates: Sender<(u64, AppRequest)>,
 }
 
 struct HeldRun {
@@ -313,6 +343,16 @@ impl Entry {
             }
             Event::FromOs(ToEntry::NetworkChanged { outcome }) => self.network_changed(outcome),
             Event::Run(attempt, report) => self.run_report(attempt, report),
+            Event::Updated { id, log, json } => {
+                if let Some((level, line)) = log {
+                    self.os.log(level, LogCategory::Helper, line);
+                }
+                self.os.send(&FromEntry::Reply {
+                    id,
+                    json: Some(json),
+                });
+            }
+            Event::UpdateLog(level, line) => self.os.log(level, LogCategory::Helper, line),
         }
     }
 
@@ -422,6 +462,15 @@ impl Entry {
             AppRequest::ReadBypassRoutes {} => return self.read_bypass_routes(app, id),
             AppRequest::WriteBypassRoutes { json } => {
                 return self.write_bypass_routes(app, id, &json);
+            }
+            update @ (AppRequest::PrepareUpdate { .. }
+            | AppRequest::InstallUpdate { .. }
+            | AppRequest::ReadPreparedUpdate {}
+            | AppRequest::DiscardPreparedUpdate {}) => {
+                self.updates
+                    .send((id, update))
+                    .expect("the update thread runs as long as the process");
+                return;
             }
         };
         let json = result.err().map(|error| to_json(&error));
@@ -817,6 +866,174 @@ fn reverted_again(
         ),
     }
     left
+}
+
+fn serve_updates(
+    mut installer: Installer,
+    requests: &Receiver<(u64, AppRequest)>,
+    replies: &Sender<Event>,
+) {
+    let logs = replies.clone();
+    let log: Log = Arc::new(move |level, line| {
+        logs.send(Event::UpdateLog(level, line))
+            .expect("the entry runs as long as the process");
+    });
+    installer.recover(&log);
+    for (id, request) in requests {
+        let (line, json) = match request {
+            AppRequest::PrepareUpdate { json } => prepare_update(&mut installer, &json),
+            AppRequest::InstallUpdate { json } => install_update(&mut installer, &json, &log),
+            AppRequest::ReadPreparedUpdate {} => read_prepared_update(&installer),
+            AppRequest::DiscardPreparedUpdate {} => discard_prepared_update(&mut installer),
+            other => unreachable!("{other:?} reached the update thread"),
+        };
+        replies
+            .send(Event::Updated {
+                id,
+                log: line,
+                json,
+            })
+            .expect("the entry runs as long as the process");
+    }
+}
+
+fn prepare_update(installer: &mut Installer, json: &str) -> (Option<(LogLevel, String)>, String) {
+    let Ok(request) = serde_json::from_str::<UpdatePrepareRequest>(json) else {
+        let error = error(
+            HelperErrorCode::InvalidRequest,
+            "could not decode the update prepare request",
+        );
+        return (None, to_json(&UpdatePrepareReply::Failure { error }));
+    };
+    let relative = [
+        &request.installer_path,
+        &request.checksums_path,
+        &request.signature_path,
+    ]
+    .into_iter()
+    .find(|path| !Path::new(path).is_absolute());
+    if let Some(relative) = relative {
+        let message = format!("{relative} is not an absolute path");
+        let line = format!("update prepare invalid: {message}");
+        let error = error(HelperErrorCode::InvalidRequest, message);
+        return (
+            Some((LogLevel::Error, line)),
+            to_json(&UpdatePrepareReply::Failure { error }),
+        );
+    }
+    let (level, line, reply) = match installer.prepare(&request) {
+        Ok(prepared) => (
+            LogLevel::Notice,
+            format!("update prepared: {} verified", prepared.installer),
+            UpdatePrepareReply::Prepared {
+                version: prepared.version,
+            },
+        ),
+        Err(NotDone::Refused(reason, message)) => (
+            LogLevel::Notice,
+            format!("update prepare refused ({reason:?}): {message}"),
+            UpdatePrepareReply::Refused { reason, message },
+        ),
+        Err(NotDone::Failed(message)) => (
+            LogLevel::Error,
+            format!("update prepare failed: {message}"),
+            UpdatePrepareReply::Failure {
+                error: error(HelperErrorCode::InternalError, message),
+            },
+        ),
+    };
+    (Some((level, line)), to_json(&reply))
+}
+
+fn install_update(
+    installer: &mut Installer,
+    json: &str,
+    log: &Log,
+) -> (Option<(LogLevel, String)>, String) {
+    let Ok(request) = serde_json::from_str::<UpdateInstallRequest>(json) else {
+        let error = error(
+            HelperErrorCode::InvalidRequest,
+            "could not decode the update install request",
+        );
+        return (None, to_json(&UpdateInstallReply::Failure { error }));
+    };
+    let id = request.install_id;
+    let (level, line, reply) = match installer.install(id, log) {
+        Ok(started) => (
+            LogLevel::Notice,
+            format!(
+                "update install {id}: runner {} started for {}",
+                started.runner, started.installer
+            ),
+            UpdateInstallReply::Started {
+                installer_process_id: started.installer_process,
+            },
+        ),
+        Err(NotDone::Refused(reason, message)) => (
+            LogLevel::Notice,
+            format!("update install {id} refused ({reason:?}): {message}"),
+            UpdateInstallReply::Refused { reason, message },
+        ),
+        Err(NotDone::Failed(message)) => (
+            LogLevel::Error,
+            format!("update install {id} failed: {message}"),
+            UpdateInstallReply::Failure {
+                error: error(HelperErrorCode::InternalError, message),
+            },
+        ),
+    };
+    (Some((level, line)), to_json(&reply))
+}
+
+fn read_prepared_update(installer: &Installer) -> (Option<(LogLevel, String)>, String) {
+    let (log, reply) = match installer.prepared() {
+        Ok(Some(prepared)) => (
+            None,
+            PreparedUpdateReply::Prepared {
+                version: prepared.version,
+            },
+        ),
+        Ok(None) => (None, PreparedUpdateReply::NotPrepared {}),
+        Err(NotDone::Refused(_, message)) => (
+            Some((LogLevel::Notice, message)),
+            PreparedUpdateReply::NotPrepared {},
+        ),
+        Err(NotDone::Failed(message)) => (
+            Some((
+                LogLevel::Error,
+                format!("reading the prepared update failed: {message}"),
+            )),
+            PreparedUpdateReply::Failure {
+                error: error(HelperErrorCode::InternalError, message),
+            },
+        ),
+    };
+    (log, to_json(&reply))
+}
+
+fn discard_prepared_update(installer: &mut Installer) -> (Option<(LogLevel, String)>, String) {
+    let (level, line, reply) = match installer.discard() {
+        Ok(()) => (
+            LogLevel::Notice,
+            "prepared update discarded".to_owned(),
+            UpdateDiscardReply::Discarded {},
+        ),
+        Err(NotDone::Refused(_, message)) => (
+            LogLevel::Notice,
+            format!("discarding the prepared update refused: {message}"),
+            UpdateDiscardReply::Failure {
+                error: error(HelperErrorCode::Busy, message),
+            },
+        ),
+        Err(NotDone::Failed(message)) => (
+            LogLevel::Error,
+            format!("discarding the prepared update failed: {message}"),
+            UpdateDiscardReply::Failure {
+                error: error(HelperErrorCode::InternalError, message),
+            },
+        ),
+    };
+    (Some((level, line)), to_json(&reply))
 }
 
 fn error(code: HelperErrorCode, message: impl Into<String>) -> HelperError {

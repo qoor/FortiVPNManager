@@ -84,6 +84,12 @@ impl Runtime {
             Command::AddCurrentNetwork {} => self.add_current_network(),
             Command::DiscardBypassChanges {} => self.discard_bypass_changes(),
             Command::ApplyBypassRules {} => self.apply_bypass_rules(),
+            Command::CheckForUpdates {} => self.check_for_updates_now(),
+            Command::UpdatePageOpened {} => self.update_page_opened(),
+            Command::UpdateNow {} => self.update_now(),
+            Command::UpdateNowFromNotification {} => self.update_now_from_notification(),
+            Command::CancelUpdateDownload {} => self.cancel_update_download(),
+            Command::RestartToUpdate {} => self.restart_to_update(),
         }
     }
 

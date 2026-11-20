@@ -68,6 +68,12 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Command.AddCurrentNetwork), TypeInfoPropertyName = "CommandAddCurrentNetwork")]
 [JsonSerializable(typeof(AppInternal.Command.DiscardBypassChanges), TypeInfoPropertyName = "CommandDiscardBypassChanges")]
 [JsonSerializable(typeof(AppInternal.Command.ApplyBypassRules), TypeInfoPropertyName = "CommandApplyBypassRules")]
+[JsonSerializable(typeof(AppInternal.Command.CheckForUpdates), TypeInfoPropertyName = "CommandCheckForUpdates")]
+[JsonSerializable(typeof(AppInternal.Command.UpdatePageOpened), TypeInfoPropertyName = "CommandUpdatePageOpened")]
+[JsonSerializable(typeof(AppInternal.Command.UpdateNow), TypeInfoPropertyName = "CommandUpdateNow")]
+[JsonSerializable(typeof(AppInternal.Command.UpdateNowFromNotification), TypeInfoPropertyName = "CommandUpdateNowFromNotification")]
+[JsonSerializable(typeof(AppInternal.Command.CancelUpdateDownload), TypeInfoPropertyName = "CommandCancelUpdateDownload")]
+[JsonSerializable(typeof(AppInternal.Command.RestartToUpdate), TypeInfoPropertyName = "CommandRestartToUpdate")]
 
 [JsonSerializable(typeof(AppInternal.ConnectionOption.ScheduleEnabled), TypeInfoPropertyName = "ConnectionOptionScheduleEnabled")]
 [JsonSerializable(typeof(AppInternal.ConnectionOption.ScheduleDay), TypeInfoPropertyName = "ConnectionOptionScheduleDay")]
@@ -85,6 +91,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Section.Gmail), TypeInfoPropertyName = "SectionGmail")]
 [JsonSerializable(typeof(AppInternal.Section.BypassRules), TypeInfoPropertyName = "SectionBypassRules")]
 [JsonSerializable(typeof(AppInternal.Section.Config), TypeInfoPropertyName = "SectionConfig")]
+[JsonSerializable(typeof(AppInternal.Section.AutoUpdate), TypeInfoPropertyName = "SectionAutoUpdate")]
 
 [JsonSerializable(typeof(AppInternal.ConnectionStatus.NotConnected), TypeInfoPropertyName = "ConnectionStatusNotConnected")]
 [JsonSerializable(typeof(AppInternal.ConnectionStatus.SetupRequired), TypeInfoPropertyName = "ConnectionStatusSetupRequired")]
@@ -258,6 +265,34 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.ImportError.NoFortiClientConnection), TypeInfoPropertyName = "ImportErrorNoFortiClientConnection")]
 [JsonSerializable(typeof(AppInternal.ImportError.InvalidFortiClientServer), TypeInfoPropertyName = "ImportErrorInvalidFortiClientServer")]
 
+[JsonSerializable(typeof(AppInternal.UpdateStatus.Checking), TypeInfoPropertyName = "UpdateStatusChecking")]
+[JsonSerializable(typeof(AppInternal.UpdateStatus.UpToDate), TypeInfoPropertyName = "UpdateStatusUpToDate")]
+[JsonSerializable(typeof(AppInternal.UpdateStatus.Available), TypeInfoPropertyName = "UpdateStatusAvailable")]
+[JsonSerializable(typeof(AppInternal.UpdateStatus.CheckFailed), TypeInfoPropertyName = "UpdateStatusCheckFailed")]
+
+[JsonSerializable(typeof(AppInternal.UpdateCheckFailure.HttpStatus), TypeInfoPropertyName = "UpdateCheckFailureHttpStatus")]
+[JsonSerializable(typeof(AppInternal.UpdateCheckFailure.Network), TypeInfoPropertyName = "UpdateCheckFailureNetwork")]
+[JsonSerializable(typeof(AppInternal.UpdateCheckFailure.InvalidReply), TypeInfoPropertyName = "UpdateCheckFailureInvalidReply")]
+[JsonSerializable(typeof(AppInternal.UpdateCheckFailure.InstallerMissing), TypeInfoPropertyName = "UpdateCheckFailureInstallerMissing")]
+
+[JsonSerializable(typeof(AppInternal.UpdateProgress.Idle), TypeInfoPropertyName = "UpdateProgressIdle")]
+[JsonSerializable(typeof(AppInternal.UpdateProgress.Downloading), TypeInfoPropertyName = "UpdateProgressDownloading")]
+[JsonSerializable(typeof(AppInternal.UpdateProgress.Preparing), TypeInfoPropertyName = "UpdateProgressPreparing")]
+[JsonSerializable(typeof(AppInternal.UpdateProgress.ReadyToRestart), TypeInfoPropertyName = "UpdateProgressReadyToRestart")]
+[JsonSerializable(typeof(AppInternal.UpdateProgress.Installing), TypeInfoPropertyName = "UpdateProgressInstalling")]
+[JsonSerializable(typeof(AppInternal.UpdateProgress.Failed), TypeInfoPropertyName = "UpdateProgressFailed")]
+
+[JsonSerializable(typeof(AppInternal.RemainingTime.Calculating), TypeInfoPropertyName = "RemainingTimeCalculating")]
+[JsonSerializable(typeof(AppInternal.RemainingTime.Minutes), TypeInfoPropertyName = "RemainingTimeMinutes")]
+[JsonSerializable(typeof(AppInternal.RemainingTime.Seconds), TypeInfoPropertyName = "RemainingTimeSeconds")]
+
+[JsonSerializable(typeof(AppInternal.InstallFailure.DownloadFailed), TypeInfoPropertyName = "InstallFailureDownloadFailed")]
+[JsonSerializable(typeof(AppInternal.InstallFailure.WaiterFailed), TypeInfoPropertyName = "InstallFailureWaiterFailed")]
+[JsonSerializable(typeof(AppInternal.InstallFailure.HelperUnreachable), TypeInfoPropertyName = "InstallFailureHelperUnreachable")]
+[JsonSerializable(typeof(AppInternal.InstallFailure.HelperBuildMismatch), TypeInfoPropertyName = "InstallFailureHelperBuildMismatch")]
+[JsonSerializable(typeof(AppInternal.InstallFailure.HelperFailed), TypeInfoPropertyName = "InstallFailureHelperFailed")]
+[JsonSerializable(typeof(AppInternal.InstallFailure.HelperRefused), TypeInfoPropertyName = "InstallFailureHelperRefused")]
+
 [JsonSerializable(typeof(AppInternal.PortRequest.ReadSecret), TypeInfoPropertyName = "PortRequestReadSecret")]
 [JsonSerializable(typeof(AppInternal.PortRequest.HasSecret), TypeInfoPropertyName = "PortRequestHasSecret")]
 [JsonSerializable(typeof(AppInternal.PortRequest.WriteSecret), TypeInfoPropertyName = "PortRequestWriteSecret")]
@@ -274,6 +309,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.PortRequest.LoginItemRegistration), TypeInfoPropertyName = "PortRequestLoginItemRegistration")]
 [JsonSerializable(typeof(AppInternal.PortRequest.SetLoginItem), TypeInfoPropertyName = "PortRequestSetLoginItem")]
 [JsonSerializable(typeof(AppInternal.PortRequest.FortiClientConnections), TypeInfoPropertyName = "PortRequestFortiClientConnections")]
+[JsonSerializable(typeof(AppInternal.PortRequest.StartUpdateWaiter), TypeInfoPropertyName = "PortRequestStartUpdateWaiter")]
 
 [JsonSerializable(typeof(AppInternal.PortResponse.Secret), TypeInfoPropertyName = "PortResponseSecret")]
 [JsonSerializable(typeof(AppInternal.PortResponse.HasSecret), TypeInfoPropertyName = "PortResponseHasSecret")]
@@ -293,11 +329,15 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.PortResponse.ScreenState), TypeInfoPropertyName = "PortResponseScreenState")]
 [JsonSerializable(typeof(AppInternal.PortResponse.BrowserOpened), TypeInfoPropertyName = "PortResponseBrowserOpened")]
 [JsonSerializable(typeof(AppInternal.PortResponse.FortiClientConnections), TypeInfoPropertyName = "PortResponseFortiClientConnections")]
+[JsonSerializable(typeof(AppInternal.PortResponse.UpdateWaiterStarted), TypeInfoPropertyName = "PortResponseUpdateWaiterStarted")]
+[JsonSerializable(typeof(AppInternal.PortResponse.UpdateWaiterFailed), TypeInfoPropertyName = "PortResponseUpdateWaiterFailed")]
 
 [JsonSerializable(typeof(AppInternal.PortAction.Log), TypeInfoPropertyName = "PortActionLog")]
 [JsonSerializable(typeof(AppInternal.PortAction.PostNotification), TypeInfoPropertyName = "PortActionPostNotification")]
 [JsonSerializable(typeof(AppInternal.PortAction.HoldActivity), TypeInfoPropertyName = "PortActionHoldActivity")]
 [JsonSerializable(typeof(AppInternal.PortAction.OpenHelperApprovalSettings), TypeInfoPropertyName = "PortActionOpenHelperApprovalSettings")]
+[JsonSerializable(typeof(AppInternal.PortAction.ReleaseUpdateWaiter), TypeInfoPropertyName = "PortActionReleaseUpdateWaiter")]
+[JsonSerializable(typeof(AppInternal.PortAction.StopUpdateWaiter), TypeInfoPropertyName = "PortActionStopUpdateWaiter")]
 [JsonSerializable(typeof(AppInternal.PortAction.ApproveQuit), TypeInfoPropertyName = "PortActionApproveQuit")]
 
 [JsonSerializable(typeof(AppInternal.SecretItem.VpnPassword), TypeInfoPropertyName = "SecretItemVpnPassword")]
@@ -312,6 +352,10 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.HelperCall.ExitWhenIdle), TypeInfoPropertyName = "HelperCallExitWhenIdle")]
 [JsonSerializable(typeof(AppInternal.HelperCall.ReadBypassRoutes), TypeInfoPropertyName = "HelperCallReadBypassRoutes")]
 [JsonSerializable(typeof(AppInternal.HelperCall.WriteBypassRoutes), TypeInfoPropertyName = "HelperCallWriteBypassRoutes")]
+[JsonSerializable(typeof(AppInternal.HelperCall.PrepareUpdate), TypeInfoPropertyName = "HelperCallPrepareUpdate")]
+[JsonSerializable(typeof(AppInternal.HelperCall.InstallUpdate), TypeInfoPropertyName = "HelperCallInstallUpdate")]
+[JsonSerializable(typeof(AppInternal.HelperCall.ReadPreparedUpdate), TypeInfoPropertyName = "HelperCallReadPreparedUpdate")]
+[JsonSerializable(typeof(AppInternal.HelperCall.DiscardPreparedUpdate), TypeInfoPropertyName = "HelperCallDiscardPreparedUpdate")]
 
 [JsonSerializable(typeof(AppInternal.HelperChannelFailure.AppNotSigned), TypeInfoPropertyName = "HelperChannelFailureAppNotSigned")]
 [JsonSerializable(typeof(AppInternal.HelperChannelFailure.Connection), TypeInfoPropertyName = "HelperChannelFailureConnection")]
@@ -323,6 +367,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.RegistrationError.Failed), TypeInfoPropertyName = "RegistrationErrorFailed")]
 
 [JsonSerializable(typeof(AppInternal.UserNotification.ExceptionRulesNotApplied), TypeInfoPropertyName = "UserNotificationExceptionRulesNotApplied")]
+[JsonSerializable(typeof(AppInternal.UserNotification.UpdateAvailable), TypeInfoPropertyName = "UserNotificationUpdateAvailable")]
 
 [JsonSerializable(typeof(AppInternal.ConfigFileError.InvalidSettings), TypeInfoPropertyName = "ConfigFileErrorInvalidSettings")]
 [JsonSerializable(typeof(AppInternal.ConfigFileError.UnreadableFile), TypeInfoPropertyName = "ConfigFileErrorUnreadableFile")]
@@ -410,6 +455,10 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(HelperPipe.Request.ExitWhenIdle), TypeInfoPropertyName = "RequestExitWhenIdle")]
 [JsonSerializable(typeof(HelperPipe.Request.ReadBypassRoutes), TypeInfoPropertyName = "RequestReadBypassRoutes")]
 [JsonSerializable(typeof(HelperPipe.Request.WriteBypassRoutes), TypeInfoPropertyName = "RequestWriteBypassRoutes")]
+[JsonSerializable(typeof(HelperPipe.Request.PrepareUpdate), TypeInfoPropertyName = "RequestPrepareUpdate")]
+[JsonSerializable(typeof(HelperPipe.Request.InstallUpdate), TypeInfoPropertyName = "RequestInstallUpdate")]
+[JsonSerializable(typeof(HelperPipe.Request.ReadPreparedUpdate), TypeInfoPropertyName = "RequestReadPreparedUpdate")]
+[JsonSerializable(typeof(HelperPipe.Request.DiscardPreparedUpdate), TypeInfoPropertyName = "RequestDiscardPreparedUpdate")]
 
 [JsonSerializable(typeof(HelperPipe.Message.Build), TypeInfoPropertyName = "MessageBuild")]
 [JsonSerializable(typeof(HelperPipe.Message.Reply), TypeInfoPropertyName = "MessageReply")]

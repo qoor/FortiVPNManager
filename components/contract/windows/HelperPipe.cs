@@ -48,6 +48,10 @@ public static class HelperPipe
 
         public sealed record ReadBypassRoutes(ulong Id) : Request;
         public sealed record WriteBypassRoutes(ulong Id, string Json) : Request;
+        public sealed record PrepareUpdate(ulong Id, string Json) : Request;
+        public sealed record InstallUpdate(ulong Id, string Json) : Request;
+        public sealed record ReadPreparedUpdate(ulong Id) : Request;
+        public sealed record DiscardPreparedUpdate(ulong Id) : Request;
     }
 
     /// <summary>Sent by the Helper.</summary>

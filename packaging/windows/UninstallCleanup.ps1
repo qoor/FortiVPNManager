@@ -1,8 +1,9 @@
 # Run by the installer as the system account on a real uninstall only, never while an upgrade removes
 # the old version, after the app is closed and the Helper stopped. For every user profile of the PC it
-# removes the app's open-at-login entries; then it removes the Helper's work folder. Each user's own
-# files (config.yaml, state.json, logs, credentials) stay. A user whose registry cannot be read is
-# skipped and logged, and nothing here fails the uninstall. Windows PowerShell 5.1, ASCII only.
+# removes the app's open-at-login entries; then it removes the Helper's work folder and the update
+# records folder. Each user's own files (config.yaml, state.json, logs, credentials) stay. A user
+# whose registry cannot be read is skipped and logged, and nothing here fails the uninstall. Windows
+# PowerShell 5.1, ASCII only.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 # components/os-integration/windows/ServiceRegistration.cs
@@ -13,6 +14,8 @@ $loginKeys = @(
 )
 # components/helper/windows/src/service.rs
 $helperFolder = 'C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager'
+# components/contract/src/app_helper.rs
+$updateFolder = 'C:\Program Files\FortiVPNManager\AutoUpdate'
 
 # reg.exe writes its messages in the system's language; only its exit code counts.
 function Invoke-Reg([string[]] $arguments) {
@@ -67,11 +70,13 @@ foreach ($entry in Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVer
         Write-Output "${sid}: login item skipped: $($_.Exception.Message)"
     }
 }
-if (Test-Path -LiteralPath $helperFolder) {
-    try {
-        Remove-Item -LiteralPath $helperFolder -Recurse -Force
-        Write-Output "removed $helperFolder"
-    } catch {
-        Write-Output "cannot remove ${helperFolder}: $($_.Exception.Message)"
+foreach ($folder in @($helperFolder, $updateFolder)) {
+    if (Test-Path -LiteralPath $folder) {
+        try {
+            Remove-Item -LiteralPath $folder -Recurse -Force
+            Write-Output "removed $folder"
+        } catch {
+            Write-Output "cannot remove ${folder}: $($_.Exception.Message)"
+        }
     }
 }

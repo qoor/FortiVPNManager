@@ -7,8 +7,10 @@ use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::thread;
 
-use crate::link;
+use fvm_core::auto_update::LATEST_RELEASE_URL;
+
 use crate::orchestration::{self, ClientSettings, Input, Paths};
+use crate::{auto_update, link};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
@@ -29,7 +31,9 @@ pub fn start() -> UnixStream {
     });
     thread::Builder::new()
         .name("fvm-runtime".into())
-        .spawn(move || orchestration::run(paths(), inputs, received, out))
+        .spawn(move || {
+            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out)
+        })
         .expect("starting the runtime thread");
     theirs
 }
@@ -41,6 +45,7 @@ fn paths() -> Paths {
         config: home.join(".config/FortiVPNManager/config.yaml"),
         state: home.join("Library/Application Support/FortiVPNManager/state.json"),
         log: home.join("Library/Logs/FortiVPNManager/vpn_backend.log"),
+        update_downloads: std::env::temp_dir().join(auto_update::DOWNLOAD_FOLDER),
         client_settings: ClientSettings::OpenFortiVpn { home },
     }
 }

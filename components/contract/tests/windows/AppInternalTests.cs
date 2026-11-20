@@ -74,6 +74,14 @@ public class AppInternalTests
     public void ConfigSections() => RoundTrip<ConfigSection>("config_sections.json");
 
     [Fact]
+    public void AutoUpdateSections()
+    {
+        RoundTrip<AutoUpdateSection>("auto_update_sections.json");
+        RoundTrip<InstallFailure>("install_failures.json");
+        RoundTrip<UpdateCheckFailure>("update_check_failures.json");
+    }
+
+    [Fact]
     public void SettingsFileProblems()
     {
         RoundTrip<ConfigFileError>("config_file_errors.json");
@@ -101,6 +109,8 @@ public class AppInternalTests
             .ToList();
         Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.BypassRoutes });
         Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.LoginItem });
+        Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.Update });
+        Assert.Contains(actions, action => action is PortAction.ReleaseUpdateWaiter { InstallerProcessId: 4_294_967_295 });
     }
 
     // Sent by the app
@@ -167,7 +177,7 @@ public class AppInternalTests
             new PortResponse.Secret("vpn-secret").ToString(),
             new HelperCall.Connect("""{"password":"vpn-secret"}""").ToString(),
             new HelperCall.SubmitOtp("attempt", "123456").ToString(),
-            new AppFacts("1", true, "Asia/Seoul", new SignInPages("a", "b", "c"), "client-secret").ToString(),
+            new AppFacts("1", "26.1.0", true, "Asia/Seoul", new SignInPages("a", "b", "c"), "client-secret").ToString(),
         ];
         foreach (var text in shown)
         {

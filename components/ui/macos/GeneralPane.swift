@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The General pane: the connection's status with its buttons (as in the menu), how the app starts,
-/// and importing the VPN client's settings.
+/// importing the VPN client's settings, and the way to Software Update.
 struct GeneralPane: View {
     let ui: AppUI
     let navigation: SettingsNavigation
@@ -15,6 +15,9 @@ struct GeneralPane: View {
             if let config = ui.config {
                 startupSection(config)
                 importSection(config.account)
+            }
+            if let update = ui.autoUpdate {
+                updateSection(update)
             }
         }
         .toggleStyle(.switch)
@@ -142,6 +145,33 @@ struct GeneralPane: View {
                 ImportReportView(report: report)
                 Button("Close") { ui.send(.dismissImportReport) }
             }
+        }
+    }
+
+    private func updateSection(_ update: AppInternal.AutoUpdateSection) -> some View {
+        Section {
+            Button(action: navigation.showSoftwareUpdate) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(.gray, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Text("Software Update")
+                    Spacer()
+                    if update.cardDot {
+                        Circle()
+                            .fill(.blue)
+                            .frame(width: 8, height: 8)
+                    }
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .searchAnchor("Software Update", navigation)
         }
     }
 }

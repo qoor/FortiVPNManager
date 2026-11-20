@@ -6,7 +6,7 @@ import Synchronization
 /// Payloads cross unread; the one reply read here is the build, which marks its connection verified
 /// when it is the app's. A new connection is opened when there is none or the last one was lost.
 ///
-/// - Calls that send secrets or change routes go only over a verified connection.
+/// - Calls that send secrets, change routes or handle an update go only over a verified connection.
 /// - The build, the status and the route calls are tried once more on a fresh connection when the
 ///   connection fails: a Helper whose executable a reinstall replaced exits instead of answering, and
 ///   the system starts the new one for the next connection. Other calls are never repeated or moved.
@@ -71,6 +71,24 @@ final class HelperRelay {
             let request = Data(json.utf8)
             reply(response(await relay(verified: true, retrying: true) { (helper, done: @escaping @Sendable (Data) -> Void) in
                 helper.setBypassRoutes(request, reply: done)
+            }))
+        case let .prepareUpdate(json):
+            let request = Data(json.utf8)
+            reply(response(await relay(verified: true, retrying: false) { (helper, done: @escaping @Sendable (Data) -> Void) in
+                helper.prepareUpdate(request, reply: done)
+            }))
+        case let .installUpdate(json):
+            let request = Data(json.utf8)
+            reply(response(await relay(verified: true, retrying: false) { (helper, done: @escaping @Sendable (Data) -> Void) in
+                helper.installUpdate(request, reply: done)
+            }))
+        case .readPreparedUpdate:
+            reply(response(await relay(verified: true, retrying: false) { (helper, done: @escaping @Sendable (Data) -> Void) in
+                helper.preparedUpdate(reply: done)
+            }))
+        case .discardPreparedUpdate:
+            reply(response(await relay(verified: true, retrying: false) { (helper, done: @escaping @Sendable (Data) -> Void) in
+                helper.discardPreparedUpdate(reply: done)
             }))
         }
     }

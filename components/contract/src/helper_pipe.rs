@@ -24,8 +24,8 @@ pub const MAX_MESSAGE_BYTES: u32 = 1 << 20;
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum PipeRequest {
     /// The build check, answered by `PipeMessage::Build`. `app` is the app's build; a connection
-    /// whose app build equals the Helper's may send connect, submitOtp and the bypass-route
-    /// requests. Goes between builds, so its shape and its answer's never change.
+    /// whose app build equals the Helper's may send connect, submitOtp, the bypass-route requests
+    /// and the update requests. Goes between builds, so its shape and its answer's never change.
     Build { id: u64, app: String },
     /// `json` is a `RunRequest`. Answered by `Reply`: nothing, or a `HelperError`.
     Connect { id: u64, json: String },
@@ -53,6 +53,14 @@ pub enum PipeRequest {
     ReadBypassRoutes { id: u64 },
     /// `json` is a `BypassRoutesRequest`. Answered by `Reply` with a `BypassRoutesReply`.
     WriteBypassRoutes { id: u64, json: String },
+    /// `json` is an `UpdatePrepareRequest`. Answered by `Reply` with an `UpdatePrepareReply`.
+    PrepareUpdate { id: u64, json: String },
+    /// `json` is an `UpdateInstallRequest`. Answered by `Reply` with an `UpdateInstallReply`.
+    InstallUpdate { id: u64, json: String },
+    /// Answered by `Reply` with a `PreparedUpdateReply`.
+    ReadPreparedUpdate { id: u64 },
+    /// Answered by `Reply` with an `UpdateDiscardReply`.
+    DiscardPreparedUpdate { id: u64 },
 }
 
 impl PipeRequest {
@@ -65,7 +73,11 @@ impl PipeRequest {
             | Self::Status { id }
             | Self::ExitWhenIdle { id }
             | Self::ReadBypassRoutes { id }
-            | Self::WriteBypassRoutes { id, .. } => id,
+            | Self::WriteBypassRoutes { id, .. }
+            | Self::PrepareUpdate { id, .. }
+            | Self::InstallUpdate { id, .. }
+            | Self::ReadPreparedUpdate { id }
+            | Self::DiscardPreparedUpdate { id } => id,
         }
     }
 }
@@ -111,6 +123,24 @@ impl fmt::Debug for PipeRequest {
                 .debug_struct("WriteBypassRoutes")
                 .field("id", id)
                 .field("json", json)
+                .finish(),
+            Self::PrepareUpdate { id, json } => f
+                .debug_struct("PrepareUpdate")
+                .field("id", id)
+                .field("json", json)
+                .finish(),
+            Self::InstallUpdate { id, json } => f
+                .debug_struct("InstallUpdate")
+                .field("id", id)
+                .field("json", json)
+                .finish(),
+            Self::ReadPreparedUpdate { id } => f
+                .debug_struct("ReadPreparedUpdate")
+                .field("id", id)
+                .finish(),
+            Self::DiscardPreparedUpdate { id } => f
+                .debug_struct("DiscardPreparedUpdate")
+                .field("id", id)
                 .finish(),
         }
     }

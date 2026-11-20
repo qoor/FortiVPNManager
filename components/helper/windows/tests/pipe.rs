@@ -22,7 +22,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use fake::{FakeBackend, FakeSecrets, VERSION};
-use fvm_contract::app_helper::{BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus};
+use fvm_contract::app_helper::{
+    BypassRoutesReply, HelperError, HelperErrorCode, HelperStatus, PreparedUpdateReply,
+    UpdateDiscardReply, UpdateInstallReply, UpdatePrepareReply,
+};
 use fvm_contract::helper_pipe::MAX_MESSAGE_BYTES;
 use fvm_contract::stream;
 use fvm_helper_core::entry::{RESTART_EXIT_CODE, end_for_restart};
@@ -195,6 +198,121 @@ fn a_connection_has_one_route_request_at_a_time() {
     assert!(
         matches!(next, BypassRoutesReply::Success { .. }),
         "{next:?}"
+    );
+}
+
+#[test]
+fn the_update_requests_need_the_build_check() {
+    let test = start();
+    let connection = test.connect();
+    let prepare = |id: u64| json!({ "prepareUpdate": { "id": id, "json": "{}" } });
+    let install = |id: u64| json!({ "installUpdate": { "id": id, "json": "{}" } });
+
+    let answer = ask(&connection, prepare(2));
+    let UpdatePrepareReply::Failure { error } = reply(&answer, 2) else {
+        panic!("prepared without the build check: {answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::NotAuthorized);
+    let answer = ask(&connection, install(3));
+    let UpdateInstallReply::Failure { error } = reply(&answer, 3) else {
+        panic!("installed without the build check: {answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::NotAuthorized);
+    let answer = ask(&connection, json!({ "readPreparedUpdate": { "id": 4 } }));
+    let PreparedUpdateReply::Failure { error } = reply(&answer, 4) else {
+        panic!("answered without the build check: {answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::NotAuthorized);
+    let answer = ask(&connection, json!({ "discardPreparedUpdate": { "id": 5 } }));
+    let UpdateDiscardReply::Failure { error } = reply(&answer, 5) else {
+        panic!("discarded without the build check: {answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::NotAuthorized);
+
+    build_check(&connection, BUILD);
+    let answer = ask(&connection, prepare(6));
+    let UpdatePrepareReply::Failure { error } = reply(&answer, 6) else {
+        panic!("{answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::InvalidRequest, "{error:?}");
+    let answer = ask(&connection, install(7));
+    let UpdateInstallReply::Failure { error } = reply(&answer, 7) else {
+        panic!("{answer}");
+    };
+    assert_eq!(error.code, HelperErrorCode::InvalidRequest, "{error:?}");
+}
+
+const STILL_RUNNING: &str =
+    "the connection's previous update prepare or install request is still running";
+
+fn send_together(
+    connection: &DuplexPipeStream<pipe_mode::Bytes>,
+    requests: &[Value],
+) -> Vec<(u64, Value)> {
+    let mut frames = Vec::new();
+    for request in requests {
+        stream::send(&mut frames, request).unwrap();
+    }
+    (&*connection).write_all(&frames).unwrap();
+    let mut answers: Vec<(u64, Value)> = requests
+        .iter()
+        .map(|_| {
+            let answer: Value = stream::receive(&mut &*connection).unwrap();
+            (answer["reply"]["id"].as_u64().unwrap(), answer)
+        })
+        .collect();
+    answers.sort_by_key(|(id, _)| *id);
+    answers
+}
+
+fn prepare_request(id: u64) -> Value {
+    json!({ "prepareUpdate": { "id": id, "json": "{}" } })
+}
+
+#[test]
+fn a_read_of_the_prepared_update_runs_alongside_a_preparation() {
+    let test = start();
+    let connection = test.connect();
+    build_check(&connection, BUILD);
+    let answers = send_together(
+        &connection,
+        &[
+            json!({ "readPreparedUpdate": { "id": 2 } }),
+            prepare_request(3),
+        ],
+    );
+    let read: PreparedUpdateReply = reply(&answers[0].1, 2);
+    if let PreparedUpdateReply::Failure { error } = &read {
+        assert_ne!(error.message, STILL_RUNNING);
+    }
+    let UpdatePrepareReply::Failure { error } = reply(&answers[1].1, 3) else {
+        panic!("{}", answers[1].1);
+    };
+    assert_eq!(error.code, HelperErrorCode::InvalidRequest);
+    assert_ne!(error.message, STILL_RUNNING);
+}
+
+#[test]
+fn a_route_request_runs_alongside_a_preparation() {
+    let test = start();
+    let connection = test.connect();
+    build_check(&connection, BUILD);
+    let answers = send_together(
+        &connection,
+        &[
+            prepare_request(2),
+            json!({ "readBypassRoutes": { "id": 3 } }),
+        ],
+    );
+    let UpdatePrepareReply::Failure { error } = reply(&answers[0].1, 2) else {
+        panic!("{}", answers[0].1);
+    };
+    assert_ne!(error.message, STILL_RUNNING);
+    let route: BypassRoutesReply = reply(&answers[1].1, 3);
+    assert!(
+        matches!(route, BypassRoutesReply::Success { .. }),
+        "{}",
+        answers[1].1
     );
 }
 

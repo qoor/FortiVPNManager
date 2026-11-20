@@ -28,6 +28,14 @@ import Foundation
     /// Request: encoded `BypassRoutesRequest`, which sets or removes the app's exception routes.
     /// Reply: encoded `BypassRoutesReply` with the routes looked up afterwards.
     func setBypassRoutes(_ request: Data, reply: @escaping @Sendable (Data) -> Void)
+    /// Request: encoded `UpdatePrepareRequest`. Reply: encoded `UpdatePrepareReply`.
+    func prepareUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void)
+    /// Request: encoded `UpdateInstallRequest`. Reply: encoded `UpdateInstallReply`.
+    func installUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void)
+    /// Reply: encoded `PreparedUpdateReply`.
+    func preparedUpdate(reply: @escaping @Sendable (Data) -> Void)
+    /// Reply: encoded `UpdateDiscardReply`.
+    func discardPreparedUpdate(reply: @escaping @Sendable (Data) -> Void)
 }
 
 /// Methods the helper calls back on the app. Both travel on the same connection in FIFO order.

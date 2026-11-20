@@ -14,13 +14,13 @@ namespace FortiVPNManager.Ui;
 public sealed class AppUi
 {
     private readonly DispatcherQueue dispatcher;
-    private readonly Action<string, string, string> notify;
+    private readonly Action<string, string, string, string?> notify;
     private readonly DispatcherQueueTimer ticker;
     private SettingsWindow? settings;
 
     /// <param name="send">Sends a command to the runtime.</param>
-    /// <param name="notify">Posts a notification as (identifier, title, body), replacing one of the same identifier.</param>
-    public AppUi(DispatcherQueue dispatcher, Action<Command> send, Action<string, string, string> notify)
+    /// <param name="notify">Posts a notification as (identifier, title, body, button), replacing one of the same identifier.</param>
+    public AppUi(DispatcherQueue dispatcher, Action<Command> send, Action<string, string, string, string?> notify)
     {
         this.dispatcher = dispatcher;
         this.notify = notify;
@@ -42,6 +42,8 @@ public sealed class AppUi
     public BypassRulesSection? BypassRules { get; private set; }
 
     public ConfigSection? Config { get; private set; }
+
+    public AutoUpdateSection? AutoUpdate { get; private set; }
 
     /// <summary>The lines the Log pane shows; the log file keeps them all.</summary>
     public LogLines Log { get; } = new();
@@ -93,6 +95,22 @@ public sealed class AppUi
     /// <summary>Closes the settings window when it is open; quitting doesn't make one only to close it.</summary>
     public void CloseSettings() => settings?.Close();
 
+    public void OpenNotification(string? identifier, bool button)
+    {
+        if (identifier == BypassText.UpdateAvailableIdentifier)
+        {
+            Settings.ShowUpdates();
+            if (button)
+            {
+                Send(new Command.UpdateNowFromNotification());
+            }
+        }
+        else
+        {
+            Settings.Show(SettingsPane.ExceptionRules);
+        }
+    }
+
     /// <summary>Sends what Settings still has in its fields; quitting asks the runtime only after it.</summary>
     public void FinishSettingsTyping() => settings?.FinishTyping();
 
@@ -122,6 +140,9 @@ public sealed class AppUi
                 Config = config.Value;
                 AccountDraft.Replace(config.Value.Account);
                 break;
+            case Section.AutoUpdate update:
+                AutoUpdate = update.Value;
+                break;
         }
         Changed?.Invoke();
     });
@@ -133,7 +154,7 @@ public sealed class AppUi
     });
 
     public void PostNotification(UserNotification notification) => dispatcher.TryEnqueue(() =>
-        notify(notification.Identifier(), notification.Title(), notification.Body()));
+        notify(notification.Identifier(), notification.Title(), notification.Body(), notification.ButtonTitle()));
 
     private void RestartClock()
     {

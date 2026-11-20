@@ -20,6 +20,16 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <TextBlock x:Name="Title" Style="{StaticResource PageTitleStyle}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+            <BreadcrumbBar x:Name="Breadcrumb" VerticalAlignment="Center" Visibility="Collapsed">
+                <BreadcrumbBar.Resources>
+                    <x:Double x:Key="BreadcrumbBarItemThemeFontSize">28</x:Double>
+                    <FontWeight x:Key="BreadcrumbBarItemFontWeight">SemiBold</FontWeight>
+                    <x:Double x:Key="BreadcrumbBarChevronFontSize">14</x:Double>
+                    <Thickness x:Key="BreadcrumbBarChevronPadding">10,4,10,0</Thickness>
+                    <StaticResource x:Key="BreadcrumbBarNormalForegroundBrush" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="BreadcrumbBarHoverForegroundBrush" ResourceKey="TextFillColorPrimaryBrush" />
+                </BreadcrumbBar.Resources>
+            </BreadcrumbBar>
             <StackPanel x:Name="Actions" Grid.Column="1" Orientation="Horizontal" Spacing="8" />
         </Grid>
         <ScrollViewer x:Name="Scroller" Grid.Row="1">

@@ -199,6 +199,76 @@ fn a_launch_without_auto_connect_stays_off_even_inside_the_hours() {
 }
 
 #[test]
+fn a_launch_after_an_update_inside_the_hours_is_a_normal_launch() {
+    let ledger = super::super::FailureLedger {
+        consecutive_auth_failures: 1,
+        last_auth_failure_at: Some(at(18, 9, 30, 0)),
+        last_auth_failure: Some(Failure::OtpRejected),
+        recent_auth_attempts: vec![at(18, 9, 30, 0)],
+        ..empty_ledger()
+    };
+    let mut normal = hours_at(18, 10, 0);
+    let expected = normal.launch_with(true, Some(ledger.clone()));
+    let mut h = hours_at(18, 10, 0);
+    assert_eq!(h.launch_after_update(true, Some(ledger.clone())), expected);
+    assert_eq!(reason(&h), Some(AttemptReason::Launch));
+    assert_eq!(h.cm.ledger, ledger);
+}
+
+#[test]
+fn a_launch_after_an_update_with_the_schedule_off() {
+    let mut normal = harness_at(18, 10, 0, None);
+    let expected = normal.launch_with(true, None);
+    let mut auto_connect = harness_at(18, 10, 0, None);
+    assert_eq!(auto_connect.launch_after_update(true, None), expected);
+    assert_eq!(reason(&auto_connect), Some(AttemptReason::Launch));
+    let mut no_auto_connect = harness_at(18, 10, 0, None);
+    assert_eq!(no_auto_connect.launch_after_update(false, None), expected);
+    assert_eq!(reason(&no_auto_connect), Some(AttemptReason::User));
+}
+
+#[test]
+fn a_launch_after_an_update_connects_where_a_launch_would_not() {
+    for (day, hour, schedule, auto_connect) in [
+        (18, 10, Some(weekday_hours()), false),
+        (18, 10, None, false),
+        (18, 7, Some(weekday_hours()), true),
+        (18, 7, Some(weekday_hours()), false),
+        (18, 19, Some(weekday_hours()), true),
+        (23, 10, Some(weekday_hours()), true),
+    ] {
+        let label = format!("{day} {hour}:00 {schedule:?} {auto_connect}");
+        let mut normal = harness_at(day, hour, 0, schedule.clone());
+        normal.launch_with(auto_connect, None);
+        assert_eq!(normal.cm.phase, Phase::Idle, "{label}");
+        let mut h = harness_at(day, hour, 0, schedule);
+        h.launch_after_update(auto_connect, None);
+        assert!(h.cm.wants_connection, "{label}");
+        assert_eq!(reason(&h), Some(AttemptReason::User), "{label}");
+    }
+}
+
+#[test]
+fn a_launch_after_an_update_outside_the_hours_announces_the_attempt_first() {
+    let mut h = hours_at(18, 7, 0);
+    let effects = h.launch_after_update(true, None);
+    assert_eq!(
+        effects,
+        [
+            Effect::AttemptBegun {
+                attempt: id(1),
+                session: SessionId(1_327_896_000)
+            },
+            Effect::ReadScreenState,
+            Effect::CheckReadiness,
+            h.set(TimerKind::AttemptDeadline, at(18, 7, 2, 30)),
+            h.set(TimerKind::Schedule, at(18, 9, 0, 0)),
+            Effect::HoldActivity(true)
+        ]
+    );
+}
+
+#[test]
 fn the_start_clears_a_failure_like_connect() {
     let mut h = hours_at(18, 7, 0);
     h.launch();

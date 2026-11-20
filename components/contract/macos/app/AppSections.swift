@@ -10,6 +10,7 @@ extension AppInternal {
         case gmail(GmailSection)
         case bypassRules(BypassRulesSection)
         case config(ConfigSection)
+        case autoUpdate(AutoUpdateSection)
     }
 
     // MARK: Connection
@@ -436,5 +437,80 @@ extension AppInternal {
         case config(error: ConfigFileError)
         case noFortiClientConnection
         case invalidFortiClientServer(connection: String)
+    }
+
+    // MARK: Auto update
+
+    struct AutoUpdateSection: Decodable, Equatable, Sendable {
+        var currentVersion: String
+        var status: UpdateStatus
+        var failedInstallVersion: String?
+        var progress: UpdateProgress
+        var check: ButtonState
+        /// Also "Try Again" after a failure.
+        var updateNow: ButtonState
+        /// Cancels the download.
+        var cancel: ButtonState
+        var restart: ButtonState
+        /// The dot on the Software Update card.
+        var cardDot: Bool
+        /// The badge in the menu.
+        var menuBadge: Bool
+    }
+
+    enum UpdateStatus: Decodable, Equatable, Sendable {
+        case checking
+        case upToDate
+        case available(
+            version: String, releasePageUrl: String, installerBytes: Int, releaseNoteTitles: [String: [String]]
+        )
+        case checkFailed(reason: UpdateCheckFailure)
+    }
+
+    enum UpdateCheckFailure: Decodable, Equatable, Sendable {
+        case httpStatus(code: Int)
+        case network(detail: String)
+        case invalidReply
+        case installerMissing
+    }
+
+    /// `percent` is the progress bar's value; there is no bar without it.
+    enum UpdateProgress: Decodable, Equatable, Sendable {
+        case idle
+        /// Counts the installer's bytes.
+        case downloading(receivedBytes: Int, totalBytes: Int, percent: Int, remaining: RemainingTime)
+        /// The Helper checks the downloaded files.
+        case preparing(percent: Int)
+        case readyToRestart(version: String)
+        /// From Restart App until the app quits for the installer, or the install fails.
+        case installing(version: String)
+        case failed(reason: InstallFailure)
+    }
+
+    enum RemainingTime: Decodable, Equatable, Sendable {
+        case calculating
+        /// Whole minutes, rounded up; over 55 seconds.
+        case minutes(minutes: Int)
+        /// Rounded up to a multiple of 5, from 5 to 55.
+        case seconds(seconds: Int)
+    }
+
+    enum InstallFailure: Decodable, Equatable, Sendable {
+        case downloadFailed(detail: String)
+        case waiterFailed(description: String)
+        case helperUnreachable(failure: HelperChannelFailure)
+        case helperBuildMismatch(helperBuild: String, appBuild: String)
+        case helperFailed(message: String)
+        case helperRefused(reason: UpdateRefusal, message: String)
+    }
+
+    enum UpdateRefusal: String, Decodable, Sendable {
+        case signatureInvalid
+        case checksumMismatch
+        case versionNotNewer
+        case alreadyInstalling
+        case filesUnreadable
+        /// An install was asked for with no update prepared.
+        case nothingPrepared
     }
 }

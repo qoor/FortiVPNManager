@@ -53,6 +53,24 @@ final class HelperService: NSObject, HelperXPCProtocol {
         EntryRelay.forward(.writeBypassRoutes(json: json), from: client, reply: .data(reply))
     }
 
+    func prepareUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        let json = String(decoding: request, as: UTF8.self)
+        EntryRelay.forward(.prepareUpdate(json: json), from: client, reply: .data(reply))
+    }
+
+    func installUpdate(_ request: Data, reply: @escaping @Sendable (Data) -> Void) {
+        let json = String(decoding: request, as: UTF8.self)
+        EntryRelay.forward(.installUpdate(json: json), from: client, reply: .data(reply))
+    }
+
+    func preparedUpdate(reply: @escaping @Sendable (Data) -> Void) {
+        EntryRelay.forward(.readPreparedUpdate, from: client, reply: .data(reply))
+    }
+
+    func discardPreparedUpdate(reply: @escaping @Sendable (Data) -> Void) {
+        EntryRelay.forward(.discardPreparedUpdate, from: client, reply: .data(reply))
+    }
+
     /// Never `nil`: a `nil` reply means success.
     private static func encode(_ error: HelperError) -> Data {
         (try? XPCCoding.encode(error)) ?? Data(#"{"code":"internalError","message":""}"#.utf8)

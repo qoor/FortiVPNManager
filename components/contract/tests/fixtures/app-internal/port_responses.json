@@ -334,5 +334,23 @@
         }
       }
     }
+  },
+  {
+    "portResponse": {
+      "id": 25,
+      "response": {
+        "updateWaiterStarted": {}
+      }
+    }
+  },
+  {
+    "portResponse": {
+      "id": 25,
+      "response": {
+        "updateWaiterFailed": {
+          "description": "The application “FortiVPNManager” could not be launched."
+        }
+      }
+    }
   }
 ]

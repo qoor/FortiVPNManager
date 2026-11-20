@@ -13,6 +13,7 @@ final class AppUI {
     private(set) var gmail: AppInternal.GmailSection?
     private(set) var bypassRules: AppInternal.BypassRulesSection?
     private(set) var config: AppInternal.ConfigSection?
+    private(set) var autoUpdate: AppInternal.AutoUpdateSection?
 
     let log = LogLines()
     let clock = StatusClock()
@@ -41,6 +42,7 @@ final class AppUI {
         case let .config(section):
             config = section
             accountDraft.replace(with: section.account)
+        case let .autoUpdate(section): autoUpdate = section
         }
     }
 

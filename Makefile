@@ -30,7 +30,7 @@ local-config:
 
 gen:
 	@test -f packaging/macos/Config/Local.xcconfig || $(MAKE) local-config
-	xcodegen generate --spec packaging/macos/project.yml
+	FVM_VERSION=$(VERSION) xcodegen generate --spec packaging/macos/project.yml
 
 build: gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) \

@@ -45,6 +45,8 @@ public static partial class AppInternal
 
         /// <summary>The official FortiClient's SSL VPN connections, read only; Windows imports its settings from them.</summary>
         public sealed record FortiClientConnections : PortRequest;
+
+        public sealed record StartUpdateWaiter(ulong InstallId) : PortRequest;
     }
 
     [JsonConverter(typeof(CasesConverter<PortResponse>))]
@@ -87,6 +89,9 @@ public static partial class AppInternal
         public sealed record BrowserOpened(bool Opened) : PortResponse;
 
         public sealed record FortiClientConnections(IReadOnlyList<FortiClientConnection> Connections) : PortResponse;
+
+        public sealed record UpdateWaiterStarted : PortResponse;
+        public sealed record UpdateWaiterFailed(string Description) : PortResponse;
     }
 
     /// <summary>Carried out without an answer.</summary>
@@ -105,8 +110,13 @@ public static partial class AppInternal
 
         public sealed record HoldActivity(bool Hold) : PortAction;
         public sealed record OpenHelperApprovalSettings : PortAction;
+        public sealed record ReleaseUpdateWaiter(uint InstallerProcessId) : PortAction;
+        public sealed record StopUpdateWaiter : PortAction;
 
-        /// <summary>The runtime's last message.</summary>
+        /// <summary>
+        /// The runtime's last message. Also comes unasked once an update's installer started: then
+        /// the app quits.
+        /// </summary>
         public sealed record ApproveQuit : PortAction;
     }
 
@@ -151,6 +161,10 @@ public static partial class AppInternal
 
         public sealed record ReadBypassRoutes : HelperCall;
         public sealed record WriteBypassRoutes(string Json) : HelperCall;
+        public sealed record PrepareUpdate(string Json) : HelperCall;
+        public sealed record InstallUpdate(string Json) : HelperCall;
+        public sealed record ReadPreparedUpdate : HelperCall;
+        public sealed record DiscardPreparedUpdate : HelperCall;
     }
 
     [JsonConverter(typeof(CasesConverter<HelperChannelFailure>))]
@@ -215,6 +229,8 @@ public static partial class AppInternal
 
         [JsonStringEnumMemberName("login-item")]
         LoginItem,
+
+        Update,
     }
 
     [JsonConverter(typeof(CasesConverter<UserNotification>))]
@@ -223,5 +239,6 @@ public static partial class AppInternal
         private UserNotification() { }
 
         public sealed record ExceptionRulesNotApplied(uint Retries, BypassFailure Failure) : UserNotification;
+        public sealed record UpdateAvailable(string Version) : UserNotification;
     }
 }

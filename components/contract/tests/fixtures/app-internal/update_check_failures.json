@@ -1,0 +1,18 @@
+[
+  {
+    "httpStatus": {
+      "code": 403
+    }
+  },
+  {
+    "network": {
+      "detail": "error sending request: dns error"
+    }
+  },
+  {
+    "invalidReply": {}
+  },
+  {
+    "installerMissing": {}
+  }
+]

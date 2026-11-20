@@ -11,6 +11,11 @@ public enum SettingsPane
     Log,
 }
 
+public enum SettingsSubpage
+{
+    SoftwareUpdate,
+}
+
 public static class SettingsPanes
 {
     /// <summary>The pane's English title, its key in the catalogs (the macOS pane titles).</summary>

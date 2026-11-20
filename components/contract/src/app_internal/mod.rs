@@ -84,6 +84,7 @@ pub enum FromRuntime {
 pub struct AppFacts {
     /// The build number the Helper must also report.
     pub app_build: String,
+    pub app_version: String,
     /// This copy is the installed one, the only copy allowed to register the Helper and the login
     /// item.
     pub installed_copy: bool,

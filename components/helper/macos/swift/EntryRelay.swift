@@ -11,7 +11,7 @@ enum EntryRelay {
     enum Reply: Sendable {
         /// connect, submitOTP and disconnect; `nil` is the empty (success) reply.
         case optionalData(@Sendable (Data?) -> Void)
-        /// status and the exception-route requests.
+        /// status, the exception-route requests and the update requests.
         case data(@Sendable (Data) -> Void)
         /// exitWhenIdle.
         case flag(@Sendable (Bool) -> Void)

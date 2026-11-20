@@ -93,6 +93,17 @@ struct SettingsSearchTests {
         #expect(navigation.highlightedRow == SettingsSearch.connectionButtons)
     }
 
+    @Test func findsTheSoftwareUpdateCardFromItsPage() throws {
+        let navigation = SettingsNavigation()
+        navigation.showSoftwareUpdate()
+        navigation.searchText = "software"
+        let item = try #require(navigation.results(in: .general).first)
+        #expect(navigation.results(in: .general).map(\.key) == ["Software Update"])
+        navigation.reveal(item)
+        #expect(navigation.page == .pane(.general))
+        #expect(navigation.highlightedRow == "Software Update")
+    }
+
     @Test func returnOpensTheFirstResult() {
         let navigation = SettingsNavigation()
         navigation.select(.general)
@@ -116,5 +127,20 @@ struct SettingsSearchTests {
         // A new pane drops the panes ahead.
         navigation.select(.advanced)
         #expect(navigation.forwardHistory.isEmpty)
+    }
+
+    @Test func theSoftwareUpdatePageIsInGeneralAndInTheHistory() {
+        let navigation = SettingsNavigation()
+        navigation.select(.general)
+        navigation.showSoftwareUpdate()
+        #expect(navigation.page == .softwareUpdate)
+        #expect(navigation.pane == .general)
+        navigation.select(.account)
+        navigation.goBack()
+        #expect(navigation.page == .softwareUpdate)
+        navigation.goBack()
+        #expect(navigation.page == .pane(.general))
+        navigation.goForward()
+        #expect(navigation.page == .softwareUpdate)
     }
 }

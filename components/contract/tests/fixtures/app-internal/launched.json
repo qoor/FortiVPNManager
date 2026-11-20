@@ -3,6 +3,7 @@
     "launched": {
       "facts": {
         "appBuild": "20261109120000",
+        "appVersion": "26.1.0",
         "installedCopy": true,
         "builtInOauthClient": "{\"installed\":{\"client_id\":\"123-abc.apps.googleusercontent.com\"}}",
         "timeZone": "Asia/Seoul",

@@ -174,6 +174,7 @@ pub struct Launch {
     pub restored_ledger: Option<FailureLedger>,
     /// The first config section carries the report of the automatic first-launch import.
     pub import_report_shown: bool,
+    pub connected_before_update: bool,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -190,6 +191,11 @@ pub enum Input {
     ReconnectNow,
     /// The user or the system asked the app to quit.
     QuitRequested,
+    StopForUpdate,
+    /// The update's install did not start; `reconnect` connects again.
+    UpdateFailed {
+        reconnect: bool,
+    },
     SettingsOpened,
     AppActivated,
     /// Something readiness rests on may have changed outside the settings this manager holds:
@@ -348,6 +354,7 @@ pub enum Effect {
     },
     /// Show the settings window (`FromRuntime::OpenSettings`), after the sections of this input.
     OpenSettings,
+    StoppedForUpdate,
     /// Finish writing the log file, then let the app quit. Always the last effect; the manager
     /// takes no input after it.
     ApproveQuit,

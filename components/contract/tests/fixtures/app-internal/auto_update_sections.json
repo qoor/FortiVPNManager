@@ -1,0 +1,346 @@
+[
+  {
+    "cancel": "hidden",
+    "cardDot": true,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "failedInstallVersion": "26.2.0",
+    "menuBadge": true,
+    "progress": {
+      "idle": {}
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "enabled"
+  },
+  {
+    "cancel": "enabled",
+    "cardDot": false,
+    "check": "disabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "downloading": {
+        "percent": 0,
+        "receivedBytes": 0,
+        "remaining": {
+          "calculating": {}
+        },
+        "totalBytes": 21733376
+      }
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "enabled",
+    "cardDot": false,
+    "check": "disabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "downloading": {
+        "percent": 11,
+        "receivedBytes": 4194304,
+        "remaining": {
+          "minutes": {
+            "minutes": 2
+          }
+        },
+        "totalBytes": 21733376
+      }
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "enabled",
+    "cardDot": false,
+    "check": "disabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "downloading": {
+        "percent": 55,
+        "receivedBytes": 19922944,
+        "remaining": {
+          "seconds": {
+            "seconds": 5
+          }
+        },
+        "totalBytes": 21733376
+      }
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": false,
+    "check": "disabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "preparing": {
+        "percent": 60
+      }
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": true,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "readyToRestart": {
+        "version": "26.2.0"
+      }
+    },
+    "restart": "enabled",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": false,
+    "check": "disabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": false,
+    "progress": {
+      "installing": {
+        "version": "26.2.0"
+      }
+    },
+    "restart": "disabled",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": true,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "failed": {
+        "reason": {
+          "helperRefused": {
+            "message": "the installer does not match SHA256SUMS.txt",
+            "reason": "checksumMismatch"
+          }
+        }
+      }
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 21733376,
+        "releaseNoteTitles": {
+          "en": [
+            "Automatic updates",
+            "Faster reconnects after sleep"
+          ],
+          "ko": [
+            "자동 업데이트",
+            "잠자기 후 더 빠른 재연결"
+          ]
+        },
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "enabled"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": true,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "idle": {}
+    },
+    "restart": "hidden",
+    "status": {
+      "available": {
+        "installerBytes": 48431104,
+        "releaseNoteTitles": {},
+        "releasePageUrl": "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0",
+        "version": "26.2.0"
+      }
+    },
+    "updateNow": "disabled"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": false,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": false,
+    "progress": {
+      "idle": {}
+    },
+    "restart": "hidden",
+    "status": {
+      "checking": {}
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": false,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": false,
+    "progress": {
+      "idle": {}
+    },
+    "restart": "hidden",
+    "status": {
+      "upToDate": {}
+    },
+    "updateNow": "hidden"
+  },
+  {
+    "cancel": "hidden",
+    "cardDot": true,
+    "check": "enabled",
+    "currentVersion": "26.1.0",
+    "menuBadge": true,
+    "progress": {
+      "readyToRestart": {
+        "version": "26.2.0"
+      }
+    },
+    "restart": "enabled",
+    "status": {
+      "checkFailed": {
+        "reason": {
+          "httpStatus": {
+            "code": 403
+          }
+        }
+      }
+    },
+    "updateNow": "hidden"
+  }
+]
