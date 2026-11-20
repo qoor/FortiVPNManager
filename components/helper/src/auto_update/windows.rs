@@ -24,7 +24,6 @@ const MSIEXEC: &str = r"C:\Windows\System32\msiexec.exe";
 const MSIEXEC_LOG: &str = "update.log";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
-const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 
 pub(super) struct Runner {
     pub(super) pid: u32,
@@ -101,7 +100,7 @@ pub(super) fn launch(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let mut child = msiexec
-        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB)
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
         .spawn()?;
     let pid = child.id();
     let run = installer.records.join(format!("{install_id}{RUN_SUFFIX}"));
