@@ -34,6 +34,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="..\..\..\..\packaging\windows\AppIcon.ico" Link="AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\..\packaging\windows\TrayDisconnected.ico" Link="TrayDisconnected.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\..\packaging\windows\TrayInProgress.ico" Link="TrayInProgress.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\..\..\packaging\windows\TrayError.ico" Link="TrayError.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!--
     Of the Windows App SDK, only the WinUI component, which takes Foundation, InteractiveExperiences

@@ -25,6 +25,7 @@
     <Compile Include="..\..\windows\SettingsPane.cs" Link="SettingsPane.cs" />
     <Compile Include="..\..\windows\LogLines.cs" Link="LogLines.cs" />
     <Compile Include="..\..\windows\SettingsSearch.cs" Link="SettingsSearch.cs" />
+    <Compile Include="..\..\windows\TrayIcon.IconFile.cs" Link="TrayIcon.IconFile.cs" />
     <EmbeddedResource Include="..\..\macos\Localizable.xcstrings" LogicalName="Localizable.xcstrings" />
     <EmbeddedResource Include="..\..\windows\Windows.xcstrings" LogicalName="Windows.xcstrings" />
   </ItemGroup>

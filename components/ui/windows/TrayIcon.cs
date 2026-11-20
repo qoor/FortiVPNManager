@@ -11,9 +11,9 @@ using static FortiVPNManager.Ui.Text.Strings;
 namespace FortiVPNManager.Ui;
 
 /// <summary>
-/// The notification-area icon, the menu bar item's place on Windows: the app's
-/// icon, whose tooltip tells the connection's state; a click opens the menu the macOS menu bar item
-/// has, drawn from the latest sections (components/ui/macos/MenuBar.swift), and a double-click Settings.
+/// The notification-area icon, the menu bar item's place on Windows: a click opens the menu the macOS
+/// menu bar item has, drawn from the latest sections (components/ui/macos/MenuBar.swift), and a
+/// double-click Settings.
 /// </summary>
 /// <remarks>
 /// The menu is the standard Windows menu of a notification-area icon, which H.NotifyIcon builds from
@@ -25,8 +25,10 @@ public sealed partial class TrayIcon : IDisposable
     private readonly AppUi ui;
     private readonly Action quit;
     private readonly TaskbarIcon icon;
+    private readonly Dictionary<ConnectionIcon, System.Drawing.Icon> stateIcons;
     private readonly MenuFlyout menu = new();
     private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
+    private ConnectionIcon? shownIcon;
     private List<(string? Text, bool Enabled)> shownMenu = [];
 
     /// <param name="quit">Asks the runtime to quit, as the menu's Quit does.</param>
@@ -35,12 +37,10 @@ public sealed partial class TrayIcon : IDisposable
     {
         this.ui = ui;
         this.quit = quit;
-        // The app's own icon, at the notification area's size for this display; the tooltip and the
-        // menu tell the connection's state.
         var size = (int)Math.Round(16 * GetDpiForSystem() / 96.0);
+        stateIcons = Enum.GetValues<ConnectionIcon>().ToDictionary(state => state, state => new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, IconFile(state)), size, size));
         icon = new TaskbarIcon
         {
-            Icon = new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, "AppIcon.ico"), size, size),
             ContextMenuMode = ContextMenuMode.PopupMenu,
             MenuActivation = PopupActivationMode.LeftOrRightClick,
             ContextFlyout = menu,
@@ -56,11 +56,21 @@ public sealed partial class TrayIcon : IDisposable
     {
         ui.Changed -= Update;
         icon.Dispose();
+        foreach (var stateIcon in stateIcons.Values)
+        {
+            stateIcon.Dispose();
+        }
     }
 
     private void Update()
     {
-        icon.ToolTipText = "FortiVPNManager: " + (ui.Connection?.Icon ?? ConnectionIcon.Disconnected).AccessibilityText();
+        var state = ui.Connection?.Icon ?? ConnectionIcon.Disconnected;
+        icon.ToolTipText = "FortiVPNManager: " + state.AccessibilityText();
+        if (state != shownIcon)
+        {
+            shownIcon = state;
+            icon.UpdateIcon(stateIcons[state]);
+        }
         ShowMenu(Entries());
     }
 

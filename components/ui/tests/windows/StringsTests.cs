@@ -13,7 +13,7 @@ namespace FortiVPNManager.Ui.Tests;
 /// <summary>The sentences: every key the UI uses is in a catalog, and they come out as macOS writes them.</summary>
 public class StringsTests
 {
-    private static readonly string Repository = FindRepository();
+    internal static readonly string Repository = FindRepository();
 
     public StringsTests()
     {
