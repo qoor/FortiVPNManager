@@ -29,8 +29,7 @@
   - 앱과 Helper: 별도 프로세스
   - 화살표: 서로 주고받는 내용
   - 공통 계약: 양쪽 공통 약속이라 그림에서 제외
-  - 기준: macOS 구성
-  - Windows: 앱 쪽 동일, Helper 쪽은 세 모듈과 Helper OS 영역 (Windows)이 Helper 서비스 하나로 실행
+  - Windows: Helper 쪽 네 모듈과 Helper OS 영역 (Windows)이 Helper 서비스 하나로 실행
 
 | 구성 요소 | 위치 | 역할 |
 |---|---|---|
@@ -43,10 +42,11 @@
 | session 모듈 | Helper | openconnect 세션 실행, 비밀번호·OTP 전달, 단계별 시간 제한, 네트워크 설정 적용·원복 요청, 세션 비밀값 보관, 중지 |
 | recovery 모듈 | Helper | 실행 기록과 예외 route 기록, 이전 Helper가 남긴 네트워크 설정·예외 route 정리와 서버 세션 logout |
 | entry 모듈 | Helper | 앱 요청 처리, 실행과 예외 route의 주인 판단, Helper 수명 |
+| auto_update 모듈 | Helper | 업데이트 설치 파일 서명·해시·버전 확인, 준비 파일 보관, OS 설치 프로그램 실행 |
 | Helper OS 영역 (macOS) | Helper | 앱 연결 확인, Helper 실행 관리와 자가 업데이트, 터널 네트워크 설정, 예외 route 넣기·지우기 |
 | UI (Windows) | 앱 | 알림 영역 아이콘과 설정창, 사용자에게 보이는 모든 문장과 번역 |
 | OS 연동 (Windows) | 앱 | OS 기능 제공, 시스템 이벤트 전달, Helper와의 통신 |
-| Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 세 모듈 사용, 서비스 수명, 앱 연결 확인, 터널 네트워크 설정, 예외 route 넣기·지우기 |
+| Helper OS 영역 (Windows) | Helper | Helper 서비스로 실행, 네 모듈 사용, 서비스 수명, 앱 연결 확인, 터널 네트워크 설정, 예외 route 넣기·지우기 |
 | 설치 패키지 (Windows) | 설치·제거 때 | 앱, Helper, OpenConnect 라이브러리 설치와 업그레이드, Helper 서비스 등록, 제거 때의 정리 |
 | OpenConnect 라이브러리 | Helper 안 | VPN 서버 로그인·터널·logout, macOS는 Helper에 포함, Windows는 Helper와 함께 설치 |
 | Gmail · Google | 외부 | OTP 메일, 계정 인증 |
@@ -54,7 +54,7 @@
 | macOS · Windows | OS | 비밀값 저장, 서비스 실행, 전원·화면·네트워크 이벤트, routing table |
 
 - Helper: 관리자 권한으로 openconnect 세션을 실행하는 별도 프로세스
-  - 구성: entry·session·recovery 모듈(두 OS 공통) + 해당 OS의 Helper OS 영역
+  - 구성: entry·session·recovery·auto_update 모듈(두 OS 공통) + 해당 OS의 Helper OS 영역
 - (macOS)·(Windows) 표기: 해당 OS 전용 구성 요소, 표기 없는 것은 모든 OS 공통
 - 본문: OS 표기 생략
 
@@ -131,6 +131,7 @@
 - 설명: Helper의 OS 무관 앞단, 앱 요청 접수와 허용 판단
   - VPN 세션 관련 처리: session·recovery 모듈에 위임
   - 상태 응답: session 모듈 제공 정보 기반
+  - 업데이트 준비·설치: auto_update 모듈에 위임
 - 역할
   - 앱 연결, 실행 하나와 그 주인 관리, 응답 생성
   - 앱 연결별 원하는 예외 route와 Helper가 넣은 예외 route 관리, 넣고 지울 route의 OS 쪽 전달
@@ -140,7 +141,16 @@
   - 업데이트 요청의 연결 처리와 별도 처리
 - 제공 기능: 3.5 예외 규칙, 3.7 VPN 실행, 3.10 업데이트
 
-## 2.8 UI (macOS)
+## 2.8 auto_update 모듈
+- 설명: Helper의 업데이트 설치 담당, entry 모듈이 받은 업데이트 요청 수행
+- 역할
+  - 앱이 내려받은 설치 파일 복사, 서명·해시·버전 확인
+  - 준비 파일 보관·삭제
+  - OS 설치 프로그램 실행, 설치 시작·결과 기록
+  - OS별 차이: macOS는 installer, Windows는 msiexec와 Helper 재시작 뒤 진행 중인 설치의 결과 기록 이어받기
+- 제공 기능: 3.10 업데이트
+
+## 2.9 UI (macOS)
 - 설명: 도메인 구역의 화면 표시, 사용자 조작의 명령 전송, 사용자에게 보이는 모든 문장과 번역 생성
 - 역할
   - 메뉴바 아이콘, 메뉴, 설정창 pane
@@ -148,7 +158,7 @@
   - 소프트웨어 업데이트 화면
 - 제공 기능: 3.8 macOS
 
-## 2.9 OS 연동 (macOS)
+## 2.10 OS 연동 (macOS)
 - 설명: 런타임이 요청한 OS 기능의 macOS 제공, 시스템 이벤트 전달
 - 역할
   - 비밀값 저장, Helper 등록·통신, 알림, 브라우저 열기, 앱 수명
@@ -156,17 +166,16 @@
   - 업데이트 설치 뒤 앱 다시 열기 대기 프로세스
 - 제공 기능: 3.8 macOS
 
-## 2.10 Helper OS 영역 (macOS)
+## 2.11 Helper OS 영역 (macOS)
 - 설명: Helper 프로세스의 OS 의존 부분, 앱 쪽 OS 연동에 대응, 나머지는 entry 모듈에 전달
 - 역할
   - 앱 연결 접수와 서명 확인, Helper 실행 관리와 자가 업데이트
   - entry 요청에 따른 예외 route 추가·삭제와 주 네트워크 조회
   - 터널 장치(utun) 준비, 터널 네트워크 설정 적용·원복과 연결됨 확인
   - 세션 비밀값 저장(System Keychain)
-  - 업데이트 설치 프로그램(installer) 실행
 - 제공 기능: 3.7 VPN 실행, 3.8 macOS
 
-## 2.11 UI (Windows)
+## 2.12 UI (Windows)
 - 설명: UI (macOS)와 같은 역할의 Windows 구현
   - 사용자에게 보이는 구성(창, 메뉴, pane과 순서, pane 선택 방식, pane 안 항목의 섹션과 순서): macOS와 동일
   - 컨트롤: Windows 기본 컨트롤
@@ -176,7 +185,7 @@
   - 소프트웨어 업데이트 화면
 - 제공 기능: 3.9 Windows
 
-## 2.12 OS 연동 (Windows)
+## 2.13 OS 연동 (Windows)
 - 설명: 런타임이 요청한 OS 기능의 Windows 제공, 시스템 이벤트 전달, 런타임과의 메시지는 macOS와 동일
 - 역할
   - 앱 시작 시 Helper 서비스 시작과 대기
@@ -185,17 +194,16 @@
   - 업데이트 설치 뒤 앱 다시 열기 대기 프로세스(콘솔창 없는 cmd)
 - 제공 기능: 3.9 Windows
 
-## 2.13 Helper OS 영역 (Windows)
-- 설명: Windows의 Helper OS 영역, Helper 서비스로 실행, entry·session·recovery 모듈 사용, macOS Helper OS 영역의 일을 직접 수행
+## 2.14 Helper OS 영역 (Windows)
+- 설명: Windows의 Helper OS 영역, Helper 서비스로 실행, entry·session·recovery·auto_update 모듈 사용, macOS Helper OS 영역의 일을 직접 수행
 - 역할
   - 서비스 수명(실행 중 알림 전 wintun.dll 상주 로드), 앱 연결 접수·확인
   - session 모듈용 backend adapter, 세션 비밀값 저장소(Helper 서비스 계정 기준 DPAPI 암호화 파일), 실행 기록 폴더 선택
   - entry 요청에 따른 예외 route 추가·삭제와 주 interface 조회
   - 터널 네트워크 설정 적용·원복(WINS 설정 10초 제한)과 연결됨 확인
-  - 업데이트 설치 프로그램(msiexec) 실행
 - 제공 기능: 3.7 VPN 실행, 3.9 Windows
 
-## 2.14 설치 패키지 (Windows)
+## 2.15 설치 패키지 (Windows)
 - 설명: Windows 앱의 설치·업그레이드·제거용 MSI 설치 패키지, 관리자 권한 실행
 - 역할
   - 앱, Helper, OpenConnect 라이브러리 설치와 업그레이드
