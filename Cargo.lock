@@ -413,7 +413,6 @@ dependencies = [
  "fvm-backend-adapter",
  "fvm-common",
  "fvm-contract",
- "fvm-core",
  "fvm-helper-core",
  "interprocess",
  "log",

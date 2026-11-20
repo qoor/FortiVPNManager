@@ -1,10 +1,8 @@
 //! Route planning for the exception rules.
 
-use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot};
+use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, Ipv4Network};
 use fvm_contract::app_internal::section::BypassStatus;
-use fvm_core::bypass_rules::{
-    Applicability, Ipv4Network, RoutePlan, plan_routes, vpn_server_target,
-};
+use fvm_core::bypass_rules::{Applicability, RoutePlan, plan_routes, vpn_server_target};
 
 const ROUTER: &str = "10.20.161.254";
 

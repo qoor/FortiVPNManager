@@ -9,11 +9,12 @@ use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 
 use fvm_common::os_api::{self, DadState, Family, Luid, Medium, Route};
-use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
+use fvm_contract::app_helper::{
+    BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode, Ipv4Network, MAX_ENTRIES,
+};
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, LogCategory, LogLevel, NetworkCheck,
 };
-use fvm_core::bypass_rules::{Ipv4Network, MAX_ENTRIES};
 
 use crate::Log;
 

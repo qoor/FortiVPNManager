@@ -3,35 +3,12 @@
 
 mod common;
 
-use std::net::Ipv4Addr;
-
 use common::*;
-use fvm_contract::app_helper::BypassRoute;
 use fvm_contract::app_internal::Weekday;
 use fvm_contract::app_internal::problem::{
     AddressProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind, ValueKind,
 };
 use fvm_core::config::{Ipv4Network, Settings};
-
-fn parse(text: &str) -> Result<Ipv4Network, AddressProblem> {
-    text.parse()
-}
-
-fn out_of_range(length: u32) -> AddressProblem {
-    AddressProblem::PrefixOutOfRange {
-        length,
-        minimum: 8,
-        maximum: 32,
-    }
-}
-
-fn route(destination: &str, mask: &str) -> BypassRoute {
-    BypassRoute {
-        destination: destination.into(),
-        subnet_mask: mask.into(),
-        gateway: "10.20.161.254".into(),
-    }
-}
 
 fn bypass_host() -> Ipv4Network {
     net("10.30.161.16")
@@ -47,131 +24,6 @@ fn changed(change: impl FnOnce(&mut Settings)) -> Settings {
     let mut settings = Settings::default();
     change(&mut settings);
     settings
-}
-
-// MARK: Hosts and networks
-
-#[test]
-fn hosts_and_networks_in_canonical_spelling() {
-    for (raw, canonical, prefix_length) in [
-        ("10.30.161.16", "10.30.161.16", 32),
-        ("10.30.161.16/32", "10.30.161.16", 32),
-        ("10.30.170.0/24", "10.30.170.0/24", 24),
-        ("10.0.0.0/8", "10.0.0.0/8", 8),
-        ("192.168.50.128/25", "192.168.50.128/25", 25),
-        ("223.255.255.255", "223.255.255.255", 32),
-        ("1.0.0.0/8", "1.0.0.0/8", 8),
-    ] {
-        let network = parse(raw).unwrap();
-        assert_eq!(network.to_string(), canonical);
-        assert_eq!(u32::from(network.prefix_length()), prefix_length);
-    }
-}
-
-#[test]
-fn malformed_spellings() {
-    for raw in [
-        "",
-        " 10.0.0.1",
-        "10.0.0.1 ",
-        "10.0.0",
-        "10.0.0.1.2",
-        "10.0.0.256",
-        "010.0.0.1",
-        "10.0.0.01",
-        "10.0.0.1/",
-        "10.0.0.1/024",
-        "10.0.0.1/24/1",
-        "10.0.0.1/+8",
-        "0x0a.0.0.1",
-        "10.0.0.-1",
-        "10..0.1",
-        "host.example.com",
-        "10.0.0.1/33a",
-        "\u{FF11}0.0.0.1",
-        "::1",
-        "10.0.0.1/100",
-    ] {
-        assert_eq!(parse(raw), Err(AddressProblem::Malformed {}), "{raw:?}");
-    }
-}
-
-#[test]
-fn prefix_lengths_outside_8_to_32() {
-    assert_eq!(parse("10.0.0.0/7"), Err(out_of_range(7)));
-    assert_eq!(parse("10.0.0.0/0"), Err(out_of_range(0)));
-    assert_eq!(parse("10.0.0.1/33"), Err(out_of_range(33)));
-}
-
-#[test]
-fn addresses_that_cannot_be_routed() {
-    for raw in [
-        "0.0.0.0",
-        "0.1.2.3",
-        "127.0.0.1",
-        "127.0.0.0/8",
-        "224.0.0.1",
-        "239.255.255.250",
-        "240.0.0.0/8",
-        "255.255.255.255",
-    ] {
-        assert_eq!(parse(raw), Err(AddressProblem::Unroutable {}), "{raw}");
-    }
-}
-
-#[test]
-fn host_bits_after_the_prefix_suggest_the_network() {
-    assert_eq!(
-        parse("10.30.170.5/24"),
-        Err(AddressProblem::HostBitsSet {
-            network: "10.30.170.0/24".into()
-        })
-    );
-}
-
-#[test]
-fn route_destinations_with_subnet_masks() {
-    assert_eq!(
-        Ipv4Network::from_route(&route("10.30.161.16", "255.255.255.255"))
-            .unwrap()
-            .to_string(),
-        "10.30.161.16"
-    );
-    assert_eq!(
-        Ipv4Network::from_route(&route("10.30.170.0", "255.255.255.0"))
-            .unwrap()
-            .to_string(),
-        "10.30.170.0/24"
-    );
-    assert_eq!(
-        Ipv4Network::from_route(&route("10.0.0.0", "255.0.255.0")),
-        Err(AddressProblem::NonContiguousMask {})
-    );
-    assert_eq!(
-        Ipv4Network::from_route(&route("10.0.0.0", "0.0.0.0")),
-        Err(out_of_range(0))
-    );
-    assert_eq!(
-        bypass_network().route_through("10.20.161.254"),
-        route("10.30.170.0", "255.255.255.0")
-    );
-}
-
-#[test]
-fn containment() {
-    assert!(office().contains_address(Ipv4Addr::new(10, 20, 161, 20)));
-    assert!(!office().contains_address(Ipv4Addr::new(10, 20, 162, 20)));
-    assert!(office().contains(&net("10.20.161.16")));
-    assert!(office().contains(&office()));
-    assert!(!office().contains(&net("10.20.0.0/16")));
-    assert_eq!(
-        Ipv4Network::enclosing("10.20.161.20", "255.255.255.0"),
-        Ok(office())
-    );
-    assert_eq!(
-        Ipv4Network::enclosing("10.20.161.20", "255.0.255.0"),
-        Err(AddressProblem::NonContiguousMask {})
-    );
 }
 
 // MARK: Lists in the file

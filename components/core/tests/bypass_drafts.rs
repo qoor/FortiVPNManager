@@ -1,8 +1,9 @@
 //! Edit drafts of the exception rule lists.
 
+use fvm_contract::app_helper::Ipv4Network;
 use fvm_contract::app_internal::problem::AddressProblem;
 use fvm_contract::app_internal::section::RowProblem;
-use fvm_core::bypass_rules::{Ipv4Network, ListDraft, RuleDrafts};
+use fvm_core::bypass_rules::{ListDraft, RuleDrafts};
 
 fn net(text: &str) -> Ipv4Network {
     text.parse().unwrap()

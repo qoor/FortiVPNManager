@@ -13,7 +13,6 @@ eventlog.workspace = true
 fvm-backend-adapter.workspace = true
 fvm-common.workspace = true
 fvm-contract.workspace = true
-fvm-core.workspace = true
 fvm-helper-core.workspace = true
 interprocess.workspace = true
 log.workspace = true

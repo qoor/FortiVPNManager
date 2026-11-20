@@ -4,6 +4,7 @@
 use std::fmt;
 use std::ops::RangeInclusive;
 
+use fvm_contract::app_helper::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
 use fvm_contract::app_internal::TimeOfDay;
 use fvm_contract::app_internal::problem::ConfigProblemKind;
 
@@ -13,7 +14,7 @@ use super::{
     OTP_METHODS, PORTS, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, WEEKDAYS, minutes,
     normalized_days,
 };
-use crate::bypass_rules::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH, vpn_server_target};
+use crate::bypass_rules::vpn_server_target;
 
 /// Settings that pass come back unchanged when the text is read. The certificate values are not
 /// checked again: only the contract's rule produces them.

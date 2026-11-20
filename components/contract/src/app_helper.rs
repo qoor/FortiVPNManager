@@ -15,6 +15,8 @@ use std::time::SystemTime;
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Serialize};
 
+use crate::app_internal::problem::AddressProblem;
+
 /// One connection attempt, as the app's UUID text. Kept in uppercase, the form the app writes, so
 /// equal attempts compare equal however the text was cased.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -334,6 +336,160 @@ pub struct BypassRoute {
     pub gateway: String,
 }
 
+/// Most entries one list may hold; the settings file refuses more.
+pub const MAX_ENTRIES: usize = 100;
+
+pub const MIN_PREFIX_LENGTH: u32 = 8;
+pub const MAX_PREFIX_LENGTH: u32 = 32;
+
+/// An IPv4 host (a /32) or network as the exception rules use it: no bits set after the prefix,
+/// a prefix of 8 to 32, and an address that can be routed. Shown as `10.30.161.16` for a host and
+/// `10.30.170.0/24` for a network.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Ipv4Network {
+    address: u32,
+    prefix_length: u32,
+}
+
+impl Ipv4Network {
+    /// A route's destination: an address and a subnet mask.
+    pub fn from_route(route: &BypassRoute) -> Result<Self, AddressProblem> {
+        let (address, prefix_length) = address_and_mask(&route.destination, &route.subnet_mask)?;
+        Self::new(address, prefix_length)
+    }
+
+    /// The network an interface address belongs to, such as `10.20.161.0/24` for `10.20.161.20`
+    /// with `255.255.255.0`: the host bits are cleared instead of refused.
+    pub fn enclosing(address: &str, subnet_mask: &str) -> Result<Self, AddressProblem> {
+        let (address, prefix_length) = address_and_mask(address, subnet_mask)?;
+        Self::new(address & mask(prefix_length), prefix_length)
+    }
+
+    /// The single host `address`, if it can be an exception target.
+    pub fn host(address: Ipv4Addr) -> Option<Self> {
+        Self::new(u32::from(address), MAX_PREFIX_LENGTH).ok()
+    }
+
+    fn new(address: u32, prefix_length: u32) -> Result<Self, AddressProblem> {
+        if !(MIN_PREFIX_LENGTH..=MAX_PREFIX_LENGTH).contains(&prefix_length) {
+            return Err(AddressProblem::PrefixOutOfRange {
+                length: prefix_length,
+                minimum: MIN_PREFIX_LENGTH,
+                maximum: MAX_PREFIX_LENGTH,
+            });
+        }
+        // 0.0.0.0/8, loopback, and multicast, reserved and broadcast from 224.0.0.0 up.
+        let first_octet = address >> 24;
+        if first_octet == 0 || first_octet == 127 || first_octet >= 224 {
+            return Err(AddressProblem::Unroutable {});
+        }
+        let network = address & mask(prefix_length);
+        if network != address {
+            let network = Self {
+                address: network,
+                prefix_length,
+            };
+            return Err(AddressProblem::HostBitsSet {
+                network: network.to_string(),
+            });
+        }
+        Ok(Self {
+            address,
+            prefix_length,
+        })
+    }
+
+    pub fn address(&self) -> Ipv4Addr {
+        Ipv4Addr::from(self.address)
+    }
+
+    pub fn prefix_length(&self) -> u8 {
+        u8::try_from(self.prefix_length).expect("prefix lengths are at most 32")
+    }
+
+    pub fn contains_address(&self, address: Ipv4Addr) -> bool {
+        u32::from(address) & mask(self.prefix_length) == self.address
+    }
+
+    /// Whether all of `other` is inside this network.
+    pub fn contains(&self, other: &Self) -> bool {
+        other.prefix_length >= self.prefix_length
+            && other.address & mask(self.prefix_length) == self.address
+    }
+
+    /// Whether the two share an address, which means one contains the other.
+    pub fn overlaps(&self, other: &Self) -> bool {
+        self.contains(other) || other.contains(self)
+    }
+
+    /// The exception route that sends this network through `gateway`.
+    pub fn route_through(&self, gateway: &str) -> BypassRoute {
+        BypassRoute {
+            destination: self.address().to_string(),
+            subnet_mask: Ipv4Addr::from(mask(self.prefix_length)).to_string(),
+            gateway: gateway.to_owned(),
+        }
+    }
+}
+
+/// Reads `a.b.c.d` or `a.b.c.d/n` without surrounding spaces; `a.b.c.d/32` is `a.b.c.d`. The
+/// address follows the contract's IPv4 rule (`Ipv4Addr`'s: four decimal octets without leading
+/// zeros); the prefix is one or two digits without a leading zero.
+impl FromStr for Ipv4Network {
+    type Err = AddressProblem;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let (address, prefix) = match text.split_once('/') {
+            Some((address, prefix)) => (address, Some(prefix)),
+            None => (text, None),
+        };
+        let address = address
+            .parse::<Ipv4Addr>()
+            .map_err(|_| AddressProblem::Malformed {})?;
+        let prefix_length = match prefix {
+            None => MAX_PREFIX_LENGTH,
+            Some(prefix) => {
+                let plain = (1..=2).contains(&prefix.len())
+                    && prefix.bytes().all(|byte| byte.is_ascii_digit())
+                    && (prefix.len() == 1 || !prefix.starts_with('0'));
+                if !plain {
+                    return Err(AddressProblem::Malformed {});
+                }
+                prefix.parse().expect("one or two ASCII digits")
+            }
+        };
+        Self::new(u32::from(address), prefix_length)
+    }
+}
+
+impl fmt::Display for Ipv4Network {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.prefix_length == MAX_PREFIX_LENGTH {
+            write!(f, "{}", self.address())
+        } else {
+            write!(f, "{}/{}", self.address(), self.prefix_length)
+        }
+    }
+}
+
+fn mask(prefix_length: u32) -> u32 {
+    u32::MAX.checked_shl(32 - prefix_length).unwrap_or(0)
+}
+
+fn address_and_mask(address: &str, subnet_mask: &str) -> Result<(u32, u32), AddressProblem> {
+    let (Ok(address), Ok(subnet_mask)) =
+        (address.parse::<Ipv4Addr>(), subnet_mask.parse::<Ipv4Addr>())
+    else {
+        return Err(AddressProblem::Malformed {});
+    };
+    let subnet_mask = u32::from(subnet_mask);
+    let prefix_length = subnet_mask.leading_ones();
+    if mask(prefix_length) != subnet_mask {
+        return Err(AddressProblem::NonContiguousMask {});
+    }
+    Ok((u32::from(address), prefix_length))
+}
+
 /// The primary network: the physical interface the OS sends default traffic through, never a
 /// tunnel, with its IPv4 router and this device's IPv4 address on it.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -584,5 +740,164 @@ mod seconds {
 
     pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
         Ok(UNIX_EPOCH + read(deserializer)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn net(text: &str) -> Ipv4Network {
+        text.parse().unwrap()
+    }
+
+    fn parse(text: &str) -> Result<Ipv4Network, AddressProblem> {
+        text.parse()
+    }
+
+    fn out_of_range(length: u32) -> AddressProblem {
+        AddressProblem::PrefixOutOfRange {
+            length,
+            minimum: 8,
+            maximum: 32,
+        }
+    }
+
+    fn route(destination: &str, mask: &str) -> BypassRoute {
+        BypassRoute {
+            destination: destination.into(),
+            subnet_mask: mask.into(),
+            gateway: "10.20.161.254".into(),
+        }
+    }
+
+    fn bypass_network() -> Ipv4Network {
+        net("10.30.170.0/24")
+    }
+    fn office() -> Ipv4Network {
+        net("10.20.161.0/24")
+    }
+
+    #[test]
+    fn hosts_and_networks_in_canonical_spelling() {
+        for (raw, canonical, prefix_length) in [
+            ("10.30.161.16", "10.30.161.16", 32),
+            ("10.30.161.16/32", "10.30.161.16", 32),
+            ("10.30.170.0/24", "10.30.170.0/24", 24),
+            ("10.0.0.0/8", "10.0.0.0/8", 8),
+            ("192.168.50.128/25", "192.168.50.128/25", 25),
+            ("223.255.255.255", "223.255.255.255", 32),
+            ("1.0.0.0/8", "1.0.0.0/8", 8),
+        ] {
+            let network = parse(raw).unwrap();
+            assert_eq!(network.to_string(), canonical);
+            assert_eq!(u32::from(network.prefix_length()), prefix_length);
+        }
+    }
+
+    #[test]
+    fn malformed_spellings() {
+        for raw in [
+            "",
+            " 10.0.0.1",
+            "10.0.0.1 ",
+            "10.0.0",
+            "10.0.0.1.2",
+            "10.0.0.256",
+            "010.0.0.1",
+            "10.0.0.01",
+            "10.0.0.1/",
+            "10.0.0.1/024",
+            "10.0.0.1/24/1",
+            "10.0.0.1/+8",
+            "0x0a.0.0.1",
+            "10.0.0.-1",
+            "10..0.1",
+            "host.example.com",
+            "10.0.0.1/33a",
+            "\u{FF11}0.0.0.1",
+            "::1",
+            "10.0.0.1/100",
+        ] {
+            assert_eq!(parse(raw), Err(AddressProblem::Malformed {}), "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn prefix_lengths_outside_8_to_32() {
+        assert_eq!(parse("10.0.0.0/7"), Err(out_of_range(7)));
+        assert_eq!(parse("10.0.0.0/0"), Err(out_of_range(0)));
+        assert_eq!(parse("10.0.0.1/33"), Err(out_of_range(33)));
+    }
+
+    #[test]
+    fn addresses_that_cannot_be_routed() {
+        for raw in [
+            "0.0.0.0",
+            "0.1.2.3",
+            "127.0.0.1",
+            "127.0.0.0/8",
+            "224.0.0.1",
+            "239.255.255.250",
+            "240.0.0.0/8",
+            "255.255.255.255",
+        ] {
+            assert_eq!(parse(raw), Err(AddressProblem::Unroutable {}), "{raw}");
+        }
+    }
+
+    #[test]
+    fn host_bits_after_the_prefix_suggest_the_network() {
+        assert_eq!(
+            parse("10.30.170.5/24"),
+            Err(AddressProblem::HostBitsSet {
+                network: "10.30.170.0/24".into()
+            })
+        );
+    }
+
+    #[test]
+    fn route_destinations_with_subnet_masks() {
+        assert_eq!(
+            Ipv4Network::from_route(&route("10.30.161.16", "255.255.255.255"))
+                .unwrap()
+                .to_string(),
+            "10.30.161.16"
+        );
+        assert_eq!(
+            Ipv4Network::from_route(&route("10.30.170.0", "255.255.255.0"))
+                .unwrap()
+                .to_string(),
+            "10.30.170.0/24"
+        );
+        assert_eq!(
+            Ipv4Network::from_route(&route("10.0.0.0", "255.0.255.0")),
+            Err(AddressProblem::NonContiguousMask {})
+        );
+        assert_eq!(
+            Ipv4Network::from_route(&route("10.0.0.0", "0.0.0.0")),
+            Err(out_of_range(0))
+        );
+        assert_eq!(
+            bypass_network().route_through("10.20.161.254"),
+            route("10.30.170.0", "255.255.255.0")
+        );
+    }
+
+    #[test]
+    fn containment() {
+        assert!(office().contains_address(Ipv4Addr::new(10, 20, 161, 20)));
+        assert!(!office().contains_address(Ipv4Addr::new(10, 20, 162, 20)));
+        assert!(office().contains(&net("10.20.161.16")));
+        assert!(office().contains(&office()));
+        assert!(!office().contains(&net("10.20.0.0/16")));
+        assert_eq!(
+            Ipv4Network::enclosing("10.20.161.20", "255.255.255.0"),
+            Ok(office())
+        );
+        assert_eq!(
+            Ipv4Network::enclosing("10.20.161.20", "255.0.255.0"),
+            Err(AddressProblem::NonContiguousMask {})
+        );
     }
 }

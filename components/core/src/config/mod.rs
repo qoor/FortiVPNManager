@@ -15,7 +15,7 @@ use std::ops::RangeInclusive;
 use fvm_contract::app_internal::problem::{ConfigProblem, ConfigWarning};
 use fvm_contract::app_internal::{OtpMethod, TimeOfDay, Weekday};
 
-pub use crate::bypass_rules::Ipv4Network;
+pub use fvm_contract::app_helper::Ipv4Network;
 
 /// Largest file the app reads or writes.
 pub const MAX_FILE_BYTES: usize = 64 * 1024;

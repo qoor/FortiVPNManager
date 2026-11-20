@@ -5,6 +5,7 @@
 
 use std::ops::RangeInclusive;
 
+use fvm_contract::app_helper::MAX_ENTRIES;
 use fvm_contract::app_internal::problem::{
     ConfigProblem, ConfigProblemKind, ConfigWarning, ConfigWarningKind, LineColumn, ValueKind,
 };
@@ -20,7 +21,7 @@ use super::{
     SCHEMA_VERSION, SESSION_MAX_MINUTES, Schedule, Settings, Vpn, WEEKDAYS, minutes,
     normalized_days,
 };
-use crate::bypass_rules::{MAX_ENTRIES, vpn_server_target};
+use crate::bypass_rules::vpn_server_target;
 
 type Pairs = [(usize, usize)];
 
