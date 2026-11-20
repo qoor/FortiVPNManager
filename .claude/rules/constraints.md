@@ -82,3 +82,6 @@ paths:
 # GitHub
 - releases/latest: 초안 릴리스 미포함
 - releases/latest: 사전 공개 릴리스 미포함
+- Actions macOS arm64 실행 환경 부족 시 job 미배정 취소 가능
+  - 릴리즈 workflow: pkg job 취소 시 게시 단계 미실행
+  - 대응: 실패 job 재실행
