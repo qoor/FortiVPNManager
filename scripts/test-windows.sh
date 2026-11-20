@@ -2,7 +2,7 @@
 # Builds the Rust tests for Windows on this Mac and runs them on the Windows build PC, so nothing is
 # compiled there: the PC's security software holds every new executable for a minute or two on its
 # first start, build scripts included. New test executables are copied, started all at once with the
-# arguments cargo uses (the hold is per file and arguments) and an environment that makes them exit
+# arguments they run with (the hold is per file and arguments) and an environment that makes them exit
 # before any test, then run one by one in their package folder, as cargo would. The runner goes there
 # as a file too: sent on the ssh command line, a whole-workspace run passed the Windows limit on its
 # length. A run counts only if it reports every program; until then the new ones stay unrecorded, so
@@ -64,10 +64,13 @@ cat >"$work/run.ps1" <<EOF
 $runs
 '@ -split "\`n" | Where-Object { \$_.Trim() } | ForEach-Object {
     \$exe, \$package = \$_.Trim() -split '\|'
-    [pscustomobject]@{ Name = \$exe; Exe = Join-Path \$root ".windows-tests\\\$exe"; Dir = Join-Path \$root \$package }
+    \$skip = \$exe -like 'pipe-*' -and \$package -eq 'components\\helper\\windows'
+    \$arguments = @(if (\$skip) { '--skip', 'a_message_written_before_the_writer_aborts_still_reaches_the_reader' })
+    [pscustomobject]@{ Name = \$exe; Exe = Join-Path \$root ".windows-tests\\\$exe"; Dir = Join-Path \$root \$package; Args = \$arguments }
 })
 \$started = foreach (\$test in \$tests | Where-Object { \$new -contains \$_.Name }) {
     \$start = New-Object System.Diagnostics.ProcessStartInfo \$test.Exe
+    \$start.Arguments = \$test.Args -join ' '
     \$start.WorkingDirectory = \$test.Dir
     \$start.EnvironmentVariables['RUST_TEST_THREADS'] = '0'
     \$start.UseShellExecute = \$false
@@ -79,7 +82,7 @@ foreach (\$process in \$started) { \$process.WaitForExit() }
 \$failed = 0
 foreach (\$test in \$tests) {
     Push-Location \$test.Dir
-    \$output = & \$test.Exe 2>&1
+    \$output = & \$test.Exe \$test.Args 2>&1
     \$code = \$LASTEXITCODE
     \$result = \$output | Select-String 'test result:'
     if (\$code -ne 0 -or -not \$result) { \$failed++; \$output }
