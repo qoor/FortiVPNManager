@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use common::*;
-use serde_json::{Value, json};
+use serde_json::json;
 
 fn up() -> Script {
     common::up(settings("utun9", "10.10.0.5"))
@@ -18,28 +18,13 @@ const KEPT_OPEN: &str =
 
 const WELL_BEFORE_THE_LIMIT: Duration = Duration::from_millis(650);
 
-fn exits(message: &Value) -> bool {
-    is("exitAfterDraining")(message) || is("exitNow")(message)
-}
-
-fn wait_for_the_exit(swift: &mut Swift) {
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
-    });
-}
-
-fn assert_no_exit_until(swift: &mut Swift, until: Instant) {
-    swift.received_within(until.saturating_duration_since(Instant::now()));
-    assert!(swift.position(exits).is_none(), "{:#?}", swift.received);
-}
-
 #[test]
 fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwhile() {
     let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
+    let asked = Instant::now();
     let id = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(id));
-    let replied = Instant::now();
     assert!(
         swift.has_log("notice helper: exiting on request so launchd starts the current binary")
     );
@@ -51,10 +36,14 @@ fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwh
     );
     let again = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(again));
-    assert_no_exit_until(&mut swift, replied + WELL_BEFORE_THE_LIMIT);
+    swift
+        .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
+    assert_eq!(swift.count(is("exitAfterDraining")), 0);
 
     swift.disconnect_app(1);
-    wait_for_the_exit(&mut swift);
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
     assert!(!swift.has_log(KEPT_OPEN));
     assert_eq!(swift.count(is("exitAfterDraining")), 1);
     assert_eq!(swift.count(is("exitNow")), 0);
@@ -65,13 +54,15 @@ fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwh
 fn exit_when_idle_exits_at_the_limit_when_the_asking_app_keeps_its_connection() {
     let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
+    let asked = Instant::now();
     let id = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(id));
-    let replied = Instant::now();
-    wait_for_the_exit(&mut swift);
-    let waited = replied.elapsed();
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
+    let waited = asked.elapsed();
     assert!(
-        (Duration::from_millis(800)..Duration::from_secs(3)).contains(&waited),
+        (Duration::from_secs(1)..Duration::from_secs(3)).contains(&waited),
         "{waited:?}"
     );
     assert!(swift.has_log(KEPT_OPEN));
@@ -80,20 +71,50 @@ fn exit_when_idle_exits_at_the_limit_when_the_asking_app_keeps_its_connection() 
 }
 
 #[test]
-fn exit_when_idle_waits_for_every_app_that_asked() {
+fn exit_when_idle_counts_the_limit_from_the_first_request() {
     let mut swift = Swift::start(Setup::default());
     assert!(swift.connect_app(1, 501));
     assert!(swift.connect_app(2, 502));
+    let asked = Instant::now();
     let first = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(first));
-    let replied = Instant::now();
+    swift.received_within(
+        (asked + Duration::from_millis(600)).saturating_duration_since(Instant::now()),
+    );
     let second = swift.request(2, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(second));
 
     swift.disconnect_app(1);
-    assert_no_exit_until(&mut swift, replied + WELL_BEFORE_THE_LIMIT);
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
+    let waited = asked.elapsed();
+    assert!(
+        (Duration::from_secs(1)..Duration::from_millis(1500)).contains(&waited),
+        "{waited:?}"
+    );
+    assert!(swift.has_log(KEPT_OPEN));
+}
+
+#[test]
+fn exit_when_idle_waits_for_every_app_that_asked() {
+    let mut swift = Swift::start(Setup::default());
+    assert!(swift.connect_app(1, 501));
+    assert!(swift.connect_app(2, 502));
+    let asked = Instant::now();
+    let first = swift.request(1, json!({"exitWhenIdle": {}}));
+    assert!(swift.reply_flag(first));
+    let second = swift.request(2, json!({"exitWhenIdle": {}}));
+    assert!(swift.reply_flag(second));
+
+    swift.disconnect_app(1);
+    swift
+        .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
+    assert_eq!(swift.count(is("exitAfterDraining")), 0);
     swift.disconnect_app(2);
-    wait_for_the_exit(&mut swift);
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
     assert!(!swift.has_log(KEPT_OPEN));
 }
 
@@ -103,14 +124,18 @@ fn exit_when_idle_does_not_wait_for_apps_that_did_not_ask() {
     assert!(swift.connect_app(1, 501));
     assert!(swift.connect_app(2, 502));
     assert!(swift.connect_app(3, 503));
+    let asked = Instant::now();
     let id = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(id));
-    let replied = Instant::now();
 
     swift.disconnect_app(3);
-    assert_no_exit_until(&mut swift, replied + WELL_BEFORE_THE_LIMIT);
+    swift
+        .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
+    assert_eq!(swift.count(is("exitAfterDraining")), 0);
     swift.disconnect_app(1);
-    wait_for_the_exit(&mut swift);
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
     assert!(!swift.has_log(KEPT_OPEN));
 }
 
@@ -122,7 +147,9 @@ fn exit_when_idle_from_a_closed_connection_exits_right_after_the_reply() {
     let id = swift.request(1, json!({"exitWhenIdle": {}}));
     assert!(swift.reply_flag(id));
     let replied = Instant::now();
-    wait_for_the_exit(&mut swift);
+    swift.wait_until("the exit", |swift| {
+        swift.position(is("exitAfterDraining")).is_some()
+    });
     assert!(replied.elapsed() < Duration::from_millis(400));
     let reply = swift
         .position(|message| message["replyFlag"]["id"] == id)
