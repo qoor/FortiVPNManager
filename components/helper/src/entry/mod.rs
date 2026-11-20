@@ -2,7 +2,7 @@ mod bypass_routes;
 #[cfg(test)]
 mod update_tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::mem;
 use std::panic;
@@ -36,8 +36,7 @@ use bypass_routes::{BypassRoutes, Job};
 /// Longer than a stopped session's wait before it is detached, so a run whose logout hangs is still
 /// detached and reported first.
 const SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
-/// Lets the reply to an exitWhenIdle request leave before the Helper exits.
-const EXIT_WHEN_IDLE_DELAY: Duration = Duration::from_millis(500);
+const EXIT_WHEN_IDLE_LIMIT: Duration = Duration::from_secs(1);
 
 /// Takes the OS side's messages to the entry.
 pub struct Inbox(Sender<Event>);
@@ -282,9 +281,9 @@ struct HeldRun {
 
 enum Lifecycle {
     Serving,
-    /// Answered an exitWhenIdle request with true; tells the OS side to exit at `at`.
     ExitingWhenIdle {
-        at: Instant,
+        asking: HashSet<u64>,
+        deadline: Instant,
     },
     ShuttingDown {
         deadline: Instant,
@@ -296,8 +295,9 @@ enum Lifecycle {
 impl Lifecycle {
     fn deadline(&self) -> Option<Instant> {
         match *self {
-            Self::ExitingWhenIdle { at } => Some(at),
-            Self::ShuttingDown { deadline } => Some(deadline),
+            Self::ExitingWhenIdle { deadline, .. } | Self::ShuttingDown { deadline } => {
+                Some(deadline)
+            }
             Self::Serving | Self::Exiting => None,
         }
     }
@@ -375,6 +375,10 @@ impl Entry {
             );
             held.run.stop(StopReason::AppDisconnected);
         }
+        if let Lifecycle::ExitingWhenIdle { asking, .. } = &mut self.lifecycle {
+            asking.remove(&app);
+            self.exit_when_asking_apps_are_gone();
+        }
     }
 
     fn executable_replaced(&mut self) {
@@ -419,7 +423,15 @@ impl Entry {
 
     fn deadline_passed(&mut self) {
         match self.lifecycle {
-            Lifecycle::ExitingWhenIdle { .. } => self.exit(FromEntry::ExitAfterDraining {}),
+            Lifecycle::ExitingWhenIdle { .. } => {
+                self.os.log(
+                    LogLevel::Notice,
+                    LogCategory::Helper,
+                    "an app that asked the Helper to exit kept its connection open; exiting anyway"
+                        .to_owned(),
+                );
+                self.exit(FromEntry::ExitAfterDraining {});
+            }
             Lifecycle::ShuttingDown { .. } => {
                 self.os.log(
                     LogLevel::Error,
@@ -455,8 +467,9 @@ impl Entry {
                 return;
             }
             AppRequest::ExitWhenIdle {} => {
-                let value = self.exit_when_idle();
+                let value = self.exit_when_idle(app);
                 self.os.send(&FromEntry::ReplyFlag { id, value });
+                self.exit_when_asking_apps_are_gone();
                 return;
             }
             AppRequest::ReadBypassRoutes {} => return self.read_bypass_routes(app, id),
@@ -690,7 +703,7 @@ impl Entry {
         self.os.send(&FromEntry::Reply { id, json });
     }
 
-    fn exit_when_idle(&mut self) -> bool {
+    fn exit_when_idle(&mut self, app: u64) -> bool {
         if !self.runs.is_empty() {
             return false;
         }
@@ -701,10 +714,24 @@ impl Entry {
                 "exiting on request so launchd starts the current binary".to_owned(),
             );
             self.lifecycle = Lifecycle::ExitingWhenIdle {
-                at: Instant::now() + EXIT_WHEN_IDLE_DELAY,
+                asking: HashSet::new(),
+                deadline: Instant::now() + EXIT_WHEN_IDLE_LIMIT,
             };
         }
+        if let Lifecycle::ExitingWhenIdle { asking, .. } = &mut self.lifecycle
+            && self.apps.contains_key(&app)
+        {
+            asking.insert(app);
+        }
         true
+    }
+
+    fn exit_when_asking_apps_are_gone(&mut self) {
+        if let Lifecycle::ExitingWhenIdle { asking, .. } = &self.lifecycle
+            && asking.is_empty()
+        {
+            self.exit(FromEntry::ExitAfterDraining {});
+        }
     }
 
     fn run_report(&mut self, attempt: AttemptId, report: Report) {
