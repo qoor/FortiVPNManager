@@ -1,9 +1,7 @@
-use std::path::{Path, PathBuf};
-
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::validation::certificate_value;
 
-use super::{ImportedSettings, default_files, is_digest, lines, strtol_port};
+use super::{ImportedSettings, is_digest, lines, strtol_port};
 
 const DIGEST_A: &str = "4d1b72371c42a69bd949048883897aa673059f2e7b1cc992a650584132aae8f3";
 const DIGEST_B: &str = "e0ef56d6eb603d9ffe87e74c28b8210b0ea93839e2ea4fb64f1fc2c66e95e391";
@@ -324,17 +322,6 @@ fn debug_output_redacts_the_password() {
     let debug = format!("{:?}", read(&user_file_shape()));
     assert!(!debug.contains("s3cr3t"));
     assert!(debug.contains("203.0.113.10"));
-}
-
-#[test]
-fn the_default_files_are_the_users_then_homebrews() {
-    assert_eq!(
-        default_files(Path::new("/Users/alice")),
-        [
-            PathBuf::from("/Users/alice/.config/openfortivpn/config"),
-            PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
-        ]
-    );
 }
 
 #[test]

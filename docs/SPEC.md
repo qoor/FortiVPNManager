@@ -82,11 +82,11 @@
   - 같은 입력·순서에 항상 같은 결과
 - 역할
   - Connection Manager 규칙, 표시 값, 준비 상태 판정
-  - 예외 규칙 계산, config.yaml·IMAP·Gmail API·OAuth·OTP 메일 형식
+  - 예외 규칙 계산, config.yaml·state.json·openfortivpn 설정·IMAP·Gmail API·OAuth·OTP 메일 형식
   - 업데이트 확인 시점 판단
   - 릴리스 해석
   - 다운로드 진행률 계산
-- 제공 기능: 3.1 연결 관리, 3.2 설정, 3.5 예외 규칙, 4.4 config.yaml
+- 제공 기능: 3.1 연결 관리, 3.2 설정, 3.5 예외 규칙, 4.4 config.yaml, 4.5 저장 데이터
 
 ## 2.3 런타임
 - 설명: 앱 안의 조율과 OS 무관 외부 작업, 판단 코어가 정한 작업 실행

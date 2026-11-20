@@ -20,9 +20,9 @@ use fvm_contract::app_internal::{ButtonState, SecretText};
 use fvm_contract::validation;
 use fvm_core::config::Settings;
 use fvm_core::connection;
+use fvm_core::openfortivpn_settings;
 
 use crate::files;
-use crate::openfortivpn_settings;
 use crate::orchestration::{ClientSettings, Runtime};
 
 /// An openfortivpn config file is small; anything larger is not one.
@@ -379,7 +379,7 @@ impl Runtime {
     /// connection has no file; it is read when imported.
     pub(crate) fn find_default_import_file(&mut self) {
         self.forms.default_import_file = match &self.client_settings {
-            ClientSettings::OpenFortiVpn { home } => openfortivpn_settings::default_files(home)
+            ClientSettings::OpenFortiVpn { home } => openfortivpn_default_files(home)
                 .into_iter()
                 .find(|path| path.exists())
                 .map(|path| path.display().to_string()),
@@ -403,7 +403,7 @@ impl Runtime {
         match self.client_settings.clone() {
             ClientSettings::OpenFortiVpn { home } => {
                 let source = file.map(PathBuf::from).or_else(|| {
-                    openfortivpn_settings::default_files(&home)
+                    openfortivpn_default_files(&home)
                         .into_iter()
                         .find(|path| path.exists())
                 });
@@ -437,7 +437,7 @@ impl Runtime {
         }
         match self.client_settings.clone() {
             ClientSettings::OpenFortiVpn { home } => {
-                let source = openfortivpn_settings::default_files(&home)
+                let source = openfortivpn_default_files(&home)
                     .into_iter()
                     .find(|path| path.exists());
                 match source {
@@ -650,6 +650,13 @@ impl Runtime {
     }
 }
 
+fn openfortivpn_default_files(home: &Path) -> Vec<PathBuf> {
+    vec![
+        home.join(".config/openfortivpn/config"),
+        PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
+    ]
+}
+
 fn forticlient_connections(response: PortResponse) -> Vec<FortiClientConnection> {
     match response {
         PortResponse::FortiClientConnections { connections } => connections,
@@ -684,7 +691,20 @@ fn file_problem(error: &io::Error, path: &str) -> FileProblem {
 
 #[cfg(test)]
 mod tests {
-    use super::forticlient_server;
+    use std::path::{Path, PathBuf};
+
+    use super::{forticlient_server, openfortivpn_default_files};
+
+    #[test]
+    fn the_default_files_are_the_users_then_homebrews() {
+        assert_eq!(
+            openfortivpn_default_files(Path::new("/Users/alice")),
+            [
+                PathBuf::from("/Users/alice/.config/openfortivpn/config"),
+                PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
+            ]
+        );
+    }
 
     #[test]
     fn a_forticlient_server_is_a_host_with_or_without_a_port() {

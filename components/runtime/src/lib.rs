@@ -19,7 +19,6 @@ mod log_file;
 pub mod macos;
 mod net;
 mod network_probe;
-mod openfortivpn_settings;
 mod orchestration;
 mod otp_session;
 mod readiness;

@@ -13,8 +13,6 @@
 //! Unlike load_config(), it reads every known key to the end of the file instead of stopping at
 //! the first unknown one, and it also takes indented `#` lines as comments.
 
-use std::path::{Path, PathBuf};
-
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::validation::{certificate_value, is_forbidden};
 
@@ -72,36 +70,28 @@ const OTHER_KNOWN_KEYS: [&str; 34] = [
 /// What an openfortivpn config file holds for the app. A later line overrides an earlier one, as
 /// in openfortivpn, and an empty value clears the field.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct ImportedSettings {
-    pub(crate) host: Option<String>,
+pub struct ImportedSettings {
+    pub host: Option<String>,
     /// 443 when the file has no usable `port` line.
-    pub(crate) port: u16,
-    pub(crate) username: Option<String>,
+    pub port: u16,
+    pub username: Option<String>,
     /// Written in the file in plain text, to go to the secret storage.
-    pub(crate) password: Option<SecretText>,
-    pub(crate) realm: Option<String>,
+    pub password: Option<SecretText>,
+    pub realm: Option<String>,
     /// Valid pins, each once, in file order.
-    pub(crate) trusted_cert_pins: Vec<String>,
+    pub trusted_cert_pins: Vec<String>,
     /// Keys openfortivpn does not know, such as `insecure-cert`, each once, in file order;
     /// openfortivpn stops reading at the first one.
-    pub(crate) unknown_keys: Vec<String>,
+    pub unknown_keys: Vec<String>,
     /// openfortivpn options the app does not carry over, such as `set-dns`.
-    pub(crate) ignored_keys: Vec<String>,
+    pub ignored_keys: Vec<String>,
     /// 1-based numbers of lines that could not be used: without `=`, with an empty key, with bytes
     /// that are not UTF-8, with a control character or NUL, with a port openfortivpn refuses, or
     /// with an invalid certificate value.
-    pub(crate) unreadable_lines: Vec<u32>,
+    pub unreadable_lines: Vec<u32>,
 }
 
-/// The files openfortivpn reads by default, in the order to try: the user's, then Homebrew's.
-pub(crate) fn default_files(home: &Path) -> Vec<PathBuf> {
-    vec![
-        home.join(".config/openfortivpn/config"),
-        PathBuf::from("/opt/homebrew/etc/openfortivpn/openfortivpn/config"),
-    ]
-}
-
-pub(crate) fn read(bytes: &[u8]) -> ImportedSettings {
+pub fn read(bytes: &[u8]) -> ImportedSettings {
     let mut settings = ImportedSettings {
         host: None,
         port: DEFAULT_PORT,
