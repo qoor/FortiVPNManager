@@ -1,6 +1,6 @@
 ---
 name: scoped-review
-description: 코드 리뷰 규칙
+description: 이 프로젝트의 기본 코드 리뷰 절차(리뷰 범위 지정 후 내장 code-review 실행). 별도 지시 없는 코드 리뷰 요청에 사용
 ---
 
 # 리뷰 범위
