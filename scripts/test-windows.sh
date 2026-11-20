@@ -97,7 +97,7 @@ code=0
 ssh "$host" "powershell -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\\src\\$folder\\.windows-tests\\run.ps1" |
     tee "$work/output" | grep -v '^#< CLIXML\|^<Objs' || code=$?
 programs=$(wc -l <"$work/tests" | tr -d ' ')
-if ! tr -d '\r' <"$work/output" | grep -q "^windows tests: $programs programs, "; then
+if ! LC_ALL=C tr -d '\r' <"$work/output" | grep -q "^windows tests: $programs programs, "; then
     echo "test-windows: the run on $host did not report all $programs test programs" >&2
     exit 1
 fi
