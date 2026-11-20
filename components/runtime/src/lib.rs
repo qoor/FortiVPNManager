@@ -18,7 +18,7 @@ mod log_file;
 #[cfg(target_os = "macos")]
 pub mod macos;
 mod net;
-mod network;
+mod network_probe;
 mod openfortivpn_settings;
 mod orchestration;
 mod otp_session;
