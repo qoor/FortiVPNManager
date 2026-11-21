@@ -1,4 +1,4 @@
-// Exported by components/helper/macos/rust (libfvm_helper_macos.a), linked into the Helper.
+// Exported by components/helper/macos (libfvm_helper_macos.a), linked into the Helper.
 #pragma once
 
 #include <stddef.h>

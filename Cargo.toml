@@ -5,7 +5,7 @@ members = [
     "components/contract",
     "components/core",
     "components/helper/core",
-    "components/helper/macos/rust",
+    "components/helper/macos",
     "components/helper/windows",
     "components/os-api/windows",
     "components/runtime",

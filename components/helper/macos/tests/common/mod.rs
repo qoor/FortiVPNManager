@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-#[path = "../../../../core/tests/common/fake.rs"]
+#[path = "../../../core/tests/common/fake.rs"]
 mod fake;
 
 use std::io::{self, BufRead, BufReader};

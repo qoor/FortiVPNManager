@@ -126,7 +126,7 @@ targets:
         ARCHS: arm64
         # The header and module map of the Rust start function; build-rust.sh puts the library in
         # BUILT_PRODUCTS_DIR.
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/helper/macos/rust/include
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/helper/macos/include
         LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
         # cargo reads the source tree and writes under DerivedData, and the OpenConnect build writes
         # the ~/.cache/fvm-openconnect cache: both outside declared inputs and outputs.
@@ -189,6 +189,8 @@ targets:
       - path: ../../components/contract/macos/xpc/HelperError.swift
       - path: ../../components/contract/macos/xpc/Identifiers.swift
       - path: ../../components/helper/macos/tests
+        excludes:
+          - "**/*.rs"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.HelperTests
