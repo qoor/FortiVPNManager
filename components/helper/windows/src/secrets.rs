@@ -2,9 +2,9 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
-use fvm_common::os_api;
 use fvm_helper_core::recovery::create_private_file;
 use fvm_helper_core::secrets::{SecretStore, StoredSecret};
+use fvm_os_api_windows::os_api;
 use zeroize::Zeroizing;
 
 const PREFIX: &str = "session-";

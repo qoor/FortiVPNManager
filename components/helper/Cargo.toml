@@ -15,7 +15,7 @@ nix = { workspace = true, features = ["process", "signal"] }
 rustix = { workspace = true, features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
-fvm-common.workspace = true
+fvm-os-api-windows.workspace = true
 sysinfo.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]

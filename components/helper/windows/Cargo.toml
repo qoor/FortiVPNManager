@@ -11,9 +11,9 @@ path = "src/main.rs"
 [target.'cfg(windows)'.dependencies]
 eventlog.workspace = true
 fvm-backend-adapter.workspace = true
-fvm-common.workspace = true
 fvm-contract.workspace = true
 fvm-helper-core.workspace = true
+fvm-os-api-windows.workspace = true
 interprocess.workspace = true
 log.workspace = true
 serde.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "fvm-common"
+name = "fvm-os-api-windows"
 edition.workspace = true
 publish.workspace = true
 

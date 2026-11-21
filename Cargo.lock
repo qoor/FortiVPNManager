@@ -337,21 +337,13 @@ name = "fvm-backend-adapter"
 version = "0.0.0"
 dependencies = [
  "cc",
- "fvm-common",
  "fvm-contract",
  "fvm-helper-core",
+ "fvm-os-api-windows",
  "nix",
  "rustls",
  "windows-sys 0.61.2",
  "zeroize",
-]
-
-[[package]]
-name = "fvm-common"
-version = "0.0.0"
-dependencies = [
- "widestring",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -381,8 +373,8 @@ dependencies = [
 name = "fvm-helper-core"
 version = "0.0.0"
 dependencies = [
- "fvm-common",
  "fvm-contract",
+ "fvm-os-api-windows",
  "nix",
  "ring",
  "rustix",
@@ -411,9 +403,9 @@ version = "0.0.0"
 dependencies = [
  "eventlog",
  "fvm-backend-adapter",
- "fvm-common",
  "fvm-contract",
  "fvm-helper-core",
+ "fvm-os-api-windows",
  "interprocess",
  "log",
  "serde",
@@ -421,6 +413,14 @@ dependencies = [
  "widestring",
  "windows-service",
  "zeroize",
+]
+
+[[package]]
+name = "fvm-os-api-windows"
+version = "0.0.0"
+dependencies = [
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

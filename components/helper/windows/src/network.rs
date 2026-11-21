@@ -5,11 +5,11 @@ use std::os::windows::process::ExitStatusExt;
 use std::process::ExitStatus;
 use std::time::Duration;
 
-use fvm_common::os_api::{self, DadState, Family, Luid, Route};
 use fvm_contract::helper_internal::{
     FamilySettings, IpNetwork, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
     NetworkSettings, NetworkStep, OutsideChanges, OutsideRoute, TunnelDevice, TunnelRoutes,
 };
+use fvm_os_api_windows::os_api::{self, DadState, Family, Luid, Route};
 
 use crate::Log;
 use crate::routes::{self, BYPASS_ROUTE_METRIC};

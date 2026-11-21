@@ -12,7 +12,7 @@ zeroize.workspace = true
 nix = { workspace = true, features = ["ioctl", "socket"] }
 
 [target.'cfg(windows)'.dependencies]
-fvm-common.workspace = true
+fvm-os-api-windows.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]

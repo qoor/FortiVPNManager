@@ -4,7 +4,7 @@ use std::io::{self, PipeReader, PipeWriter};
 use std::os::windows::process::ExitStatusExt;
 use std::process::ExitStatus;
 
-use fvm_common::os_api::{self, Process};
+use fvm_os_api_windows::os_api::{self, Process};
 
 use super::NULL_DEVICE;
 

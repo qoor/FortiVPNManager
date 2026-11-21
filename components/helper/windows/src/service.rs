@@ -6,11 +6,11 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_common::os_api;
 use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
 use fvm_helper_core::entry::{end_for_restart, report_faults};
 use fvm_helper_core::session::{SessionManager, Timing};
+use fvm_os_api_windows::os_api;
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
 };
