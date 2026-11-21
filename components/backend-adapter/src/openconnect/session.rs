@@ -209,7 +209,7 @@ impl Context<'_> {
 
 #[cfg(windows)]
 fn interface_index(name: &str) -> Result<Option<u32>, String> {
-    use fvm_os_api_windows::os_api::Luid;
+    use fvm_os_api_windows::network::Luid;
 
     Luid::from_alias(name)
         .and_then(Luid::index)

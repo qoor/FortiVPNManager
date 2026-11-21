@@ -4,7 +4,7 @@ use std::io::{self, PipeReader, PipeWriter};
 use std::os::windows::process::ExitStatusExt;
 use std::process::ExitStatus;
 
-use fvm_os_api_windows::os_api::{self, Process};
+use fvm_os_api_windows::process::{self, Process};
 
 use super::NULL_DEVICE;
 
@@ -19,7 +19,7 @@ impl Child {
         let (stdin_read, stdin) = io::pipe()?;
         let (stdout, stdout_write) = io::pipe()?;
         let null = File::options().write(true).open(NULL_DEVICE)?;
-        let process = os_api::spawn(
+        let process = process::spawn(
             program,
             args,
             environment,

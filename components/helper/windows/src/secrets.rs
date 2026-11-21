@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use fvm_helper_core::recovery::create_private_file;
 use fvm_helper_core::secrets::{SecretStore, StoredSecret};
-use fvm_os_api_windows::os_api;
+use fvm_os_api_windows::crypto;
 use zeroize::Zeroizing;
 
 const PREFIX: &str = "session-";
@@ -25,7 +25,7 @@ impl SecretFiles {
 
 impl SecretStore for SecretFiles {
     fn save(&self, name: &str, secret: &[u8]) -> Result<(), String> {
-        let protected = os_api::protect(secret).map_err(|error| error.to_string())?;
+        let protected = crypto::protect(secret).map_err(|error| error.to_string())?;
         let path = self.path(name);
         let mut file = create_private_file(&path)
             .map_err(|error| format!("open {}: {error}", path.display()))?;
@@ -45,7 +45,7 @@ impl SecretStore for SecretFiles {
                 let secret = fs::read(entry.path())
                     .map_err(|error| format!("read {}: {error}", entry.path().display()))
                     .and_then(|protected| {
-                        os_api::unprotect(&protected)
+                        crypto::unprotect(&protected)
                             .map(Zeroizing::new)
                             .map_err(|error| error.to_string())
                     });

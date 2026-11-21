@@ -10,7 +10,7 @@ use fvm_contract::helper_internal::{LogCategory, LogLevel};
 use fvm_contract::helper_pipe::PIPE_NAME;
 use fvm_helper_core::entry::{end_for_restart, report_faults};
 use fvm_helper_core::session::{SessionManager, Timing};
-use fvm_os_api_windows::os_api;
+use fvm_os_api_windows::library;
 use windows_service::service::{
     ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus, ServiceType,
 };
@@ -94,7 +94,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         ServiceState::StartPending,
         ServiceExitCode::Win32(0),
     );
-    match os_api::keep_library_loaded("wintun.dll") {
+    match library::keep_library_loaded("wintun.dll") {
         Ok(()) => log(
             LogLevel::Notice,
             LogCategory::Helper,

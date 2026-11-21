@@ -101,7 +101,7 @@ pub fn end_for_restart() -> ! {
 
 #[cfg(windows)]
 pub fn end_for_restart() -> ! {
-    fvm_os_api_windows::os_api::terminate_this_process(RESTART_EXIT_CODE)
+    fvm_os_api_windows::process::terminate_this_process(RESTART_EXIT_CODE)
 }
 
 enum Event {

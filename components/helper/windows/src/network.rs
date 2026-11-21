@@ -9,7 +9,8 @@ use fvm_contract::helper_internal::{
     FamilySettings, IpNetwork, LogCategory, LogLevel, NetworkChange, NetworkOutcome,
     NetworkSettings, NetworkStep, OutsideChanges, OutsideRoute, TunnelDevice, TunnelRoutes,
 };
-use fvm_os_api_windows::os_api::{self, DadState, Family, Luid, Route};
+use fvm_os_api_windows::network::{self, DadState, Family, Luid, Route};
+use fvm_os_api_windows::process;
 
 use crate::Log;
 use crate::routes::{self, BYPASS_ROUTE_METRIC};
@@ -95,7 +96,7 @@ struct Physical {
 impl Physical {
     fn read(log: &Log) -> Result<Self, Failure> {
         let table =
-            os_api::routes(Family::Ipv4).map_err(|error| failure(NetworkStep::Network, error))?;
+            network::routes(Family::Ipv4).map_err(|error| failure(NetworkStep::Network, error))?;
         let primary = routes::primary(&table, log)
             .map_err(|error| failure(NetworkStep::Network, error.message))?;
         let ipv4_router = primary
@@ -103,7 +104,7 @@ impl Physical {
             .router
             .parse()
             .expect("the primary network's router is an IPv4 address");
-        let ipv6_router = os_api::routes(Family::Ipv6)
+        let ipv6_router = network::routes(Family::Ipv6)
             .map_err(|error| failure(NetworkStep::Network, error))?
             .into_iter()
             .filter(|route| {
@@ -145,12 +146,14 @@ impl Physical {
     }
 }
 
-fn table(destinations: impl IntoIterator<Item = IpAddr>) -> Result<Vec<Route>, os_api::Error> {
+fn table(
+    destinations: impl IntoIterator<Item = IpAddr>,
+) -> Result<Vec<Route>, fvm_os_api_windows::Error> {
     let families: Vec<Family> = destinations.into_iter().map(Family::of).collect();
     let mut table = Vec::new();
     for family in [Family::Ipv4, Family::Ipv6] {
         if families.contains(&family) {
-            table.extend(os_api::routes(family)?);
+            table.extend(network::routes(family)?);
         }
     }
     Ok(table)
@@ -161,7 +164,7 @@ fn found(table: &[Route], route: &OutsideRoute) -> Option<Route> {
         row.destination == route.destination.address
             && row.prefix_length == route.destination.prefix_length
             && row.next_hop == route.router
-            && os_api::interface(row.interface)
+            && network::interface(row.interface)
                 .is_ok_and(|interface| interface.guid == route.service_id)
     })
 }
@@ -172,7 +175,7 @@ fn look_up(
     log: &Log,
 ) -> Result<NetworkOutcome, Failure> {
     let tunnel = tunnel_interface(tunnel)?;
-    let dns_service_id = os_api::interface(tunnel)
+    let dns_service_id = network::interface(tunnel)
         .map_err(|error| failure(NetworkStep::Network, error))?
         .guid;
     let physical = Physical::read(log)?;
@@ -279,7 +282,7 @@ fn apply_steps(
         .collect();
     *unchanged = Some(before);
     for row in rows {
-        os_api::delete_route(&row).map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
+        network::delete_route(&row).map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
         *unchanged = None;
     }
     if let Some(mtu) = settings.mtu {
@@ -289,19 +292,19 @@ fn apply_steps(
             &[Family::Ipv4]
         };
         for &family in families {
-            os_api::set_mtu(tunnel, family, mtu)
+            network::set_mtu(tunnel, family, mtu)
                 .map_err(|error| failure(NetworkStep::Mtu, error))?;
         }
     }
     for address in addresses(settings) {
-        match os_api::add_address(tunnel, address.address, address.prefix_length) {
+        match network::add_address(tunnel, address.address, address.prefix_length) {
             Ok(()) => {}
             Err(error) if error.already_exists() => {}
             Err(error) => return Err(failure(NetworkStep::Addresses, error)),
         }
     }
     for route in add {
-        match os_api::add_route(&physical.os_route(route)) {
+        match network::add_route(&physical.os_route(route)) {
             Ok(()) => added.push(route.clone()),
             Err(error) if error.already_exists() => {}
             Err(error) => return Err(failure(NetworkStep::OutsideRoutes, error)),
@@ -312,24 +315,24 @@ fn apply_steps(
         return Ok(Vec::new());
     }
     if matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
-        os_api::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
+        network::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
             .map_err(|error| failure(NetworkStep::Routes, error))?;
     }
     for route in tunnel_routes(tunnel, settings) {
-        match os_api::add_route(&route) {
+        match network::add_route(&route) {
             Ok(()) => {}
             Err(error) if error.already_exists() => {}
             Err(error) => return Err(failure(NetworkStep::Routes, error)),
         }
     }
-    let guid = os_api::interface(tunnel)
+    let guid = network::interface(tunnel)
         .map_err(|error| failure(NetworkStep::Dns, error))?
         .guid;
     for family in [Family::Ipv4, Family::Ipv6] {
         let servers = dns_servers(settings, family);
         let had = previous.is_some_and(|previous| !dns_servers(previous, family).is_empty());
         if !servers.is_empty() || had {
-            os_api::set_dns_servers(&guid, family, &servers)
+            network::set_dns_servers(&guid, family, &servers)
                 .map_err(|error| failure(NetworkStep::Dns, error))?;
         }
     }
@@ -405,7 +408,7 @@ fn remove_previous(
         if kept.contains(&address) {
             continue;
         }
-        match os_api::delete_address(tunnel, address.address) {
+        match network::delete_address(tunnel, address.address) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
             Err(error) => return Err(failure(NetworkStep::Addresses, error)),
@@ -416,7 +419,7 @@ fn remove_previous(
         if wanted.contains(&route) {
             continue;
         }
-        match os_api::delete_route(&route) {
+        match network::delete_route(&route) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
             Err(error) => return Err(failure(NetworkStep::Routes, error)),
@@ -424,7 +427,7 @@ fn remove_previous(
     }
     let was_full = matches!(previous.ipv4.routes, TunnelRoutes::Full {});
     if was_full && !matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
-        os_api::set_metric(tunnel, Family::Ipv4, None)
+        network::set_metric(tunnel, Family::Ipv4, None)
             .map_err(|error| failure(NetworkStep::Routes, error))?;
     }
     Ok(())
@@ -474,7 +477,7 @@ fn netsh(args: &[&str]) -> Result<(), Failure> {
         })
         .map_err(|error| error.to_string())
         .and_then(|stdio| {
-            os_api::spawn(NETSH, args, &environment, stdio).map_err(|error| error.to_string())
+            process::spawn(NETSH, args, &environment, stdio).map_err(|error| error.to_string())
         })
         .map_err(|error| failure(NetworkStep::Wins, format!("netsh: {error}")))?;
     let ended = process
@@ -517,7 +520,7 @@ fn confirm(
     routes_and_dns: bool,
 ) -> Result<(), Failure> {
     for address in addresses(settings) {
-        let present = os_api::addresses(Family::of(address.address))
+        let present = network::addresses(Family::of(address.address))
             .map_err(|error| failure(NetworkStep::Addresses, error))?
             .iter()
             .any(|found| {
@@ -537,7 +540,7 @@ fn confirm(
         }
     }
     if let Some(mtu) = settings.mtu {
-        let read = os_api::interface_settings(tunnel, Family::Ipv4)
+        let read = network::interface_settings(tunnel, Family::Ipv4)
             .map_err(|error| failure(NetworkStep::Mtu, error))?;
         if read.mtu != mtu {
             return Err(failure(
@@ -582,7 +585,7 @@ fn confirm(
         .filter(|_| routes_and_dns)
     {
         let servers = dns_servers(settings, family);
-        let read = os_api::dns_servers(tunnel, family)
+        let read = network::dns_servers(tunnel, family)
             .map_err(|error| failure(NetworkStep::Dns, error))?;
         if read != servers {
             return Err(failure(
@@ -632,7 +635,7 @@ fn remove_replaced(replaced: &NetworkSettings) -> Result<(), Failure> {
     };
     let routes = tunnel_routes(tunnel, replaced);
     for route in &routes {
-        match os_api::delete_route(route) {
+        match network::delete_route(route) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
             Err(error) => return Err(failure(NetworkStep::Routes, error)),
@@ -694,7 +697,7 @@ fn routing_facts(
     tunnel: Luid,
 ) -> Result<(Vec<Luid>, Vec<Chosen>), Failure> {
     let address = settings.ipv4.address.address;
-    let owners = os_api::addresses(Family::Ipv4)
+    let owners = network::addresses(Family::Ipv4)
         .map_err(|error| failure(NetworkStep::Addresses, error))?
         .into_iter()
         .filter(|found| found.address == address)
@@ -703,7 +706,7 @@ fn routing_facts(
     let chosen = tunnel_routes(tunnel, settings)
         .into_iter()
         .map(|route| {
-            let (best, source) = os_api::best_route(first_address(&route))
+            let (best, source) = network::best_route(first_address(&route))
                 .map_err(|error| failure(NetworkStep::Routes, error))?;
             Ok((route, best, source))
         })
@@ -783,7 +786,7 @@ fn routing_problem(
 }
 
 fn alias(luid: Luid) -> String {
-    os_api::interface(luid).map_or_else(
+    network::interface(luid).map_or_else(
         |error| format!("an unreadable interface ({error})"),
         |interface| interface.alias,
     )
@@ -793,11 +796,11 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
     let mut failed = None;
     if !changes.dns_service_id.is_empty() {
         for family in [Family::Ipv4, Family::Ipv6] {
-            if let Err(error) = os_api::set_dns_servers(&changes.dns_service_id, family, &[]) {
+            if let Err(error) = network::set_dns_servers(&changes.dns_service_id, family, &[]) {
                 failed.get_or_insert(failure(NetworkStep::Dns, error));
             }
         }
-        match os_api::clear_wins_servers(&changes.dns_service_id) {
+        match network::clear_wins_servers(&changes.dns_service_id) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
             Err(error) => {
@@ -812,7 +815,7 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
         Ok(before) => {
             for route in &changes.routes {
                 if let Some(row) = found(before, route) {
-                    match os_api::delete_route(&row) {
+                    match network::delete_route(&row) {
                         Ok(()) => deleted = true,
                         Err(error) => {
                             failed.get_or_insert(failure(NetworkStep::OutsideRoutes, error));
@@ -866,7 +869,7 @@ mod tests {
     use crate::routes::{ROUTE_WRITES, Undo};
 
     fn loopback() -> Luid {
-        os_api::best_route(Ipv4Addr::LOCALHOST.into())
+        network::best_route(Ipv4Addr::LOCALHOST.into())
             .unwrap()
             .0
             .interface
@@ -877,7 +880,7 @@ mod tests {
             Family::Ipv4 => "Tcpip",
             Family::Ipv6 => "Tcpip6",
         };
-        let guid = os_api::interface(luid).unwrap().guid;
+        let guid = network::interface(luid).unwrap().guid;
         format!(r"HKLM\SYSTEM\CurrentControlSet\Services\{service}\Parameters\Interfaces\{guid}")
     }
 
@@ -995,14 +998,14 @@ mod tests {
         let first_include = network("198.51.100.128", 25);
         let second_include = network("198.51.100.0", 26);
         let (dns_service_id, gateway_route) = look_up_route(network("192.0.2.97", 32));
-        assert_eq!(dns_service_id, os_api::interface(loopback()).unwrap().guid);
+        assert_eq!(dns_service_id, network::interface(loopback()).unwrap().guid);
         let physical = Physical::read(&quiet()).ok().unwrap();
         let gateway_row = physical.os_route(&gateway_route);
         let _undo = Undo(move || {
-            let _ = os_api::delete_route(&gateway_row);
-            let _ = os_api::delete_route(&on_loopback(first_include));
-            let _ = os_api::delete_route(&on_loopback(second_include));
-            let _ = os_api::delete_address(loopback(), "198.51.100.97".parse().unwrap());
+            let _ = network::delete_route(&gateway_row);
+            let _ = network::delete_route(&on_loopback(first_include));
+            let _ = network::delete_route(&on_loopback(second_include));
+            let _ = network::delete_address(loopback(), "198.51.100.97".parse().unwrap());
         });
 
         let first = settings(first_include);
@@ -1023,11 +1026,11 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let table = os_api::routes(Family::Ipv4).unwrap();
+        let table = network::routes(Family::Ipv4).unwrap();
         assert!(routes::has(&table, &on_loopback(first_include)));
         assert!(routes::has(&table, &gateway_row));
         assert_eq!(
-            os_api::dns_servers(loopback(), Family::Ipv4),
+            network::dns_servers(loopback(), Family::Ipv4),
             Ok(first.dns_servers.clone())
         );
 
@@ -1048,7 +1051,7 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let table = os_api::routes(Family::Ipv4).unwrap();
+        let table = network::routes(Family::Ipv4).unwrap();
         assert!(!routes::has(&table, &on_loopback(first_include)));
         assert!(routes::has(&table, &on_loopback(second_include)));
 
@@ -1063,11 +1066,11 @@ mod tests {
         );
         assert_eq!(reverted, NetworkOutcome::Reverted { left: Vec::new() });
         assert!(!routes::has(
-            &os_api::routes(Family::Ipv4).unwrap(),
+            &network::routes(Family::Ipv4).unwrap(),
             &gateway_row
         ));
         assert_eq!(
-            os_api::dns_servers(loopback(), Family::Ipv4),
+            network::dns_servers(loopback(), Family::Ipv4),
             Ok(Vec::new())
         );
     }
@@ -1079,9 +1082,9 @@ mod tests {
         let physical = Physical::read(&quiet()).ok().unwrap();
         let gateway_row = physical.os_route(&gateway_route);
         let _undo = Undo(move || {
-            let _ = os_api::delete_route(&gateway_row);
+            let _ = network::delete_route(&gateway_row);
         });
-        os_api::add_route(&gateway_row).unwrap();
+        network::add_route(&gateway_row).unwrap();
 
         let reverted = super::change(
             &NetworkChange::Revert {
@@ -1094,7 +1097,7 @@ mod tests {
         );
         assert_eq!(reverted, NetworkOutcome::Reverted { left: Vec::new() });
         assert!(!routes::has(
-            &os_api::routes(Family::Ipv4).unwrap(),
+            &network::routes(Family::Ipv4).unwrap(),
             &gateway_row
         ));
     }
@@ -1109,11 +1112,11 @@ mod tests {
         let physical = Physical::read(&quiet()).ok().unwrap();
         let gateway_row = physical.os_route(&gateway_route);
         let _undo = Undo(move || {
-            let _ = os_api::delete_route(&gateway_row);
-            let _ = os_api::delete_route(&on_loopback(replaced_include));
-            let _ = os_api::delete_route(&on_loopback(include));
+            let _ = network::delete_route(&gateway_row);
+            let _ = network::delete_route(&on_loopback(replaced_include));
+            let _ = network::delete_route(&on_loopback(include));
             for address in ["198.51.100.97", "198.51.100.98"] {
-                let _ = os_api::delete_address(loopback(), address.parse().unwrap());
+                let _ = network::delete_address(loopback(), address.parse().unwrap());
             }
         });
         let replaced = settings(replaced_include);
@@ -1149,19 +1152,19 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let table = os_api::routes(Family::Ipv4).unwrap();
+        let table = network::routes(Family::Ipv4).unwrap();
         assert!(routes::has(&table, &gateway_row));
         assert!(routes::has(&table, &on_loopback(replaced_include)));
         assert!(!routes::has(&table, &on_loopback(include)));
-        let addresses = os_api::addresses(Family::Ipv4).unwrap();
+        let addresses = network::addresses(Family::Ipv4).unwrap();
         assert!(addresses.iter().any(|found| found.interface == loopback()
             && found.address == "198.51.100.98".parse::<IpAddr>().unwrap()));
         assert_eq!(
-            os_api::dns_servers(loopback(), Family::Ipv4),
+            network::dns_servers(loopback(), Family::Ipv4),
             Ok(replaced.dns_servers.clone())
         );
 
-        os_api::delete_address(loopback(), "198.51.100.97".parse().unwrap()).unwrap();
+        network::delete_address(loopback(), "198.51.100.97".parse().unwrap()).unwrap();
         let switched = super::change(
             &NetworkChange::Switch {
                 settings: Box::new(next.clone()),
@@ -1177,12 +1180,12 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let table = os_api::routes(Family::Ipv4).unwrap();
+        let table = network::routes(Family::Ipv4).unwrap();
         assert!(routes::has(&table, &on_loopback(include)));
         assert!(!routes::has(&table, &on_loopback(replaced_include)));
         assert!(routes::has(&table, &gateway_row));
         assert_eq!(
-            os_api::dns_servers(loopback(), Family::Ipv4),
+            network::dns_servers(loopback(), Family::Ipv4),
             Ok(next.dns_servers)
         );
     }
@@ -1191,7 +1194,7 @@ mod tests {
     fn wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid() {
         let _turn = ROUTE_WRITES.lock().unwrap_or_else(PoisonError::into_inner);
         let loopback = loopback();
-        let guid = os_api::interface(loopback).unwrap().guid;
+        let guid = network::interface(loopback).unwrap().guid;
         let key = format!(
             r"HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\Tcpip_{guid}"
         );
@@ -1223,13 +1226,13 @@ mod tests {
             registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
             Some(Some(r"192.0.2.137\0192.0.2.138".to_owned()))
         );
-        os_api::clear_wins_servers(&guid).unwrap();
+        network::clear_wins_servers(&guid).unwrap();
         assert_eq!(
             registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
             Some(Some(String::new()))
         );
         reg(&["delete", &key, "/v", "NameServerList", "/f"]).unwrap();
-        let error = os_api::clear_wins_servers(&guid).unwrap_err();
+        let error = network::clear_wins_servers(&guid).unwrap_err();
         assert!(error.not_found(), "{error}");
         assert_eq!(
             registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
@@ -1261,7 +1264,7 @@ mod tests {
                 left: Vec::new(),
             }
         );
-        let addresses = os_api::addresses(Family::Ipv4).unwrap();
+        let addresses = network::addresses(Family::Ipv4).unwrap();
         assert!(!addresses.iter().any(|found| found.interface == loopback()
             && found.address == "198.51.100.97".parse::<IpAddr>().unwrap()));
     }
@@ -1378,9 +1381,9 @@ mod tests {
             metric: BYPASS_ROUTE_METRIC,
         };
         let _undo = Undo(move || {
-            let _ = os_api::delete_route(&through_primary);
-            let _ = os_api::delete_route(&on_loopback(include));
-            let _ = os_api::delete_address(loopback(), "198.51.100.97".parse().unwrap());
+            let _ = network::delete_route(&through_primary);
+            let _ = network::delete_route(&on_loopback(include));
+            let _ = network::delete_address(loopback(), "198.51.100.97".parse().unwrap());
         });
         let settings = settings(include);
         let apply = |outside: Vec<IpNetwork>| {
@@ -1413,7 +1416,7 @@ mod tests {
             NetworkOutcome::Checked { complete: true }
         );
 
-        os_api::add_route(&through_primary).unwrap();
+        network::add_route(&through_primary).unwrap();
         assert_eq!(
             check(Vec::new()),
             NetworkOutcome::Checked { complete: false }

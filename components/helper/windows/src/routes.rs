@@ -1,9 +1,9 @@
-//! The routing table, through the IP Helper API in `os_api`. The exception routes go through the
-//! gateway of the primary interface: the hardware Ethernet or Wi-Fi adapter whose default route has
-//! the lowest metric. Virtual adapters, such as FortiClient's or Hyper-V's, report Ethernet too, so
-//! the hardware flag tells them apart. The app sees its GUID as the service ID and its name as the
-//! service name, as a network service on macOS. The routes live in the active routing table only,
-//! so Windows forgets them at a restart.
+//! The routing table, through the IP Helper API in `fvm_os_api_windows::network`. The exception
+//! routes go through the gateway of the primary interface: the hardware Ethernet or Wi-Fi adapter
+//! whose default route has the lowest metric. Virtual adapters, such as FortiClient's or Hyper-V's,
+//! report Ethernet too, so the hardware flag tells them apart. The app sees its GUID as the service
+//! ID and its name as the service name, as a network service on macOS. The routes live in the
+//! active routing table only, so Windows forgets them at a restart.
 
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
@@ -14,7 +14,7 @@ use fvm_contract::app_helper::{
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, LogCategory, LogLevel, NetworkCheck,
 };
-use fvm_os_api_windows::os_api::{self, DadState, Family, Luid, Medium, Route};
+use fvm_os_api_windows::network::{self, DadState, Family, Luid, Medium, Route};
 
 use crate::Log;
 
@@ -66,7 +66,7 @@ fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, 
     for added in &change.remove {
         for route in before.iter().filter(|route| was_added(route, added)) {
             changed = true;
-            match os_api::delete_route(route) {
+            match network::delete_route(route) {
                 Ok(()) => removed += 1,
                 Err(failure) => log(
                     LogLevel::Error,
@@ -85,7 +85,7 @@ fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, 
             continue;
         }
         changed = true;
-        match os_api::add_route(&route) {
+        match network::add_route(&route) {
             Ok(()) => tried.push(asked),
             // Added since the table was read, by someone else.
             Err(failure) if failure.already_exists() => {}
@@ -165,7 +165,7 @@ fn was_added(route: &Route, added: &AddedRoute) -> bool {
             && route.prefix_length == prefix_length
             && route.next_hop == IpAddr::V4(gateway)
             // An interface that went away took its routes with it.
-            && os_api::interface(route.interface)
+            && network::interface(route.interface)
                 .is_ok_and(|interface| interface.guid == added.service_id)
     })
 }
@@ -188,24 +188,24 @@ pub(crate) struct Primary {
 
 /// The primary interface among the default routes of `table`.
 pub(crate) fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError> {
-    let unreadable = |failure: os_api::Error| {
+    let unreadable = |failure: fvm_os_api_windows::Error| {
         let message = format!("reading the primary interface failed: {failure}");
         log(LogLevel::Error, LogCategory::Routes, &message);
         error(HelperErrorCode::InternalError, message)
     };
-    let mut best: Option<(u32, &Route, os_api::Interface)> = None;
+    let mut best: Option<(u32, &Route, network::Interface)> = None;
     for route in table {
         if route.prefix_length != 0 || !route.destination.is_unspecified() {
             continue;
         }
         // An interface that went away meanwhile is not the primary one.
-        let Ok(interface) = os_api::interface(route.interface) else {
+        let Ok(interface) = network::interface(route.interface) else {
             continue;
         };
         if !interface.up || !interface.hardware || interface.medium == Medium::Other {
             continue;
         }
-        let Ok(settings) = os_api::interface_settings(route.interface, Family::Ipv4) else {
+        let Ok(settings) = network::interface_settings(route.interface, Family::Ipv4) else {
             continue;
         };
         let metric = route.metric.saturating_add(settings.metric);
@@ -229,7 +229,7 @@ pub(crate) fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError
         IpAddr::V4(router) if !router.is_unspecified() => router,
         _ => return Err(no_router_or_address()),
     };
-    let address = os_api::addresses(Family::Ipv4)
+    let address = network::addresses(Family::Ipv4)
         .map_err(unreadable)?
         .into_iter()
         .find(|address| {
@@ -250,7 +250,7 @@ pub(crate) fn primary(table: &[Route], log: &Log) -> Result<Primary, HelperError
 }
 
 fn read_table(log: &Log) -> Result<Vec<Route>, HelperError> {
-    os_api::routes(Family::Ipv4).map_err(|failure| {
+    network::routes(Family::Ipv4).map_err(|failure| {
         let message = format!("reading the routing table failed: {failure}");
         log(LogLevel::Error, LogCategory::Routes, &message);
         error(HelperErrorCode::InternalError, message)
@@ -375,13 +375,13 @@ mod tests {
     }
 
     fn primary_now() -> Primary {
-        primary(&os_api::routes(Family::Ipv4).unwrap(), &quiet()).unwrap()
+        primary(&network::routes(Family::Ipv4).unwrap(), &quiet()).unwrap()
     }
 
     /// Whether the table has `route` through the primary interface.
     fn on_primary(route: &BypassRoute) -> bool {
         let wanted = as_route(route, primary_now().luid).unwrap();
-        has(&os_api::routes(Family::Ipv4).unwrap(), &wanted)
+        has(&network::routes(Family::Ipv4).unwrap(), &wanted)
     }
 
     fn read_network() -> BypassRoutesSnapshot {
@@ -414,7 +414,7 @@ mod tests {
         let route = host("192.0.2.88", &network.router);
         let undo_route = as_route(&route, primary_now().luid).unwrap();
         let _undo = Undo(move || {
-            let _ = os_api::delete_route(&undo_route);
+            let _ = network::delete_route(&undo_route);
         });
         let expect = || NetworkCheck::Expect {
             network: network.clone(),
@@ -485,7 +485,7 @@ mod tests {
         ));
         assert_eq!(error.code, HelperErrorCode::WrongPhase, "{error:?}");
         let destination = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 93));
-        let table = os_api::routes(Family::Ipv4).unwrap();
+        let table = network::routes(Family::Ipv4).unwrap();
         assert!(
             !table
                 .iter()
