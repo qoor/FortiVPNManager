@@ -124,7 +124,7 @@ git submodule update --init third_party/openconnect
 ## 구조
 
 - **공통 로직**: Rust
-- **macOS**: UI, OS 연동, Helper OS 영역 (Swift)
+- **macOS**: UI, OS 연동 (Swift), Helper OS 영역 (Rust)
 - **Windows**: UI, OS 연동 (C#, WinUI 3), Helper OS 영역 (Rust, Windows 서비스)
 - **VPN**: Helper 안의 OpenConnect 라이브러리
   - macOS: Helper에 포함

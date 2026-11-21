@@ -124,7 +124,7 @@ git submodule update --init third_party/openconnect
 ## Architecture
 
 - **Shared logic**: Rust
-- **macOS**: UI, OS integration, Helper OS area (Swift)
+- **macOS**: UI, OS integration (Swift), Helper OS area (Rust)
 - **Windows**: UI, OS integration (C#, WinUI 3), Helper OS area (Rust, a Windows service)
 - **VPN**: the OpenConnect library inside the Helper
   - macOS: part of the Helper

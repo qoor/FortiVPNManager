@@ -32,6 +32,15 @@ paths:
   - 업데이트 준비·설치
   - 사유: 다른 로컬 프로그램의 요청 누적 방지
 
+## macOS
+- 앱↔Helper 통신: NSXPC 유지
+  - 사유: 설치 중 다른 빌드 Helper와 getVersion·exitWhenIdle로 통신
+  - getVersion·exitWhenIdle의 selector·응답 형식 변경 금지
+- XPC 프로토콜 선언: 앱·Helper 공용 ObjC 헤더 하나
+  - 사유: 두 선언의 수동 일치 제거
+- SIGTERM 수신: signal-hook 사용
+  - 사유: 신호 차단 방식은 Helper가 실행하는 자식 프로세스에 차단 상태 상속
+
 # 설치·배포
 - 버전 번호의 pre-release 꼬리표 금지
   - 사유: macOS·MSI 버전 칸이 숫자 3개만 허용
