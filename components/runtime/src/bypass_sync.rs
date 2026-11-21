@@ -3,7 +3,9 @@
 //! wants the VPN up, so a change of that is synced at once: an attempt's routes are in place
 //! before the tunnel's. The Helper removes them when the app quits or its connection goes away,
 //! so the app writes them again on a new connection. A failed write, or a failed read after the
-//! connection was lost, is retried a few times, then reported once as a notification.
+//! connection was lost, is retried a few times, each counted on its own. Writes that still fail
+//! are reported once as a notification; reads that still fail stop quietly, and a readiness check
+//! that finds the Helper syncs again.
 
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
@@ -38,6 +40,7 @@ pub(crate) struct Bypass {
     syncing: bool,
     sync_requested: bool,
     write_failures: u32,
+    read_failures: u32,
     retry_generation: u64,
     settle_generation: u64,
     /// The Helper answered with this build; a Helper that becomes ready later starts a sync.
@@ -61,6 +64,7 @@ impl Default for Bypass {
             syncing: false,
             sync_requested: false,
             write_failures: 0,
+            read_failures: 0,
             retry_generation: 0,
             settle_generation: 0,
             helper_ready: false,
@@ -168,7 +172,7 @@ impl Runtime {
     }
 
     /// The Helper connection is gone, and the routes with it: the next one gets them again, and a
-    /// failed read is retried until it does.
+    /// failed read is retried a few times.
     pub(crate) fn bypass_connection_lost(&mut self) {
         self.bypass.connection_lost = true;
         self.sync_bypass_routes_soon();
@@ -227,7 +231,10 @@ impl Runtime {
         self.call_helper(
             HelperCall::ReadBypassRoutes {},
             |runtime, response| match runtime.routes_reply(response) {
-                Ok((snapshot, routes)) => runtime.plan_and_write(snapshot, &routes),
+                Ok((snapshot, routes)) => {
+                    runtime.bypass.read_failures = 0;
+                    runtime.plan_and_write(snapshot, &routes);
+                }
                 Err(error) => runtime.sync_failed(SyncFailure {
                     failure: error,
                     writing: false,
@@ -361,6 +368,7 @@ impl Runtime {
     fn sync_succeeded(&mut self, current: &BypassRoutesSnapshot, status: BypassStatus) {
         self.bypass.current = Some(current.clone());
         self.bypass.write_failures = 0;
+        self.bypass.read_failures = 0;
         self.bypass.retry_generation += 1;
         self.bypass.connection_lost = false;
         self.bypass.status = status;
@@ -385,8 +393,15 @@ impl Runtime {
             };
             return self.sync_done();
         }
-        self.bypass.write_failures += 1;
-        let retrying = self.bypass.write_failures <= MAX_WRITE_RETRIES;
+        let was_retrying = self.bypass.write_failures <= MAX_WRITE_RETRIES
+            && self.bypass.read_failures <= MAX_WRITE_RETRIES;
+        if failure.writing {
+            self.bypass.write_failures += 1;
+        } else {
+            self.bypass.read_failures += 1;
+        }
+        let retrying = self.bypass.write_failures <= MAX_WRITE_RETRIES
+            && self.bypass.read_failures <= MAX_WRITE_RETRIES;
         self.bypass.status = BypassStatus::Failed {
             failure: failure.failure.clone(),
             retry_in_seconds: retrying.then_some(WRITE_RETRY_DELAY.as_secs()),
@@ -404,18 +419,20 @@ impl Runtime {
                     }
                 });
             });
-        } else if self.bypass.write_failures == MAX_WRITE_RETRIES + 1 {
+        } else if was_retrying {
             self.system_log(
                 LogLevel::Error,
                 LogCategory::BypassRoutes,
                 format!("exception routes still failed after {MAX_WRITE_RETRIES} retries; retrying stopped"),
             );
-            self.action(PortAction::PostNotification {
-                notification: UserNotification::ExceptionRulesNotApplied {
-                    retries: MAX_WRITE_RETRIES,
-                    failure: failure.failure,
-                },
-            });
+            if failure.writing {
+                self.action(PortAction::PostNotification {
+                    notification: UserNotification::ExceptionRulesNotApplied {
+                        retries: MAX_WRITE_RETRIES,
+                        failure: failure.failure,
+                    },
+                });
+            }
         }
         self.sync_done();
     }

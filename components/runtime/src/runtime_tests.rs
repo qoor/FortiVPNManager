@@ -1255,6 +1255,155 @@ fn a_read_that_fails_after_the_helper_connection_was_lost_is_retried() {
     });
 }
 
+#[test]
+fn a_read_that_still_fails_after_the_helper_connection_was_lost_stops_quietly() {
+    let mut app = app_with_the_rule_applied();
+    app.routes_unreachable = true;
+    app.send(ToRuntime::Event {
+        event: SystemEvent::HelperConnectionLost {},
+    });
+    app.settle_until("the first failure", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Failed { .. }))
+    });
+    for _ in 0..3 {
+        let calls = app.route_calls();
+        network_changed(&app);
+        app.settle_until("another try", |app| app.route_calls() > calls);
+        app.settle();
+    }
+    assert_eq!(
+        app.bypass_status(),
+        Some(&BypassStatus::Failed {
+            failure: BypassFailure::HelperUnreachable {
+                failure: HelperChannelFailure::ConnectionLost {},
+            },
+            retry_in_seconds: None,
+            stopped_after_retries: Some(3),
+        })
+    );
+    let notifications = app
+        .actions
+        .iter()
+        .filter(|action| {
+            matches!(
+                action,
+                PortAction::PostNotification {
+                    notification: UserNotification::ExceptionRulesNotApplied { .. },
+                }
+            )
+        })
+        .count();
+    assert_eq!(notifications, 0);
+}
+
+#[test]
+fn routes_the_routing_table_still_did_not_keep_are_reported_once() {
+    let mut app = App::new();
+    app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
+    app.service = Some(office_wifi());
+    app.keeps_routes = false;
+    app.launch();
+    want_the_vpn(&mut app);
+    app.settle_until("the first failure", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Failed { .. }))
+    });
+    for _ in 0..4 {
+        let calls = app.route_calls();
+        network_changed(&app);
+        app.settle_until("another try", |app| app.route_calls() > calls);
+        app.settle();
+    }
+    assert_eq!(
+        app.bypass_status(),
+        Some(&BypassStatus::Failed {
+            failure: BypassFailure::RoutesNotKept {},
+            retry_in_seconds: None,
+            stopped_after_retries: Some(3),
+        })
+    );
+    let notifications = app
+        .actions
+        .iter()
+        .filter(|action| {
+            matches!(
+                action,
+                PortAction::PostNotification {
+                    notification: UserNotification::ExceptionRulesNotApplied { .. },
+                }
+            )
+        })
+        .count();
+    assert_eq!(notifications, 1);
+}
+
+#[test]
+fn writes_that_fail_once_the_helper_is_back_are_reported_after_reads_stopped_quietly() {
+    let mut app = app_with_the_rule_applied();
+    app.exception_routes.clear();
+    app.routes_unreachable = true;
+    app.keeps_routes = false;
+    app.send(ToRuntime::Event {
+        event: SystemEvent::HelperConnectionLost {},
+    });
+    app.settle_until("the first failure", |app| {
+        matches!(app.bypass_status(), Some(BypassStatus::Failed { .. }))
+    });
+    for _ in 0..3 {
+        let calls = app.route_calls();
+        network_changed(&app);
+        app.settle_until("another try", |app| app.route_calls() > calls);
+        app.settle();
+    }
+    assert!(matches!(
+        app.bypass_status(),
+        Some(BypassStatus::Failed {
+            stopped_after_retries: Some(3),
+            ..
+        })
+    ));
+    let notifications = app
+        .actions
+        .iter()
+        .filter(|action| {
+            matches!(
+                action,
+                PortAction::PostNotification {
+                    notification: UserNotification::ExceptionRulesNotApplied { .. },
+                }
+            )
+        })
+        .count();
+    assert_eq!(notifications, 0);
+    app.routes_unreachable = false;
+    for _ in 0..4 {
+        let calls = app.route_calls();
+        network_changed(&app);
+        app.settle_until("another try", |app| app.route_calls() > calls);
+        app.settle();
+    }
+    assert_eq!(
+        app.bypass_status(),
+        Some(&BypassStatus::Failed {
+            failure: BypassFailure::RoutesNotKept {},
+            retry_in_seconds: None,
+            stopped_after_retries: Some(3),
+        })
+    );
+    let notifications = app
+        .actions
+        .iter()
+        .filter(|action| {
+            matches!(
+                action,
+                PortAction::PostNotification {
+                    notification: UserNotification::ExceptionRulesNotApplied { .. },
+                }
+            )
+        })
+        .count();
+    assert_eq!(notifications, 1);
+}
+
 /// A sync that failed and stopped is tried again once a readiness check finds the Helper.
 #[test]
 fn a_failed_sync_is_tried_again_when_the_helper_answers() {
