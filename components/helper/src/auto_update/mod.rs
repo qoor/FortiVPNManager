@@ -20,8 +20,8 @@ use std::str;
 use std::sync::Arc;
 
 use fvm_contract::app_helper::{
-    UPDATE_RESULT_SUFFIX, UPDATE_STARTED_SUFFIX, UpdatePrepareRequest, UpdateRefusal, Version,
-    installer_version,
+    CHECKSUMS_FILE, CHECKSUMS_SIGNATURE_FILE, UPDATE_RESULT_SUFFIX, UPDATE_STARTED_SUFFIX,
+    UpdatePrepareRequest, UpdateRefusal, Version, installer_version,
 };
 use fvm_contract::helper_internal::LogLevel;
 use ring::digest::{Context, SHA256};
@@ -35,8 +35,6 @@ pub const PUBLIC_KEY: [u8; 32] = [
 ];
 const VERSION: &str = include_str!("../../../../VERSION");
 const PREPARED: &str = "prepared";
-const CHECKSUMS: &str = "SHA256SUMS.txt";
-const SIGNATURE: &str = "SHA256SUMS.txt.sig";
 const DRAFT_SUFFIX: &str = ".tmp";
 const RUN_SUFFIX: &str = ".run";
 
@@ -78,8 +76,8 @@ impl Staged {
     fn new(staging: &Path, installer: &str) -> Self {
         Self {
             installer: staging.join(installer),
-            checksums: staging.join(CHECKSUMS),
-            signature: staging.join(SIGNATURE),
+            checksums: staging.join(CHECKSUMS_FILE),
+            signature: staging.join(CHECKSUMS_SIGNATURE_FILE),
         }
     }
 }
@@ -259,8 +257,8 @@ impl Installer {
     ) -> Result<Version, NotDone> {
         let copies = [
             (draft, "the installer"),
-            (staged.checksums.as_path(), CHECKSUMS),
-            (staged.signature.as_path(), SIGNATURE),
+            (staged.checksums.as_path(), CHECKSUMS_FILE),
+            (staged.signature.as_path(), CHECKSUMS_SIGNATURE_FILE),
         ];
         for (source, (copy, what)) in sources.into_iter().zip(copies) {
             copy_file(source, copy, what)?;
@@ -278,7 +276,7 @@ impl Installer {
         {
             return Err(NotDone::Refused(
                 UpdateRefusal::SignatureInvalid,
-                format!("{SIGNATURE} does not verify"),
+                format!("{CHECKSUMS_SIGNATURE_FILE} does not verify"),
             ));
         }
         let listed = listed_checksum(&checksums, installer)
@@ -289,7 +287,7 @@ impl Installer {
         if actual != listed {
             return Err(NotDone::Refused(
                 UpdateRefusal::ChecksumMismatch,
-                format!("{installer} does not match {CHECKSUMS}"),
+                format!("{installer} does not match {CHECKSUMS_FILE}"),
             ));
         }
         let Some(version) = installer_version(installer, os::INSTALLER_EXTENSION) else {
@@ -383,7 +381,7 @@ fn copy_file(source: &Path, copy: &Path, what: &str) -> Result<(), NotDone> {
 }
 
 fn listed_checksum<'a>(list: &'a [u8], installer: &str) -> Result<&'a str, String> {
-    let malformed = || format!("{CHECKSUMS} is not a sha256sum list");
+    let malformed = || format!("{CHECKSUMS_FILE} is not a sha256sum list");
     let lines = str::from_utf8(list)
         .ok()
         .and_then(|text| text.strip_suffix('\n'))
@@ -401,10 +399,10 @@ fn listed_checksum<'a>(list: &'a [u8], installer: &str) -> Result<&'a str, Strin
             })
             .ok_or_else(malformed)?;
         if name == installer && listed.replace(hash).is_some() {
-            return Err(format!("{CHECKSUMS} lists {installer} more than once"));
+            return Err(format!("{CHECKSUMS_FILE} lists {installer} more than once"));
         }
     }
-    listed.ok_or_else(|| format!("{CHECKSUMS} does not list {installer}"))
+    listed.ok_or_else(|| format!("{CHECKSUMS_FILE} does not list {installer}"))
 }
 
 fn sha256(path: &Path) -> io::Result<String> {

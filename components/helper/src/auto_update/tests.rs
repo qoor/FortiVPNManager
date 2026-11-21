@@ -111,15 +111,18 @@ impl Setup {
     pub(crate) fn request(&self, installer: &str) -> UpdatePrepareRequest {
         UpdatePrepareRequest {
             installer_path: self.download(installer).display().to_string(),
-            checksums_path: self.download(CHECKSUMS).display().to_string(),
-            signature_path: self.download(SIGNATURE).display().to_string(),
+            checksums_path: self.download(CHECKSUMS_FILE).display().to_string(),
+            signature_path: self
+                .download(CHECKSUMS_SIGNATURE_FILE)
+                .display()
+                .to_string(),
         }
     }
 
     fn download_files(&self, installer: &str, contents: &[u8], list: &[u8], signature: &[u8]) {
         fs::write(self.download(installer), contents).unwrap();
-        fs::write(self.download(CHECKSUMS), list).unwrap();
-        fs::write(self.download(SIGNATURE), signature).unwrap();
+        fs::write(self.download(CHECKSUMS_FILE), list).unwrap();
+        fs::write(self.download(CHECKSUMS_SIGNATURE_FILE), signature).unwrap();
     }
 
     fn signed(&self, installer: &str, contents: &[u8], list: &[u8]) -> UpdatePrepareRequest {
@@ -189,7 +192,11 @@ pub(crate) fn names(directory: &Path) -> Vec<String> {
 }
 
 fn staged_names(installer: &str) -> Vec<String> {
-    let mut names = vec![installer.to_owned(), CHECKSUMS.into(), SIGNATURE.into()];
+    let mut names = vec![
+        installer.to_owned(),
+        CHECKSUMS_FILE.into(),
+        CHECKSUMS_SIGNATURE_FILE.into(),
+    ];
     names.sort();
     names
 }
@@ -285,8 +292,8 @@ fn a_newer_installer_that_verifies_is_kept_prepared_without_starting() {
     assert_eq!(names(&setup.staging()), staged_names(&name));
     for (copy, original) in [
         (name.as_str(), &request.installer_path),
-        (CHECKSUMS, &request.checksums_path),
-        (SIGNATURE, &request.signature_path),
+        (CHECKSUMS_FILE, &request.checksums_path),
+        (CHECKSUMS_SIGNATURE_FILE, &request.signature_path),
     ] {
         assert_eq!(
             fs::read(setup.staging().join(copy)).unwrap(),
@@ -369,8 +376,8 @@ fn the_prepared_update_is_the_installer_whose_copy_was_verified() {
     fs::create_dir_all(setup.staging()).unwrap();
     for left in [
         format!("{name}{DRAFT_SUFFIX}"),
-        CHECKSUMS.into(),
-        SIGNATURE.into(),
+        CHECKSUMS_FILE.into(),
+        CHECKSUMS_SIGNATURE_FILE.into(),
     ] {
         fs::write(setup.staging().join(left), b"").unwrap();
     }

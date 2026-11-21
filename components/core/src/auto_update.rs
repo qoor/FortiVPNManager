@@ -2,15 +2,13 @@ use std::collections::{BTreeMap, VecDeque};
 use std::time::{Duration, SystemTime};
 
 pub use fvm_contract::app_helper::Version;
-use fvm_contract::app_helper::installer_version;
+use fvm_contract::app_helper::{CHECKSUMS_FILE, CHECKSUMS_SIGNATURE_FILE, installer_version};
 use fvm_contract::app_internal::section::RemainingTime;
 use serde::Deserialize;
 
 const RELEASES_URL: &str = "https://github.com/qoor/FortiVPNManager/releases";
 pub const LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/qoor/FortiVPNManager/releases/latest";
-pub const CHECKSUMS_FILE: &str = "SHA256SUMS.txt";
-pub const CHECKSUMS_SIGNATURE_FILE: &str = "SHA256SUMS.txt.sig";
 const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const PAGE_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 pub const DOWNLOADED_PERCENT: u8 = 60;

@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    PreparedUpdateReply, UpdateDiscardReply, UpdateInstallReply, UpdateInstallRequest,
-    UpdatePrepareReply, UpdatePrepareRequest,
+    CHECKSUMS_FILE, CHECKSUMS_SIGNATURE_FILE, PreparedUpdateReply, UpdateDiscardReply,
+    UpdateInstallReply, UpdateInstallRequest, UpdatePrepareReply, UpdatePrepareRequest,
 };
 use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::port::{
@@ -728,11 +728,8 @@ async fn download(
     .await
     .map_err(|detail| transfer_failed(format!("{}: {detail}", update.installer_file_name)))?;
     for (url, name) in [
-        (&update.checksums_url, auto_update::CHECKSUMS_FILE),
-        (
-            &update.checksums_signature_url,
-            auto_update::CHECKSUMS_SIGNATURE_FILE,
-        ),
+        (&update.checksums_url, CHECKSUMS_FILE),
+        (&update.checksums_signature_url, CHECKSUMS_SIGNATURE_FILE),
     ] {
         net::download(url, &folder.join(name), |_| {})
             .await
@@ -741,8 +738,8 @@ async fn download(
     let path = |name: &str| folder.join(name).display().to_string();
     Ok(UpdatePrepareRequest {
         installer_path: path(&update.installer_file_name),
-        checksums_path: path(auto_update::CHECKSUMS_FILE),
-        signature_path: path(auto_update::CHECKSUMS_SIGNATURE_FILE),
+        checksums_path: path(CHECKSUMS_FILE),
+        signature_path: path(CHECKSUMS_SIGNATURE_FILE),
     })
 }
 

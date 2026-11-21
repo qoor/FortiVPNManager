@@ -545,6 +545,8 @@ pub const UPDATE_RECORDS_DIRECTORY_MACOS: &str = "/var/run/com.qoor.FortiVPNMana
 pub const UPDATE_RECORDS_DIRECTORY_WINDOWS: &str = r"C:\Program Files\FortiVPNManager\AutoUpdate";
 pub const UPDATE_STARTED_SUFFIX: &str = ".started";
 pub const UPDATE_RESULT_SUFFIX: &str = ".result";
+pub const CHECKSUMS_FILE: &str = "SHA256SUMS.txt";
+pub const CHECKSUMS_SIGNATURE_FILE: &str = "SHA256SUMS.txt.sig";
 
 /// Sent as its text, such as `26.2.0`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
