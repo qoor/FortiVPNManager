@@ -65,7 +65,7 @@ swap() {
     if [ -e "$installed" ]; then
         mv "$installed" "$previous" || { open "$installed"; echo failed >"$done_file"; return; }
     fi
-    # The old helper exits by itself once its binary is replaced (components/helper/macos/swift/SelfUpdateWatcher.swift).
+    # The old helper exits by itself once its binary is replaced (components/helper/macos/src/self_update.rs).
     if ! ditto "$built" "$installed" || ! open "$installed"; then
         rm -rf "$installed"
         [ -e "$previous" ] && mv "$previous" "$installed" && open "$installed"

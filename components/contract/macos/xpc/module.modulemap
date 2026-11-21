@@ -1,0 +1,4 @@
+module HelperXPC {
+    header "HelperXPC.h"
+    export *
+}

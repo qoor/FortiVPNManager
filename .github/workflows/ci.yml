@@ -102,7 +102,7 @@ jobs:
       - run: FVM_VERSION="$(cat VERSION)" xcodegen generate --spec packaging/macos/project.yml
       # The test bundles need no signing identity.
       - run: |
-          for scheme in ContractTests HelperTests AppSwiftTests; do
+          for scheme in ContractTests AppSwiftTests; do
             xcodebuild -project packaging/macos/FortiVPNManager.xcodeproj -scheme "$scheme" \
               -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO test
           done

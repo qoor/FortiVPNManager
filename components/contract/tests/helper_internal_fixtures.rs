@@ -1,7 +1,5 @@
-//! `fixtures/helper-internal/` pins the JSON of every message between the Helper's Swift side
-//! and the Helper entry (Rust). Rust decodes what Swift sends and encodes what Swift
-//! receives; `tests/macos/HelperInternalTests.swift` checks the Swift types the opposite way against
-//! the same files.
+//! `fixtures/helper-internal/` pins the JSON of every message between the Helper's OS side and the
+//! Helper entry: the entry decodes what the OS side sends and encodes what it receives.
 
 use std::net::{IpAddr, Ipv4Addr};
 

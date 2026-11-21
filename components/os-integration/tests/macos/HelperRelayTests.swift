@@ -1,4 +1,5 @@
 import Foundation
+import HelperXPC
 import Synchronization
 import Testing
 

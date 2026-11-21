@@ -7,7 +7,7 @@
 //!
 //! On Unix the process this runs in must ignore SIGPIPE. The logout request's cookie goes to curl's
 //! stdin pipe, and a write after curl exited must fail with EPIPE instead of killing the process.
-//! A Rust `main` ignores SIGPIPE by itself; the macOS Helper's Swift `main` does it explicitly.
+//! A Rust `main` ignores SIGPIPE by itself.
 
 pub mod backend;
 mod run;

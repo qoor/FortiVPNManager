@@ -43,7 +43,6 @@ release:
 test: gen
 	$(CARGO) test --workspace
 	xcodebuild -project $(PROJECT) -scheme ContractTests -derivedDataPath $(DERIVED) test
-	xcodebuild -project $(PROJECT) -scheme HelperTests -derivedDataPath $(DERIVED) test
 	xcodebuild -project $(PROJECT) -scheme AppSwiftTests -derivedDataPath $(DERIVED) test
 
 ## Signing sanity checks for the built app.

@@ -1,10 +1,9 @@
-//! Messages between the Helper's OS side and the Helper entry in the Helper process: the Helper's
-//! Swift side on macOS, the service's own part on Windows. The OS side accepts and checks
-//! app connections and answers the version check itself; every other app request goes to the entry
+//! Messages between the Helper's OS side and the Helper entry in the Helper process: `relay` and
+//! `xpc` on macOS, the service's own part on Windows. The OS side accepts and checks app
+//! connections and answers the version check itself; every other app request goes to the entry
 //! unread. The entry decides which exception routes to add and remove, and the OS side changes the
-//! routing table as it asks. The JSON follows Swift's enum
-//! coding (see `app_helper`), so the Swift side, `components/contract/macos/HelperInternal.swift`,
-//! uses synthesized `Codable`. The entry only receives `ToEntry` and only sends `FromEntry`.
+//! routing table as it asks. The JSON follows Swift's enum coding, like `app_helper`'s. The entry
+//! only receives `ToEntry` and only sends `FromEntry`.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
@@ -35,9 +34,9 @@ pub enum ToEntry {
         app: u64,
         request: AppRequest,
     },
-    /// macOS: the Helper's own executable was replaced on disk. Once Swift has seen the
-    /// replacement, it sends this before announcing any new app connection, so Rust can refuse
-    /// that connection. Windows cannot replace a running executable.
+    /// macOS: the Helper's own executable was replaced on disk. Once the OS side has seen the
+    /// replacement, it sends this before announcing any new app connection, so the entry can
+    /// refuse that connection. Windows cannot replace a running executable.
     ExecutableReplaced {},
     /// The OS asked the Helper to stop: SIGTERM on macOS, the service stop on Windows.
     TerminationRequested {},
@@ -124,8 +123,8 @@ impl fmt::Debug for AppRequest {
     }
 }
 
-/// Sent by Rust. Swift passes events and output to each app connection in the order they arrive,
-/// because the app reads a run's end from the last event, not from a reply.
+/// Sent by the entry. The OS side passes events and output to each app connection in the order they
+/// arrive, because the app reads a run's end from the last event, not from a reply.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FromEntry {

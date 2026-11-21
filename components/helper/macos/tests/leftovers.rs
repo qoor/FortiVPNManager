@@ -33,9 +33,9 @@ fn changes(dns: &str, destination: &str) -> Value {
     })
 }
 
-fn requests(swift: &Swift) -> Vec<Value> {
+fn requests(os_side: &OsSide) -> Vec<Value> {
     let logged = is("log");
-    swift
+    os_side
         .received
         .iter()
         .filter(|message| !logged(message))
@@ -47,22 +47,22 @@ fn requests(swift: &Swift) -> Vec<Value> {
 fn recorded_network_changes_are_reverted_before_ready() {
     let changes = changes("svc", GATEWAY);
     let record = json!({"processes": [], "gatewayIP": GATEWAY, "outsideChanges": changes});
-    let mut swift = Swift::launch(left_behind(&record.to_string()), Setup::default());
+    let mut os_side = OsSide::launch(left_behind(&record.to_string()), Setup::default());
 
-    let first = swift.receive_within(Duration::from_secs(10));
+    let first = os_side.receive_within(Duration::from_secs(10));
     assert_eq!(
         first,
         Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
     );
-    let before_answer = swift.received_within(Duration::from_millis(300));
+    let before_answer = os_side.received_within(Duration::from_millis(300));
     assert!(before_answer.is_empty(), "{before_answer:#?}");
-    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    assert!(swift.has_log(
+    os_side.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
+    assert!(os_side.has_log(
         "notice routes: reverted the network settings an unfinished run left (0 of 1 route(s) still in place)"
     ));
     assert_eq!(
-        swift.scratch.run_directory_names(),
+        os_side.scratch.run_directory_names(),
         ["config.7", "run.json.tmp"]
     );
 }
@@ -79,34 +79,34 @@ fn every_run_record_left_is_cleaned_up_before_ready() {
         record.to_string(),
     )
     .unwrap();
-    let mut swift = Swift::launch(scratch, Setup::default());
+    let mut os_side = OsSide::launch(scratch, Setup::default());
 
     for (number, changes) in [first, second].into_iter().enumerate() {
-        swift.wait_until("the next cleanup request", |swift| {
-            requests(swift).len() > number
+        os_side.wait_until("the next cleanup request", |os_side| {
+            requests(os_side).len() > number
         });
         assert_eq!(
-            requests(&swift)[number],
+            requests(&os_side)[number],
             json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}),
             "{:#?}",
-            swift.received
+            os_side.received
         );
-        swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+        os_side.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
     }
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
     assert_eq!(
-        swift.scratch.run_directory_names(),
+        os_side.scratch.run_directory_names(),
         ["config.7", "run.json.tmp"]
     );
 }
 
 #[test]
 fn an_unreadable_run_record_is_logged_and_removed() {
-    let mut swift = Swift::launch(left_behind("not JSON"), Setup::default());
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    let record = swift.scratch.run_directory().join("run.json");
+    let mut os_side = OsSide::launch(left_behind("not JSON"), Setup::default());
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
+    let record = os_side.scratch.run_directory().join("run.json");
     assert_eq!(
-        swift.received,
+        os_side.received,
         [
             json!({"log": {
                 "level": "error",
@@ -135,28 +135,28 @@ fn the_sessions_an_earlier_helper_left_are_logged_out_and_deleted_before_ready()
         secrets: Arc::clone(&secrets),
         ..Setup::default()
     };
-    let mut swift = Swift::launch(left_behind(&record.to_string()), setup);
-    let first = swift.receive_within(Duration::from_secs(10));
+    let mut os_side = OsSide::launch(left_behind(&record.to_string()), setup);
+    let first = os_side.receive_within(Duration::from_secs(10));
     assert_eq!(
         first,
         Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
     );
     assert!(gateway.connections().is_empty());
-    swift.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    os_side.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
     assert_eq!(gateway.connections(), [TLS_HANDSHAKE.to_vec()]);
     assert!(secrets.stored().is_empty());
-    let logs = swift.logs();
+    let logs = os_side.logs();
     let logged_out = format!("notice helper: session {ATTEMPT} an earlier helper left: ");
     assert!(
         logs.iter().any(|line| line.starts_with(&logged_out)),
         "{logs:#?}"
     );
-    assert!(swift.has_log(
+    assert!(os_side.has_log(
         "error helper: cannot read the session unreadable an earlier helper left: decryption failed"
     ));
-    let ready = swift.position(is("ready")).unwrap();
-    let last_log = swift.received.iter().rposition(is("log")).unwrap();
+    let ready = os_side.position(is("ready")).unwrap();
+    let last_log = os_side.received.iter().rposition(is("log")).unwrap();
     assert!(last_log < ready);
 }
 
@@ -183,24 +183,24 @@ fn a_session_left_with_a_bad_pin_or_host_is_deleted_without_a_logout_before_read
         secrets: Arc::clone(&secrets),
         ..Setup::default()
     };
-    let mut swift = Swift::launch(Scratch::new(), setup);
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
+    let mut os_side = OsSide::launch(Scratch::new(), setup);
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
     assert!(gateway.connections().is_empty());
     assert!(secrets.stored().is_empty());
     let mut deleted = secrets.deletes();
     deleted.sort();
     assert_eq!(deleted, ["bad-host", "bad-pin"]);
-    assert!(swift.has_log(
+    assert!(os_side.has_log(
         "error helper: cannot read the session bad-pin an earlier helper left: pin 0 is not a \
          pin-sha256: value"
     ));
-    assert!(swift.has_log(
+    assert!(os_side.has_log(
         "error helper: cannot read the session bad-host an earlier helper left: host must be a DNS \
          hostname (letters, digits and hyphens, labels of 1-63) or a dotted-quad IPv4 address"
     ));
-    let ready = swift.position(is("ready")).unwrap();
-    assert_eq!(swift.received.len(), ready + 1, "{:#?}", swift.received);
-    assert_eq!(ready, 2, "{:#?}", swift.received);
+    let ready = os_side.position(is("ready")).unwrap();
+    assert_eq!(os_side.received.len(), ready + 1, "{:#?}", os_side.received);
+    assert_eq!(ready, 2, "{:#?}", os_side.received);
 }
 
 #[test]
@@ -208,8 +208,8 @@ fn without_a_run_record_the_entry_is_ready_at_once() {
     let scratch = Scratch::new();
     let directory = scratch.run_directory();
     DirBuilder::new().mode(0o755).create(&directory).unwrap();
-    let mut swift = Swift::launch(scratch, Setup::default());
-    let first = swift.receive_within(Duration::from_secs(10));
+    let mut os_side = OsSide::launch(scratch, Setup::default());
+    let first = os_side.receive_within(Duration::from_secs(10));
     assert_eq!(first, Some(json!({"ready": {}})));
     // The directory is made private again.
     let mode = fs::metadata(&directory).unwrap().permissions().mode();
@@ -221,15 +221,15 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     let scratch = Scratch::new();
     // A file where the directory belongs.
     fs::write(scratch.run_directory(), "").unwrap();
-    let mut swift = Swift::launch(scratch, Setup::default());
-    swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-    let path = swift.scratch.run_directory();
+    let mut os_side = OsSide::launch(scratch, Setup::default());
+    os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
+    let path = os_side.scratch.run_directory();
     let unusable = format!(
         "{} is not a directory owned by the helper: Operation not permitted (os error 1)",
         path.display()
     );
     assert_eq!(
-        swift.received[0]["log"],
+        os_side.received[0]["log"],
         json!({
             "level": "error",
             "category": "helper",
@@ -238,16 +238,16 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     );
 
     // A connect then fails the same way, before anything starts.
-    assert!(swift.connect_app(1, 501));
+    assert!(os_side.connect_app(1, 501));
     assert_eq!(
-        swift.connect(1, ATTEMPT),
+        os_side.connect(1, ATTEMPT),
         error(
             "internalError",
             &format!("could not prepare the run directory: {unusable}")
         )
     );
-    assert!(swift.logs().iter().any(|line| {
+    assert!(os_side.logs().iter().any(|line| {
         line == &format!("error helper: cannot prepare the run directory: {unusable}")
     }));
-    assert!(swift.events(1).is_empty());
+    assert!(os_side.events(1).is_empty());
 }

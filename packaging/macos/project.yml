@@ -30,13 +30,7 @@ targets:
     type: application
     platform: macOS
     sources:
-      # The Helper's messages to its entry, and the types only the Helper's Swift side uses, are
-      # not the app's.
       - path: ../../components/contract/macos
-        excludes:
-          - "HelperInternal.swift"
-          - "xpc/BypassRouteMessages.swift"
-          - "xpc/HelperError.swift"
       - path: ../../components/ui/macos
       - path: ../../components/os-integration/macos
       - path: ../../components/runtime/macos/swift
@@ -67,9 +61,9 @@ targets:
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # The Rust static library is built for Apple Silicon only.
         ARCHS: arm64
-        # The header and module map of the Rust start function; build-rust.sh puts the library in
-        # BUILT_PRODUCTS_DIR.
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/runtime/macos/include
+        # The module maps of the Rust start function, whose library build-rust.sh puts in
+        # BUILT_PRODUCTS_DIR, and of the XPC protocols shared with the Helper.
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/runtime/macos/include $(SRCROOT)/../../components/contract/macos/xpc
         LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
         # cargo reads the source tree and writes under DerivedData, the OpenConnect build writes the
         # ~/.cache/fvm-openconnect cache, and the OAuth-client script below reads an optional,
@@ -120,10 +114,6 @@ targets:
     platform: macOS
     sources:
       - path: ../../components/contract/macos
-        excludes:
-          - "HelperInternal.swift"
-          - "xpc/BypassRouteMessages.swift"
-          - "xpc/HelperError.swift"
       - path: ../../components/ui/macos
       - path: ../../components/os-integration/macos
         excludes:
@@ -133,30 +123,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.AppSwiftTests
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-
-  # Helper sources that are testable without the Helper process.
-  HelperTests:
-    type: bundle.unit-test
-    platform: macOS
-    sources:
-      - path: ../../components/helper/macos/swift/RouteTable.swift
-      - path: ../../components/helper/macos/swift/SystemCommand.swift
-      - path: ../../components/helper/macos/swift/HelperLog.swift
-      - path: ../../components/helper/macos/swift/BypassRoutes.swift
-      - path: ../../components/helper/macos/swift/TunnelInterface.swift
-      - path: ../../components/helper/macos/swift/TunnelNetwork.swift
-      - path: ../../components/contract/macos/HelperInternal.swift
-      - path: ../../components/contract/macos/xpc/BypassRouteMessages.swift
-      - path: ../../components/contract/macos/xpc/HelperError.swift
-      - path: ../../components/contract/macos/xpc/Identifiers.swift
-      - path: ../../components/helper/macos/tests
-        excludes:
-          - "**/*.rs"
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.HelperTests
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/contract/macos/xpc
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
 
@@ -171,12 +138,6 @@ schemes:
         ContractTests: [test]
     test:
       targets: [ContractTests]
-  HelperTests:
-    build:
-      targets:
-        HelperTests: [test]
-    test:
-      targets: [HelperTests]
   AppSwiftTests:
     build:
       targets:

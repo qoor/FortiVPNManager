@@ -1,4 +1,5 @@
 import Foundation
+import HelperXPC
 import os
 import Synchronization
 

@@ -1,6 +1,6 @@
 //! The app side of the Helper: the named pipe the apps connect to, and the relay between those
-//! connections and the Helper entry. It does what Swift's `EntryRelay` and XPC listener do on
-//! macOS: it announces each connection to the entry and keeps it only if the entry admits it,
+//! connections and the Helper entry. It does what `relay` and `xpc` do in the macOS
+//! Helper: it announces each connection to the entry and keeps it only if the entry admits it,
 //! answers the build check itself, passes the other requests on with numbers of its own, sends
 //! each answer, event and output batch to the connection it belongs to, in the order the entry
 //! sent them, and changes the routing table as the entry asks.

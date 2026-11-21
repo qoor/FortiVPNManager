@@ -20,218 +20,218 @@ const WELL_BEFORE_THE_LIMIT: Duration = Duration::from_millis(650);
 
 #[test]
 fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwhile() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
     let asked = Instant::now();
-    let id = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(id));
+    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(id));
     assert!(
-        swift.has_log("notice helper: exiting on request so launchd starts the current binary")
+        os_side.has_log("notice helper: exiting on request so launchd starts the current binary")
     );
 
-    assert!(!swift.connect_app(2, 501));
+    assert!(!os_side.connect_app(2, 501));
     assert_eq!(
-        swift.connect(1, ATTEMPT),
+        os_side.connect(1, ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
-    let again = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(again));
-    swift
+    let again = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(again));
+    os_side
         .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
-    assert_eq!(swift.count(is("exitAfterDraining")), 0);
+    assert_eq!(os_side.count(is("exitAfterDraining")), 0);
 
-    swift.disconnect_app(1);
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    os_side.disconnect_app(1);
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    assert!(!swift.has_log(KEPT_OPEN));
-    assert_eq!(swift.count(is("exitAfterDraining")), 1);
-    assert_eq!(swift.count(is("exitNow")), 0);
-    assert_eq!(swift.events(1).len(), 0);
+    assert!(!os_side.has_log(KEPT_OPEN));
+    assert_eq!(os_side.count(is("exitAfterDraining")), 1);
+    assert_eq!(os_side.count(is("exitNow")), 0);
+    assert_eq!(os_side.events(1).len(), 0);
 }
 
 #[test]
 fn exit_when_idle_exits_at_the_limit_when_the_asking_app_keeps_its_connection() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
     let asked = Instant::now();
-    let id = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(id));
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(id));
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
     let waited = asked.elapsed();
     assert!(
         (Duration::from_secs(1)..Duration::from_secs(3)).contains(&waited),
         "{waited:?}"
     );
-    assert!(swift.has_log(KEPT_OPEN));
-    assert_eq!(swift.count(is("exitAfterDraining")), 1);
-    assert_eq!(swift.count(is("exitNow")), 0);
+    assert!(os_side.has_log(KEPT_OPEN));
+    assert_eq!(os_side.count(is("exitAfterDraining")), 1);
+    assert_eq!(os_side.count(is("exitNow")), 0);
 }
 
 #[test]
 fn exit_when_idle_counts_the_limit_from_the_first_request() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    assert!(swift.connect_app(2, 502));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    assert!(os_side.connect_app(2, 502));
     let asked = Instant::now();
-    let first = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(first));
-    swift.received_within(
+    let first = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(first));
+    os_side.received_within(
         (asked + Duration::from_millis(600)).saturating_duration_since(Instant::now()),
     );
-    let second = swift.request(2, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(second));
+    let second = os_side.request(2, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(second));
 
-    swift.disconnect_app(1);
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    os_side.disconnect_app(1);
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
     let waited = asked.elapsed();
     assert!(
         (Duration::from_secs(1)..Duration::from_millis(1500)).contains(&waited),
         "{waited:?}"
     );
-    assert!(swift.has_log(KEPT_OPEN));
+    assert!(os_side.has_log(KEPT_OPEN));
 }
 
 #[test]
 fn exit_when_idle_waits_for_every_app_that_asked() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    assert!(swift.connect_app(2, 502));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    assert!(os_side.connect_app(2, 502));
     let asked = Instant::now();
-    let first = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(first));
-    let second = swift.request(2, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(second));
+    let first = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(first));
+    let second = os_side.request(2, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(second));
 
-    swift.disconnect_app(1);
-    swift
+    os_side.disconnect_app(1);
+    os_side
         .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
-    assert_eq!(swift.count(is("exitAfterDraining")), 0);
-    swift.disconnect_app(2);
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    assert_eq!(os_side.count(is("exitAfterDraining")), 0);
+    os_side.disconnect_app(2);
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    assert!(!swift.has_log(KEPT_OPEN));
+    assert!(!os_side.has_log(KEPT_OPEN));
 }
 
 #[test]
 fn exit_when_idle_does_not_wait_for_apps_that_did_not_ask() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    assert!(swift.connect_app(2, 502));
-    assert!(swift.connect_app(3, 503));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    assert!(os_side.connect_app(2, 502));
+    assert!(os_side.connect_app(3, 503));
     let asked = Instant::now();
-    let id = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(id));
+    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(id));
 
-    swift.disconnect_app(3);
-    swift
+    os_side.disconnect_app(3);
+    os_side
         .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
-    assert_eq!(swift.count(is("exitAfterDraining")), 0);
-    swift.disconnect_app(1);
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    assert_eq!(os_side.count(is("exitAfterDraining")), 0);
+    os_side.disconnect_app(1);
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    assert!(!swift.has_log(KEPT_OPEN));
+    assert!(!os_side.has_log(KEPT_OPEN));
 }
 
 #[test]
 fn exit_when_idle_from_a_closed_connection_exits_right_after_the_reply() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    swift.disconnect_app(1);
-    let id = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(swift.reply_flag(id));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    os_side.disconnect_app(1);
+    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(os_side.reply_flag(id));
     let replied = Instant::now();
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
     assert!(replied.elapsed() < Duration::from_millis(400));
-    let reply = swift
+    let reply = os_side
         .position(|message| message["replyFlag"]["id"] == id)
         .unwrap();
-    assert!(reply < swift.position(is("exitAfterDraining")).unwrap());
-    assert!(!swift.has_log(KEPT_OPEN));
+    assert!(reply < os_side.position(is("exitAfterDraining")).unwrap());
+    assert!(!os_side.has_log(KEPT_OPEN));
 }
 
 #[test]
 fn exit_when_idle_is_declined_during_a_run() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let id = swift.request(1, json!({"exitWhenIdle": {}}));
-    assert!(!swift.reply_flag(id));
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    assert!(!os_side.reply_flag(id));
 
-    let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
-    assert_eq!(swift.reply(id), None);
-    swift.wait_for_exit(1);
-    let later = swift.received_within(Duration::from_millis(800));
+    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    assert_eq!(os_side.reply(id), None);
+    os_side.wait_for_exit(1);
+    let later = os_side.received_within(Duration::from_millis(800));
     assert!(
         !later
             .iter()
             .any(|message| is("exitAfterDraining")(message) || is("exitNow")(message)),
         "{later:#?}"
     );
-    assert!(swift.connect_app(2, 501));
+    assert!(os_side.connect_app(2, 501));
 }
 
 #[test]
 fn sigterm_while_idle_exits_at_once() {
-    let mut swift = Swift::start(Setup::default());
-    swift.send(json!({"terminationRequested": {}}));
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    let mut os_side = OsSide::start(Setup::default());
+    os_side.send(json!({"terminationRequested": {}}));
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    assert!(!swift.connect_app(1, 501));
+    assert!(!os_side.connect_app(1, 501));
 }
 
 #[test]
 fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let id = swift.request(1, submit_otp(ATTEMPT, OTP));
-    assert_eq!(swift.reply(id), None);
-    swift.bring_up(1);
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    assert_eq!(os_side.reply(id), None);
+    os_side.bring_up(1);
 
-    swift.send(json!({"terminationRequested": {}}));
-    swift.send(json!({"terminationRequested": {}}));
-    assert!(!swift.connect_app(2, 501));
+    os_side.send(json!({"terminationRequested": {}}));
+    os_side.send(json!({"terminationRequested": {}}));
+    assert!(!os_side.connect_app(2, 501));
     assert_eq!(
-        swift.connect(1, OTHER_ATTEMPT),
+        os_side.connect(1, OTHER_ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
-    swift.answer_network("revert", reverted());
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    os_side.answer_network("revert", reverted());
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    let facts = swift
+    let facts = os_side
         .end_facts(1)
         .expect("the run's exit before the Helper's");
     assert_eq!(
         facts["stopInitiator"],
         json!({"helper": {"_0": "helperShutdown"}})
     );
-    let exit_event = swift
+    let exit_event = os_side
         .position(|message| {
             message["sendEvent"]["json"]
                 .as_str()
                 .is_some_and(|json| json.contains("exited"))
         })
         .unwrap();
-    assert!(exit_event < swift.position(is("exitAfterDraining")).unwrap());
+    assert!(exit_event < os_side.position(is("exitAfterDraining")).unwrap());
 
-    let later = swift.received_within(Duration::from_millis(300));
+    let later = os_side.received_within(Duration::from_millis(300));
     assert!(later.is_empty(), "{later:#?}");
-    assert_eq!(swift.count(is("exitAfterDraining")), 1);
-    assert_eq!(swift.count(is("exitNow")), 0);
-    assert!(swift.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.count(is("exitAfterDraining")), 1);
+    assert_eq!(os_side.count(is("exitNow")), 0);
+    assert!(os_side.scratch.run_directory_names().is_empty());
 }
 
 #[test]
@@ -242,40 +242,40 @@ fn sigterm_exits_anyway_when_the_run_does_not_end_in_time() {
         let _ = released.recv();
         ended(-EIO)
     });
-    let mut swift = Swift::start(Setup::with([stuck]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, CONNECTED_TO_GATEWAY);
-    swift.send(json!({"terminationRequested": {}}));
+    let mut os_side = OsSide::start(Setup::with([stuck]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, CONNECTED_TO_GATEWAY);
+    os_side.send(json!({"terminationRequested": {}}));
     let sent = Instant::now();
-    swift.wait_until_within(Duration::from_secs(20), "the forced exit", |swift| {
-        swift.position(is("exitNow")).is_some()
+    os_side.wait_until_within(Duration::from_secs(20), "the forced exit", |os_side| {
+        os_side.position(is("exitNow")).is_some()
     });
     let waited = sent.elapsed();
     assert!(
         (Duration::from_secs(14)..Duration::from_secs(17)).contains(&waited),
         "{waited:?}"
     );
-    assert!(swift.has_log(
+    assert!(os_side.has_log(
         "error helper: the run did not finish after the termination request; exiting anyway"
     ));
-    assert_eq!(swift.end_facts(1), None);
-    assert_eq!(swift.count(is("exitAfterDraining")), 0);
+    assert_eq!(os_side.end_facts(1), None);
+    assert_eq!(os_side.count(is("exitAfterDraining")), 0);
 
     release.send(()).unwrap();
-    swift.wait_for_exit(1);
+    os_side.wait_for_exit(1);
 }
 
 #[test]
 fn a_replaced_helper_finishes_its_run_and_then_exits() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    swift.send(json!({"executableReplaced": {}}));
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    os_side.send(json!({"executableReplaced": {}}));
     // A connection that comes during the run is still admitted.
-    assert!(swift.connect_app(2, 501));
-    let meanwhile = swift.received_within(Duration::from_millis(300));
+    assert!(os_side.connect_app(2, 501));
+    let meanwhile = os_side.received_within(Duration::from_millis(300));
     assert!(
         !meanwhile
             .iter()
@@ -283,30 +283,30 @@ fn a_replaced_helper_finishes_its_run_and_then_exits() {
         "{meanwhile:#?}"
     );
 
-    let id = swift.request(2, disconnect(ATTEMPT, "userDisconnect"));
-    assert_eq!(swift.reply(id), None);
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    let id = os_side.request(2, disconnect(ATTEMPT, "userDisconnect"));
+    assert_eq!(os_side.reply(id), None);
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    assert!(swift.end_facts(1).is_some());
+    assert!(os_side.end_facts(1).is_some());
     let executable = std::env::current_exe().unwrap();
-    assert!(swift.has_log(&format!(
+    assert!(os_side.has_log(&format!(
         "notice helper: executable replaced at {}; exiting so launchd starts the new build",
         executable.display()
     )));
-    assert!(!swift.connect_app(3, 501));
+    assert!(!os_side.connect_app(3, 501));
 }
 
 #[test]
 fn a_replaced_helper_that_is_idle_refuses_new_connections_and_exits() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    swift.send(json!({"executableReplaced": {}}));
-    assert!(!swift.connect_app(2, 501));
-    swift.wait_until("the exit", |swift| {
-        swift.position(is("exitAfterDraining")).is_some()
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    os_side.send(json!({"executableReplaced": {}}));
+    assert!(!os_side.connect_app(2, 501));
+    os_side.wait_until("the exit", |os_side| {
+        os_side.position(is("exitAfterDraining")).is_some()
     });
-    let replaced = swift
+    let replaced = os_side
         .logs()
         .iter()
         .filter(|line| line.contains("executable replaced at "))
@@ -314,7 +314,7 @@ fn a_replaced_helper_that_is_idle_refuses_new_connections_and_exits() {
     assert_eq!(replaced, 1);
     // The app that is still connected gets its answers.
     assert_eq!(
-        swift.connect(1, ATTEMPT),
+        os_side.connect(1, ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
 }

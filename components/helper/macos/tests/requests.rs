@@ -39,23 +39,23 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
             ended(-EINTR)
         })
     };
-    let mut swift = Swift::start(Setup::with([script]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let id = swift.request(1, submit_otp(ATTEMPT, OTP));
-    assert_eq!(swift.reply(id), None);
-    swift.bring_up(1);
-    swift.wait_until("the tunnel log", |swift| {
-        swift.has_log(&format!(
+    let mut os_side = OsSide::start(Setup::with([script]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    assert_eq!(os_side.reply(id), None);
+    os_side.bring_up(1);
+    os_side.wait_until("the tunnel log", |os_side| {
+        os_side.has_log(&format!(
             "notice helper: 0277070470 run {ATTEMPT}: tunnel up"
         ))
     });
     assert_eq!(received.lock().unwrap().as_deref(), Some(PASSWORD));
 
     // The run record lives in the run directory for the run, readable only by its owner.
-    assert_eq!(swift.scratch.run_directory_names(), ["run.json"]);
-    let file = swift.scratch.run_directory().join("run.json");
+    assert_eq!(os_side.scratch.run_directory_names(), ["run.json"]);
+    let file = os_side.scratch.run_directory().join("run.json");
     let mode = fs::metadata(&file).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600);
     let record: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
@@ -63,10 +63,10 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         record,
         json!({"outsideChanges": {"dnsServiceID": "svc", "routes": outside_routes()}})
     );
-    let status = swift.request(1, json!({"status": {}}));
-    swift.answer_network("check", json!({"checked": {"complete": true}}));
+    let status = os_side.request(1, json!({"status": {}}));
+    os_side.answer_network("check", json!({"checked": {"complete": true}}));
     assert_eq!(
-        swift.reply_json(status),
+        os_side.reply_json(status),
         json!({
             "sessionRunning": true,
             "backend": {"version": VERSION},
@@ -74,10 +74,10 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         })
     );
 
-    let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
-    assert_eq!(swift.reply(id), None);
-    swift.answer_network("revert", reverted());
-    let facts = swift.wait_for_exit(1);
+    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    assert_eq!(os_side.reply(id), None);
+    os_side.answer_network("revert", reverted());
+    let facts = os_side.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], TUNNEL_UP);
     assert_eq!(
         facts["stopInitiator"],
@@ -85,21 +85,21 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     );
     assert_eq!(facts["endCode"], -EINTR);
 
-    assert_eq!(swift.milestones(1), [0, 1, 2, 3, 4, 5]);
-    let tunnel_up = swift.events(1)[5].clone();
+    assert_eq!(os_side.milestones(1), [0, 1, 2, 3, 4, 5]);
+    let tunnel_up = os_side.events(1)[5].clone();
     assert_eq!(tunnel_up["attemptID"], ATTEMPT);
     assert_eq!(tunnel_up["kind"]["milestone"]["tunnelIP"], "10.10.0.5");
-    assert_eq!(swift.output(1)[0], "‹VPN client: openconnect 9.21›");
+    assert_eq!(os_side.output(1)[0], "‹VPN client: openconnect 9.21›");
     assert!(
-        swift
+        os_side
             .output(1)
             .contains(&"‹session cancelled (reason: userDisconnect)›".to_owned())
     );
-    swift.wait_until("the exit log", |swift| {
-        swift.logs().iter().any(|line| line.contains(" exited: "))
+    os_side.wait_until("the exit log", |os_side| {
+        os_side.logs().iter().any(|line| line.contains(" exited: "))
     });
-    assert!(swift.scratch.run_directory_names().is_empty());
-    assert_eq!(swift.secrets.deletes(), [ATTEMPT]);
+    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.secrets.deletes(), [ATTEMPT]);
     for line in [
         format!(
             "notice helper: 0277070470 run {ATTEMPT} started for uid 501 with openconnect 9.21"
@@ -111,15 +111,19 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
              Helper {{ reason: UserDisconnect }}, furthest TunnelUp"
         ),
     ] {
-        assert!(swift.has_log(&line), "{line} not in {:#?}", swift.logs());
+        assert!(
+            os_side.has_log(&line),
+            "{line} not in {:#?}",
+            os_side.logs()
+        );
     }
     // The exit is the run's last message to the app, and its revert line is the last Log tab line.
-    let exit = swift.position(|message| {
+    let exit = os_side.position(|message| {
         message["sendEvent"]["json"]
             .as_str()
             .is_some_and(|json| json.contains("exited"))
     });
-    let last_to_app = swift.received.iter().rposition(|message| {
+    let last_to_app = os_side.received.iter().rposition(|message| {
         message
             .get("sendEvent")
             .or(message.get("sendOutput"))
@@ -127,39 +131,39 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     });
     assert_eq!(exit, last_to_app);
     assert_eq!(
-        swift.output(1).last().unwrap(),
+        os_side.output(1).last().unwrap(),
         "‹network settings reverted›"
     );
-    swift.assert_no_secret();
+    os_side.assert_no_secret();
 }
 
 #[test]
 fn a_failed_login_is_reported_as_the_session_ending_the_run() {
-    let mut swift = Swift::start(Setup::with([failed_login()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    let facts = swift.wait_for_exit(1);
+    let mut os_side = OsSide::start(Setup::with([failed_login()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    let facts = os_side.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], CONNECTED_TO_GATEWAY);
     assert_eq!(facts["stopInitiator"], json!({"none": {}}));
     assert_eq!(facts["endCode"], -EPERM);
-    swift.wait_until("the exit log", |swift| {
-        swift.has_log(&format!(
+    os_side.wait_until("the exit log", |os_side| {
+        os_side.has_log(&format!(
             "notice helper: 0277070470 run {ATTEMPT} exited: code -1, initiator Session, furthest \
              ConnectedToGateway"
         ))
     });
-    assert!(swift.scratch.run_directory_names().is_empty());
-    assert!(swift.secrets.saves().is_empty());
-    swift.assert_no_secret();
+    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert!(os_side.secrets.saves().is_empty());
+    os_side.assert_no_secret();
 }
 
 #[test]
 fn every_output_batch_names_its_attempt() {
-    let mut swift = Swift::start(Setup::with([failed_login()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_exit(1);
-    let attempts: Vec<Value> = swift
+    let mut os_side = OsSide::start(Setup::with([failed_login()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_exit(1);
+    let attempts: Vec<Value> = os_side
         .received
         .iter()
         .filter_map(|message| message.get("sendOutput"))
@@ -179,10 +183,10 @@ fn a_rejected_certificate_is_reported_with_its_value() {
         link.report(SessionEvent::CertificateRejected(OTHER_PIN.to_owned()));
         ended(-EIO)
     });
-    let mut swift = Swift::start(Setup::with([script]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    let facts = swift.wait_for_exit(1);
+    let mut os_side = OsSide::start(Setup::with([script]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    let facts = os_side.wait_for_exit(1);
     assert_eq!(facts["certRejectedDigests"], json!([OTHER_PIN]));
     assert_eq!(facts["certRejectedAt"], STARTED);
     assert_eq!(facts["furthestMilestone"], STARTED);
@@ -191,19 +195,19 @@ fn a_rejected_certificate_is_reported_with_its_value() {
 
 #[test]
 fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert!(swift.connect_app(2, 501));
-    assert!(swift.connect_app(3, 502));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert!(os_side.connect_app(2, 501));
+    assert!(os_side.connect_app(3, 502));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
 
     assert_eq!(
-        swift.connect(2, OTHER_ATTEMPT),
+        os_side.connect(2, OTHER_ATTEMPT),
         error("busy", "openconnect is already running")
     );
     assert_eq!(
-        swift.connect(3, OTHER_ATTEMPT),
+        os_side.connect(3, OTHER_ATTEMPT),
         error(
             "notAuthorized",
             "a VPN run started by another user is active"
@@ -237,58 +241,58 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
         ),
     ];
     for (app, request, expected) in refused {
-        let id = swift.request(app, request);
-        assert_eq!(swift.reply(id), expected);
+        let id = os_side.request(app, request);
+        assert_eq!(os_side.reply(id), expected);
     }
 
     // Any connection of the owner's user may control the run; attempt IDs ignore case.
-    let id = swift.request(2, submit_otp(&ATTEMPT.to_lowercase(), OTP));
-    assert_eq!(swift.reply(id), None);
-    let id = swift.request(1, submit_otp(ATTEMPT, OTP));
+    let id = os_side.request(2, submit_otp(&ATTEMPT.to_lowercase(), OTP));
+    assert_eq!(os_side.reply(id), None);
+    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
     assert_eq!(
-        swift.reply(id),
+        os_side.reply(id),
         error(
             "wrongPhase",
             "an OTP was already submitted for this attempt"
         )
     );
-    swift.bring_up(1);
+    os_side.bring_up(1);
     // A stop names the run it is for.
-    let id = swift.request(2, disconnect("", "userDisconnect"));
+    let id = os_side.request(2, disconnect("", "userDisconnect"));
     assert_eq!(
-        swift.reply(id),
+        os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
     );
-    let id = swift.request(2, disconnect(ATTEMPT, "notAReason"));
-    assert_eq!(swift.reply(id), None);
-    swift.answer_network("revert", reverted());
-    let facts = swift.wait_for_exit(1);
+    let id = os_side.request(2, disconnect(ATTEMPT, "notAReason"));
+    assert_eq!(os_side.reply(id), None);
+    os_side.answer_network("revert", reverted());
+    let facts = os_side.wait_for_exit(1);
     // An unknown reason counts as the user's.
     assert_eq!(
         facts["stopInitiator"],
         json!({"helper": {"_0": "userDisconnect"}})
     );
-    assert!(swift.events(2).is_empty());
+    assert!(os_side.events(2).is_empty());
 
     // With no run, every attempt is unknown.
-    let id = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(
-        swift.reply(id),
+        os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
     );
-    let id = swift.request(1, submit_otp("", OTP));
+    let id = os_side.request(1, submit_otp("", OTP));
     assert_eq!(
-        swift.reply(id),
+        os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
     );
 }
 
 #[test]
 fn a_bad_connect_request_starts_nothing() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    let undecodable = swift.request(1, json!({"connect": {"json": "{\"host\": 1}"}}));
-    let invalid = swift.request(
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    let undecodable = os_side.request(1, json!({"connect": {"json": "{\"host\": 1}"}}));
+    let invalid = os_side.request(
         1,
         connect_request_with(json!({
             "attemptID": ATTEMPT,
@@ -302,25 +306,25 @@ fn a_bad_connect_request_starts_nothing() {
         })),
     );
     assert_eq!(
-        swift.reply(undecodable),
+        os_side.reply(undecodable),
         error("invalidRequest", "could not decode the connect request")
     );
     assert_eq!(
-        swift.reply(invalid),
+        os_side.reply(invalid),
         error("invalidRequest", "port 0 is refused")
     );
-    assert_eq!(swift.status(1)["sessionRunning"], false);
-    assert!(swift.events(1).is_empty());
-    assert!(swift.scratch.run_directory_names().is_empty());
-    swift.assert_no_secret();
+    assert_eq!(os_side.status(1)["sessionRunning"], false);
+    assert!(os_side.events(1).is_empty());
+    assert!(os_side.scratch.run_directory_names().is_empty());
+    os_side.assert_no_secret();
 }
 
 #[test]
 fn the_status_carries_the_backends_version() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
     assert_eq!(
-        swift.status(1),
+        os_side.status(1),
         json!({
             "sessionRunning": false,
             "backend": {"version": VERSION},
@@ -330,13 +334,13 @@ fn the_status_carries_the_backends_version() {
 
 #[test]
 fn the_status_of_an_up_run_waits_for_its_routing_check() {
-    let mut swift = Swift::start(Setup::with([up_without_otp(settings(
+    let mut os_side = OsSide::start(Setup::with([up_without_otp(settings(
         "utun9",
         "10.10.0.5",
     ))]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.bring_up(1);
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.bring_up(1);
     let outcomes = [
         (json!({"checked": {"complete": true}}), Some(true)),
         (json!({"checked": {"complete": false}}), Some(false)),
@@ -346,13 +350,13 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
         ),
     ];
     for (outcome, routing_complete) in outcomes {
-        let status = swift.request(1, json!({"status": {}}));
-        let late = swift.received_within(Duration::from_millis(200));
+        let status = os_side.request(1, json!({"status": {}}));
+        let late = os_side.received_within(Duration::from_millis(200));
         assert!(
             !late.iter().any(|message| message["reply"]["id"] == status),
             "{late:#?}"
         );
-        let check = swift.answer_network("check", outcome);
+        let check = os_side.answer_network("check", outcome);
         assert_eq!(check["settings"]["tunnel"]["name"], "utun9");
         assert_eq!(
             check["outside"],
@@ -361,7 +365,7 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
                 {"address": "10.20.161.16", "prefixLength": 32},
             ])
         );
-        let reply = swift.reply_json(status);
+        let reply = os_side.reply_json(status);
         assert_eq!(reply["sessionRunning"], true);
         assert_eq!(
             reply.get("routingComplete").and_then(Value::as_bool),
@@ -373,75 +377,75 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
 
 #[test]
 fn the_status_of_a_run_that_is_not_up_needs_no_routing_check() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let reply = swift.status(1);
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    let reply = os_side.status(1);
     assert_eq!(reply["sessionRunning"], true);
     assert!(reply.get("routingComplete").is_none(), "{reply}");
-    assert!(swift.network_changes().is_empty());
+    assert!(os_side.network_changes().is_empty());
 }
 
 #[test]
 fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
-    let mut swift = Swift::start(Setup::with([up()]));
-    assert!(swift.connect_app(1, 501));
-    assert_eq!(swift.connect(1, ATTEMPT), None);
-    swift.wait_for_milestone(1, OTP_PROMPTED);
-    let status = swift.request(1, json!({"status": {}}));
-    swift.disconnect_app(1);
+    let mut os_side = OsSide::start(Setup::with([up()]));
+    assert!(os_side.connect_app(1, 501));
+    assert_eq!(os_side.connect(1, ATTEMPT), None);
+    os_side.wait_for_milestone(1, OTP_PROMPTED);
+    let status = os_side.request(1, json!({"status": {}}));
+    os_side.disconnect_app(1);
 
-    assert_eq!(swift.reply_json(status)["sessionRunning"], true);
-    let facts = swift.wait_for_exit(1);
+    assert_eq!(os_side.reply_json(status)["sessionRunning"], true);
+    let facts = os_side.wait_for_exit(1);
     assert_eq!(
         facts["stopInitiator"],
         json!({"helper": {"_0": "clientInvalidated"}})
     );
-    assert!(swift.has_log(&format!(
+    assert!(os_side.has_log(&format!(
         "notice helper: 0277070470 run {ATTEMPT}: owning connection invalidated"
     )));
-    swift.wait_until("the exit log", |swift| {
-        swift.logs().iter().any(|line| line.contains(" exited: "))
+    os_side.wait_until("the exit log", |os_side| {
+        os_side.logs().iter().any(|line| line.contains(" exited: "))
     });
-    assert!(swift.scratch.run_directory_names().is_empty());
+    assert!(os_side.scratch.run_directory_names().is_empty());
 }
 
 #[test]
 fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
-    swift.disconnect_app(1);
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
+    os_side.disconnect_app(1);
     let gone = error("notAuthorized", "the app connection is closed");
-    let connect = swift.request(1, connect_request(ATTEMPT));
-    let otp = swift.request(1, submit_otp(ATTEMPT, OTP));
-    let stop = swift.request(1, disconnect(ATTEMPT, "userDisconnect"));
-    let status = swift.request(1, json!({"status": {}}));
-    assert_eq!(swift.reply(connect), gone);
-    assert_eq!(swift.reply(otp), gone);
-    assert_eq!(swift.reply(stop), gone);
-    assert_eq!(swift.reply_json(status)["sessionRunning"], false);
+    let connect = os_side.request(1, connect_request(ATTEMPT));
+    let otp = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    let stop = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let status = os_side.request(1, json!({"status": {}}));
+    assert_eq!(os_side.reply(connect), gone);
+    assert_eq!(os_side.reply(otp), gone);
+    assert_eq!(os_side.reply(stop), gone);
+    assert_eq!(os_side.reply_json(status)["sessionRunning"], false);
 
-    let late = swift.received_within(Duration::from_millis(300));
+    let late = os_side.received_within(Duration::from_millis(300));
     assert!(late.is_empty(), "{late:#?}");
     for id in [connect, otp, stop, status] {
-        assert_eq!(swift.replies(id).len(), 1, "request {id}");
+        assert_eq!(os_side.replies(id).len(), 1, "request {id}");
     }
-    assert!(swift.events(1).is_empty());
-    assert!(swift.scratch.run_directory_names().is_empty());
+    assert!(os_side.events(1).is_empty());
+    assert!(os_side.scratch.run_directory_names().is_empty());
 }
 
 #[test]
 fn replies_carry_the_request_id_they_answer() {
-    let mut swift = Swift::start(Setup::default());
-    assert!(swift.connect_app(1, 501));
+    let mut os_side = OsSide::start(Setup::default());
+    assert!(os_side.connect_app(1, 501));
     let ids: Vec<u64> = (0..5)
-        .map(|_| swift.request(1, json!({"status": {}})))
+        .map(|_| os_side.request(1, json!({"status": {}})))
         .collect();
-    swift.wait_until("all replies", |swift| {
-        ids.iter().all(|&id| !swift.replies(id).is_empty())
+    os_side.wait_until("all replies", |os_side| {
+        ids.iter().all(|&id| !os_side.replies(id).is_empty())
     });
-    let answered: Vec<Value> = swift
+    let answered: Vec<Value> = os_side
         .received
         .iter()
         .filter_map(|message| message["reply"].get("id").cloned())

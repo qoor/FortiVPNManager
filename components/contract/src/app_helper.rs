@@ -1,11 +1,11 @@
-//! What the app and the Helper exchange. Every message uses Swift's standard Codable coding
-//! (`XPCCoding`), so the Helper's Swift side can write the few answers it gives itself, such as a
-//! `HelperError` for a payload it cannot pass on: an enum value with data is an object keyed by its
-//! case name, data without a label uses the key `_0`, a case without data is `{}`, dates are seconds
-//! since 1970, and absent optional values are left out. The Helper receives the run request, the
-//! exception-route request and the update prepare and install requests and sends everything else,
-//! and the app's runtime does the opposite; the Helper entry, in Rust, reads and writes them on
-//! every OS.
+//! What the app and the Helper exchange. Every message uses Swift's standard Codable coding, the
+//! app's `XPCCoding`, which the Helper's OS side (`xpc` on macOS, the pipe on Windows) also follows
+//! for the few answers it gives itself, the build and a `HelperError` for a payload it cannot pass
+//! on: an enum value with data is an object keyed by its case name, data without a label uses the
+//! key `_0`, a case without data is `{}`, dates are seconds since 1970, and absent optional values
+//! are left out. The Helper receives the run request, the exception-route request and the update
+//! prepare and install requests and sends everything else, and the app's runtime does the
+//! opposite; the Helper entry, in Rust, reads and writes them on every OS.
 
 use std::fmt;
 use std::net::Ipv4Addr;

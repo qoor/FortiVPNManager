@@ -91,7 +91,7 @@ impl Drop for Scratch {
     }
 }
 
-pub struct Swift {
+pub struct OsSide {
     inbox: Inbox,
     messages: Receiver<Value>,
     /// Every message from the entry, in order.
@@ -102,12 +102,12 @@ pub struct Swift {
     network_answered: usize,
 }
 
-impl Swift {
+impl OsSide {
     /// Starts an entry and waits for it to be ready.
     pub fn start(setup: Setup) -> Self {
-        let mut swift = Self::launch(Scratch::new(), setup);
-        swift.wait_until("ready", |swift| swift.position(is("ready")).is_some());
-        swift
+        let mut os_side = Self::launch(Scratch::new(), setup);
+        os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
+        os_side
     }
 
     /// Starts an entry in `scratch`, which may hold what an earlier Helper left.
@@ -193,8 +193,8 @@ impl Swift {
     /// Announces app connection `app` and returns whether the entry admitted it.
     pub fn connect_app(&mut self, app: u64, uid: u32) -> bool {
         self.send(json!({"appConnected": {"app": app, "uid": uid}}));
-        self.wait_until("the admission", |swift| {
-            swift
+        self.wait_until("the admission", |os_side| {
+            os_side
                 .position(|message| message["admitted"]["app"] == app)
                 .is_some()
         });
@@ -228,7 +228,7 @@ impl Swift {
 
     /// The error a connect, submitOtp or disconnect reply carries, `None` for success.
     pub fn reply(&mut self, id: u64) -> Option<Value> {
-        self.wait_until("the reply", |swift| !swift.replies(id).is_empty());
+        self.wait_until("the reply", |os_side| !os_side.replies(id).is_empty());
         let reply = &self.replies(id)[0]["reply"];
         assert!(!reply.is_null(), "request {id} got a flag: {reply}");
         reply["json"]
@@ -242,7 +242,7 @@ impl Swift {
     }
 
     pub fn reply_flag(&mut self, id: u64) -> bool {
-        self.wait_until("the reply", |swift| !swift.replies(id).is_empty());
+        self.wait_until("the reply", |os_side| !os_side.replies(id).is_empty());
         self.replies(id)[0]["replyFlag"]["value"]
             .as_bool()
             .expect("an exitWhenIdle reply is a flag")
@@ -276,8 +276,8 @@ impl Swift {
     }
 
     pub fn wait_for_milestone(&mut self, app: u64, milestone: u64) {
-        self.wait_until("the milestone", |swift| {
-            swift.milestones(app).contains(&milestone)
+        self.wait_until("the milestone", |os_side| {
+            os_side.milestones(app).contains(&milestone)
         });
     }
 
@@ -288,7 +288,7 @@ impl Swift {
     }
 
     pub fn wait_for_exit(&mut self, app: u64) -> Value {
-        self.wait_until("the exit", |swift| swift.end_facts(app).is_some());
+        self.wait_until("the exit", |os_side| os_side.end_facts(app).is_some());
         self.end_facts(app).unwrap()
     }
 
@@ -355,8 +355,8 @@ impl Swift {
 
     pub fn next_network_change(&mut self) -> Value {
         let answered = self.network_answered;
-        self.wait_until("a network change", |swift| {
-            swift.network_changes().len() > answered
+        self.wait_until("a network change", |os_side| {
+            os_side.network_changes().len() > answered
         });
         self.network_answered += 1;
         self.network_changes()[answered].clone()
