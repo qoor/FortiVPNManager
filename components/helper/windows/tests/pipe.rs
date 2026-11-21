@@ -10,7 +10,7 @@
 #![cfg(windows)]
 
 #[allow(dead_code)]
-#[path = "../../tests/common/fake.rs"]
+#[path = "../../core/tests/common/fake.rs"]
 mod fake;
 
 use std::env;
