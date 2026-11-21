@@ -1,92 +1,97 @@
-//! The macOS Helper's Rust start. Swift reaches the Helper's Rust side only through the socket
-//! returned by `fvm_helper_entry_start`, using the messages in `fvm_contract::helper_internal`, and
-//! the shared Helper entry has the session manager run the VPN client with its backend adapter,
-//! keeping the session secrets in the System keychain.
+//! The macOS Helper: a root LaunchDaemon, demand-launched through its mach service. It runs the
+//! shared Helper entry with a session manager for openconnect, keeping the session secrets in the
+//! System keychain, takes the app's connections over NSXPC, answers the build check, and changes
+//! the network settings and the exception routes as the entry asks.
 
-mod keychain;
+mod command;
+mod network;
+mod relay;
+mod route_table;
+mod routes;
+mod secrets;
+mod self_update;
+mod xpc;
 
-use std::io::{self, BufReader};
-use std::os::fd::IntoRawFd;
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread;
+use std::sync::{Arc, LazyLock};
+use std::{process, thread};
 
 use fvm_backend_adapter::openconnect::OpenConnect;
-use fvm_contract::stream;
-use fvm_helper_core::secrets::SecretStore;
-use fvm_helper_core::session::backend::Backend;
+use fvm_contract::helper_internal::LogCategory;
+use fvm_helper_core::entry;
 use fvm_helper_core::session::{SessionManager, Timing};
-use keychain::Keychain;
+use fvm_os_api_macos::code_signing;
+use fvm_os_api_macos::log::{Level, Log};
+use signal_hook::consts::SIGTERM;
+use signal_hook::iterator::Signals;
 
+use relay::Relay;
+use secrets::Keychain;
+use self_update::Watcher;
+
+/// This build, which the app compares with its own.
+const BUILD: &str = match option_env!("FVM_BUILD") {
+    Some(build) => build,
+    None => "unknown",
+};
+
+const APP_ID: &str = "com.qoor.FortiVPNManager";
+const HELPER_ID: &str = "com.qoor.FortiVPNManager.Helper";
+const LOG_SUBSYSTEM: &str = "com.qoor.FortiVPNManager";
 /// Root-only: it holds the run record.
 const RUN_DIRECTORY: &str = "/var/run/com.qoor.FortiVPNManager.Helper";
 
-/// Starts the Helper entry and returns Swift's end of its socketpair, which Swift then owns.
-// The C symbol Swift calls and the C function Swift passes: exporting a fixed name needs the unsafe
-// attribute, and calling the function an unsafe block.
-#[allow(unsafe_code)]
-#[unsafe(no_mangle)]
-pub extern "C" fn fvm_helper_entry_start(fault: unsafe extern "C" fn(*const u8, usize)) -> i32 {
-    fvm_helper_core::entry::report_faults(move |line| {
-        // SAFETY: Swift's function reads the `length` bytes at `text` during the call, which `line`
-        // holds.
-        unsafe { fault(line.as_ptr(), line.len()) }
-    });
-    start(
+static HELPER_LOG: LazyLock<Log> = LazyLock::new(|| Log::new(LOG_SUBSYSTEM, "helper"));
+static ROUTES_LOG: LazyLock<Log> = LazyLock::new(|| Log::new(LOG_SUBSYSTEM, "routes"));
+
+/// A line for the unified log. Never with a password, an OTP code or a config file's contents.
+fn log(category: LogCategory, level: Level, message: &str) {
+    let log = match category {
+        LogCategory::Helper => &HELPER_LOG,
+        LogCategory::Routes => &ROUTES_LOG,
+    };
+    log.write(level, message);
+}
+
+pub fn run() -> ! {
+    let Some(team_id) = code_signing::team_id() else {
+        log(
+            LogCategory::Helper,
+            Level::Fault,
+            "helper is not signed with a team identity; refusing to start",
+        );
+        process::exit(1);
+    };
+    // Installed before the entry starts: a SIGTERM during its cleanup is passed on once it is ready.
+    let mut terminations = Signals::new([SIGTERM]).expect("installing the SIGTERM handler");
+    // Created before the entry starts, so a reinstall during its cleanup counts as a replacement.
+    let watcher = Arc::new(Watcher::new());
+    entry::report_faults(|line| log(LogCategory::Helper, Level::Fault, line));
+    let sessions = SessionManager::new(
         Arc::new(OpenConnect::default()),
         Arc::new(Keychain),
         PathBuf::from(RUN_DIRECTORY),
-    )
-    .into_raw_fd()
-}
-
-/// Starts the Helper entry for the client of `backend`, keeping its session secrets in `secrets`
-/// and its files in `run_directory`, and returns Swift's end of the stream. The entry says "ready"
-/// once it has cleaned up after an earlier Helper.
-pub fn start(
-    backend: Arc<dyn Backend>,
-    secrets: Arc<dyn SecretStore>,
-    run_directory: PathBuf,
-) -> UnixStream {
-    let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
-    let writer = ours.try_clone().expect("cloning the socket to Swift");
-    let sessions = SessionManager::new(backend, secrets, run_directory, Timing::default());
-    let inbox = fvm_helper_core::entry::start(sessions, move |message| {
-        stream::send(&mut &writer, message).expect("writing a message to Swift");
-    });
+        Timing::default(),
+    );
+    let relay = Relay::start(sessions);
+    let replaced = Arc::clone(&relay);
+    Arc::clone(&watcher).start(move || replaced.executable_replaced());
+    let terminated = Arc::clone(&relay);
     thread::Builder::new()
-        .name("fvm-entry-read".into())
+        .name("fvm-helper-sigterm".into())
         .spawn(move || {
-            let mut reader = BufReader::new(ours);
-            loop {
-                let message = stream::receive(&mut reader).expect("reading a message from Swift");
-                inbox.deliver(message);
+            for _ in terminations.forever() {
+                terminated.termination_requested();
             }
         })
-        .expect("starting the entry reader thread");
-    theirs
-}
-
-/// Rust keeps the first end; Swift gets the second.
-fn socket_pair() -> io::Result<(UnixStream, UnixStream)> {
-    let (ours, theirs) = UnixStream::pair()?;
-    // Rust's `main`, which ignores SIGPIPE, never runs in a library linked into a Swift process, so
-    // a write to a closed peer would kill the process instead of failing with EPIPE.
-    socket2::SockRef::from(&ours).set_nosigpipe(true)?;
-    socket2::SockRef::from(&theirs).set_nosigpipe(true)?;
-    Ok((ours, theirs))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn socket_pair_connects_both_ends() {
-        let (ours, theirs) = socket_pair().unwrap();
-        stream::send(&mut &theirs, &"from Swift").unwrap();
-        let received: String = stream::receive(&mut BufReader::new(&ours)).unwrap();
-        assert_eq!(received, "from Swift");
+        .expect("starting the SIGTERM thread");
+    let _listener = xpc::listen(relay, watcher, &team_id);
+    log(
+        LogCategory::Helper,
+        Level::Notice,
+        &format!("helper {BUILD} listening (team {team_id})"),
+    );
+    loop {
+        thread::park();
     }
 }

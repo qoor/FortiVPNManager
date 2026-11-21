@@ -1,20 +1,21 @@
-//! Fake sessions behind the real Helper entry, and a fake Swift side that drives the entry through
-//! the Helper-internal protocol and records everything it sends.
+//! Fake sessions behind the real Helper entry, and a fake OS side that drives the entry through the
+//! Helper-internal messages, written as JSON, and records everything it sends.
 
 #![allow(dead_code)]
 
 #[path = "../../../core/tests/common/fake.rs"]
 mod fake;
 
-use std::io::{self, BufRead, BufReader};
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 use std::{env, fs, process};
 
-use fvm_contract::stream;
+use fvm_contract::helper_internal::ToEntry;
+use fvm_helper_core::entry::{self, Inbox};
+use fvm_helper_core::session::{SessionManager, Timing};
 use serde_json::{Value, json};
 
 pub use fake::*;
@@ -91,8 +92,8 @@ impl Drop for Scratch {
 }
 
 pub struct Swift {
-    stream: UnixStream,
-    reader: BufReader<UnixStream>,
+    inbox: Inbox,
+    messages: Receiver<Value>,
     /// Every message from the entry, in order.
     pub received: Vec<Value>,
     last_request: u64,
@@ -111,15 +112,19 @@ impl Swift {
 
     /// Starts an entry in `scratch`, which may hold what an earlier Helper left.
     pub fn launch(scratch: Scratch, setup: Setup) -> Self {
-        let stream = fvm_helper_macos::start(
+        let sessions = SessionManager::new(
             Arc::new(FakeBackend::new(setup.scripts)),
             Arc::clone(&setup.secrets) as _,
             scratch.run_directory(),
+            Timing::default(),
         );
-        let reader = BufReader::new(stream.try_clone().unwrap());
+        let (sender, messages) = mpsc::channel();
+        let inbox = entry::start(sessions, move |message| {
+            let _ = sender.send(serde_json::to_value(message).unwrap());
+        });
         Self {
-            stream,
-            reader,
+            inbox,
+            messages,
             received: Vec::new(),
             last_request: 0,
             scratch,
@@ -129,35 +134,20 @@ impl Swift {
     }
 
     pub fn send(&self, message: Value) {
-        stream::send(&mut &self.stream, &message).unwrap();
+        self.inbox
+            .deliver(serde_json::from_value::<ToEntry>(message).unwrap());
     }
 
-    /// The next message, if one starts arriving within `timeout`. Only the wait for its first bytes
-    /// has the timeout, so a timeout never cuts a message in two.
+    /// The next message, if one arrives within `timeout`.
     pub fn receive_within(&mut self, timeout: Duration) -> Option<Value> {
-        let socket = self.reader.get_ref();
-        socket
-            .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))
-            .unwrap();
-        match self.reader.fill_buf() {
-            Ok([]) => panic!("the entry closed its end"),
-            Ok(_) => {}
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::WouldBlock
-                        | io::ErrorKind::TimedOut
-                        | io::ErrorKind::Interrupted
-                ) =>
-            {
-                return None;
+        match self.messages.recv_timeout(timeout) {
+            Ok(message) => {
+                self.received.push(message.clone());
+                Some(message)
             }
-            Err(error) => panic!("reading from the entry: {error}"),
+            Err(RecvTimeoutError::Timeout) => None,
+            Err(RecvTimeoutError::Disconnected) => panic!("the entry stopped"),
         }
-        self.reader.get_ref().set_read_timeout(None).unwrap();
-        let message: Value = stream::receive(&mut self.reader).unwrap();
-        self.received.push(message.clone());
-        Some(message)
     }
 
     /// Receives until `condition` holds for everything received so far.

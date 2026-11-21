@@ -5,15 +5,16 @@ use security_framework::os::macos::keychain::SecKeychain;
 use security_framework::passwords;
 use zeroize::Zeroizing;
 
-const SERVICE: &str = "com.qoor.FortiVPNManager.Helper";
+use crate::HELPER_ID;
+
 const SYSTEM_KEYCHAIN: &str = "/Library/Keychains/System.keychain";
 const ITEM_NOT_FOUND: i32 = -25_300;
 
-pub struct Keychain;
+pub(crate) struct Keychain;
 
 impl SecretStore for Keychain {
     fn save(&self, name: &str, secret: &[u8]) -> Result<(), String> {
-        passwords::set_generic_password(SERVICE, name, secret).map_err(describe)
+        passwords::set_generic_password(HELPER_ID, name, secret).map_err(describe)
     }
 
     fn load_all(&self) -> Result<Vec<StoredSecret>, String> {
@@ -53,7 +54,7 @@ fn items(keychain: &SecKeychain) -> ItemSearchOptions {
     let mut options = ItemSearchOptions::new();
     options
         .class(ItemClass::generic_password())
-        .service(SERVICE)
+        .service(HELPER_ID)
         .keychains(std::slice::from_ref(keychain));
     options
 }
