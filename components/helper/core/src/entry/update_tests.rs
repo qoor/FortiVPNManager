@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use fvm_contract::app_helper::{
-    HelperErrorCode, PreparedUpdateReply, UpdateDiscardReply, UpdateInstallReply,
+    HelperErrorCode, PreparedUpdateReply, RunRequest, UpdateDiscardReply, UpdateInstallReply,
     UpdatePrepareReply, UpdatePrepareRequest, UpdateRefusal, Version,
 };
 use serde::de::DeserializeOwned;
