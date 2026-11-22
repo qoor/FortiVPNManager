@@ -136,6 +136,9 @@ public sealed class AppRouter
             // Windows neither suspends a desktop app nor asks the user to approve the Helper.
             case PortAction.HoldActivity or PortAction.OpenHelperApprovalSettings:
                 break;
+            // Windows checks the owner of the Helper's pipe, not a signing team.
+            case PortAction.UseHelperTeam:
+                break;
             case PortAction.ReleaseUpdateWaiter release:
                 waiter.Release(release.InstallerProcessId);
                 break;

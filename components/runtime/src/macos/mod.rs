@@ -7,9 +7,12 @@ use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::thread;
 
+use fvm_contract::app_internal::FromRuntime;
+use fvm_contract::app_internal::port::PortAction;
 use fvm_core::auto_update::LATEST_RELEASE_URL;
+use fvm_os_api_macos::code_signing;
 
-use crate::orchestration::{self, ClientSettings, Input, Paths};
+use crate::orchestration::{self, ClientSettings, Input, Outgoing, Paths};
 use crate::{auto_update, link, os};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
@@ -35,6 +38,11 @@ pub fn start() -> UnixStream {
         let _ = from_swift.send(Input::App(message));
     });
     let out = os::connect(app, inputs.clone());
+    let _ = out.send(Outgoing::App(FromRuntime::PortAction {
+        action: PortAction::UseHelperTeam {
+            team_id: code_signing::team_id(),
+        },
+    }));
     thread::Builder::new()
         .name("fvm-runtime".into())
         .spawn(move || {

@@ -128,7 +128,7 @@ private final class Relay {
   init(helpers: [FakeHelper]) {
     let inbound = HelperInbound(post: { [events] event in events.append(event) })
     var remaining = helpers
-    relay = HelperRelay(appBuild: "100", inbound: inbound) { [unowned self] _, _ in
+    relay = HelperRelay(appBuild: "100", inbound: inbound) { [unowned self] _, _, _ in
       opened += 1
       return FakeChannel(helper: remaining.removeFirst())
     }

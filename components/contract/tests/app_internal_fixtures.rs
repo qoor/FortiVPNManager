@@ -1794,6 +1794,10 @@ fn port_actions() {
             }),
             action(PortAction::HoldActivity { hold: true }),
             action(PortAction::OpenHelperApprovalSettings {}),
+            action(PortAction::UseHelperTeam {
+                team_id: Some("ABCDE12345".into()),
+            }),
+            action(PortAction::UseHelperTeam { team_id: None }),
             action(PortAction::ReleaseUpdateWaiter {
                 installer_process_id: 4_294_967_295,
             }),

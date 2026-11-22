@@ -14,12 +14,14 @@ import os
 @MainActor
 final class HelperRelay {
   typealias Open =
-    @MainActor (_ id: UInt64, _ inbound: HelperInbound) throws(AppInternal.HelperChannelFailure)
+    @MainActor (_ id: UInt64, _ inbound: HelperInbound, _ teamID: String?) throws(AppInternal
+    .HelperChannelFailure)
     -> any HelperChannel
 
   private let appBuild: String
   private let inbound: HelperInbound
   private let open: Open
+  private var teamID: String?
   private var link: Link?
   private var nextLinkID: UInt64 = 0
   /// The connection whose Helper answered with the app's build.
@@ -35,6 +37,10 @@ final class HelperRelay {
     self.appBuild = appBuild
     self.inbound = inbound
     self.open = open
+  }
+
+  func useTeam(_ teamID: String?) {
+    self.teamID = teamID
   }
 
   func build(reply: @escaping @Sendable (AppInternal.PortResponse) -> Void) async {
@@ -281,7 +287,7 @@ final class HelperRelay {
     }
     nextLinkID += 1
     let id = nextLinkID
-    let channel = try open(id, inbound)
+    let channel = try open(id, inbound, teamID)
     inbound.activate(id)
     channel.resume()
     let link = Link(channel: channel, id: id)
@@ -305,11 +311,11 @@ final class HelperRelay {
 extension HelperRelay {
   /// A connection to the Helper's mach service. Its peer must be the Helper signed by the app's team;
   /// the Helper checks the app the same way.
-  static func xpcConnection(id: UInt64, inbound: HelperInbound) throws(AppInternal
+  static func xpcConnection(id: UInt64, inbound: HelperInbound, teamID: String?) throws(AppInternal
     .HelperChannelFailure)
     -> any HelperChannel
   {
-    guard let teamID = CodeSigningIdentity.currentTeamID() else { throw .appNotSigned }
+    guard let teamID else { throw .appNotSigned }
     let connection = NSXPCConnection(
       machServiceName: FortiIdentifiers.helperMachService, options: .privileged)
     connection.remoteObjectInterface = NSXPCInterface(with: HelperXPCProtocol.self)

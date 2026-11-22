@@ -61,6 +61,7 @@ extension AppInternal {
     case postNotification(notification: UserNotification)
     case holdActivity(hold: Bool)
     case openHelperApprovalSettings
+    case useHelperTeam(teamId: String?)
     case releaseUpdateWaiter(installerProcessId: UInt32)
     case stopUpdateWaiter
     /// The runtime's last message. Also comes unasked once an update's installer started: then

@@ -85,6 +85,7 @@ public static partial class AppInternal
 
         public sealed record HoldActivity(bool Hold) : PortAction;
         public sealed record OpenHelperApprovalSettings : PortAction;
+        public sealed record UseHelperTeam(string? TeamId = null) : PortAction;
         public sealed record ReleaseUpdateWaiter(uint InstallerProcessId) : PortAction;
         public sealed record StopUpdateWaiter : PortAction;
 

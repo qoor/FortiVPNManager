@@ -131,6 +131,10 @@ pub enum PortAction {
     },
     /// Opens the system settings where the Helper is approved.
     OpenHelperApprovalSettings {},
+    UseHelperTeam {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        team_id: Option<String>,
+    },
     ReleaseUpdateWaiter {
         installer_process_id: u32,
     },

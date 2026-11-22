@@ -87,6 +87,7 @@ final class AppRouter {
       )
     case .holdActivity(let hold): lifetime.holdActivity(hold)
     case .openHelperApprovalSettings: ServiceRegistration.openApprovalSettings()
+    case .useHelperTeam(let teamID): relay.useTeam(teamID)
     case .releaseUpdateWaiter: break
     case .stopUpdateWaiter: updateWaiter.stop()
     case .approveQuit: lifetime.approveQuit()

@@ -320,6 +320,7 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.PortAction.PostNotification), TypeInfoPropertyName = "PortActionPostNotification")]
 [JsonSerializable(typeof(AppInternal.PortAction.HoldActivity), TypeInfoPropertyName = "PortActionHoldActivity")]
 [JsonSerializable(typeof(AppInternal.PortAction.OpenHelperApprovalSettings), TypeInfoPropertyName = "PortActionOpenHelperApprovalSettings")]
+[JsonSerializable(typeof(AppInternal.PortAction.UseHelperTeam), TypeInfoPropertyName = "PortActionUseHelperTeam")]
 [JsonSerializable(typeof(AppInternal.PortAction.ReleaseUpdateWaiter), TypeInfoPropertyName = "PortActionReleaseUpdateWaiter")]
 [JsonSerializable(typeof(AppInternal.PortAction.StopUpdateWaiter), TypeInfoPropertyName = "PortActionStopUpdateWaiter")]
 [JsonSerializable(typeof(AppInternal.PortAction.ApproveQuit), TypeInfoPropertyName = "PortActionApproveQuit")]

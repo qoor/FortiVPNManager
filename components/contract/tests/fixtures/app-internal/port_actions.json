@@ -179,6 +179,22 @@
   {
     "portAction": {
       "_0": {
+        "useHelperTeam": {
+          "teamId": "ABCDE12345"
+        }
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
+        "useHelperTeam": {}
+      }
+    }
+  },
+  {
+    "portAction": {
+      "_0": {
         "releaseUpdateWaiter": {
           "installerProcessId": 4294967295
         }

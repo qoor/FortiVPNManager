@@ -27,6 +27,7 @@ rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation.workspace = true
+fvm-os-api-macos.workspace = true
 nix = { workspace = true, features = ["net"] }
 security-framework.workspace = true
 security-framework-sys.workspace = true

@@ -896,6 +896,8 @@ extension AppInternal {
       .portAction(.postNotification(notification: .updateAvailable(version: "26.2.0"))),
       .portAction(.holdActivity(hold: true)),
       .portAction(.openHelperApprovalSettings),
+      .portAction(.useHelperTeam(teamId: "ABCDE12345")),
+      .portAction(.useHelperTeam(teamId: nil)),
       .portAction(.releaseUpdateWaiter(installerProcessId: 4_294_967_295)),
       .portAction(.stopUpdateWaiter),
       .portAction(.approveQuit),
