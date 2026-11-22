@@ -99,15 +99,28 @@ git submodule update --init third_party/openconnect
 - Rust ([rustup](https://rustup.rs)으로 설치)
 - .NET 10 SDK
 - Visual Studio Build Tools의 **C++를 사용한 데스크톱 개발** 워크로드
-- OpenConnect 라이브러리 zip: Mac에서 빌드
-  - macOS 요구 사항의 도구와 Homebrew mingw-w64 필요
+- OpenConnect 라이브러리 빌드 도구: [MSYS2](https://www.msys2.org)
+  - 설치 프로그램 기본 폴더(`C:\msys64`)에 설치
+
+### 처음 한 번 준비
+
+MSYS2 셸에서:
+
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf autoconf automake libtool make perl curl git zip unzip
+```
+
+저장소에서:
+
+```sh
+git submodule update --init third_party/openconnect
+```
 
 ### 빌드와 설치
 
 | 명령 | 내용 |
 |---|---|
-| `packaging/openconnect/build.sh windows` | Mac에서 OpenConnect 라이브러리 zip 생성 |
-| `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더> -OpenConnect <zip>` | 미리 빌드한 Rust 결과물과 OpenConnect 라이브러리 zip으로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
+| `packaging\windows\build.ps1` | Release 빌드로 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
 
 - **설치**: GitHub Release 또는 직접 생성한 MSI 실행
 

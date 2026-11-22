@@ -52,6 +52,9 @@ paths:
 - 설치 패키지의 Helper 서비스 시작 없음
   - 사유: 서비스 시작의 기한 초과 시 설치 실패 처리
 - Helper 서비스 시작: 앱 시작 때 앱 담당
+- OpenConnect 빌드 환경: C:\msys64의 MSYS2 UCRT64 고정
+  - 사유: PATH의 bash는 Git Bash·WSL일 수 있음
+  - C:\msys64: MSYS2 설치 프로그램 기본 폴더, GitHub Windows runner 설치 위치
 
 ## macOS
 - 번들 ID 변경 금지

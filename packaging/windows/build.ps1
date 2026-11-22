@@ -1,15 +1,15 @@
 # Builds the Windows app (with its own .NET) for release into .build\windows\FortiVPNManager, with the
-# Helper, the runtime DLL and the OpenConnect libraries built beforehand and the built-in Google OAuth
-# client when there is one, and from that folder the installer, .build\windows\FortiVPNManager-<version>.msi.
-# OpenConnect comes as a zip that packaging/openconnect/build.sh builds on a Mac.
-# It runs no cargo: scripts/msi-windows.sh builds the Rust parts on a Mac, as the build PC's security
-# software holds every new executable, build scripts included, for minutes on its first run.
+# Helper, the runtime DLL, the OpenConnect libraries and the built-in Google OAuth client when there is
+# one, and from that folder the installer, .build\windows\FortiVPNManager-<version>.msi.
 # ASCII only.
-# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1 -Build <build> -RustOutput <folder> -OpenConnect <zip>
-# <build> is yyyyMMddHHmmss, which the app takes and the Helper was built with (FVM_BUILD); <folder>
-# holds fvm-helper.exe and fvm_runtime.dll from release builds for x86_64-pc-windows-msvc:
-#   cargo build --release --package fvm-helper-windows
-#   cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
+# It builds the Rust parts, and the OpenConnect libraries with them, and takes the build
+# (yyyyMMddHHmmss), which the app and the Helper carry, from the current time.
+# With the Rust parts and the OpenConnect libraries built beforehand:
+#   build.ps1 -Build <build> -RustOutput <folder> -OpenConnect <zip>
+# <build> is the build the Helper was built with (FVM_BUILD); <folder> holds fvm-helper.exe and
+# fvm_runtime.dll from release builds for x86_64-pc-windows-msvc; <zip> is what
+# packaging/openconnect/build.sh windows makes.
 [CmdletBinding(DefaultParameterSetName = 'Build')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Prebuilt')] [string] $Build,

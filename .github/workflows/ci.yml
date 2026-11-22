@@ -67,7 +67,7 @@ jobs:
       - run: cargo clippy --workspace --exclude fvm-helper-macos --all-targets -- -D warnings
       # The Helper's exception-route and VPN network tests, which read the PC's primary network and
       # change its routing table or WINS servers directly or through the pipe, were not tried on
-      # this runner; they run on the Windows PC (scripts/test-windows.sh).
+      # this runner.
       - run: >-
           cargo test --workspace --exclude fvm-helper-macos --
           --skip routes::tests::a_change_for_a_network_that_changed_since_it_was_read_changes_nothing

@@ -20,8 +20,7 @@ use fvm_contract::app_internal::*;
 use serde::Serialize;
 use serde_json::Value;
 
-/// Relative to the package folder, where cargo and `scripts/test-windows.sh` run the tests: a path
-/// fixed at build time names this Mac's tree on the Windows PC that runs the cross-built test.
+/// Relative to the package folder, where cargo runs the tests.
 fn path(name: &str) -> PathBuf {
     PathBuf::from("tests/fixtures/app-internal").join(name)
 }

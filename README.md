@@ -99,15 +99,28 @@ git submodule update --init third_party/openconnect
 - Rust (install with [rustup](https://rustup.rs))
 - .NET 10 SDK
 - The **Desktop development with C++** workload of Visual Studio Build Tools
-- The OpenConnect library zip, built on a Mac
-  - Needs the macOS build tools and Homebrew mingw-w64
+- Build tools for the OpenConnect library: [MSYS2](https://www.msys2.org)
+  - Installed in `C:\msys64`, the installer's default folder
+
+### One-time setup
+
+In an MSYS2 shell:
+
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf autoconf automake libtool make perl curl git zip unzip
+```
+
+In the repository:
+
+```sh
+git submodule update --init third_party/openconnect
+```
 
 ### Build and install
 
 | Command | What it does |
 |---|---|
-| `packaging/openconnect/build.sh windows` | OpenConnect library zip, made on a Mac |
-| `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder> -OpenConnect <zip>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output and the OpenConnect library zip |
+| `packaging\windows\build.ps1` | Installer package (`.build\windows\FortiVPNManager-<version>.msi`) from a Release build |
 
 - **Install**: run the MSI from a GitHub Release or your own build
 
