@@ -368,7 +368,7 @@ fn the_away_limit_stops_reconnects_but_keeps_the_tunnel() {
     assert_eq!(h.now, at(18, 20, 10, 0));
     assert_eq!(stop_reasons(&limit), []);
     assert!(h.connected().is_some());
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     assert_eq!(h.cm.schedule_outlook(), Some(ScheduleOutlook::Suspended {}));
     // Back before the server ends the session: it is kept, but the next one does not replace it.
     h.advance(600.0);
@@ -404,7 +404,7 @@ fn a_held_reconnect_is_given_up_at_the_limit() {
     h.fire(TimerKind::Retry);
     assert_eq!(h.cm.phase, Phase::Idle);
     assert!(!h.cm.wants_connection);
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     back(&mut h);
     assert_eq!(h.cm.phase, Phase::Idle);
 }
@@ -418,10 +418,10 @@ fn away_time_before_the_end_counts_at_the_end() {
     if h.timer(TimerKind::AwayLimit).is_some() {
         h.fire(TimerKind::AwayLimit);
     }
-    assert!(!h.cm.reconnect_suspended);
+    assert!(!h.cm.reconnect_limits.reconnect_suspended);
     h.fire(TimerKind::Schedule);
     assert_eq!(h.now, at(18, 18, 0, 0));
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     assert!(h.connected().is_some());
 }
 
@@ -437,7 +437,7 @@ fn the_next_start_clears_the_suspension() {
     assert_eq!(h.cm.phase, Phase::Idle);
     h.fire(TimerKind::Schedule);
     assert_eq!(h.now, at(19, 9, 0, 0));
-    assert!(!h.cm.reconnect_suspended);
+    assert!(!h.cm.reconnect_limits.reconnect_suspended);
     assert_eq!(reason(&h), Some(AttemptReason::Scheduled));
 }
 
@@ -453,7 +453,7 @@ fn reconnect_now_clears_the_suspension() {
         stop_reasons(&h.send(Input::ReconnectNow)),
         [StopReason::Reconnect]
     );
-    assert!(!h.cm.reconnect_suspended);
+    assert!(!h.cm.reconnect_limits.reconnect_suspended);
 }
 
 // MARK: Sleep
@@ -472,7 +472,7 @@ fn a_long_sleep_outside_the_hours_stops_reconnects_before_the_user_unlocks() {
     if h.timer(TimerKind::Schedule).is_some_and(|due| due <= h.now) {
         h.fire(TimerKind::Schedule);
     }
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     back(&mut h);
     let settled = h.settle(&observe().dead());
     assert_eq!(stop_reasons(&settled), [StopReason::Reconnect]);
@@ -495,7 +495,7 @@ fn a_working_tunnel_is_kept_on_a_wake_while_reconnects_wait() {
     h.sleep();
     h.now = at(18, 20, 0, 0);
     h.wake();
-    assert!(!h.cm.reconnect_suspended);
+    assert!(!h.cm.reconnect_limits.reconnect_suspended);
     let settled = h.settle(&observe());
     assert_eq!(stop_reasons(&settled), []);
     assert!(h.connected().is_some());
@@ -605,7 +605,7 @@ fn a_shorter_away_limit_applies_at_once() {
         ..weekday_hours()
     });
     h.send(Input::SettingsChanged(settings));
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     assert!(h.connected().is_some());
 }
 

@@ -50,7 +50,7 @@ impl ConnectionManager {
     }
 
     pub(in crate::connection) fn did_wake(&mut self, slept_for: Duration) {
-        self.sleeping = false;
+        self.system.sleeping = false;
         self.last_wake_at = Some(self.now);
         self.pending_wake = Some(slept_for);
         // The away time may have run out during the sleep; act before the user unlocks.
@@ -82,7 +82,9 @@ impl ConnectionManager {
             Phase::WaitingNetwork {
                 reason,
                 delay_after_path,
-            } if matches!(observation, WakeObservation::NetworkBack { .. }) && !self.sleeping => {
+            } if matches!(observation, WakeObservation::NetworkBack { .. })
+                && !self.system.sleeping =>
+            {
                 self.resume_from_network_wait(*reason, *delay_after_path);
             }
             _ => {}
@@ -155,7 +157,7 @@ impl ConnectionManager {
         routing_incomplete: bool,
     ) {
         self.path = Some(snapshot.clone());
-        if self.sleeping {
+        if self.system.sleeping {
             return;
         }
         let session = match &mut self.phase {

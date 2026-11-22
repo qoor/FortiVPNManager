@@ -69,7 +69,7 @@ impl ConnectionManager {
                 end: EpochMillis(next.at),
             });
         }
-        Some(if self.reconnect_suspended {
+        Some(if self.reconnect_limits.reconnect_suspended {
             ScheduleOutlook::Suspended {}
         } else if let Some(away_since) = self.away_since {
             ScheduleOutlook::HoldingWhileAway {
@@ -82,7 +82,7 @@ impl ConnectionManager {
 
     #[must_use]
     pub fn readiness_section(&self) -> ReadinessSection {
-        let helper = match &self.helper {
+        let helper = match &self.readiness.helper {
             None => HelperState::Checking {},
             Some(HelperFacts::NotRegistered) => HelperState::NotRegistered {},
             Some(HelperFacts::RequiresApproval) => HelperState::RequiresApproval {},
@@ -99,7 +99,7 @@ impl ConnectionManager {
                 app_build: self.app_build.clone(),
             },
         };
-        let backend = match &self.helper {
+        let backend = match &self.readiness.helper {
             Some(HelperFacts::Answered {
                 build,
                 status: Some(status),
@@ -111,7 +111,7 @@ impl ConnectionManager {
         ReadinessSection {
             register_helper: shown(matches!(helper, HelperState::NotRegistered {})),
             helper,
-            register_error: self.register_error.clone(),
+            register_error: self.readiness.register_error.clone(),
             backend,
         }
     }

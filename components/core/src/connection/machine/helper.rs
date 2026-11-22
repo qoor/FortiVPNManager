@@ -10,7 +10,7 @@ use crate::connection::policy;
 use crate::connection::{Effect, OtpFailure};
 
 use super::{
-    AfterStop, Attempt, ConnectionManager, OtpSession, Phase, RetryReason, Session, Stage,
+    AfterStop, Attempt, ConnectionManager, OtpSession, Phase, Quit, RetryReason, Session, Stage,
 };
 
 impl ConnectionManager {
@@ -80,9 +80,9 @@ impl ConnectionManager {
     pub(super) fn enter_connected(&mut self, mut attempt: Attempt, tunnel_ip: Option<Ipv4Addr>) {
         // Still open only when the gateway asked for no OTP.
         self.push_otp_close(attempt.close_otp_session(false, true));
-        self.network_failure_streak = 0;
+        self.reconnect_limits.network_failure_streak = 0;
         self.ledger.reset_consecutive_failures();
-        self.forced_retry_used = false;
+        self.reconnect_limits.forced_retry_used = false;
         self.phase = Phase::Connected(Session {
             attempt: attempt.id,
             since: self.now,
@@ -264,7 +264,7 @@ impl ConnectionManager {
     /// routes are in place exactly then (user decision, 2026-11-16).
     #[must_use]
     pub fn wants_vpn(&self) -> bool {
-        if self.terminated {
+        if self.quit == Quit::Terminated {
             return false;
         }
         match &self.phase {

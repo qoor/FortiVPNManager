@@ -66,6 +66,16 @@ pub(super) struct FollowApproval {
     pub(super) next: SystemTime,
 }
 
+#[derive(Default)]
+pub(super) struct Readiness {
+    /// The setup the last readiness check found missing; `None` before the first check.
+    setup_needed: Option<Vec<SetupNeed>>,
+    pub(super) helper: Option<HelperFacts>,
+    pub(super) register_error: Option<RegistrationError>,
+    pub(super) follow_approval: Option<FollowApproval>,
+    pub(super) settings_open_decided: bool,
+}
+
 impl ReadinessFacts {
     fn missing(&self, app_build: &str) -> Vec<SetupNeed> {
         let checks = [
@@ -103,13 +113,13 @@ impl ConnectionManager {
 
     pub(super) fn readiness_checked(&mut self, facts: ReadinessFacts) {
         let missing = facts.missing(&self.app_build);
-        self.helper = Some(facts.helper);
-        let first = self.setup_needed.is_none();
-        self.setup_needed = Some(missing.clone());
+        self.readiness.helper = Some(facts.helper);
+        let first = self.readiness.setup_needed.is_none();
+        self.readiness.setup_needed = Some(missing.clone());
         // Settings open by themselves once per launch, for the first check only: setup that
         // becomes required later in the run opens nothing.
-        if first && !self.settings_open_decided {
-            self.settings_open_decided = true;
+        if first && !self.readiness.settings_open_decided {
+            self.readiness.settings_open_decided = true;
             if !missing.is_empty() {
                 self.effects.push(Effect::OpenSettings);
             }
@@ -150,15 +160,15 @@ impl ConnectionManager {
     pub(super) fn helper_registered(&mut self, result: Result<(), RegistrationError>) {
         match result {
             Ok(()) => {
-                self.register_error = None;
+                self.readiness.register_error = None;
                 self.follow_helper_approval();
             }
-            Err(error) => self.register_error = Some(error),
+            Err(error) => self.readiness.register_error = Some(error),
         }
     }
 
     pub(super) fn follow_helper_approval(&mut self) {
-        self.follow_approval = Some(FollowApproval {
+        self.readiness.follow_approval = Some(FollowApproval {
             until: self.now + policy::APPROVAL_FOLLOW,
             next: self.now + policy::APPROVAL_FOLLOW_POLL,
         });
@@ -166,7 +176,8 @@ impl ConnectionManager {
 
     pub(super) fn approval_follow_due(&mut self) {
         self.check_readiness();
-        self.follow_approval = self
+        self.readiness.follow_approval = self
+            .readiness
             .follow_approval
             .filter(|follow| self.now < follow.until)
             .map(|follow| FollowApproval {

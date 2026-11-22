@@ -29,11 +29,11 @@ impl ConnectionManager {
     /// again: the Helper ends itself on internal faults, and one that did so on every run would
     /// otherwise repeat VPN logins and OTP emails without end.
     pub(super) fn forced_termination(&mut self) {
-        if self.forced_retry_used {
+        if self.reconnect_limits.forced_retry_used {
             self.network_failure(RetryReason::Network);
             return;
         }
-        self.forced_retry_used = true;
+        self.reconnect_limits.forced_retry_used = true;
         self.begin_attempt(
             AttemptReason::Retry(RetryReason::ForcedTermination),
             false,
@@ -42,8 +42,11 @@ impl ConnectionManager {
     }
 
     pub(super) fn network_failure(&mut self, reason: RetryReason) {
-        self.network_failure_streak += 1;
-        self.schedule_retry(reason, policy::network_backoff(self.network_failure_streak));
+        self.reconnect_limits.network_failure_streak += 1;
+        self.schedule_retry(
+            reason,
+            policy::network_backoff(self.reconnect_limits.network_failure_streak),
+        );
     }
 
     pub(super) fn auth_failure(&mut self, failure: Failure) {
@@ -61,7 +64,7 @@ impl ConnectionManager {
     pub(super) fn schedule_retry(&mut self, reason: RetryReason, delay: Duration) {
         if !self.wants_connection {
             self.phase = Phase::Idle;
-        } else if self.sleeping {
+        } else if self.system.sleeping {
             self.wait_for_network(RetryReason::Sleep, Duration::ZERO);
         } else if self.path.as_ref().is_some_and(|path| !path.satisfied) {
             // An authentication retry is bound by the ledger's cooldown instead of a new wait.

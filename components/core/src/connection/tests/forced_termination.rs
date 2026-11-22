@@ -212,7 +212,7 @@ fn a_lost_helper_after_reconnects_were_suspended_stays_off() {
     h.advance(600.0);
     h.send(Input::ScreenLocked { at: h.now });
     h.fire(TimerKind::AwayLimit);
-    assert!(h.cm.reconnect_suspended);
+    assert!(h.cm.reconnect_limits.reconnect_suspended);
     h.lose_helper(4.0 * 3600.0);
     assert_eq!(h.cm.phase, Phase::Idle);
     assert!(!h.cm.wants_connection);

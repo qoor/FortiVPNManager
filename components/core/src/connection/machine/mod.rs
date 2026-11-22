@@ -17,13 +17,12 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime};
 
 use fvm_contract::app_helper::{AttemptId, Milestone, SessionId, StopReason};
-use fvm_contract::app_internal::port::RegistrationError;
 use jiff::tz::TimeZone;
 
 use super::ledger::{Failure, FailureLedger};
 use super::policy;
-use super::readiness::{FollowApproval, HelperFacts, SetupNeed};
-use super::system::{PathSnapshot, RawPath, Underlay, WakeSettle};
+use super::readiness::{Readiness, SetupNeed};
+use super::system::{PathSnapshot, SystemObservation, Underlay, WakeSettle};
 use super::{
     ConnectionSettings, Effect, Input, Launch, Note, OtpFailure, Settings, Startup, TimerId,
     TimerKind, VpnAccount,
@@ -50,23 +49,16 @@ pub struct ConnectionManager {
     saved_ledger: FailureLedger,
     /// The network path as last judged.
     pub(super) path: Option<PathSnapshot>,
-    pub(super) sleeping: bool,
     last_wake_at: Option<SystemTime>,
     /// A wake not judged yet, with how long the system slept.
     pending_wake: Option<Duration>,
-    quit_requested_at: Option<SystemTime>,
-    terminated: bool,
+    quit: Quit,
     pub(super) update_stop: Option<UpdateStop>,
     /// Since when the user has been away; `None` while present.
     pub(super) away_since: Option<SystemTime>,
-    /// The away limit was reached: no automatic reconnect until Connect, Reconnect Now or the next
-    /// scheduled start.
-    pub(super) reconnect_suspended: bool,
+    pub(super) reconnect_limits: ReconnectLimits,
     /// The latest schedule start or end acted on.
     schedule_boundary: Option<SystemTime>,
-    network_failure_streak: u32,
-    /// The immediate reconnect after a forced termination was used and no tunnel has come up since.
-    forced_retry_used: bool,
     /// The attempt whose failure the phase shows, for a late spam-folder finding.
     last_failure_attempt: Option<AttemptId>,
     /// The code email the next login waits for.
@@ -77,28 +69,25 @@ pub struct ConnectionManager {
     timers: BTreeMap<TimerKind, TimerSlot>,
     next_timer_generation: u64,
     activity_held: bool,
+    pub(super) system: SystemObservation,
+    pub(super) readiness: Readiness,
+}
 
-    // The system as observed (system.rs).
-    pub(super) raw_path: Option<RawPath>,
-    pub(super) path_settle_at: Option<SystemTime>,
-    /// The probe a network path report waits for, with the host it looks up.
-    pub(super) path_probe: Option<(u64, String)>,
-    pub(super) wake_settle: Option<WakeSettle>,
-    pub(super) next_probe: u64,
-    /// The gateway address resolved for a host.
-    pub(super) gateway_ip: Option<(String, Ipv4Addr)>,
-    pub(super) screen_locked: bool,
-    pub(super) displays_asleep: bool,
-    pub(super) lock_poll_at: Option<SystemTime>,
-    pub(super) sleep_reported_at: Option<SystemTime>,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Quit {
+    NotRequested,
+    Requested { at: SystemTime },
+    Terminated,
+}
 
-    // Readiness (readiness.rs).
-    /// The setup the last readiness check found missing; `None` before the first check.
-    pub(super) setup_needed: Option<Vec<SetupNeed>>,
-    pub(super) helper: Option<HelperFacts>,
-    pub(super) register_error: Option<RegistrationError>,
-    pub(super) follow_approval: Option<FollowApproval>,
-    pub(super) settings_open_decided: bool,
+#[derive(Default)]
+pub(super) struct ReconnectLimits {
+    /// The away limit was reached: no automatic reconnect until Connect, Reconnect Now or the next
+    /// scheduled start.
+    pub(super) reconnect_suspended: bool,
+    network_failure_streak: u32,
+    /// The immediate reconnect after a forced termination was used and no tunnel has come up since.
+    forced_retry_used: bool,
 }
 
 /// Where the connection is.
@@ -339,44 +328,27 @@ impl ConnectionManager {
             saved_ledger: ledger.clone(),
             ledger,
             path: None,
-            sleeping: false,
             last_wake_at: None,
             pending_wake: None,
-            quit_requested_at: None,
-            terminated: false,
+            quit: Quit::NotRequested,
             update_stop: None,
             away_since: None,
-            reconnect_suspended: false,
+            reconnect_limits: ReconnectLimits::default(),
             schedule_boundary: None,
-            network_failure_streak: 0,
-            forced_retry_used: false,
             last_failure_attempt: None,
             stale_otp: None,
             run_account: None,
             timers: BTreeMap::new(),
             next_timer_generation: 0,
             activity_held: false,
-            raw_path: None,
-            path_settle_at: None,
-            path_probe: None,
-            wake_settle: None,
-            next_probe: 0,
-            gateway_ip: None,
-            screen_locked: false,
-            displays_asleep: false,
-            lock_poll_at: None,
-            sleep_reported_at: None,
-            setup_needed: None,
-            helper: None,
-            register_error: None,
-            follow_approval: None,
-            settings_open_decided: false,
+            system: SystemObservation::default(),
+            readiness: Readiness::default(),
         }
     }
 
     /// Handles one input taken at `now` and returns what to carry out, in order.
     pub fn handle(&mut self, input: Input, now: SystemTime) -> Vec<Effect> {
-        if self.terminated {
+        if self.quit == Quit::Terminated {
             return Vec::new();
         }
         self.now = match &input {
@@ -430,28 +402,28 @@ impl ConnectionManager {
             Input::WillSleep { at } => self.will_sleep_reported(at),
             Input::DidWake => self.did_wake_reported(),
             Input::ScreenLocked { at } => {
-                self.screen_locked = true;
+                self.system.screen_locked = true;
                 self.update_presence(at);
             }
             Input::ScreenUnlocked => {
-                self.screen_locked = false;
+                self.system.screen_locked = false;
                 self.update_presence(self.now);
             }
             Input::DisplaysSlept { at } => {
-                self.displays_asleep = true;
+                self.system.displays_asleep = true;
                 self.update_presence(at);
             }
             Input::DisplaysWoke => {
                 // Whether the screen is locked behind the displays decides; the answer judges.
-                self.displays_asleep = false;
+                self.system.displays_asleep = false;
                 self.effects.push(Effect::ReadScreenState);
             }
             Input::ScreenState {
                 locked,
                 displays_asleep,
             } => {
-                self.screen_locked = locked;
-                self.displays_asleep = displays_asleep;
+                self.system.screen_locked = locked;
+                self.system.displays_asleep = displays_asleep;
                 self.update_presence(self.now);
             }
             Input::NetworkPathChanged {
@@ -466,7 +438,8 @@ impl ConnectionManager {
     fn finish(&mut self, marks: &NoteMarks) -> Vec<Effect> {
         self.reconcile_timers();
         // A pending stale-code search keeps its polling and its time limit on time.
-        let hold = !self.terminated && (self.phase.holds_activity() || self.stale_otp.is_some());
+        let hold = self.quit != Quit::Terminated
+            && (self.phase.holds_activity() || self.stale_otp.is_some());
         if hold != self.activity_held {
             self.activity_held = hold;
             self.effects.push(Effect::HoldActivity(hold));
@@ -475,7 +448,7 @@ impl ConnectionManager {
             self.saved_ledger = self.ledger.clone();
             self.effects.push(Effect::SaveLedger(self.ledger.clone()));
         }
-        if self.terminated {
+        if self.quit == Quit::Terminated {
             self.effects.push(Effect::ApproveQuit);
         }
         let mut effects = match &self.phase {
@@ -505,7 +478,7 @@ impl ConnectionManager {
                 _ => None,
             },
             holding: self.phase.is_holding(),
-            suspended: self.reconnect_suspended,
+            suspended: self.reconnect_limits.reconnect_suspended,
         }
     }
 
@@ -541,7 +514,7 @@ impl ConnectionManager {
 
     fn wanted_timers(&self) -> BTreeMap<TimerKind, SystemTime> {
         let mut wanted = BTreeMap::new();
-        if self.terminated {
+        if self.quit == Quit::Terminated {
             return wanted;
         }
         match &self.phase {
@@ -554,7 +527,7 @@ impl ConnectionManager {
                     wanted.insert(TimerKind::OtpDeadline, prompted + policy::OTP_DEADLINE);
                 }
             }
-            Phase::Connected(session) if !self.sleeping && self.pending_wake.is_none() => {
+            Phase::Connected(session) if !self.system.sleeping && self.pending_wake.is_none() => {
                 let next = match &session.renewal {
                     None if self.automatic_reconnect_allowed() => session
                         .planned_reconnect
@@ -581,11 +554,15 @@ impl ConnectionManager {
             .update_stop
             .filter(|stop| !stop.stopped)
             .map(|stop| stop.requested_at);
-        if let Some(requested) = self.quit_requested_at.or(stopping_for_update) {
+        let quit_requested_at = match self.quit {
+            Quit::Requested { at } => Some(at),
+            Quit::NotRequested | Quit::Terminated => None,
+        };
+        if let Some(requested) = quit_requested_at.or(stopping_for_update) {
             wanted.insert(TimerKind::QuitDeadline, requested + policy::QUIT_TIMEOUT);
         }
         if let Some(schedule) = &self.settings.connection.schedule
-            && self.quit_requested_at.is_none()
+            && self.quit == Quit::NotRequested
             && self.update_stop.is_none()
         {
             if let Some(handled) = self.schedule_boundary
@@ -594,21 +571,27 @@ impl ConnectionManager {
                 wanted.insert(TimerKind::Schedule, next.at);
             }
             if let Some(away_since) = self.away_since
-                && !self.reconnect_suspended
+                && !self.reconnect_limits.reconnect_suspended
             {
                 wanted.insert(TimerKind::AwayLimit, away_since + schedule.away_limit());
             }
         }
         let observation = [
-            (TimerKind::PathSettle, self.path_settle_at),
+            (TimerKind::PathSettle, self.system.path_settle_at),
             (
                 TimerKind::WakeSettle,
-                self.wake_settle.as_ref().and_then(WakeSettle::next_look),
+                self.system
+                    .wake_settle
+                    .as_ref()
+                    .and_then(WakeSettle::next_look),
             ),
-            (TimerKind::LockPoll, self.lock_poll_at),
+            (TimerKind::LockPoll, self.system.lock_poll_at),
             (
                 TimerKind::ApprovalFollow,
-                self.follow_approval.as_ref().map(|follow| follow.next),
+                self.readiness
+                    .follow_approval
+                    .as_ref()
+                    .map(|follow| follow.next),
             ),
         ];
         for (kind, at) in observation {
@@ -677,7 +660,7 @@ impl ConnectionManager {
         self.reset_schedule_boundary();
         self.effects.push(Effect::ReadScreenState);
         if launch.import_report_shown {
-            self.settings_open_decided = true;
+            self.readiness.settings_open_decided = true;
             self.effects.push(Effect::OpenSettings);
         }
 
@@ -723,7 +706,7 @@ impl ConnectionManager {
             self.effects.push(Effect::ClearTrustedCerts);
         }
         if account.host != old.host {
-            self.gateway_ip = None;
+            self.system.gateway_ip = None;
         }
         let key = account.ledger_key();
         if key != self.ledger.account_key {
@@ -782,11 +765,11 @@ impl ConnectionManager {
                 reason: RetryReason::UserAway,
                 ..
             } => {
-                self.reconnect_suspended = false;
+                self.reconnect_limits.reconnect_suspended = false;
                 self.begin_attempt(reason, false, false);
             }
             phase => {
-                self.reconnect_suspended = false;
+                self.reconnect_limits.reconnect_suspended = false;
                 self.phase = phase;
             }
         }
@@ -845,7 +828,9 @@ impl ConnectionManager {
 
     fn quit_requested(&mut self) {
         self.wants_connection = false;
-        self.quit_requested_at.get_or_insert(self.now);
+        if self.quit == Quit::NotRequested {
+            self.quit = Quit::Requested { at: self.now };
+        }
         match self.take_phase() {
             Phase::Connecting(attempt) => {
                 self.abort_attempt(*attempt, StopReason::AppQuit, AfterStop::Quit);
@@ -859,13 +844,13 @@ impl ConnectionManager {
             }
             phase => {
                 self.phase = phase;
-                self.terminated = true;
+                self.quit = Quit::Terminated;
             }
         }
     }
 
     fn stop_for_update(&mut self) {
-        if self.quit_requested_at.is_some() {
+        if self.quit != Quit::NotRequested {
             return;
         }
         self.wants_connection = false;
@@ -904,7 +889,7 @@ impl ConnectionManager {
     }
 
     fn update_failed(&mut self, reconnect: bool) {
-        if self.quit_requested_at.is_some() {
+        if self.quit != Quit::NotRequested {
             return;
         }
         self.update_stop = None;
@@ -920,9 +905,9 @@ impl ConnectionManager {
 
     fn reset_for_user_action(&mut self) {
         self.ledger.reset_for_user_action();
-        self.network_failure_streak = 0;
-        self.forced_retry_used = false;
-        self.reconnect_suspended = false;
+        self.reconnect_limits.network_failure_streak = 0;
+        self.reconnect_limits.forced_retry_used = false;
+        self.reconnect_limits.reconnect_suspended = false;
     }
 
     // MARK: Timers
@@ -947,7 +932,9 @@ impl ConnectionManager {
                 phase => self.phase = phase,
             },
             TimerKind::ProactiveReconnect => self.proactive_reconnect_due(),
-            TimerKind::QuitDeadline if self.quit_requested_at.is_some() => self.terminated = true,
+            TimerKind::QuitDeadline if self.quit != Quit::NotRequested => {
+                self.quit = Quit::Terminated;
+            }
             TimerKind::QuitDeadline => self.stopped_for_update(),
             TimerKind::Schedule => self.schedule_boundary_due(),
             TimerKind::AwayLimit => self.check_away_limit(),

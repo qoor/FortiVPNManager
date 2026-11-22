@@ -10,8 +10,8 @@ use crate::connection::ledger::Failure;
 use crate::connection::policy::{self, elapsed};
 
 use super::{
-    AfterStop, Attempt, AttemptReason, ConnectionManager, OtpSession, Phase, Renewal, RetryReason,
-    SECONDS_FROM_1970_TO_2026, Session, Stage, Stop,
+    AfterStop, Attempt, AttemptReason, ConnectionManager, OtpSession, Phase, Quit, Renewal,
+    RetryReason, SECONDS_FROM_1970_TO_2026, Session, Stage, Stop,
 };
 
 impl ConnectionManager {
@@ -36,7 +36,7 @@ impl ConnectionManager {
                 .filter(|schedule| !schedule.is_active(self.now, &self.time_zone))
                 .map(crate::connection::Schedule::away_limit)
         {
-            if self.reconnect_suspended || self.away_limit_reached() {
+            if self.reconnect_limits.reconnect_suspended || self.away_limit_reached() {
                 self.give_up_reconnecting();
                 return;
             }
@@ -48,7 +48,7 @@ impl ConnectionManager {
                 return;
             }
         }
-        if self.sleeping {
+        if self.system.sleeping {
             self.wait_for_network(RetryReason::Sleep, Duration::ZERO);
             return;
         }
@@ -337,7 +337,7 @@ impl ConnectionManager {
             }
             AfterStop::Quit => {
                 self.phase = Phase::Idle;
-                self.terminated = true;
+                self.quit = Quit::Terminated;
             }
             AfterStop::Update => {
                 self.phase = Phase::Idle;

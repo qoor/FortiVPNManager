@@ -20,7 +20,7 @@ impl ConnectionManager {
     pub(super) fn schedule_changed(&mut self) {
         self.reset_schedule_boundary();
         if self.settings.connection.schedule.is_none() {
-            self.reconnect_suspended = false;
+            self.reconnect_limits.reconnect_suspended = false;
         } else {
             self.check_away_limit();
         }
@@ -66,7 +66,7 @@ impl ConnectionManager {
         self.schedule_boundary = Some(latest.at);
         match latest.edge {
             crate::connection::schedule::Edge::Start => {
-                self.reconnect_suspended = false;
+                self.reconnect_limits.reconnect_suspended = false;
                 self.connect_requested(AttemptReason::Scheduled);
             }
             crate::connection::schedule::Edge::End => self.check_away_limit(),
@@ -75,10 +75,10 @@ impl ConnectionManager {
 
     /// Stops automatic reconnects once the away limit is reached; a waiting one is dropped.
     pub(super) fn check_away_limit(&mut self) {
-        if self.reconnect_suspended || !self.away_limit_reached() {
+        if self.reconnect_limits.reconnect_suspended || !self.away_limit_reached() {
             return;
         }
-        self.reconnect_suspended = true;
+        self.reconnect_limits.reconnect_suspended = true;
         if matches!(
             self.phase,
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. }
@@ -90,7 +90,7 @@ impl ConnectionManager {
     /// Like Disconnect without stopping anything: the next connection waits for the user or the
     /// schedule.
     pub(super) fn give_up_reconnecting(&mut self) {
-        self.reconnect_suspended = true;
+        self.reconnect_limits.reconnect_suspended = true;
         self.wants_connection = false;
         self.phase = Phase::Idle;
     }
@@ -106,7 +106,8 @@ impl ConnectionManager {
     /// Always inside the scheduled hours; outside them only while the user is present and
     /// reconnects were not suspended.
     pub(in crate::connection) fn automatic_reconnect_allowed(&self) -> bool {
-        self.within_schedule() || (!self.reconnect_suspended && self.away_since.is_none())
+        self.within_schedule()
+            || (!self.reconnect_limits.reconnect_suspended && self.away_since.is_none())
     }
 
     /// Outside the scheduled hours, the user has been away for the schedule's away time.
