@@ -66,8 +66,6 @@ pub(crate) enum OsRequest {
     ReadSecret {
         item: SecretItem,
     },
-    /// Answered by `HasSecret`, or `SecretStoreFailed`. Never reads the secret, so the OS asks the
-    /// user for nothing.
     HasSecret {
         item: SecretItem,
     },
