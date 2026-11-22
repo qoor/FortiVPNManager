@@ -31,6 +31,8 @@ final class UpdateWaiter {
     process.standardError = FileHandle.nullDevice
     do {
       try process.run()
+    } catch let error as NSError where error.domain == NSPOSIXErrorDomain {
+      return .updateWaiterFailed(description: errorText(Int32(error.code)))
     } catch {
       return .updateWaiterFailed(description: error.localizedDescription)
     }
@@ -42,6 +44,5 @@ final class UpdateWaiter {
     guard let process else { return }
     self.process = nil
     process.terminate()
-    process.waitUntilExit()
   }
 }
