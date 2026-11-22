@@ -1,4 +1,5 @@
 import Foundation
+import System
 
 // Sentences about the settings file (config.yaml) and IPv4 entries. Paths such as `vpn.port` come
 // as written in the file; the few rules that name fixed keys spell them here.
@@ -271,7 +272,7 @@ private enum SettingsKey {
 
 /// The system's description of `errno`.
 func errorText(_ errno: Int32) -> String {
-  unsafe String(cString: strerror(errno))
+  Errno(rawValue: errno).description
 }
 
 /// "U+0007".

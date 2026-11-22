@@ -76,13 +76,9 @@ nonisolated enum SystemFacts {
     return (session["CGSSessionScreenIsLocked"] as? Bool) ?? false
   }
 
-  private static func ipv4String(_ address: in_addr) -> String? {
-    var address = address
-    var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-    guard unsafe inet_ntop(AF_INET, &address, &buffer, socklen_t(buffer.count)) != nil else {
-      return nil
-    }
-    return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+  private static func ipv4String(_ address: in_addr) -> String {
+    let value = UInt32(bigEndian: address.s_addr)
+    return [24, 16, 8, 0].map { String((value >> $0) & 0xFF) }.joined(separator: ".")
   }
 
   /// Runs a fixed command with only PATH and hands over its standard output when it exits with 0.
