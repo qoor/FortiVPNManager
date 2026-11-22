@@ -12,6 +12,7 @@ final class SystemEvents {
   private let pathMonitor = NWPathMonitor()
   private var observers: [(NotificationCenter, NSObjectProtocol)] = []
   private var settingsStore: SCDynamicStore?
+  private static weak var settingsWatcher: SystemEvents?
 
   init(post: @escaping @Sendable (AppInternal.SystemEvent) -> Void) {
     self.post = post
@@ -63,23 +64,18 @@ final class SystemEvents {
 
   /// The saved IPv4 settings of any network service (System Settings) and the primary IPv4 state,
   /// from SCDynamicStore on the main run loop: the exception routes follow the primary network, its
-  /// router and this Mac's address on it. The store holds `self` unretained; this object lives as
-  /// long as the app.
+  /// router and this Mac's address on it.
   private func watchNetworkSettings() {
-    var context = unsafe SCDynamicStoreContext(
-      version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-      retain: nil, release: nil, copyDescription: nil)
+    Self.settingsWatcher = self
     guard
       let store = unsafe SCDynamicStoreCreate(
         nil, "FortiVPNManager" as CFString,
-        { _, _, info in
-          guard let info = unsafe info else { return }
+        { _, _, _ in
           // Delivered on the main run loop, where the source is scheduled.
           MainActor.assumeIsolated {
-            unsafe Unmanaged<SystemEvents>.fromOpaque(info).takeUnretainedValue().post(
-              .networkSettingsChanged)
+            SystemEvents.settingsWatcher?.post(.networkSettingsChanged)
           }
-        }, &context),
+        }, nil),
       SCDynamicStoreSetNotificationKeys(
         store, ["State:/Network/Global/IPv4"] as CFArray,
         ["Setup:/Network/Service/[^/]+/IPv4"] as CFArray),
