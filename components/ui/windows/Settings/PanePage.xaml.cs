@@ -176,7 +176,7 @@ public sealed partial class PanePage : Page
 
     /// <summary>
     /// Below 560 px, about the narrow window's width, the buttons move under the title, where the Log
-    /// pane's four commands or Apply and Discard Changes leave the title room.
+    /// pane's four commands leave the title room.
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {

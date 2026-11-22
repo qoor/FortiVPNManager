@@ -4,8 +4,8 @@ import SwiftUI
 
 /// One list of the Exception Rules: a single column without a border that spans its form row, with
 /// + and − in the row below (`AddressListButtons`), as in the settings mockup. Every finished edit
-/// reports the whole list through `onChange`; nothing is saved here. `onEditingChanged` tells whether a
-/// row is being typed (its text reaches `onChange` only when the edit ends).
+/// reports the whole list through `onChange`; nothing is saved here. A row being typed reaches
+/// `onChange` when its edit ends, which leaving the pane brings about too.
 struct AddressListEditor: NSViewRepresentable {
     let rows: [String]
     let problemRows: Set<Int>
@@ -23,7 +23,6 @@ struct AddressListEditor: NSViewRepresentable {
     var minHeight: CGFloat = 0
     let actions: AddressListActions
     let onChange: ([String]) -> Void
-    let onEditingChanged: (Bool) -> Void
 
     struct RowMessage: Equatable {
         /// The short form beside the row.
@@ -40,7 +39,6 @@ struct AddressListEditor: NSViewRepresentable {
 
     func updateNSView(_ view: AddressListEditorView, context: Context) {
         view.onChange = onChange
-        view.onEditingChanged = onEditingChanged
         // Each update reloads the list and reports its selection again; only a change is passed on,
         // so the update doesn't invalidate the buttons for nothing.
         view.onSelectionChanged = { [weak actions] selected in
@@ -95,7 +93,6 @@ final class AddressListActions {
 
 final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     var onChange: (([String]) -> Void)?
-    var onEditingChanged: ((Bool) -> Void)?
     var onSelectionChanged: ((Bool) -> Void)?
     var canAdd = true
     var minHeight: CGFloat = 0 {
@@ -151,6 +148,11 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         problemRows = newProblems
         messages = newMessages
         reload()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil, editingRow != nil { window?.makeFirstResponder(nil) }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     // MARK: - Layout
@@ -309,7 +311,6 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         field.isSelectable = true
         cell.showProblem(false, message: nil)
         window?.makeFirstResponder(field)
-        onEditingChanged?(true)
     }
 
     // MARK: - Editing
@@ -366,7 +367,6 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
         // Return keeps the keyboard in the list; a click elsewhere keeps its own focus.
         if movement == .return { window?.makeFirstResponder(tableView) }
         if let proposed { onChange?(proposed) }
-        onEditingChanged?(false)
     }
 }
 

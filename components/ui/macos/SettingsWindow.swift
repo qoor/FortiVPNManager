@@ -168,6 +168,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
 
     func windowWillClose(_ notification: Notification) {
         navigation.isWindowOpen = false
+        window?.makeFirstResponder(nil)
+        ui.send(.saveAccount)
         ui.send(.settingsClosed)
         NSApp.setActivationPolicy(.accessory)
     }
@@ -200,26 +202,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
 
     @objc func searchSettings(_ sender: Any?) {
         navigation.focusSearch()
-    }
-
-    /// File > Save and Revert act on the shown pane's changes: the account, or the exception rules
-    /// (Apply and Discard Changes).
-    @objc func saveChanges(_ sender: Any?) {
-        guard changesButton(save: true) == .enabled else { return }
-        switch navigation.pane {
-        case .account: ui.send(.saveAccount)
-        case .exceptionRules: ui.applyBypassRules()
-        default: break
-        }
-    }
-
-    @objc func revertChanges(_ sender: Any?) {
-        guard changesButton(save: false) == .enabled else { return }
-        switch navigation.pane {
-        case .account: ui.send(.revertAccount)
-        case .exceptionRules: ui.discardBypassChanges()
-        default: break
-        }
     }
 
     /// The report of the import shows in the General pane.
@@ -258,12 +240,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
         switch item.action {
         case #selector(goBack(_:)): !navigation.backHistory.isEmpty
         case #selector(goForward(_:)): !navigation.forwardHistory.isEmpty
-        case #selector(saveChanges(_:)):
-            validate(item, title: navigation.pane == .exceptionRules ? String(localized: "Apply") : String(localized: "Save"),
-                     state: changesButton(save: true))
-        case #selector(revertChanges(_:)):
-            validate(item, title: navigation.pane == .exceptionRules ? String(localized: "Discard Changes") : String(localized: "Revert"),
-                     state: changesButton(save: false))
         case #selector(importClientSettings(_:)): ui.config != nil
         case #selector(showLogInFinder(_:)): ui.config?.logFile != nil
         case #selector(copyEntireLog(_:)), #selector(clearLog(_:)): navigation.pane == .log
@@ -273,24 +249,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSMenuItemVali
         }
     }
 
-    private func validate(_ item: NSMenuItem, title: String, state: AppInternal.ButtonState) -> Bool {
-        item.title = title
-        return state == .enabled
-    }
-
-    /// The state of the shown pane's Save or Apply (`save`), or Revert or Discard Changes.
-    private func changesButton(save: Bool) -> AppInternal.ButtonState {
-        switch navigation.pane {
-        case .account:
-            guard let account = ui.config?.account else { return .hidden }
-            return save ? account.save : account.revert
-        case .exceptionRules:
-            guard let rules = ui.bypassRules else { return .hidden }
-            return rules.whileEditing(save ? rules.apply : rules.discard, navigation.isEditingRuleRow)
-        default:
-            return .hidden
-        }
-    }
 }
 
 extension AppUI {
@@ -325,27 +283,9 @@ extension AppUI {
         send(.importClientSettings(file: url.path))
     }
 
-    /// Finishes a row being typed so its text is sent first (buttons do not take focus).
-    func applyBypassRules() {
-        NSApp.keyWindow?.makeFirstResponder(nil)
-        send(.applyBypassRules)
-    }
-
-    func discardBypassChanges() {
-        NSApp.keyWindow?.makeFirstResponder(nil)
-        send(.discardBypassChanges)
-    }
-
     func copyEntireLog(timeZone: TimeZone = .current) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(log.copyAllText(timeZone: timeZone), forType: .string)
-    }
-}
-
-extension AppInternal.BypassRulesSection {
-    /// Apply and Discard Changes take clicks while a row is typed, whose text the runtime hasn't seen.
-    func whileEditing(_ state: AppInternal.ButtonState, _ isEditing: Bool) -> AppInternal.ButtonState {
-        isEditing && state == .disabled ? .enabled : state
     }
 }
 
@@ -368,9 +308,6 @@ private enum StandardMenus {
             item(String(localized: "Quit FortiVPNManager"), #selector(NSApplication.terminate(_:)), "q"),
         ]))
         main.addItem(menu(String(localized: "File"), [
-            item(String(localized: "Save"), #selector(SettingsWindowController.saveChanges(_:)), "s", target: settings),
-            item(String(localized: "Revert"), #selector(SettingsWindowController.revertChanges(_:)), target: settings),
-            .separator(),
             item(String(localized: "Import openfortivpn Settings…"), #selector(SettingsWindowController.importClientSettings(_:)), target: settings),
             item(String(localized: "Show Log in Finder"), #selector(SettingsWindowController.showLogInFinder(_:)), target: settings),
             .separator(),

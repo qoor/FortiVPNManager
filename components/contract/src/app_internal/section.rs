@@ -551,11 +551,7 @@ pub struct BypassRulesSection {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub notice: Option<BypassNotice>,
     pub status: BypassStatus,
-    /// The lists as edited differ from the saved ones.
-    pub has_changes: bool,
     pub add_current_network: ButtonState,
-    pub discard: ButtonState,
-    pub apply: ButtonState,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
@@ -726,9 +722,9 @@ pub struct OpenAtLogin {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountFormState {
-    /// Changes only when the runtime replaces what was typed: on load, save, revert, import,
-    /// closing Settings, or a settings file change merged into untouched fields. The UI replaces
-    /// its fields only then, and sends the revision back with every edit.
+    /// Changes only when the runtime replaces what was typed: on load, a save that changes how a
+    /// field reads, import, closing Settings, or a settings file change merged into untouched
+    /// fields. The UI replaces its fields only then, and sends the revision back with every edit.
     pub revision: u64,
     pub host: String,
     pub port: String,
@@ -744,24 +740,15 @@ pub struct AccountFormState {
     /// Why the VPN client would refuse the saved account.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub saved_account_problem: Option<AccountValueProblem>,
-    /// The last save's result, until the next edit.
+    /// Why the last save failed, until the next edit.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub feedback: Option<AccountFeedback>,
-    pub save: ButtonState,
-    pub revert: ButtonState,
+    pub save_error: Option<AccountSaveError>,
     /// The last import of the VPN client's settings, until dismissed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub import_report: Option<ClientSettingsImport>,
     /// The VPN client's settings file at its default location, if there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_import_file: Option<String>,
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum AccountFeedback {
-    Saved {},
-    Failed { error: AccountSaveError },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]

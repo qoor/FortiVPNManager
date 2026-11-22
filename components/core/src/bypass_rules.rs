@@ -136,8 +136,8 @@ impl RoutePlan {
 
 // MARK: Edit drafts
 
-/// One list as edited in Settings: rows as typed against the list as saved. Nothing is saved until
-/// Apply writes `entries`; Discard Changes goes back to the saved list.
+/// One list as edited in Settings: rows as typed against the list as saved. `entries` is what a
+/// save writes.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ListDraft {
     /// Trimmed, never blank.
@@ -189,10 +189,6 @@ impl ListDraft {
         })
     }
 
-    pub fn discard_changes(&mut self) {
-        self.rows = self.saved.iter().map(ToString::to_string).collect();
-    }
-
     /// The rows with a problem, in row order. A row is compared with the earlier rows without a
     /// problem.
     pub fn problems(&self) -> Vec<(usize, RowProblem)> {
@@ -239,7 +235,7 @@ impl ListDraft {
         Some(entries)
     }
 
-    /// Whether Apply would change the list. Rows with a problem count as a change; another
+    /// Whether saving would change the list. Rows with a problem count as a change; another
     /// spelling of the same entry, such as `/32` on a host, does not.
     pub fn has_changes(&self) -> bool {
         self.entries().as_deref() != Some(self.saved.as_slice())
@@ -310,7 +306,7 @@ pub struct RuleDrafts {
 }
 
 impl RuleDrafts {
-    /// Drafts without changes, on load and after Apply saved `networks` and `targets`.
+    /// Drafts without changes, on load and after a save of `networks` and `targets`.
     /// `vpn_server` is the VPN server's address, when `vpn.host` is one.
     pub fn new(
         networks: Vec<Ipv4Network>,
@@ -349,29 +345,23 @@ impl RuleDrafts {
         local_network(snapshot?).filter(|network| !self.networks.has_row_overlapping(network))
     }
 
-    pub fn discard_changes(&mut self) {
-        self.networks.discard_changes();
-        self.targets.discard_changes();
-    }
-
     pub fn has_changes(&self) -> bool {
         self.networks.has_changes() || self.targets.has_changes()
     }
 
-    /// The networks and targets Apply saves; `None` while a row of either list has a problem.
+    /// The networks and targets a save writes; `None` while a row of either list has a problem.
     pub fn entries(&self) -> Option<(Vec<Ipv4Network>, Vec<Ipv4Network>)> {
         Some((self.networks.entries()?, self.targets.entries()?))
     }
 
     /// The section, with the primary network as last read, the status of the routes and why the
-    /// last Apply failed, if it did.
+    /// last save failed, if it did.
     pub fn section(
         &self,
         current: Option<&BypassRoutesSnapshot>,
         status: BypassStatus,
         apply_error: Option<ConfigFileError>,
     ) -> BypassRulesSection {
-        let has_changes = self.has_changes();
         let notice = self
             .networks
             .first_problem()
@@ -384,10 +374,7 @@ impl RuleDrafts {
             targets: self.targets.rule_list(),
             notice,
             status,
-            has_changes,
             add_current_network: enabled(self.addable_network(current).is_some()),
-            discard: enabled(has_changes),
-            apply: enabled(has_changes && self.entries().is_some()),
         }
     }
 }

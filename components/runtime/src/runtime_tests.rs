@@ -18,16 +18,17 @@ use fvm_contract::app_helper::{
     RunRequest, StopInitiator, StopReason, UpdateDiscardReply, UpdateInstallReply,
     UpdateInstallRequest, UpdatePrepareReply, UpdatePrepareRequest, UpdateRefusal,
 };
-use fvm_contract::app_internal::command::{AccountForm, Command};
+use fvm_contract::app_internal::command::{AccountForm, BypassList, Command};
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, HelperCall, HelperChannelFailure, LogCategory, PortAction, PortRequest,
-    PortResponse, RegistrationStatus, SecretItem, UserNotification,
+    PortResponse, RegistrationStatus, SecretItem, SecretStoreFailure, UserNotification,
 };
 use fvm_contract::app_internal::section::{
-    AccountFeedback, AutoUpdateSection, BypassFailure, BypassStatus, ClientSettingsImport,
-    ConfigSection, ConnectProgress, ConnectionStatus, HelperState, ImportError, ImportedPassword,
-    InstallFailure, RemainingTime, Section, UpdateCheckFailure, UpdateProgress, UpdateStatus,
+    AccountSaveError, AutoUpdateSection, BypassFailure, BypassRulesSection, BypassStatus,
+    ClientSettingsImport, ConfigSection, ConnectProgress, ConnectionStatus, HelperState,
+    ImportError, ImportedPassword, InstallFailure, RemainingTime, Section, UpdateCheckFailure,
+    UpdateProgress, UpdateStatus,
 };
 use fvm_contract::app_internal::{
     AppFacts, ButtonState, FromRuntime, LogLine, SecretText, SignInPages, ToRuntime,
@@ -65,6 +66,7 @@ struct App {
     inputs: Sender<Input>,
     out: Receiver<FromRuntime>,
     secrets: Vec<(SecretItem, SecretText)>,
+    secret_writes_fail: bool,
     helper_registration: RegistrationStatus,
     helper_build: String,
     /// The primary network; `None` when there is no network.
@@ -152,6 +154,7 @@ impl App {
             log: Vec::new(),
             open_settings: 0,
             forticlient: None,
+            secret_writes_fail: false,
             waiter_failure: None,
             prepare_answer: helper_reply(&UpdatePrepareReply::Prepared {
                 version: version("26.2.0"),
@@ -403,6 +406,13 @@ impl App {
             PortRequest::HasSecret { item } => PortResponse::HasSecret {
                 exists: self.secret(&item).is_some(),
             },
+            PortRequest::WriteSecret { .. } if self.secret_writes_fail => {
+                PortResponse::SecretStoreFailed {
+                    failure: SecretStoreFailure {
+                        description: "denied".into(),
+                    },
+                }
+            }
             PortRequest::WriteSecret { item, value } => {
                 self.secrets.retain(|(other, _)| *other != item);
                 self.secrets.push((item, value));
@@ -875,44 +885,128 @@ fn the_first_launch_imports_the_openfortivpn_config_with_its_password() {
     );
 }
 
+fn edited_form(app: &App, edit: impl FnOnce(&mut AccountForm)) -> (u64, AccountForm) {
+    let account = &app.config_section().account;
+    let mut form = AccountForm {
+        host: account.host.clone(),
+        port: account.port.clone(),
+        username: account.username.clone(),
+        realm: account.realm.clone(),
+        gmail_address: account.gmail_address.clone(),
+        vpn_password: SecretText(String::new()),
+        app_password: SecretText(String::new()),
+    };
+    edit(&mut form);
+    (account.revision, form)
+}
+
+fn commit_account(app: &mut App, edit: impl FnOnce(&mut AccountForm)) {
+    let (revision, form) = edited_form(app, edit);
+    app.command(Command::EditAccount { revision, form });
+    app.command(Command::SaveAccount {});
+    app.settle();
+}
+
 #[test]
 fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_account() {
     let mut app = App::new();
     app.write_config(ACCOUNT);
     app.launch();
     app.settle();
-    let account = &app.config_section().account;
-    let form = AccountForm {
-        host: account.host.clone(),
-        port: account.port.clone(),
-        username: " bob ".into(),
-        realm: account.realm.clone(),
-        gmail_address: account.gmail_address.clone(),
-        vpn_password: SecretText("new secret".into()),
-        app_password: SecretText(String::new()),
-    };
-    app.command(Command::EditAccount {
-        revision: account.revision,
-        form,
+    let (revision, form) = edited_form(&app, |form| {
+        form.username = " bob ".into();
+        form.vpn_password = SecretText("new secret".into());
     });
+    app.command(Command::EditAccount { revision, form });
     // Edited elsewhere meanwhile: the field the user did not change keeps the edit.
     app.write_config(&ACCOUNT.replace("method: \"imap\"", "method: \"gmail_api\""));
     app.command(Command::SaveAccount {});
-    app.settle_until("the saved feedback", |app| {
-        app.config_section().account.feedback == Some(AccountFeedback::Saved {})
-    });
-    let text = app.config_text();
-    assert!(text.contains("  username: \"bob\"\n"), "{text}");
-    assert!(text.contains("  method: \"gmail_api\"\n"), "{text}");
     let saved_under = SecretItem::VpnPassword {
         username: "bob".into(),
         host: "vpn.example.com".into(),
     };
+    app.settle_until("the saved password", |app| {
+        app.secret(&saved_under) == Some(SecretText("new secret".into()))
+    });
+    app.settle();
+    let text = app.config_text();
+    assert!(text.contains("  username: \"bob\"\n"), "{text}");
+    assert!(text.contains("  method: \"gmail_api\"\n"), "{text}");
+    let account = &app.config_section().account;
+    assert_eq!(account.username, "bob");
+    assert!(!account.vpn_password_entered);
+    assert_eq!(account.save_error, None);
+}
+
+#[test]
+fn a_commit_while_passwords_are_written_saves_after_them() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let (revision, form) = edited_form(&app, |form| {
+        form.vpn_password = SecretText("new secret".into());
+    });
+    app.command(Command::EditAccount { revision, form });
+    app.command(Command::SaveAccount {});
+    let (revision, form) = edited_form(&app, |form| form.realm = "staff".into());
+    app.command(Command::EditAccount {
+        revision: revision + 1,
+        form,
+    });
+    app.command(Command::SaveAccount {});
+    app.settle_until("the saved realm", |app| {
+        app.config_text().contains("  realm: \"staff\"\n")
+    });
     assert_eq!(
-        app.secret(&saved_under),
+        app.secret(&vpn_password_item()),
         Some(SecretText("new secret".into()))
     );
-    assert!(!app.config_section().account.vpn_password_entered);
+}
+
+#[test]
+fn a_failed_password_write_stays_shown_after_a_commit_made_meanwhile() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    app.secret_writes_fail = true;
+    let (revision, form) = edited_form(&app, |form| {
+        form.vpn_password = SecretText("new secret".into());
+    });
+    app.command(Command::EditAccount { revision, form });
+    app.command(Command::SaveAccount {});
+    let (revision, form) = edited_form(&app, |form| form.realm = "staff".into());
+    app.command(Command::EditAccount {
+        revision: revision + 1,
+        form,
+    });
+    app.command(Command::SaveAccount {});
+    app.settle_until("the saved realm", |app| {
+        app.config_text().contains("  realm: \"staff\"\n")
+    });
+    app.settle();
+    assert!(matches!(
+        app.config_section().account.save_error,
+        Some(AccountSaveError::SecretStore { .. })
+    ));
+}
+
+#[test]
+fn a_save_that_keeps_the_typed_fields_does_not_replace_them() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    let before = app.config_section().account.revision;
+    commit_account(&mut app, |form| form.username = "bob".into());
+    assert!(app.config_text().contains("  username: \"bob\"\n"));
+    assert_eq!(app.config_section().account.revision, before);
+
+    commit_account(&mut app, |form| form.username = " carol ".into());
+    let account = &app.config_section().account;
+    assert_eq!(account.username, "carol");
+    assert!(account.revision > before);
 }
 
 #[test]
@@ -922,19 +1016,10 @@ fn a_typed_password_survives_a_file_change_but_not_closing_settings() {
     app.launch();
     app.settle();
     let account = app.config_section().account.clone();
-    let form = AccountForm {
-        host: account.host.clone(),
-        port: account.port.clone(),
-        username: account.username.clone(),
-        realm: account.realm.clone(),
-        gmail_address: account.gmail_address.clone(),
-        vpn_password: SecretText("typed".into()),
-        app_password: SecretText(String::new()),
-    };
-    app.command(Command::EditAccount {
-        revision: account.revision,
-        form,
+    let (revision, form) = edited_form(&app, |form| {
+        form.vpn_password = SecretText("typed".into());
     });
+    app.command(Command::EditAccount { revision, form });
     app.settle();
     // The file changes a field the user did not touch: the UI replaces its fields, the password
     // stays typed.
@@ -959,24 +1044,14 @@ fn a_draft_typed_against_replaced_fields_is_dropped() {
     app.write_config(ACCOUNT);
     app.launch();
     app.settle();
-    let account = app.config_section().account.clone();
-    app.command(Command::RevertAccount {});
-    app.settle();
-    let form = AccountForm {
-        host: account.host.clone(),
-        port: account.port.clone(),
-        username: "mallory".into(),
-        realm: account.realm.clone(),
-        gmail_address: account.gmail_address.clone(),
-        vpn_password: SecretText(String::new()),
-        app_password: SecretText(String::new()),
-    };
-    app.command(Command::EditAccount {
-        revision: account.revision,
-        form,
+    let (revision, form) = edited_form(&app, |form| form.username = "mallory".into());
+    app.write_config(&ACCOUNT.replace("alice\"\n  realm", "carol\"\n  realm"));
+    app.settle_until("the merged username", |app| {
+        app.config_section().account.username == "carol"
     });
+    app.command(Command::EditAccount { revision, form });
     app.settle();
-    assert_eq!(app.config_section().account.username, "alice");
+    assert_eq!(app.config_section().account.username, "carol");
 }
 
 const WITH_RULE: &str = "routes:\n  networks: [192.168.0.0/24]\n  bypass_vpn: [10.30.0.0/16]\n";
@@ -1039,6 +1114,63 @@ fn app_with_the_rule_applied() -> App {
     });
     assert_eq!(app.exception_routes, vec![rule_route()]);
     app
+}
+
+fn bypass_section(app: &App) -> Option<&BypassRulesSection> {
+    app.sections.iter().find_map(|section| match section {
+        Section::BypassRules { section } => Some(section.as_ref()),
+        _ => None,
+    })
+}
+
+#[test]
+fn an_ended_row_edit_saves_the_lists_unless_a_row_has_a_problem() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    app.command(Command::SetBypassRows {
+        list: BypassList::Targets,
+        rows: vec!["10.30.0.0/16".into(), String::new()],
+    });
+    app.settle();
+    let saved = app.config_text();
+    assert!(saved.contains("10.30.0.0/16"), "{saved}");
+
+    app.command(Command::SetBypassRows {
+        list: BypassList::Networks,
+        rows: vec!["192.168.0".into()],
+    });
+    app.settle();
+    assert_eq!(app.config_text(), saved);
+    let section = bypass_section(&app).unwrap();
+    assert_eq!(section.networks.rows, vec!["192.168.0".to_owned()]);
+    assert_eq!(section.networks.problem_rows, vec![0]);
+
+    app.command(Command::SetBypassRows {
+        list: BypassList::Networks,
+        rows: vec!["192.168.0.0/24".into()],
+    });
+    app.settle();
+    let text = app.config_text();
+    assert!(text.contains("192.168.0.0/24"), "{text}");
+    assert!(text.contains("10.30.0.0/16"), "{text}");
+}
+
+#[test]
+fn adding_the_current_network_saves_it() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.service = Some(office_wifi());
+    app.launch();
+    app.settle_until("the current network", |app| {
+        bypass_section(app)
+            .is_some_and(|section| section.add_current_network == ButtonState::Enabled)
+    });
+    app.command(Command::AddCurrentNetwork {});
+    app.settle();
+    let text = app.config_text();
+    assert!(text.contains("192.168.0.0/24"), "{text}");
 }
 
 fn is_route_call(call: &HelperCall) -> bool {

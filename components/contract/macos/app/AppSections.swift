@@ -281,10 +281,7 @@ extension AppInternal {
         var targets: RuleList
         var notice: BypassNotice?
         var status: BypassStatus
-        var hasChanges: Bool
         var addCurrentNetwork: ButtonState
-        var discard: ButtonState
-        var apply: ButtonState
     }
 
     struct CurrentNetwork: Decodable, Equatable, Sendable {
@@ -383,16 +380,9 @@ extension AppInternal {
         var vpnPasswordStored: Bool
         var appPasswordStored: Bool
         var savedAccountProblem: AccountValueProblem?
-        var feedback: AccountFeedback?
-        var save: ButtonState
-        var revert: ButtonState
+        var saveError: AccountSaveError?
         var importReport: ClientSettingsImport?
         var defaultImportFile: String?
-    }
-
-    enum AccountFeedback: Decodable, Equatable, Sendable {
-        case saved
-        case failed(error: AccountSaveError)
     }
 
     enum AccountSaveError: Decodable, Equatable, Sendable {

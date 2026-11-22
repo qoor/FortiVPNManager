@@ -19,7 +19,7 @@ pub enum Command {
     SettingsClosed {},
 
     /// The Account pane's fields as typed, after any edit. The draft lives in the runtime, which
-    /// decides what changed and what Save writes. `revision` is the form's revision the edit was
+    /// decides what changed and what a save writes. `revision` is the form's revision the edit was
     /// typed against; an edit against an older one is dropped, since the runtime has replaced
     /// those fields since.
     EditAccount {
@@ -27,7 +27,6 @@ pub enum Command {
         form: AccountForm,
     },
     SaveAccount {},
-    RevertAccount {},
     /// Imports the VPN client's own settings file; `None` is its default location.
     ImportClientSettings {
         file: Option<String>,
@@ -63,14 +62,13 @@ pub enum Command {
     /// Opens the system settings where the Helper is approved, then follows the approval.
     OpenHelperApprovalSettings {},
 
-    /// The rows of one exception rules list as edited, blank rows included.
+    /// The rows of one exception rules list once an edit ended, blank rows included. The runtime
+    /// saves the lists when no row has a problem.
     SetBypassRows {
         list: BypassList,
         rows: Vec<String>,
     },
     AddCurrentNetwork {},
-    DiscardBypassChanges {},
-    ApplyBypassRules {},
 
     CheckForUpdates {},
     /// The Software Update section came into view.

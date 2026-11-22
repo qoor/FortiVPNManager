@@ -2,7 +2,6 @@ using CommunityToolkit.WinUI.Controls;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.Windows.Storage.Pickers;
 using Windows.System;
 using static FortiVPNManager.Contract.AppInternal;
@@ -12,8 +11,8 @@ namespace FortiVPNManager.Ui.Settings;
 
 /// <summary>
 /// The Account pane (components/ui/macos/AccountPane.swift): the VPN account and the Gmail account
-/// that receives the OTP, saved together with Save at the top (and Ctrl+S). The OTP method and the
-/// Google account controls act at once instead of waiting for Save. No certificate fields: gateway
+/// that receives the OTP, saved when a field is committed (Enter, leaving the field, or leaving the
+/// pane). The OTP method and the Google account controls act at once. No certificate fields: gateway
 /// certificates are trusted automatically.
 /// </summary>
 internal sealed class AccountPane : IPane
@@ -22,10 +21,8 @@ internal sealed class AccountPane : IPane
 
     private readonly AppUi ui;
     private readonly StackPanel body = new() { Spacing = 4 };
-    private readonly Button revert = new() { Content = L("Revert") };
-    private readonly Button save = new() { Content = L("Save") };
     private readonly InfoBar savedAccountProblem = Cards.Notice(InfoBarSeverity.Error);
-    private readonly InfoBar feedback = Cards.Notice(InfoBarSeverity.Error);
+    private readonly InfoBar saveError = Cards.Notice(InfoBarSeverity.Error);
 
     private readonly TextBox host = new() { PlaceholderText = "vpn.example.com" };
     private readonly TextBox port = new() { PlaceholderText = "443" };
@@ -74,17 +71,8 @@ internal sealed class AccountPane : IPane
     public AccountPane(AppUi ui, PanePage page)
     {
         this.ui = ui;
-        revert.Click += (_, _) => ui.Send(new Command.RevertAccount());
-        save.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-        save.Click += (_, _) => ui.Send(new Command.SaveAccount());
-        ToolTipService.SetToolTip(save, L("Save account settings (Ctrl+S)"));
-        save.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = VirtualKey.S, Modifiers = VirtualKeyModifiers.Control });
-        save.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
-        page.ActionsPanel.Children.Add(revert);
-        page.ActionsPanel.Children.Add(save);
-
         body.Children.Add(savedAccountProblem);
-        body.Children.Add(feedback);
+        body.Children.Add(saveError);
         AddVpnRows();
         AddGmailRows();
         page.BodyPanel.Children.Add(body);
@@ -179,20 +167,37 @@ internal sealed class AccountPane : IPane
     }
 
     /// <summary>
-    /// A field of the pane: each edit is sent with all the fields as typed. Only a change from the
-    /// draft counts: the text a refresh puts in reports its change later, when it equals the draft.
+    /// A field of the pane: each edit is sent with all the fields as typed, and Enter or leaving the
+    /// field saves them. Only a change from the draft counts: the text a refresh puts in reports its
+    /// change later, when it equals the draft.
     /// </summary>
     private TextBox Field(TextBox box, Func<AccountDraft, string> read, Action<AccountDraft, string> keep)
     {
         box.TextChanged += (_, _) => Edited(box.Text, read, keep);
+        SavesOnCommit(box);
         return box;
     }
 
     private PasswordBox Field(PasswordBox box, Func<AccountDraft, string> read, Action<AccountDraft, string> keep)
     {
         box.PasswordChanged += (_, _) => Edited(box.Password, read, keep);
+        SavesOnCommit(box);
         return box;
     }
+
+    private void SavesOnCommit(Control box)
+    {
+        box.LostFocus += (_, _) => ui.Send(new Command.SaveAccount());
+        box.KeyDown += (_, args) =>
+        {
+            if (args.Key == VirtualKey.Enter)
+            {
+                ui.Send(new Command.SaveAccount());
+            }
+        };
+    }
+
+    public void FinishTyping() => ui.Send(new Command.SaveAccount());
 
     private void Edited(string text, Func<AccountDraft, string> read, Action<AccountDraft, string> keep)
     {
@@ -243,24 +248,14 @@ internal sealed class AccountPane : IPane
         // The pane and its buttons wait for both sections, as on macOS.
         var ready = ui.Config is not null && ui.Gmail is not null;
         body.Visible(ready);
-        save.Visible(ready);
-        revert.Visible(ready);
         if (ui.Config is not { } config || ui.Gmail is not { } gmail)
         {
             return;
         }
         refreshing = true;
         var account = config.Account;
-        revert.Apply(account.Revert);
-        save.Apply(account.Save);
         savedAccountProblem.Show(account.SavedAccountProblem is { } problem ? L("Saved account error: %@", problem.Message()) : null);
-        feedback.Severity = account.Feedback is AccountFeedback.Saved ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        feedback.Show(account.Feedback switch
-        {
-            AccountFeedback.Saved => L("Saved."),
-            AccountFeedback.Failed failed => failed.Error.Message(),
-            _ => null,
-        });
+        saveError.Show(account.SaveError?.Message());
 
         var draft = ui.AccountDraft;
         Set(host, draft.Host);

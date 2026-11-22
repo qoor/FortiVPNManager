@@ -135,16 +135,6 @@
         }
       }
     },
-    "Apply exception rules (Ctrl+S)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "예외 규칙 적용 (Ctrl+S)"
-          }
-        }
-      }
-    },
     "Brings in the server address from FortiClient.": {
       "localizations": {
         "ko": {
@@ -401,16 +391,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "재시작 필요"
-          }
-        }
-      }
-    },
-    "Save account settings (Ctrl+S)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "계정 설정 저장 (Ctrl+S)"
           }
         }
       }

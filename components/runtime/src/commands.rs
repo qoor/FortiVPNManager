@@ -53,7 +53,6 @@ impl Runtime {
             Command::SettingsClosed {} => self.forget_typed_passwords(),
             Command::EditAccount { revision, form } => self.edit_account(revision, form),
             Command::SaveAccount {} => self.save_account(),
-            Command::RevertAccount {} => self.revert_account(),
             Command::ImportClientSettings { file } => self.import_client_settings(file),
             Command::DismissImportReport {} => self.dismiss_import_report(),
             Command::SetOtpMethod { method } => self.set_otp_method(method),
@@ -82,8 +81,6 @@ impl Runtime {
             }
             Command::SetBypassRows { list, rows } => self.set_bypass_rows(list, rows),
             Command::AddCurrentNetwork {} => self.add_current_network(),
-            Command::DiscardBypassChanges {} => self.discard_bypass_changes(),
-            Command::ApplyBypassRules {} => self.apply_bypass_rules(),
             Command::CheckForUpdates {} => self.check_for_updates_now(),
             Command::UpdatePageOpened {} => self.update_page_opened(),
             Command::UpdateNow {} => self.update_now(),

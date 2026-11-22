@@ -32,15 +32,12 @@ fn starts_from_the_saved_list_without_changes() {
 }
 
 #[test]
-fn edits_are_changes_until_discarded() {
+fn edits_are_changes() {
     let mut draft = ListDraft::new(vec![host()]);
     draft.set_rows(rows(&["10.30.161.16", "  10.30.170.0/24 ", ""]));
     assert_eq!(draft.rows(), rows(&["10.30.161.16", "10.30.170.0/24"]));
     assert!(draft.has_changes());
     assert_eq!(draft.entries(), Some(vec![host(), network()]));
-    draft.discard_changes();
-    assert_eq!(draft.rows(), rows(&["10.30.161.16"]));
-    assert!(!draft.has_changes());
 }
 
 #[test]
@@ -51,7 +48,7 @@ fn respelling_is_no_change() {
 }
 
 #[test]
-fn problem_rows_block_apply() {
+fn problem_rows_block_saving() {
     let mut draft = ListDraft::new(vec![]);
     draft.set_rows(rows(&[
         "10.30.161",
@@ -89,7 +86,7 @@ fn problem_rows_block_apply() {
 }
 
 #[test]
-fn overlapping_rows_block_apply() {
+fn overlapping_rows_block_saving() {
     let mut draft = ListDraft::new(vec![]);
     draft.set_rows(rows(&["10.30.170.0/24", "10.30.170.9", "10.30.0.0/16"]));
     let overlap = RowProblem::Overlap {

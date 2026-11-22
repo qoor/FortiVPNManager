@@ -369,10 +369,7 @@ public static partial class AppInternal
         RuleList Networks,
         RuleList Targets,
         BypassStatus Status,
-        bool HasChanges,
         ButtonState AddCurrentNetwork,
-        ButtonState Discard,
-        ButtonState Apply,
         CurrentNetwork? CurrentNetwork = null,
         BypassNotice? Notice = null);
 
@@ -484,21 +481,10 @@ public static partial class AppInternal
         bool AppPasswordEntered,
         bool VpnPasswordStored,
         bool AppPasswordStored,
-        ButtonState Save,
-        ButtonState Revert,
         AccountValueProblem? SavedAccountProblem = null,
-        AccountFeedback? Feedback = null,
+        AccountSaveError? SaveError = null,
         ClientSettingsImport? ImportReport = null,
         string? DefaultImportFile = null);
-
-    [JsonConverter(typeof(CasesConverter<AccountFeedback>))]
-    public abstract record AccountFeedback
-    {
-        private AccountFeedback() { }
-
-        public sealed record Saved : AccountFeedback;
-        public sealed record Failed(AccountSaveError Error) : AccountFeedback;
-    }
 
     [JsonConverter(typeof(CasesConverter<AccountSaveError>))]
     public abstract record AccountSaveError

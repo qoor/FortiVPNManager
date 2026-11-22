@@ -62,13 +62,6 @@
   {
     "command": {
       "_0": {
-        "revertAccount": {}
-      }
-    }
-  },
-  {
-    "command": {
-      "_0": {
         "importClientSettings": {}
       }
     }
@@ -351,20 +344,6 @@
     "command": {
       "_0": {
         "addCurrentNetwork": {}
-      }
-    }
-  },
-  {
-    "command": {
-      "_0": {
-        "discardBypassChanges": {}
-      }
-    }
-  },
-  {
-    "command": {
-      "_0": {
-        "applyBypassRules": {}
       }
     }
   },

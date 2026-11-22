@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The Exception Rules pane. Edits are a draft until Apply, which with Discard Changes sits in the
-/// toolbar (and File > Save and Revert), like Save in the Account pane.
+/// The Exception Rules pane. Every finished edit is sent; the runtime saves the lists while no row
+/// has a problem.
 struct ExceptionRulesPane: View {
     let ui: AppUI
     let navigation: SettingsNavigation
@@ -10,8 +10,6 @@ struct ExceptionRulesPane: View {
 
     @State private var networkActions = AddressListActions()
     @State private var targetActions = AddressListActions()
-    @State private var isEditingNetworkRow = false
-    @State private var isEditingTargetRow = false
 
     var body: some View {
         if let rules = ui.bypassRules {
@@ -26,18 +24,6 @@ struct ExceptionRulesPane: View {
                 }
                 networksSection(rules)
                 targetsSection(rules)
-            }
-            .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    StateButton("Discard Changes", state: rules.whileEditing(rules.discard, navigation.isEditingRuleRow)) {
-                        ui.discardBypassChanges()
-                    }
-                    StateButton("Apply", state: rules.whileEditing(rules.apply, navigation.isEditingRuleRow)) {
-                        ui.applyBypassRules()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .help("Apply exception rules (⌘S)")
-                }
             }
         }
     }
@@ -54,8 +40,7 @@ struct ExceptionRulesPane: View {
                 emptyText: String(localized: "Double-click here or click + to add a network."),
                 placeholder: String(localized: "e.g. 10.20.161.0/24"),
                 actions: networkActions,
-                onChange: { ui.send(.setBypassRows(list: .networks, rows: $0)) },
-                onEditingChanged: { isEditingNetworkRow = $0; editingChanged() }
+                onChange: { ui.send(.setBypassRows(list: .networks, rows: $0)) }
             )
             .spanningFormRow()
             .searchAnchor("Networks where the rules apply", navigation)
@@ -79,8 +64,7 @@ struct ExceptionRulesPane: View {
                 // A Mac is used on a few networks, unlike the many exception targets.
                 minHeight: 175,
                 actions: targetActions,
-                onChange: { ui.send(.setBypassRows(list: .targets, rows: $0)) },
-                onEditingChanged: { isEditingTargetRow = $0; editingChanged() }
+                onChange: { ui.send(.setBypassRows(list: .targets, rows: $0)) }
             )
             .spanningFormRow()
             .searchAnchor("Exception targets", navigation)
@@ -98,17 +82,14 @@ struct ExceptionRulesPane: View {
         }
     }
 
-    /// Marked addresses and unapplied changes come first; otherwise how the rules stand on this
-    /// network, as the runtime reports it.
+    /// Marked addresses come first; otherwise how the rules stand on this network, as the runtime
+    /// reports it.
     @ViewBuilder
     private func statusRows(_ rules: AppInternal.BypassRulesSection, time: TimeStyle) -> some View {
         LabeledContent("Status") {
             if !rules.networks.problemRows.isEmpty || !rules.targets.problemRows.isEmpty {
                 Label("Fix the marked addresses to apply.", systemImage: "exclamationmark.circle.fill")
                     .foregroundStyle(.red)
-            } else if rules.hasChanges {
-                Label("There are changes that haven't been applied.", systemImage: "pencil.circle")
-                    .foregroundStyle(.secondary)
             } else {
                 let status = rules.status.line(time: time)
                 NoticeRow(text: status.text, style: status.style)
@@ -121,10 +102,6 @@ struct ExceptionRulesPane: View {
         if let message = rules.stoppedRetryingMessage {
             NoticeRow(text: message, style: .error)
         }
-    }
-
-    private func editingChanged() {
-        navigation.isEditingRuleRow = isEditingNetworkRow || isEditingTargetRow
     }
 }
 

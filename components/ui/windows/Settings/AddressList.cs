@@ -29,7 +29,6 @@ internal sealed class AddressList
     };
     private readonly string placeholder;
     private readonly Action<IReadOnlyList<string>> onChange;
-    private readonly Action<bool> onEditingChanged;
 
     /// <summary>The rows as last shown, the marked ones, and the explained one's (short, full) message.</summary>
     private IReadOnlyList<string> rows = [];
@@ -47,11 +46,10 @@ internal sealed class AddressList
     private (IReadOnlyList<string> Rows, IReadOnlySet<int> Problems, IReadOnlyDictionary<int, (string, string)> Messages)? pending;
 
     public AddressList(string emptyText, string placeholder, double minHeight, string addTitle, string addHelp, string removeTitle,
-        Action<IReadOnlyList<string>> onChange, Action<bool> onEditingChanged)
+        Action<IReadOnlyList<string>> onChange)
     {
         this.placeholder = placeholder;
         this.onChange = onChange;
-        this.onEditingChanged = onEditingChanged;
         empty.Text = emptyText;
         ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
@@ -286,7 +284,6 @@ internal sealed class AddressList
             editor?.SelectAll();
         };
         UpdateButtons();
-        onEditingChanged(true);
     }
 
     private void EndEditing()
@@ -339,7 +336,6 @@ internal sealed class AddressList
         {
             onChange(proposed);
         }
-        onEditingChanged(false);
     }
 
     private static Button IconButton(string glyph, string name, string help)

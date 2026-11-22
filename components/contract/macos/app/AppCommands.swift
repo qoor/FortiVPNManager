@@ -12,7 +12,6 @@ extension AppInternal {
         /// typed against; Rust drops an edit against an older revision.
         case editAccount(revision: UInt64, form: AccountForm)
         case saveAccount
-        case revertAccount
         /// The VPN client's own settings file; nil is its default location.
         case importClientSettings(file: String?)
         case dismissImportReport
@@ -33,8 +32,6 @@ extension AppInternal {
 
         case setBypassRows(list: BypassList, rows: [String])
         case addCurrentNetwork
-        case discardBypassChanges
-        case applyBypassRules
 
         case checkForUpdates
         /// The Software Update section came into view.

@@ -218,19 +218,18 @@ private extension AppInternal {
             BypassRulesSection(
                 currentNetwork: currentNetwork, networks: RuleList(rows: [], problemRows: [], addRow: .enabled),
                 targets: RuleList(rows: [], problemRows: [], addRow: .enabled), notice: notice, status: status,
-                hasChanges: false,
-                addCurrentNetwork: .disabled, discard: .disabled, apply: .disabled
+                addCurrentNetwork: .disabled
             )
         }
 
         static func accountForm(
-            _ revision: UInt64, feedback: AccountFeedback? = nil, importReport: ClientSettingsImport? = nil
+            _ revision: UInt64, saveError: AccountSaveError? = nil, importReport: ClientSettingsImport? = nil
         ) -> AccountFormState {
             AccountFormState(
                 revision: revision, host: "vpn.example.com", port: "443", username: "alice", realm: "",
                 gmailAddress: "alice@example.com", vpnPasswordEntered: false, appPasswordEntered: false,
-                vpnPasswordStored: true, appPasswordStored: false, savedAccountProblem: nil, feedback: feedback,
-                save: .disabled, revert: .disabled, importReport: importReport, defaultImportFile: nil
+                vpnPasswordStored: true, appPasswordStored: false, savedAccountProblem: nil, saveError: saveError,
+                importReport: importReport, defaultImportFile: nil
             )
         }
 
@@ -495,7 +494,7 @@ private extension AppInternal {
                 ),
                 notice: .rowProblem(row: "10.30.161", problem: .invalid(problem: .malformed)),
                 status: .applied(serviceName: "Ethernet", router: "10.20.161.1", onLinkTargets: 1),
-                hasChanges: true, addCurrentNetwork: .disabled, discard: .enabled, apply: .disabled
+                addCurrentNetwork: .disabled
             ),
             bypassSection(
                 .outsideNetworks,
@@ -556,7 +555,7 @@ private extension AppInternal {
                     revision: 2, host: "https://vpn.example.com", port: "4433", username: "alice", realm: "staff",
                     gmailAddress: "alice@example.com", vpnPasswordEntered: true, appPasswordEntered: true,
                     vpnPasswordStored: false, appPasswordStored: true, savedAccountProblem: .invalidHost,
-                    feedback: .saved, save: .enabled, revert: .enabled, importReport: nil,
+                    saveError: nil, importReport: nil,
                     defaultImportFile: "/Users/alice/.config/openfortivpn/config"
                 ),
                 options: ConnectionOptions(
@@ -569,25 +568,25 @@ private extension AppInternal {
                 logFile: "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log"
             ),
             configSection(
-                accountForm(3, feedback: .failed(error: .invalidPort)),
+                accountForm(3, saveError: .invalidPort),
                 optionsError: .invalidSettings(
                     problem: ConfigProblem(kind: .marginNotLessThanSession(margin: 60, session: 60), location: nil)
                 )
             ),
-            configSection(accountForm(3, feedback: .failed(error: .passwordNeedsAccount))),
-            configSection(accountForm(3, feedback: .failed(error: .appPasswordNeedsAddress))),
-            configSection(accountForm(3, feedback: .failed(error: .accountValue(
+            configSection(accountForm(3, saveError: .passwordNeedsAccount)),
+            configSection(accountForm(3, saveError: .appPasswordNeedsAddress)),
+            configSection(accountForm(3, saveError: .accountValue(
                 problem: .tooLong(field: .username, maxBytes: 64)
-            )))),
-            configSection(accountForm(3, feedback: .failed(error: .accountValue(
+            ))),
+            configSection(accountForm(3, saveError: .accountValue(
                 problem: .leadingOrTrailingSpace(field: .host)
-            )))),
-            configSection(accountForm(3, feedback: .failed(error: .accountValue(
+            ))),
+            configSection(accountForm(3, saveError: .accountValue(
                 problem: .disallowedCharacters(field: .realm)
-            )))),
-            configSection(accountForm(3, feedback: .failed(error: .invalidVpnPassword(maxBytes: 255)))),
-            configSection(accountForm(3, feedback: .failed(error: .config(error: unreadableFile)))),
-            configSection(accountForm(3, feedback: .failed(error: .secretStore(failure: storeFailure)))),
+            ))),
+            configSection(accountForm(3, saveError: .invalidVpnPassword(maxBytes: 255))),
+            configSection(accountForm(3, saveError: .config(error: unreadableFile))),
+            configSection(accountForm(3, saveError: .secretStore(failure: storeFailure))),
             configSection(accountForm(4, importReport: .imported(report: importReport(.saved)))),
             configSection(accountForm(4, importReport: .imported(report: importReport(.notSavedWithoutUsername)))),
             configSection(accountForm(4, importReport: .imported(report: importReport(.notSaved(failure: storeFailure))))),
@@ -825,7 +824,6 @@ private extension AppInternal {
                 vpnPassword: "p@ss", appPassword: ""
             ))),
             .command(.saveAccount),
-            .command(.revertAccount),
             .command(.importClientSettings(file: nil)),
             .command(.importClientSettings(file: "/Users/alice/vpn.conf")),
             .command(.dismissImportReport),
@@ -854,8 +852,6 @@ private extension AppInternal {
             .command(.setBypassRows(list: .networks, rows: ["10.20.161.0/24"])),
             .command(.setBypassRows(list: .targets, rows: ["10.30.161.16", ""])),
             .command(.addCurrentNetwork),
-            .command(.discardBypassChanges),
-            .command(.applyBypassRules),
             .command(.checkForUpdates),
             .command(.updatePageOpened),
             .command(.updateNow),

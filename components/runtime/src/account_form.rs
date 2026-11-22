@@ -1,11 +1,13 @@
 //! The Account pane's draft: what the user typed, compared with the file it
-//! started from. Saving writes only the fields the user changed, so a hand edit of the others
-//! survives, then the passwords under the account actually saved. Untouched fields follow the file
-//! when it changes elsewhere. An empty password field keeps the stored password.
+//! started from. A committed field saves the draft, which writes only the fields the user changed,
+//! so a hand edit of the others survives, then the passwords under the account actually saved.
+//! Untouched fields follow the file when it changes elsewhere. An empty password field keeps the
+//! stored password.
 
 use std::io;
 use std::path::{Path, PathBuf};
 
+use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::command::AccountForm;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
@@ -13,10 +15,9 @@ use fvm_contract::app_internal::port::{
 };
 use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{
-    AccountFeedback, AccountFormState, AccountSaveError, ClientSettingsImport, ImportError,
-    ImportReport, ImportedPassword,
+    AccountFormState, AccountSaveError, ClientSettingsImport, ImportError, ImportReport,
+    ImportedPassword,
 };
-use fvm_contract::app_internal::{ButtonState, SecretText};
 use fvm_contract::validation;
 use fvm_core::config::Settings;
 use fvm_core::connection;
@@ -58,7 +59,7 @@ pub(crate) struct Forms {
     app_password: SecretText,
     /// The file's fields the draft started from; edits are changes relative to these.
     base: Fields,
-    feedback: Option<AccountFeedback>,
+    save_error: Option<AccountSaveError>,
     import_report: Option<ClientSettingsImport>,
     default_import_file: Option<String>,
     /// Whether the secret storage holds a password for the typed account and address.
@@ -66,7 +67,8 @@ pub(crate) struct Forms {
     app_password_stored: bool,
     /// The account the stored flags were looked up for.
     pub(crate) looked_up: Option<(String, String, String)>,
-    pub(crate) saving: bool,
+    saving: bool,
+    save_again: bool,
 }
 
 impl Default for Forms {
@@ -77,13 +79,14 @@ impl Default for Forms {
             vpn_password: SecretText(String::new()),
             app_password: SecretText(String::new()),
             base: Fields::default(),
-            feedback: None,
+            save_error: None,
             import_report: None,
             default_import_file: None,
             vpn_password_stored: false,
             app_password_stored: false,
             looked_up: None,
             saving: false,
+            save_again: false,
         }
     }
 }
@@ -153,14 +156,17 @@ impl Forms {
         (!self.app_password.0.is_empty()).then(|| normalized_app_password(&self.app_password.0))
     }
 
+    fn settle_saved(&mut self) {
+        let entered = !self.vpn_password.0.is_empty() || !self.app_password.0.is_empty();
+        if self.typed != self.base || entered {
+            self.typed = self.base.clone();
+            self.vpn_password = SecretText(String::new());
+            self.app_password = SecretText(String::new());
+            self.revision += 1;
+        }
+    }
+
     pub(crate) fn state(&self, settings: &Settings) -> AccountFormState {
-        let enabled = |on: bool| {
-            if on && !self.saving {
-                ButtonState::Enabled
-            } else {
-                ButtonState::Disabled
-            }
-        };
         let vpn = &settings.vpn;
         AccountFormState {
             revision: self.revision,
@@ -175,9 +181,7 @@ impl Forms {
             app_password_stored: self.app_password_stored,
             saved_account_problem: validation::check_account(&vpn.host, &vpn.username, &vpn.realm)
                 .err(),
-            feedback: self.feedback.clone(),
-            save: enabled(self.has_changes()),
-            revert: enabled(self.has_changes()),
+            save_error: self.save_error.clone(),
             import_report: self.import_report.clone(),
             default_import_file: self.default_import_file.clone(),
         }
@@ -200,9 +204,7 @@ impl Runtime {
         };
         forms.vpn_password = form.vpn_password;
         forms.app_password = form.app_password;
-        if forms.has_changes() {
-            forms.feedback = None;
-        }
+        forms.save_error = None;
         self.look_up_stored_secrets();
     }
 
@@ -214,12 +216,6 @@ impl Runtime {
         self.forms.vpn_password = SecretText(String::new());
         self.forms.app_password = SecretText(String::new());
         self.forms.revision += 1;
-    }
-
-    pub(crate) fn revert_account(&mut self) {
-        self.forms.feedback = None;
-        self.forms.reset_account(&self.config.settings().clone());
-        self.look_up_stored_secrets();
     }
 
     /// Whether the secret storage holds passwords for the typed account and address; asked again
@@ -250,14 +246,19 @@ impl Runtime {
         });
     }
 
-    /// "Save": checks the draft, writes the changed fields, then the passwords under the account
-    /// that was saved.
+    /// A committed field: checks the draft, writes the changed fields, then the passwords under
+    /// the account that was saved.
     pub(crate) fn save_account(&mut self) {
         let forms = &mut self.forms;
-        forms.feedback = None;
-        let fail = |forms: &mut Forms, error: AccountSaveError| {
-            forms.feedback = Some(AccountFeedback::Failed { error })
-        };
+        if forms.saving {
+            forms.save_again = true;
+            return;
+        }
+        if !forms.has_changes() {
+            return;
+        }
+        forms.save_error = None;
+        let fail = |forms: &mut Forms, error: AccountSaveError| forms.save_error = Some(error);
         let Some(port) = trimmed(&forms.typed.port)
             .parse::<i64>()
             .ok()
@@ -304,11 +305,11 @@ impl Runtime {
             }
         });
         if let Err(error) = written {
-            let error = AccountSaveError::Config { error };
-            self.forms.feedback = Some(AccountFeedback::Failed { error });
+            self.forms.save_error = Some(AccountSaveError::Config { error });
             return;
         }
         self.config_reloaded();
+        self.forms.settle_saved();
         let saved = self.config.settings().clone();
         let mut writes = Vec::new();
         if !vpn_password.is_empty() {
@@ -338,19 +339,16 @@ impl Runtime {
         self.forms.saving = true;
         self.write_secrets(writes, |runtime, failure| {
             runtime.forms.saving = false;
-            runtime.forms.feedback = Some(match failure {
-                None => AccountFeedback::Saved {},
-                Some(failure) => AccountFeedback::Failed {
-                    error: AccountSaveError::SecretStore { failure },
-                },
-            });
-            runtime
-                .forms
-                .reset_account(&runtime.config.settings().clone());
             runtime.forms.looked_up = None;
             runtime.look_up_stored_secrets();
             // Secret storage changes raise no event of their own.
             runtime.feed(connection::Input::RecheckReadiness);
+            if std::mem::take(&mut runtime.forms.save_again) {
+                runtime.save_account();
+            }
+            if let Some(failure) = failure {
+                runtime.forms.save_error = Some(AccountSaveError::SecretStore { failure });
+            }
         });
     }
 
@@ -392,7 +390,7 @@ impl Runtime {
     pub(crate) fn import_client_settings(&mut self, file: Option<String>) {
         let done: Box<dyn FnOnce(&mut Runtime)> = Box::new(|runtime: &mut Runtime| {
             runtime.forms.vpn_password = SecretText(String::new());
-            runtime.forms.feedback = None;
+            runtime.forms.save_error = None;
             runtime
                 .forms
                 .reset_account(&runtime.config.settings().clone());

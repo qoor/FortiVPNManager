@@ -539,26 +539,6 @@
         }
       }
     },
-    "Apply": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "적용"
-          }
-        }
-      }
-    },
-    "Apply exception rules (⌘S)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "예외 규칙 적용 (⌘S)"
-          }
-        }
-      }
-    },
     "Authentication failed (%@), retrying once": {
       "localizations": {
         "ko": {
@@ -1395,16 +1375,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@을(를) 뜻했나요?"
-          }
-        }
-      }
-    },
-    "Discard Changes": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "변경 취소"
           }
         }
       }
@@ -3209,16 +3179,6 @@
         }
       }
     },
-    "Revert": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "되돌리기"
-          }
-        }
-      }
-    },
     "Running (build %@)": {
       "localizations": {
         "ko": {
@@ -3235,26 +3195,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "토"
-          }
-        }
-      }
-    },
-    "Save": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "저장"
-          }
-        }
-      }
-    },
-    "Save account settings (⌘S)": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "계정 설정 저장 (⌘S)"
           }
         }
       }
@@ -3295,16 +3235,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "비밀번호를 Keychain에 저장했습니다."
-          }
-        }
-      }
-    },
-    "Saved.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "저장했습니다."
           }
         }
       }
@@ -4085,16 +4015,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 값의 형식이 맞지 않습니다. %@."
-          }
-        }
-      }
-    },
-    "There are changes that haven't been applied.": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "적용하지 않은 변경 사항이 있습니다."
           }
         }
       }

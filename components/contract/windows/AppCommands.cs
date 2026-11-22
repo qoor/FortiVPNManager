@@ -25,7 +25,6 @@ public static partial class AppInternal
         public sealed record EditAccount(ulong Revision, AccountForm Form) : Command;
 
         public sealed record SaveAccount : Command;
-        public sealed record RevertAccount : Command;
 
         /// <summary>The VPN client's own settings file; null is its default location.</summary>
         public sealed record ImportClientSettings(string? File = null) : Command;
@@ -51,8 +50,6 @@ public static partial class AppInternal
 
         public sealed record SetBypassRows(BypassList List, IReadOnlyList<string> Rows) : Command;
         public sealed record AddCurrentNetwork : Command;
-        public sealed record DiscardBypassChanges : Command;
-        public sealed record ApplyBypassRules : Command;
 
         public sealed record CheckForUpdates : Command;
 

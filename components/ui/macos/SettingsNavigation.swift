@@ -41,9 +41,6 @@ final class SettingsNavigation {
     var showsRealm = false
     var showsIMAPFallback = false
     var showsOAuthClient = false
-    /// A row of an exception list is being typed: its text reaches the runtime when the edit ends,
-    /// which Apply and Discard Changes bring about first, so they take clicks meanwhile.
-    var isEditingRuleRow = false
 
     private static let lastPaneKey = "settingsPane"
 

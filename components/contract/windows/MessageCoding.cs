@@ -49,7 +49,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Command.SettingsClosed), TypeInfoPropertyName = "CommandSettingsClosed")]
 [JsonSerializable(typeof(AppInternal.Command.EditAccount), TypeInfoPropertyName = "CommandEditAccount")]
 [JsonSerializable(typeof(AppInternal.Command.SaveAccount), TypeInfoPropertyName = "CommandSaveAccount")]
-[JsonSerializable(typeof(AppInternal.Command.RevertAccount), TypeInfoPropertyName = "CommandRevertAccount")]
 [JsonSerializable(typeof(AppInternal.Command.ImportClientSettings), TypeInfoPropertyName = "CommandImportClientSettings")]
 [JsonSerializable(typeof(AppInternal.Command.DismissImportReport), TypeInfoPropertyName = "CommandDismissImportReport")]
 [JsonSerializable(typeof(AppInternal.Command.SetOtpMethod), TypeInfoPropertyName = "CommandSetOtpMethod")]
@@ -66,8 +65,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.Command.OpenHelperApprovalSettings), TypeInfoPropertyName = "CommandOpenHelperApprovalSettings")]
 [JsonSerializable(typeof(AppInternal.Command.SetBypassRows), TypeInfoPropertyName = "CommandSetBypassRows")]
 [JsonSerializable(typeof(AppInternal.Command.AddCurrentNetwork), TypeInfoPropertyName = "CommandAddCurrentNetwork")]
-[JsonSerializable(typeof(AppInternal.Command.DiscardBypassChanges), TypeInfoPropertyName = "CommandDiscardBypassChanges")]
-[JsonSerializable(typeof(AppInternal.Command.ApplyBypassRules), TypeInfoPropertyName = "CommandApplyBypassRules")]
 [JsonSerializable(typeof(AppInternal.Command.CheckForUpdates), TypeInfoPropertyName = "CommandCheckForUpdates")]
 [JsonSerializable(typeof(AppInternal.Command.UpdatePageOpened), TypeInfoPropertyName = "CommandUpdatePageOpened")]
 [JsonSerializable(typeof(AppInternal.Command.UpdateNow), TypeInfoPropertyName = "CommandUpdateNow")]
@@ -239,9 +236,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.BypassFailure.SettingsNotChanged), TypeInfoPropertyName = "BypassFailureSettingsNotChanged")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.HelperUnreachable), TypeInfoPropertyName = "BypassFailureHelperUnreachable")]
 [JsonSerializable(typeof(AppInternal.BypassFailure.HelperBuildMismatch), TypeInfoPropertyName = "BypassFailureHelperBuildMismatch")]
-
-[JsonSerializable(typeof(AppInternal.AccountFeedback.Saved), TypeInfoPropertyName = "AccountFeedbackSaved")]
-[JsonSerializable(typeof(AppInternal.AccountFeedback.Failed), TypeInfoPropertyName = "AccountFeedbackFailed")]
 
 [JsonSerializable(typeof(AppInternal.AccountSaveError.InvalidPort), TypeInfoPropertyName = "AccountSaveErrorInvalidPort")]
 [JsonSerializable(typeof(AppInternal.AccountSaveError.PasswordNeedsAccount), TypeInfoPropertyName = "AccountSaveErrorPasswordNeedsAccount")]

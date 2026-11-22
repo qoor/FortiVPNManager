@@ -99,9 +99,6 @@
         "bypassRules": {
           "_0": {
             "addCurrentNetwork": "disabled",
-            "apply": "disabled",
-            "discard": "disabled",
-            "hasChanges": false,
             "networks": {
               "addRow": "enabled",
               "problemRows": [],
@@ -132,9 +129,7 @@
               "host": "vpn.example.com",
               "port": "443",
               "realm": "",
-              "revert": "disabled",
               "revision": 0,
-              "save": "disabled",
               "username": "alice",
               "vpnPasswordEntered": false,
               "vpnPasswordStored": true

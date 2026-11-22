@@ -4,16 +4,11 @@
       "appPasswordEntered": true,
       "appPasswordStored": true,
       "defaultImportFile": "/Users/alice/.config/openfortivpn/config",
-      "feedback": {
-        "saved": {}
-      },
       "gmailAddress": "alice@example.com",
       "host": "https://vpn.example.com",
       "port": "4433",
       "realm": "staff",
-      "revert": "enabled",
       "revision": 2,
-      "save": "enabled",
       "savedAccountProblem": {
         "invalidHost": {}
       },
@@ -95,20 +90,14 @@
     "account": {
       "appPasswordEntered": false,
       "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "invalidPort": {}
-          }
-        }
-      },
       "gmailAddress": "alice@example.com",
       "host": "vpn.example.com",
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 3,
-      "save": "disabled",
+      "saveError": {
+        "invalidPort": {}
+      },
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -161,20 +150,14 @@
     "account": {
       "appPasswordEntered": false,
       "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "passwordNeedsAccount": {}
-          }
-        }
-      },
       "gmailAddress": "alice@example.com",
       "host": "vpn.example.com",
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 3,
-      "save": "disabled",
+      "saveError": {
+        "passwordNeedsAccount": {}
+      },
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -215,20 +198,14 @@
     "account": {
       "appPasswordEntered": false,
       "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "appPasswordNeedsAddress": {}
-          }
-        }
-      },
       "gmailAddress": "alice@example.com",
       "host": "vpn.example.com",
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 3,
-      "save": "disabled",
+      "saveError": {
+        "appPasswordNeedsAddress": {}
+      },
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -269,274 +246,244 @@
     "account": {
       "appPasswordEntered": false,
       "appPasswordStored": false,
-      "feedback": {
-        "failed": {
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "port": "443",
+      "realm": "",
+      "revision": 3,
+      "saveError": {
+        "accountValue": {
+          "problem": {
+            "tooLong": {
+              "field": "username",
+              "maxBytes": 64
+            }
+          }
+        }
+      },
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "port": "443",
+      "realm": "",
+      "revision": 3,
+      "saveError": {
+        "accountValue": {
+          "problem": {
+            "leadingOrTrailingSpace": {
+              "field": "host"
+            }
+          }
+        }
+      },
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "port": "443",
+      "realm": "",
+      "revision": 3,
+      "saveError": {
+        "accountValue": {
+          "problem": {
+            "disallowedCharacters": {
+              "field": "realm"
+            }
+          }
+        }
+      },
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "port": "443",
+      "realm": "",
+      "revision": 3,
+      "saveError": {
+        "invalidVpnPassword": {
+          "maxBytes": 255
+        }
+      },
+      "username": "alice",
+      "vpnPasswordEntered": false,
+      "vpnPasswordStored": true
+    },
+    "file": {
+      "exists": true,
+      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
+      "warnings": []
+    },
+    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
+    "openAtLogin": {
+      "available": true,
+      "enabled": true,
+      "requiresApproval": false
+    },
+    "options": {
+      "autoConnectOnLaunch": true,
+      "marginMinutes": {
+        "maximum": 60,
+        "minimum": 1,
+        "value": 5
+      },
+      "minSleepMinutes": {
+        "maximum": 1440,
+        "minimum": 1,
+        "value": 30
+      },
+      "proactiveReconnect": true,
+      "reconnectAfterSleep": false,
+      "sessionMaxMinutes": {
+        "maximum": 1440,
+        "minimum": 10,
+        "value": 180
+      }
+    }
+  },
+  {
+    "account": {
+      "appPasswordEntered": false,
+      "appPasswordStored": false,
+      "gmailAddress": "alice@example.com",
+      "host": "vpn.example.com",
+      "port": "443",
+      "realm": "",
+      "revision": 3,
+      "saveError": {
+        "config": {
           "error": {
-            "accountValue": {
+            "unreadableFile": {
+              "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
               "problem": {
-                "tooLong": {
-                  "field": "username",
-                  "maxBytes": 64
-                }
-              }
-            }
-          }
-        }
-      },
-      "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
-      "realm": "",
-      "revert": "disabled",
-      "revision": 3,
-      "save": "disabled",
-      "username": "alice",
-      "vpnPasswordEntered": false,
-      "vpnPasswordStored": true
-    },
-    "file": {
-      "exists": true,
-      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-      "warnings": []
-    },
-    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
-    "openAtLogin": {
-      "available": true,
-      "enabled": true,
-      "requiresApproval": false
-    },
-    "options": {
-      "autoConnectOnLaunch": true,
-      "marginMinutes": {
-        "maximum": 60,
-        "minimum": 1,
-        "value": 5
-      },
-      "minSleepMinutes": {
-        "maximum": 1440,
-        "minimum": 1,
-        "value": 30
-      },
-      "proactiveReconnect": true,
-      "reconnectAfterSleep": false,
-      "sessionMaxMinutes": {
-        "maximum": 1440,
-        "minimum": 10,
-        "value": 180
-      }
-    }
-  },
-  {
-    "account": {
-      "appPasswordEntered": false,
-      "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "accountValue": {
-              "problem": {
-                "leadingOrTrailingSpace": {
-                  "field": "host"
-                }
-              }
-            }
-          }
-        }
-      },
-      "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
-      "realm": "",
-      "revert": "disabled",
-      "revision": 3,
-      "save": "disabled",
-      "username": "alice",
-      "vpnPasswordEntered": false,
-      "vpnPasswordStored": true
-    },
-    "file": {
-      "exists": true,
-      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-      "warnings": []
-    },
-    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
-    "openAtLogin": {
-      "available": true,
-      "enabled": true,
-      "requiresApproval": false
-    },
-    "options": {
-      "autoConnectOnLaunch": true,
-      "marginMinutes": {
-        "maximum": 60,
-        "minimum": 1,
-        "value": 5
-      },
-      "minSleepMinutes": {
-        "maximum": 1440,
-        "minimum": 1,
-        "value": 30
-      },
-      "proactiveReconnect": true,
-      "reconnectAfterSleep": false,
-      "sessionMaxMinutes": {
-        "maximum": 1440,
-        "minimum": 10,
-        "value": 180
-      }
-    }
-  },
-  {
-    "account": {
-      "appPasswordEntered": false,
-      "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "accountValue": {
-              "problem": {
-                "disallowedCharacters": {
-                  "field": "realm"
-                }
-              }
-            }
-          }
-        }
-      },
-      "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
-      "realm": "",
-      "revert": "disabled",
-      "revision": 3,
-      "save": "disabled",
-      "username": "alice",
-      "vpnPasswordEntered": false,
-      "vpnPasswordStored": true
-    },
-    "file": {
-      "exists": true,
-      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-      "warnings": []
-    },
-    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
-    "openAtLogin": {
-      "available": true,
-      "enabled": true,
-      "requiresApproval": false
-    },
-    "options": {
-      "autoConnectOnLaunch": true,
-      "marginMinutes": {
-        "maximum": 60,
-        "minimum": 1,
-        "value": 5
-      },
-      "minSleepMinutes": {
-        "maximum": 1440,
-        "minimum": 1,
-        "value": 30
-      },
-      "proactiveReconnect": true,
-      "reconnectAfterSleep": false,
-      "sessionMaxMinutes": {
-        "maximum": 1440,
-        "minimum": 10,
-        "value": 180
-      }
-    }
-  },
-  {
-    "account": {
-      "appPasswordEntered": false,
-      "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "invalidVpnPassword": {
-              "maxBytes": 255
-            }
-          }
-        }
-      },
-      "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
-      "realm": "",
-      "revert": "disabled",
-      "revision": 3,
-      "save": "disabled",
-      "username": "alice",
-      "vpnPasswordEntered": false,
-      "vpnPasswordStored": true
-    },
-    "file": {
-      "exists": true,
-      "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-      "warnings": []
-    },
-    "logFile": "/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log",
-    "openAtLogin": {
-      "available": true,
-      "enabled": true,
-      "requiresApproval": false
-    },
-    "options": {
-      "autoConnectOnLaunch": true,
-      "marginMinutes": {
-        "maximum": 60,
-        "minimum": 1,
-        "value": 5
-      },
-      "minSleepMinutes": {
-        "maximum": 1440,
-        "minimum": 1,
-        "value": 30
-      },
-      "proactiveReconnect": true,
-      "reconnectAfterSleep": false,
-      "sessionMaxMinutes": {
-        "maximum": 1440,
-        "minimum": 10,
-        "value": 180
-      }
-    }
-  },
-  {
-    "account": {
-      "appPasswordEntered": false,
-      "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "config": {
-              "error": {
-                "unreadableFile": {
-                  "path": "/Users/alice/.config/FortiVPNManager/config.yaml",
-                  "problem": {
-                    "kind": {
-                      "duplicateKey": {
-                        "key": "vpn"
-                      }
-                    },
-                    "location": {
-                      "column": 1,
-                      "line": 7
-                    }
+                "kind": {
+                  "duplicateKey": {
+                    "key": "vpn"
                   }
+                },
+                "location": {
+                  "column": 1,
+                  "line": 7
                 }
               }
             }
           }
         }
       },
-      "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
-      "realm": "",
-      "revert": "disabled",
-      "revision": 3,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -577,24 +524,18 @@
     "account": {
       "appPasswordEntered": false,
       "appPasswordStored": false,
-      "feedback": {
-        "failed": {
-          "error": {
-            "secretStore": {
-              "failure": {
-                "description": "User interaction is not allowed."
-              }
-            }
-          }
-        }
-      },
       "gmailAddress": "alice@example.com",
       "host": "vpn.example.com",
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 3,
-      "save": "disabled",
+      "saveError": {
+        "secretStore": {
+          "failure": {
+            "description": "User interaction is not allowed."
+          }
+        }
+      },
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -664,9 +605,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -736,9 +675,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -812,9 +749,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -881,9 +816,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -937,9 +870,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -996,9 +927,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1052,9 +981,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1123,9 +1050,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1177,9 +1102,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1233,9 +1156,7 @@
       },
       "port": "443",
       "realm": "",
-      "revert": "disabled",
       "revision": 4,
-      "save": "disabled",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true

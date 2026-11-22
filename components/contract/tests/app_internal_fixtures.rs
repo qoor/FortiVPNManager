@@ -733,10 +733,7 @@ fn bypass_section(status: BypassStatus, notice: Option<BypassNotice>) -> BypassR
         },
         notice,
         status,
-        has_changes: false,
         add_current_network: ButtonState::Disabled,
-        discard: ButtonState::Disabled,
-        apply: ButtonState::Disabled,
     }
 }
 
@@ -782,10 +779,7 @@ fn bypass_rules_sections() {
                     router: "10.20.161.1".into(),
                     on_link_targets: 1,
                 },
-                has_changes: true,
                 add_current_network: ButtonState::Disabled,
-                discard: ButtonState::Enabled,
-                apply: ButtonState::Disabled,
             },
             BypassRulesSection {
                 current_network: Some(CurrentNetwork {
@@ -891,9 +885,7 @@ fn account_form(revision: u64) -> AccountFormState {
         vpn_password_stored: true,
         app_password_stored: false,
         saved_account_problem: None,
-        feedback: None,
-        save: ButtonState::Disabled,
-        revert: ButtonState::Disabled,
+        save_error: None,
         import_report: None,
         default_import_file: None,
     }
@@ -948,7 +940,7 @@ fn import_report(password: Option<ImportedPassword>) -> ImportReport {
 #[test]
 fn config_sections() {
     let feedback = |error| AccountFormState {
-        feedback: Some(AccountFeedback::Failed { error }),
+        save_error: Some(error),
         ..account_form(3)
     };
     let imported = |report| AccountFormState {
@@ -989,9 +981,7 @@ fn config_sections() {
                     vpn_password_stored: false,
                     app_password_stored: true,
                     saved_account_problem: Some(AccountValueProblem::InvalidHost {}),
-                    feedback: Some(AccountFeedback::Saved {}),
-                    save: ButtonState::Enabled,
-                    revert: ButtonState::Enabled,
+                    save_error: None,
                     import_report: None,
                     default_import_file: Some(file("/Users/alice/.config/openfortivpn/config")),
                 },
@@ -1800,7 +1790,6 @@ fn commands() {
                 },
             }),
             command(Command::SaveAccount {}),
-            command(Command::RevertAccount {}),
             command(Command::ImportClientSettings { file: None }),
             command(Command::ImportClientSettings {
                 file: Some("/Users/alice/vpn.conf".into()),
@@ -1852,8 +1841,6 @@ fn commands() {
                 rows: vec!["10.30.161.16".into(), String::new()],
             }),
             command(Command::AddCurrentNetwork {}),
-            command(Command::DiscardBypassChanges {}),
-            command(Command::ApplyBypassRules {}),
             command(Command::CheckForUpdates {}),
             command(Command::UpdatePageOpened {}),
             command(Command::UpdateNow {}),

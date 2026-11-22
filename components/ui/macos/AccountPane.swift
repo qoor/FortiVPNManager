@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Account pane: the VPN account and the Gmail account that receives the OTP, saved together
-/// with Save in the toolbar (and File > Save). No certificate fields: gateway certificates are trusted
-/// automatically. The OTP method and the Google account controls act at once instead of waiting for
-/// Save.
+/// The Account pane: the VPN account and the Gmail account that receives the OTP, saved when a field
+/// is committed (Return, leaving the field, or leaving the pane). No certificate fields: gateway
+/// certificates are trusted automatically. The OTP method and the Google account controls act at
+/// once.
 struct AccountPane: View {
     let ui: AppUI
     @Bindable var navigation: SettingsNavigation
@@ -13,37 +13,24 @@ struct AccountPane: View {
     var body: some View {
         if let config = ui.config, let gmail = ui.gmail {
             SettingsForm(navigation: navigation) {
-                if config.account.feedback != nil || config.account.savedAccountProblem != nil {
-                    feedbackSection(config.account)
+                if config.account.saveError != nil || config.account.savedAccountProblem != nil {
+                    errorSection(config.account)
                 }
                 vpnSection(config.account)
                 GmailSection(ui: ui, navigation: navigation, account: config.account, gmail: gmail)
             }
-            .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    StateButton("Revert", state: config.account.revert) { ui.send(.revertAccount) }
-                    StateButton("Save", state: config.account.save) { ui.send(.saveAccount) }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                        .help("Save account settings (⌘S)")
-                }
-            }
+            .onDisappear { ui.send(.saveAccount) }
         }
     }
 
-    /// What the last Save did, and a saved account the runtime can't connect with.
-    private func feedbackSection(_ account: AppInternal.AccountFormState) -> some View {
+    /// Why the last save failed, and a saved account the runtime can't connect with.
+    private func errorSection(_ account: AppInternal.AccountFormState) -> some View {
         Section {
             if let problem = account.savedAccountProblem {
                 NoticeRow(text: String(localized: "Saved account error: \(problem.message)"), style: .error)
             }
-            switch account.feedback {
-            case .saved?:
-                NoticeRow(text: String(localized: "Saved."), style: .success)
-            case let .failed(error)?:
+            if let error = account.saveError {
                 NoticeRow(text: error.message, style: .error)
-            case nil:
-                EmptyView()
             }
         }
     }
@@ -52,12 +39,14 @@ struct AccountPane: View {
         Section {
             AccountRow("Server address") {
                 TextField("Server address", text: accountField(ui, \.host), prompt: Text(verbatim: "vpn.example.com"))
+                    .savesAccount(ui)
             }
             .searchAnchor("Server address", navigation)
             AccountRow("Port") {
                 // Sized for a port number, in the column the other fields start at (HIG Text fields).
                 HStack {
                     TextField("Port", text: accountField(ui, \.port), prompt: Text(verbatim: "443"))
+                        .savesAccount(ui)
                         .frame(width: 80)
                     Spacer(minLength: 0)
                 }
@@ -65,10 +54,12 @@ struct AccountPane: View {
             .searchAnchor("Port", navigation)
             AccountRow("Username") {
                 TextField("Username", text: accountField(ui, \.username))
+                    .savesAccount(ui)
             }
             .searchAnchor("Username", navigation)
             AccountRow("Password") {
                 SecureField("Password", text: accountField(ui, \.vpnPassword), prompt: storedPrompt(account.vpnPasswordStored))
+                    .savesAccount(ui)
             }
             .searchAnchor("Password", navigation)
             // A disclosed setting is a row of its own, separated like the others, with its label
@@ -77,6 +68,7 @@ struct AccountPane: View {
             if navigation.showsRealm {
                 AccountRow("Realm", indented: true) {
                     TextField("Realm", text: accountField(ui, \.realm), prompt: Text("Optional"))
+                        .savesAccount(ui)
                 }
                 .searchAnchor("Realm", navigation)
             }
@@ -104,6 +96,26 @@ private func accountField(_ ui: AppUI, _ keyPath: ReferenceWritableKeyPath<Accou
     )
 }
 
+private struct SavesAccount: ViewModifier {
+    let ui: AppUI
+    @FocusState private var isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focused($isFocused)
+            .onSubmit { ui.send(.saveAccount) }
+            .onChange(of: isFocused) {
+                if !isFocused { ui.send(.saveAccount) }
+            }
+    }
+}
+
+private extension View {
+    func savesAccount(_ ui: AppUI) -> some View {
+        modifier(SavesAccount(ui: ui))
+    }
+}
+
 private func storedPrompt(_ stored: Bool) -> Text {
     stored ? Text("Saved in Keychain · type to change") : Text("Required")
 }
@@ -121,6 +133,7 @@ private struct GmailSection: View {
         Section {
             AccountRow("Gmail address") {
                 TextField("Gmail address", text: accountField(ui, \.gmailAddress), prompt: Text(verbatim: "name@example.com"))
+                    .savesAccount(ui)
             }
             .searchAnchor("Gmail address", navigation)
             Picker("Connection method", selection: method) {
@@ -189,6 +202,7 @@ private struct GmailSection: View {
     private func appPasswordRow(required: Bool, indented: Bool) -> some View {
         AccountRow("App password", indented: indented) {
             SecureField("App password", text: accountField(ui, \.appPassword), prompt: appPasswordPrompt(required: required))
+                .savesAccount(ui)
         }
     }
 

@@ -122,23 +122,23 @@ impl Runtime {
 
     pub(crate) fn set_bypass_rows(&mut self, list: BypassList, rows: Vec<String>) {
         self.drafts().list_mut(list).set_rows(rows);
-        self.bypass.apply_error = None;
+        self.save_bypass_rules();
     }
 
     pub(crate) fn add_current_network(&mut self) {
         if let Some(current) = self.bypass.current.clone() {
             self.drafts().add_current_network(&current);
-            self.bypass.apply_error = None;
+            self.save_bypass_rules();
         }
     }
 
-    pub(crate) fn discard_bypass_changes(&mut self) {
-        self.drafts().discard_changes();
+    fn save_bypass_rules(&mut self) {
         self.bypass.apply_error = None;
-    }
-
-    pub(crate) fn apply_bypass_rules(&mut self) {
-        let Some((networks, targets)) = self.drafts().entries() else {
+        let drafts = self.drafts();
+        if !drafts.has_changes() {
+            return;
+        }
+        let Some((networks, targets)) = drafts.entries() else {
             return;
         };
         match self.config.update(|settings| {
@@ -146,7 +146,6 @@ impl Runtime {
             settings.routes.bypass_vpn.clone_from(&targets);
         }) {
             Ok(_) => {
-                self.bypass.apply_error = None;
                 self.bypass.drafts = None;
                 self.config_reloaded();
             }
