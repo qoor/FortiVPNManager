@@ -227,7 +227,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 },
             ) => self.looked_up(dns_service_id, missing),
             (Asked::LookUp | Asked::Switch, NetworkOutcome::Failed { step, error, .. }) => {
-                self.network_failed(format!("{step:?}: {error}"));
+                self.network_failed(&format!("{step:?}: {error}"));
             }
             (Asked::Apply { remove }, NetworkOutcome::Applied { added, left }) => {
                 self.own(&remove, &left, &added);
@@ -243,7 +243,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 },
             ) => {
                 self.own(&remove, &left, &added);
-                self.network_failed(format!("{step:?}: {error}"));
+                self.network_failed(&format!("{step:?}: {error}"));
             }
             (Asked::Prepare, NetworkOutcome::Applied { added, left }) => {
                 self.own(&[], &left, &added);
@@ -259,7 +259,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 },
             ) => {
                 self.own(&[], &left, &added);
-                self.network_failed(format!("{step:?}: {error}"));
+                self.network_failed(&format!("{step:?}: {error}"));
             }
             (Asked::Switch, NetworkOutcome::Applied { .. }) => self.switched(),
             (Asked::Revert, NetworkOutcome::Reverted { left }) => self.reverted(&left),
@@ -329,7 +329,7 @@ impl<R: FnMut(Report)> Watch<R> {
         if let Err(failure) = self.files.write_record(&self.record) {
             let message = format!("cannot write the run record: {failure}");
             self.log(LogLevel::Error, LogCategory::Helper, message.clone());
-            self.network_failed(message);
+            self.network_failed(&message);
             return;
         }
         if self.replaced.is_some() {
@@ -386,7 +386,7 @@ impl<R: FnMut(Report)> Watch<R> {
         }
     }
 
-    fn network_failed(&mut self, reason: String) {
+    fn network_failed(&mut self, reason: &str) {
         self.meta(format!("‹network settings not applied: {reason}›"));
         if !self.changing_network() {
             return;
@@ -592,7 +592,7 @@ impl<R: FnMut(Report)> Watch<R> {
         if let Err(failure) = self.files.write_record(&self.record) {
             let message = format!("cannot write the run record: {failure}");
             self.log(LogLevel::Error, LogCategory::Helper, message.clone());
-            self.network_failed(message);
+            self.network_failed(&message);
             return;
         }
         self.ask(change, Asked::Switch);

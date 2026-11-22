@@ -23,7 +23,7 @@ fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwh
     let mut os_side = OsSide::start(Setup::default());
     assert!(os_side.connect_app(1, 501));
     let asked = Instant::now();
-    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let id = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(id));
     assert!(
         os_side.has_log("notice helper: exiting on request so launchd starts the current binary")
@@ -34,7 +34,7 @@ fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwh
         os_side.connect(1, ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
-    let again = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let again = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(again));
     os_side
         .received_within((asked + WELL_BEFORE_THE_LIMIT).saturating_duration_since(Instant::now()));
@@ -55,7 +55,7 @@ fn exit_when_idle_exits_at_the_limit_when_the_asking_app_keeps_its_connection() 
     let mut os_side = OsSide::start(Setup::default());
     assert!(os_side.connect_app(1, 501));
     let asked = Instant::now();
-    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let id = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(id));
     os_side.wait_until("the exit", |os_side| {
         os_side.position(is("exitAfterDraining")).is_some()
@@ -76,12 +76,12 @@ fn exit_when_idle_counts_the_limit_from_the_first_request() {
     assert!(os_side.connect_app(1, 501));
     assert!(os_side.connect_app(2, 502));
     let asked = Instant::now();
-    let first = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let first = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(first));
     os_side.received_within(
         (asked + Duration::from_millis(600)).saturating_duration_since(Instant::now()),
     );
-    let second = os_side.request(2, json!({"exitWhenIdle": {}}));
+    let second = os_side.request(2, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(second));
 
     os_side.disconnect_app(1);
@@ -102,9 +102,9 @@ fn exit_when_idle_waits_for_every_app_that_asked() {
     assert!(os_side.connect_app(1, 501));
     assert!(os_side.connect_app(2, 502));
     let asked = Instant::now();
-    let first = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let first = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(first));
-    let second = os_side.request(2, json!({"exitWhenIdle": {}}));
+    let second = os_side.request(2, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(second));
 
     os_side.disconnect_app(1);
@@ -125,7 +125,7 @@ fn exit_when_idle_does_not_wait_for_apps_that_did_not_ask() {
     assert!(os_side.connect_app(2, 502));
     assert!(os_side.connect_app(3, 503));
     let asked = Instant::now();
-    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let id = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(id));
 
     os_side.disconnect_app(3);
@@ -144,7 +144,7 @@ fn exit_when_idle_from_a_closed_connection_exits_right_after_the_reply() {
     let mut os_side = OsSide::start(Setup::default());
     assert!(os_side.connect_app(1, 501));
     os_side.disconnect_app(1);
-    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let id = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(id));
     let replied = Instant::now();
     os_side.wait_until("the exit", |os_side| {
@@ -164,10 +164,10 @@ fn exit_when_idle_is_declined_during_a_run() {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(os_side.connect(1, ATTEMPT), None);
     os_side.wait_for_milestone(1, OTP_PROMPTED);
-    let id = os_side.request(1, json!({"exitWhenIdle": {}}));
+    let id = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(!os_side.reply_flag(id));
 
-    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
     os_side.wait_for_exit(1);
     let later = os_side.received_within(Duration::from_millis(800));
@@ -196,7 +196,7 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(os_side.connect(1, ATTEMPT), None);
     os_side.wait_for_milestone(1, OTP_PROMPTED);
-    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    let id = os_side.request(1, &submit_otp(ATTEMPT, OTP));
     assert_eq!(os_side.reply(id), None);
     os_side.bring_up(1);
 
@@ -207,7 +207,7 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
         os_side.connect(1, OTHER_ATTEMPT),
         error("busy", "the Helper is shutting down; try again shortly")
     );
-    os_side.answer_network("revert", reverted());
+    os_side.answer_network("revert", &reverted());
     os_side.wait_until("the exit", |os_side| {
         os_side.position(is("exitAfterDraining")).is_some()
     });
@@ -283,7 +283,7 @@ fn a_replaced_helper_finishes_its_run_and_then_exits() {
         "{meanwhile:#?}"
     );
 
-    let id = os_side.request(2, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(2, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
     os_side.wait_until("the exit", |os_side| {
         os_side.position(is("exitAfterDraining")).is_some()

@@ -155,7 +155,7 @@ fn a_lost_helper_during_sleep_waits_for_the_wake() {
     );
     h.advance(60.0);
     h.wake();
-    let effects = h.settle(observe().dead());
+    let effects = h.settle(&observe().dead());
     assert!(effects.contains(&Effect::CheckReadiness), "{effects:?}");
     assert_eq!(reason(&h), Some(AttemptReason::AfterSleep));
 }

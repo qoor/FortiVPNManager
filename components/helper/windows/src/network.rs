@@ -26,7 +26,7 @@ struct Failure {
     error: String,
 }
 
-fn failure(step: NetworkStep, error: impl ToString) -> Failure {
+fn failure(step: NetworkStep, error: &(impl ToString + ?Sized)) -> Failure {
     Failure {
         step,
         error: error.to_string(),
@@ -80,10 +80,10 @@ fn tunnel_interface(tunnel: &TunnelDevice) -> Result<Luid, Failure> {
     let index = tunnel.index.ok_or_else(|| {
         failure(
             NetworkStep::Network,
-            format!("the tunnel {} has no interface index", tunnel.name),
+            &format!("the tunnel {} has no interface index", tunnel.name),
         )
     })?;
-    Luid::from_index(index).map_err(|error| failure(NetworkStep::Network, error))
+    Luid::from_index(index).map_err(|error| failure(NetworkStep::Network, &error))
 }
 
 struct Physical {
@@ -96,16 +96,16 @@ struct Physical {
 impl Physical {
     fn read(log: &Log) -> Result<Self, Failure> {
         let table =
-            network::routes(Family::Ipv4).map_err(|error| failure(NetworkStep::Network, error))?;
+            network::routes(Family::Ipv4).map_err(|error| failure(NetworkStep::Network, &error))?;
         let primary = routes::primary(&table, log)
-            .map_err(|error| failure(NetworkStep::Network, error.message))?;
+            .map_err(|error| failure(NetworkStep::Network, &error.message))?;
         let ipv4_router = primary
             .network
             .router
             .parse()
             .expect("the primary network's router is an IPv4 address");
         let ipv6_router = network::routes(Family::Ipv6)
-            .map_err(|error| failure(NetworkStep::Network, error))?
+            .map_err(|error| failure(NetworkStep::Network, &error))?
             .into_iter()
             .filter(|route| {
                 route.interface == primary.luid
@@ -176,7 +176,7 @@ fn look_up(
 ) -> Result<NetworkOutcome, Failure> {
     let tunnel = tunnel_interface(tunnel)?;
     let dns_service_id = network::interface(tunnel)
-        .map_err(|error| failure(NetworkStep::Network, error))?
+        .map_err(|error| failure(NetworkStep::Network, &error))?
         .guid;
     let physical = Physical::read(log)?;
     let routes: Vec<OutsideRoute> = outside
@@ -184,7 +184,7 @@ fn look_up(
         .filter_map(|destination| physical.route_to(*destination))
         .collect();
     let table = table(routes.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::Network, error))?;
+        .map_err(|error| failure(NetworkStep::Network, &error))?;
     let missing = routes
         .into_iter()
         .filter(|route| found(&table, route).is_none())
@@ -275,14 +275,14 @@ fn apply_steps(
         remove_previous(tunnel, previous, settings)?;
     }
     let before = table(remove.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
+        .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
     let rows: Vec<Route> = remove
         .iter()
         .filter_map(|route| found(&before, route))
         .collect();
     *unchanged = Some(before);
     for row in rows {
-        network::delete_route(&row).map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
+        network::delete_route(&row).map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
         *unchanged = None;
     }
     if let Some(mtu) = settings.mtu {
@@ -293,21 +293,21 @@ fn apply_steps(
         };
         for &family in families {
             network::set_mtu(tunnel, family, mtu)
-                .map_err(|error| failure(NetworkStep::Mtu, error))?;
+                .map_err(|error| failure(NetworkStep::Mtu, &error))?;
         }
     }
     for address in addresses(settings) {
         match network::add_address(tunnel, address.address, address.prefix_length) {
             Ok(()) => {}
             Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::Addresses, error)),
+            Err(error) => return Err(failure(NetworkStep::Addresses, &error)),
         }
     }
     for route in add {
         match network::add_route(&physical.os_route(route)) {
             Ok(()) => added.push(route.clone()),
             Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::OutsideRoutes, error)),
+            Err(error) => return Err(failure(NetworkStep::OutsideRoutes, &error)),
         }
     }
     if !routes_and_dns {
@@ -316,24 +316,24 @@ fn apply_steps(
     }
     if matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
         network::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
-            .map_err(|error| failure(NetworkStep::Routes, error))?;
+            .map_err(|error| failure(NetworkStep::Routes, &error))?;
     }
     for route in tunnel_routes(tunnel, settings) {
         match network::add_route(&route) {
             Ok(()) => {}
             Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::Routes, error)),
+            Err(error) => return Err(failure(NetworkStep::Routes, &error)),
         }
     }
     let guid = network::interface(tunnel)
-        .map_err(|error| failure(NetworkStep::Dns, error))?
+        .map_err(|error| failure(NetworkStep::Dns, &error))?
         .guid;
     for family in [Family::Ipv4, Family::Ipv6] {
         let servers = dns_servers(settings, family);
         let had = previous.is_some_and(|previous| !dns_servers(previous, family).is_empty());
         if !servers.is_empty() || had {
             network::set_dns_servers(&guid, family, &servers)
-                .map_err(|error| failure(NetworkStep::Dns, error))?;
+                .map_err(|error| failure(NetworkStep::Dns, &error))?;
         }
     }
     let previous_wins = previous.map_or(&[][..], |previous| &previous.wins_servers[..]);
@@ -345,7 +345,7 @@ fn apply_steps(
         routing(settings, tunnel, outside)?;
     }
     let after = table(remove.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
+        .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
     Ok(remove
         .iter()
         .filter(|route| found(&after, route).is_some())
@@ -411,7 +411,7 @@ fn remove_previous(
         match network::delete_address(tunnel, address.address) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
-            Err(error) => return Err(failure(NetworkStep::Addresses, error)),
+            Err(error) => return Err(failure(NetworkStep::Addresses, &error)),
         }
     }
     let wanted = tunnel_routes(tunnel, settings);
@@ -422,13 +422,13 @@ fn remove_previous(
         match network::delete_route(&route) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
-            Err(error) => return Err(failure(NetworkStep::Routes, error)),
+            Err(error) => return Err(failure(NetworkStep::Routes, &error)),
         }
     }
     let was_full = matches!(previous.ipv4.routes, TunnelRoutes::Full {});
     if was_full && !matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
         network::set_metric(tunnel, Family::Ipv4, None)
-            .map_err(|error| failure(NetworkStep::Routes, error))?;
+            .map_err(|error| failure(NetworkStep::Routes, &error))?;
     }
     Ok(())
 }
@@ -440,7 +440,7 @@ fn set_wins_servers(
 ) -> Result<(), Failure> {
     let index = tunnel
         .index()
-        .map_err(|error| failure(NetworkStep::Wins, error))?
+        .map_err(|error| failure(NetworkStep::Wins, &error))?
         .to_string();
     if !previous.is_empty() {
         netsh(&["interface", "ipv4", "delete", "winsservers", &index, "all"])?;
@@ -479,7 +479,7 @@ fn netsh(args: &[&str]) -> Result<(), Failure> {
         .and_then(|stdio| {
             process::spawn(NETSH, args, &environment, stdio).map_err(|error| error.to_string())
         })
-        .map_err(|error| failure(NetworkStep::Wins, format!("netsh: {error}")))?;
+        .map_err(|error| failure(NetworkStep::Wins, &format!("netsh: {error}")))?;
     let ended = process
         .ended_within(NETSH_LIMIT)
         .expect("netsh is this process's child and its handle open");
@@ -490,7 +490,7 @@ fn netsh(args: &[&str]) -> Result<(), Failure> {
             .expect("netsh is this process's child and its handle open");
         return Err(failure(
             NetworkStep::Wins,
-            format!(
+            &format!(
                 "netsh {} did not finish within {}s",
                 args.join(" "),
                 NETSH_LIMIT.as_secs()
@@ -507,7 +507,7 @@ fn netsh(args: &[&str]) -> Result<(), Failure> {
     } else {
         Err(failure(
             NetworkStep::Wins,
-            format!("netsh {} ended with {status}", args.join(" ")),
+            &format!("netsh {} ended with {status}", args.join(" ")),
         ))
     }
 }
@@ -521,7 +521,7 @@ fn confirm(
 ) -> Result<(), Failure> {
     for address in addresses(settings) {
         let present = network::addresses(Family::of(address.address))
-            .map_err(|error| failure(NetworkStep::Addresses, error))?
+            .map_err(|error| failure(NetworkStep::Addresses, &error))?
             .iter()
             .any(|found| {
                 found.interface == tunnel
@@ -532,7 +532,7 @@ fn confirm(
         if !present {
             return Err(failure(
                 NetworkStep::Addresses,
-                format!(
+                &format!(
                     "{}/{} is not on the tunnel",
                     address.address, address.prefix_length
                 ),
@@ -541,11 +541,11 @@ fn confirm(
     }
     if let Some(mtu) = settings.mtu {
         let read = network::interface_settings(tunnel, Family::Ipv4)
-            .map_err(|error| failure(NetworkStep::Mtu, error))?;
+            .map_err(|error| failure(NetworkStep::Mtu, &error))?;
         if read.mtu != mtu {
             return Err(failure(
                 NetworkStep::Mtu,
-                format!("the tunnel's MTU is {}, not {mtu}", read.mtu),
+                &format!("the tunnel's MTU is {}, not {mtu}", read.mtu),
             ));
         }
     }
@@ -555,12 +555,12 @@ fn confirm(
         Vec::new()
     };
     let tunnel_table = table(wanted.iter().map(|route| route.destination))
-        .map_err(|error| failure(NetworkStep::Routes, error))?;
+        .map_err(|error| failure(NetworkStep::Routes, &error))?;
     for route in wanted {
         if !routes::has(&tunnel_table, &route) {
             return Err(failure(
                 NetworkStep::Routes,
-                format!(
+                &format!(
                     "the route to {}/{} through the tunnel is missing",
                     route.destination, route.prefix_length
                 ),
@@ -568,12 +568,12 @@ fn confirm(
         }
     }
     let outside_table = table(add.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::OutsideRoutes, error))?;
+        .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
     for route in add {
         if !routes::has(&outside_table, &physical.os_route(route)) {
             return Err(failure(
                 NetworkStep::OutsideRoutes,
-                format!(
+                &format!(
                     "the route to {}/{} through {} is missing",
                     route.destination.address, route.destination.prefix_length, route.router
                 ),
@@ -586,11 +586,11 @@ fn confirm(
     {
         let servers = dns_servers(settings, family);
         let read = network::dns_servers(tunnel, family)
-            .map_err(|error| failure(NetworkStep::Dns, error))?;
+            .map_err(|error| failure(NetworkStep::Dns, &error))?;
         if read != servers {
             return Err(failure(
                 NetworkStep::Dns,
-                format!("the tunnel's DNS servers are {read:?}, not {servers:?}"),
+                &format!("the tunnel's DNS servers are {read:?}, not {servers:?}"),
             ));
         }
     }
@@ -638,15 +638,15 @@ fn remove_replaced(replaced: &NetworkSettings) -> Result<(), Failure> {
         match network::delete_route(route) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
-            Err(error) => return Err(failure(NetworkStep::Routes, error)),
+            Err(error) => return Err(failure(NetworkStep::Routes, &error)),
         }
     }
     let table = table(routes.iter().map(|route| route.destination))
-        .map_err(|error| failure(NetworkStep::Routes, error))?;
+        .map_err(|error| failure(NetworkStep::Routes, &error))?;
     match routes.iter().find(|route| routes::has(&table, route)) {
         Some(route) => Err(failure(
             NetworkStep::Routes,
-            format!(
+            &format!(
                 "the route to {}/{} through {} is still in place",
                 route.destination, route.prefix_length, replaced.tunnel.name
             ),
@@ -698,7 +698,7 @@ fn routing_facts(
 ) -> Result<(Vec<Luid>, Vec<Chosen>), Failure> {
     let address = settings.ipv4.address.address;
     let owners = network::addresses(Family::Ipv4)
-        .map_err(|error| failure(NetworkStep::Addresses, error))?
+        .map_err(|error| failure(NetworkStep::Addresses, &error))?
         .into_iter()
         .filter(|found| found.address == address)
         .map(|found| found.interface)
@@ -707,7 +707,7 @@ fn routing_facts(
         .into_iter()
         .map(|route| {
             let (best, source) = network::best_route(first_address(&route))
-                .map_err(|error| failure(NetworkStep::Routes, error))?;
+                .map_err(|error| failure(NetworkStep::Routes, &error))?;
             Ok((route, best, source))
         })
         .collect::<Result<_, Failure>>()?;
@@ -749,7 +749,7 @@ fn routing_problem(
         };
         return Some(failure(
             NetworkStep::Addresses,
-            format!("the tunnel address {address} is on {holders}, not only on {name}"),
+            &format!("the tunnel address {address} is on {holders}, not only on {name}"),
         ));
     }
     for (route, best, source) in chosen {
@@ -772,7 +772,7 @@ fn routing_problem(
         }
         return Some(failure(
             NetworkStep::Routes,
-            format!(
+            &format!(
                 "the route for {}/{} goes through {} ({}/{}) from {source}, not {name} from {own}",
                 route.destination,
                 route.prefix_length,
@@ -797,14 +797,14 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
     if !changes.dns_service_id.is_empty() {
         for family in [Family::Ipv4, Family::Ipv6] {
             if let Err(error) = network::set_dns_servers(&changes.dns_service_id, family, &[]) {
-                failed.get_or_insert(failure(NetworkStep::Dns, error));
+                failed.get_or_insert(failure(NetworkStep::Dns, &error));
             }
         }
         match network::clear_wins_servers(&changes.dns_service_id) {
             Ok(()) => {}
             Err(error) if error.not_found() => {}
             Err(error) => {
-                failed.get_or_insert(failure(NetworkStep::Wins, error));
+                failed.get_or_insert(failure(NetworkStep::Wins, &error));
             }
         }
     }
@@ -818,14 +818,14 @@ fn revert(changes: &OutsideChanges, log: &Log) -> NetworkOutcome {
                     match network::delete_route(&row) {
                         Ok(()) => deleted = true,
                         Err(error) => {
-                            failed.get_or_insert(failure(NetworkStep::OutsideRoutes, error));
+                            failed.get_or_insert(failure(NetworkStep::OutsideRoutes, &error));
                         }
                     }
                 }
             }
         }
         Err(error) => {
-            failed.get_or_insert(failure(NetworkStep::OutsideRoutes, *error));
+            failed.get_or_insert(failure(NetworkStep::OutsideRoutes, error));
         }
     }
     let after = if deleted {

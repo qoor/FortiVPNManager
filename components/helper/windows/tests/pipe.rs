@@ -78,13 +78,13 @@ impl Test {
     }
 }
 
-fn ask(connection: &DuplexPipeStream<pipe_mode::Bytes>, request: Value) -> Value {
+fn ask(connection: &DuplexPipeStream<pipe_mode::Bytes>, request: &Value) -> Value {
     stream::send(&mut &*connection, &request).unwrap();
     stream::receive(&mut &*connection).unwrap()
 }
 
 fn build_check(connection: &DuplexPipeStream<pipe_mode::Bytes>, app: &str) {
-    let answer = ask(connection, json!({ "build": { "id": 1, "app": app } }));
+    let answer = ask(connection, &json!({ "build": { "id": 1, "app": app } }));
     assert_eq!(answer, json!({ "build": { "id": 1, "build": BUILD } }));
 }
 
@@ -105,16 +105,16 @@ fn connect_request(id: u64) -> Value {
 fn only_a_connection_of_the_same_build_may_connect() {
     let test = start();
     let connection = test.connect();
-    let refused: HelperError = reply(&ask(&connection, connect_request(2)), 2);
+    let refused: HelperError = reply(&ask(&connection, &connect_request(2)), 2);
     assert_eq!(refused.code, HelperErrorCode::NotAuthorized);
 
     build_check(&connection, "another build");
-    let refused: HelperError = reply(&ask(&connection, connect_request(3)), 3);
+    let refused: HelperError = reply(&ask(&connection, &connect_request(3)), 3);
     assert_eq!(refused.code, HelperErrorCode::NotAuthorized);
 
     build_check(&connection, BUILD);
     // The entry got it: it judges the request itself.
-    let judged: HelperError = reply(&ask(&connection, connect_request(4)), 4);
+    let judged: HelperError = reply(&ask(&connection, &connect_request(4)), 4);
     assert_eq!(judged.code, HelperErrorCode::InvalidRequest, "{judged:?}");
 }
 
@@ -123,7 +123,7 @@ fn the_helper_never_exits_when_idle() {
     let test = start();
     let connection = test.connect();
     assert_eq!(
-        ask(&connection, json!({ "exitWhenIdle": { "id": 7 } })),
+        ask(&connection, &json!({ "exitWhenIdle": { "id": 7 } })),
         json!({ "replyFlag": { "id": 7, "value": false } })
     );
     // Still serving.
@@ -150,14 +150,14 @@ fn each_connection_gets_the_answers_to_its_own_requests() {
 fn the_bypass_routes_are_read_after_the_build_check() {
     let test = start();
     let connection = test.connect();
-    let answer = ask(&connection, json!({ "readBypassRoutes": { "id": 2 } }));
+    let answer = ask(&connection, &json!({ "readBypassRoutes": { "id": 2 } }));
     let BypassRoutesReply::Failure { error } = reply(&answer, 2) else {
         panic!("read without the build check: {answer}");
     };
     assert_eq!(error.code, HelperErrorCode::NotAuthorized);
 
     build_check(&connection, BUILD);
-    let answer = ask(&connection, json!({ "readBypassRoutes": { "id": 3 } }));
+    let answer = ask(&connection, &json!({ "readBypassRoutes": { "id": 3 } }));
     // The test PC has a wired network; the new connection has no exception routes.
     let BypassRoutesReply::Success { snapshot, routes } = reply(&answer, 3) else {
         panic!("{answer}");
@@ -193,7 +193,7 @@ fn a_connection_has_one_route_request_at_a_time() {
         "{answered}"
     );
     // Once it is answered, the next one is taken.
-    let next = ask(&connection, json!({ "readBypassRoutes": { "id": 4 } }));
+    let next = ask(&connection, &json!({ "readBypassRoutes": { "id": 4 } }));
     let next: BypassRoutesReply = reply(&next, 4);
     assert!(
         matches!(next, BypassRoutesReply::Success { .. }),
@@ -208,34 +208,37 @@ fn the_update_requests_need_the_build_check() {
     let prepare = |id: u64| json!({ "prepareUpdate": { "id": id, "json": "{}" } });
     let install = |id: u64| json!({ "installUpdate": { "id": id, "json": "{}" } });
 
-    let answer = ask(&connection, prepare(2));
+    let answer = ask(&connection, &prepare(2));
     let UpdatePrepareReply::Failure { error } = reply(&answer, 2) else {
         panic!("prepared without the build check: {answer}");
     };
     assert_eq!(error.code, HelperErrorCode::NotAuthorized);
-    let answer = ask(&connection, install(3));
+    let answer = ask(&connection, &install(3));
     let UpdateInstallReply::Failure { error } = reply(&answer, 3) else {
         panic!("installed without the build check: {answer}");
     };
     assert_eq!(error.code, HelperErrorCode::NotAuthorized);
-    let answer = ask(&connection, json!({ "readPreparedUpdate": { "id": 4 } }));
+    let answer = ask(&connection, &json!({ "readPreparedUpdate": { "id": 4 } }));
     let PreparedUpdateReply::Failure { error } = reply(&answer, 4) else {
         panic!("answered without the build check: {answer}");
     };
     assert_eq!(error.code, HelperErrorCode::NotAuthorized);
-    let answer = ask(&connection, json!({ "discardPreparedUpdate": { "id": 5 } }));
+    let answer = ask(
+        &connection,
+        &json!({ "discardPreparedUpdate": { "id": 5 } }),
+    );
     let UpdateDiscardReply::Failure { error } = reply(&answer, 5) else {
         panic!("discarded without the build check: {answer}");
     };
     assert_eq!(error.code, HelperErrorCode::NotAuthorized);
 
     build_check(&connection, BUILD);
-    let answer = ask(&connection, prepare(6));
+    let answer = ask(&connection, &prepare(6));
     let UpdatePrepareReply::Failure { error } = reply(&answer, 6) else {
         panic!("{answer}");
     };
     assert_eq!(error.code, HelperErrorCode::InvalidRequest, "{error:?}");
-    let answer = ask(&connection, install(7));
+    let answer = ask(&connection, &install(7));
     let UpdateInstallReply::Failure { error } = reply(&answer, 7) else {
         panic!("{answer}");
     };

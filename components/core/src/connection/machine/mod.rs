@@ -452,7 +452,7 @@ impl ConnectionManager {
                 interfaces,
             } => self.network_path_changed(satisfied, interfaces),
             Input::RouterRead { present } => self.router_read(present),
-            Input::NetworkProbed(result) => self.network_probed(result),
+            Input::NetworkProbed(result) => self.network_probed(&result),
         }
     }
 
@@ -480,7 +480,7 @@ impl ConnectionManager {
             }
             _ => Vec::new(),
         };
-        effects.append(&mut self.notes(marks));
+        effects.append(&mut self.notes(&marks));
         effects.append(&mut self.effects);
         effects
     }
@@ -502,7 +502,7 @@ impl ConnectionManager {
         }
     }
 
-    fn notes(&self, before: NoteMarks) -> Vec<Effect> {
+    fn notes(&self, before: &NoteMarks) -> Vec<Effect> {
         let Some(schedule) = &self.settings.connection.schedule else {
             return Vec::new();
         };

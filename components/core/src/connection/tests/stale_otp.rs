@@ -438,7 +438,7 @@ fn no_search_on_quit_or_sleep() {
     h.exit(ended(Milestone::OtpPrompted).by_helper(StopReason::Sleep));
     h.advance(600.0);
     h.wake();
-    h.settle(observe().dead());
+    h.settle(&observe().dead());
     let next = h.attempt().unwrap().id.clone();
     assert_eq!(
         connection_effects(&h.send(Input::ReadinessChecked(ready()))),

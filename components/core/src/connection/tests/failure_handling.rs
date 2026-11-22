@@ -377,7 +377,7 @@ fn a_gateway_end_right_after_a_wake_is_judged_by_its_facts() {
         h.sleep();
         h.advance(600.0);
         h.wake();
-        h.settle(observe().dead());
+        h.settle(&observe().dead());
         assert_eq!(h.cm.phase, Phase::Idle);
         h.send(Input::Connect);
         let id = h.start_tunnel();
@@ -608,7 +608,7 @@ fn failed_only_clears_on_a_user_action() {
     h.sleep();
     h.advance(4000.0);
     h.wake();
-    h.settle(observe().dead());
+    h.settle(&observe().dead());
     assert_eq!(h.cm.phase, failed, "sleep and wake");
     let effects = h.send(Input::Connect);
     assert!(effects.contains(&Effect::CheckReadiness));

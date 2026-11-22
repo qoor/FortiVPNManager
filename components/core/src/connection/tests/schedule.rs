@@ -474,7 +474,7 @@ fn a_long_sleep_outside_the_hours_stops_reconnects_before_the_user_unlocks() {
     }
     assert!(h.cm.reconnect_suspended);
     back(&mut h);
-    let settled = h.settle(observe().dead());
+    let settled = h.settle(&observe().dead());
     assert_eq!(stop_reasons(&settled), [StopReason::Reconnect]);
     h.exit_for(
         &id,
@@ -496,7 +496,7 @@ fn a_working_tunnel_is_kept_on_a_wake_while_reconnects_wait() {
     h.now = at(18, 20, 0, 0);
     h.wake();
     assert!(!h.cm.reconnect_suspended);
-    let settled = h.settle(observe());
+    let settled = h.settle(&observe());
     assert_eq!(stop_reasons(&settled), []);
     assert!(h.connected().is_some());
     assert_eq!(h.timer(TimerKind::ProactiveReconnect), None);

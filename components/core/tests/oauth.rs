@@ -306,7 +306,7 @@ fn complete() -> serde_json::Map<String, serde_json::Value> {
     .clone()
 }
 
-fn installed(fields: serde_json::Map<String, serde_json::Value>) -> Vec<u8> {
+fn installed(fields: &serde_json::Map<String, serde_json::Value>) -> Vec<u8> {
     serde_json::json!({ "installed": fields })
         .to_string()
         .into_bytes()
@@ -314,7 +314,7 @@ fn installed(fields: serde_json::Map<String, serde_json::Value>) -> Vec<u8> {
 
 #[test]
 fn a_desktop_client() {
-    let client = parse_client_file(&installed(complete())).unwrap();
+    let client = parse_client_file(&installed(&complete())).unwrap();
     assert_eq!(client.client_id, CLIENT_ID);
     assert_eq!(client.client_secret.0, SECRET);
     let debug = format!("{client:?}");
@@ -328,7 +328,7 @@ fn a_minimal_desktop_client() {
     fields.insert("client_id".into(), CLIENT_ID.into());
     fields.insert("client_secret".into(), SECRET.into());
     assert_eq!(
-        parse_client_file(&installed(fields)).unwrap().client_id,
+        parse_client_file(&installed(&fields)).unwrap().client_id,
         CLIENT_ID
     );
 }
@@ -403,7 +403,7 @@ fn field_problems() {
             None => fields.remove(key),
         };
         assert_eq!(
-            parse_client_file(&installed(fields)),
+            parse_client_file(&installed(&fields)),
             Err(expected),
             "{key} = {value:?}"
         );
@@ -411,7 +411,7 @@ fn field_problems() {
     let mut fields = complete();
     fields.insert("client_secret".into(), 42.into());
     assert_eq!(
-        parse_client_file(&installed(fields)),
+        parse_client_file(&installed(&fields)),
         Err(invalid("client_secret"))
     );
     let mut fields = complete();
@@ -420,12 +420,12 @@ fn field_problems() {
         ("a".repeat(250) + ".apps.googleusercontent.com").into(),
     );
     assert_eq!(
-        parse_client_file(&installed(fields)),
+        parse_client_file(&installed(&fields)),
         Err(invalid("client_id"))
     );
     let mut fields = complete();
     fields.insert("client_id".into(), "1-a.apps.googleusercontent.com".into());
-    assert!(parse_client_file(&installed(fields)).is_ok());
+    assert!(parse_client_file(&installed(&fields)).is_ok());
 }
 
 // MARK: Loopback requests

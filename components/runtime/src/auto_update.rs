@@ -395,7 +395,7 @@ impl Runtime {
         match downloaded {
             Downloaded::Files(request) => {
                 self.updates.phase = Phase::Preparing;
-                self.prepare_update(version, request);
+                self.prepare_update(version, &request);
             }
             Downloaded::Failed(detail, removed) => {
                 self.system_log(
@@ -430,7 +430,7 @@ impl Runtime {
         }
     }
 
-    fn prepare_update(&mut self, version: Version, request: UpdatePrepareRequest) {
+    fn prepare_update(&mut self, version: Version, request: &UpdatePrepareRequest) {
         let json = serde_json::to_string(&request).expect("a prepare request encodes");
         self.call_helper(
             HelperCall::PrepareUpdate { json },

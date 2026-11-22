@@ -41,10 +41,10 @@ fn added_through(last: u8, service: &str) -> Value {
 }
 
 fn write(routes: &[Value]) -> Value {
-    write_on(network(), routes)
+    write_on(&network(), routes)
 }
 
-fn write_on(network: Value, routes: &[Value]) -> Value {
+fn write_on(network: &Value, routes: &[Value]) -> Value {
     let request = json!({"write": {"expected": network, "routes": routes}});
     json!({"writeBypassRoutes": {"json": request.to_string()}})
 }
@@ -108,7 +108,7 @@ impl OsSide {
     /// Has app `app` write `routes`, none of them in the table yet, so that the Helper adds them
     /// all; its changes are the `count`-th and the next.
     fn write_added(&mut self, app: u64, routes: &[Value], count: usize) {
-        let id = self.request(app, write(routes));
+        let id = self.request(app, &write(routes));
         self.change(count);
         self.changed(Some(network()), &[], &[], &[]);
         self.change(count + 1);
@@ -139,8 +139,8 @@ fn the_exception_routes_are_kept_outside_in_the_apply_and_the_routing_check() {
     assert!(os_side.connect_app(1, 501));
     os_side.write_added(1, &[host(16)], 1);
     assert_eq!(os_side.connect(1, ATTEMPT), None);
-    os_side.answer_network("lookUp", looked_up(outside_routes()));
-    let apply = os_side.answer_network("apply", applied(outside_routes()));
+    os_side.answer_network("lookUp", &looked_up(&outside_routes()));
+    let apply = os_side.answer_network("apply", &applied(&outside_routes()));
     let outside = json!([
         {"address": GATEWAY, "prefixLength": 32},
         {"address": "10.20.161.16", "prefixLength": 32},
@@ -148,8 +148,8 @@ fn the_exception_routes_are_kept_outside_in_the_apply_and_the_routing_check() {
     ]);
     assert_eq!(apply["outside"], outside);
     os_side.wait_for_milestone(1, TUNNEL_UP);
-    let status = os_side.request(1, json!({"status": {}}));
-    let check = os_side.answer_network("check", json!({"checked": {"complete": true}}));
+    let status = os_side.request(1, &json!({"status": {}}));
+    let check = os_side.answer_network("check", &json!({"checked": {"complete": true}}));
     assert_eq!(check["outside"], outside);
     assert_eq!(os_side.reply_json(status)["routingComplete"], true);
 }
@@ -157,7 +157,7 @@ fn the_exception_routes_are_kept_outside_in_the_apply_and_the_routing_check() {
 #[test]
 fn a_write_looks_up_first_and_records_only_what_it_adds() {
     let mut os_side = started();
-    let id = os_side.request(1, write(&[host(16), host(17)]));
+    let id = os_side.request(1, &write(&[host(16), host(17)]));
     assert_eq!(os_side.change(1), look_up(&[host(16), host(17)]));
     assert_eq!(os_side.recorded(), None);
     // The first one is in the table already: someone else's.
@@ -183,7 +183,7 @@ fn a_write_looks_up_first_and_records_only_what_it_adds() {
 #[test]
 fn routes_all_in_the_table_already_are_left_where_they_are() {
     let mut os_side = started();
-    let id = os_side.request(1, write(&[host(16)]));
+    let id = os_side.request(1, &write(&[host(16)]));
     os_side.change(1);
     os_side.changed(Some(network()), &[], &[host(16)], &[]);
     assert_eq!(
@@ -192,7 +192,7 @@ fn routes_all_in_the_table_already_are_left_where_they_are() {
     );
     assert_eq!(os_side.recorded(), None);
     // Someone else's: quitting removes nothing.
-    let id = os_side.request(1, remove());
+    let id = os_side.request(1, &remove());
     assert_eq!(os_side.route_reply(id), json!({"removed": {}}));
     assert_eq!(os_side.changes().len(), 1);
 }
@@ -201,7 +201,7 @@ fn routes_all_in_the_table_already_are_left_where_they_are() {
 fn a_new_list_removes_the_routes_no_longer_wanted() {
     let mut os_side = started();
     os_side.write_added(1, &[host(16), host(17)], 1);
-    let id = os_side.request(1, write(&[host(17), host(18)]));
+    let id = os_side.request(1, &write(&[host(17), host(18)]));
     assert_eq!(os_side.change(3), look_up(&[host(17), host(18)]));
     os_side.changed(Some(network()), &[], &[host(17)], &[]);
     assert_eq!(
@@ -229,7 +229,7 @@ fn a_new_network_service_with_the_same_router_keeps_the_routes() {
     let mut os_side = started();
     let mut wifi = network_of("WIFI");
     wifi["serviceName"] = json!("Wi-Fi");
-    let id = os_side.request(1, write_on(wifi.clone(), &[host(16)]));
+    let id = os_side.request(1, &write_on(&wifi.clone(), &[host(16)]));
     os_side.change(1);
     os_side.changed(Some(wifi.clone()), &[], &[], &[]);
     os_side.change(2);
@@ -237,7 +237,7 @@ fn a_new_network_service_with_the_same_router_keeps_the_routes() {
     os_side.route_reply(id);
     assert_eq!(os_side.recorded(), Some(json!([added_through(16, "WIFI")])));
 
-    let id = os_side.request(1, write(&[host(16)]));
+    let id = os_side.request(1, &write(&[host(16)]));
     assert_eq!(os_side.change(3), look_up(&[host(16)]));
     os_side.changed(Some(network()), &[], &[host(16)], &[]);
     assert_eq!(
@@ -247,7 +247,7 @@ fn a_new_network_service_with_the_same_router_keeps_the_routes() {
     assert_eq!(os_side.changes().len(), 3);
     assert_eq!(os_side.recorded(), Some(json!([added_through(16, "WIFI")])));
     // Still the Helper's: quitting removes it.
-    let id = os_side.request(1, remove());
+    let id = os_side.request(1, &remove());
     assert_eq!(os_side.change(4), removal(&[added_through(16, "WIFI")]));
     os_side.changed(None, &[], &[], &[]);
     assert_eq!(os_side.route_reply(id), json!({"removed": {}}));
@@ -270,14 +270,14 @@ fn a_route_recorded_through_two_services_is_removed_once_no_app_wants_it() {
     os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
     assert!(os_side.connect_app(1, 501));
 
-    let id = os_side.request(1, write(&[host(16)]));
+    let id = os_side.request(1, &write(&[host(16)]));
     os_side.change(2);
     os_side.changed(Some(network()), &[], &[host(16)], &[]);
     os_side.route_reply(id);
     assert_eq!(os_side.changes().len(), 2);
     assert_eq!(os_side.recorded(), Some(json!(both)));
 
-    let id = os_side.request(1, remove());
+    let id = os_side.request(1, &remove());
     assert_eq!(os_side.change(3), removal(&both));
     os_side.changed(None, &[], &[], &[]);
     assert_eq!(os_side.route_reply(id), json!({"removed": {}}));
@@ -287,7 +287,7 @@ fn a_route_recorded_through_two_services_is_removed_once_no_app_wants_it() {
 #[test]
 fn a_refused_look_up_answers_the_error() {
     let mut os_side = started();
-    let id = os_side.request(1, write(&[host(16)]));
+    let id = os_side.request(1, &write(&[host(16)]));
     os_side.change(1);
     os_side.refused(&wrong_phase());
     assert_eq!(
@@ -301,7 +301,7 @@ fn a_refused_look_up_answers_the_error() {
 #[test]
 fn a_refused_change_puts_the_record_back() {
     let mut os_side = started();
-    let id = os_side.request(1, write(&[host(16)]));
+    let id = os_side.request(1, &write(&[host(16)]));
     os_side.change(1);
     os_side.changed(Some(network()), &[], &[], &[]);
     os_side.change(2);
@@ -318,7 +318,7 @@ fn a_refused_change_puts_the_record_back() {
 fn reading_looks_up_the_routes_the_app_last_wrote() {
     let mut os_side = started();
     os_side.write_added(1, &[host(16)], 1);
-    let id = os_side.request(1, read());
+    let id = os_side.request(1, &read());
     assert_eq!(
         os_side.change(3),
         json!({"network": {"read": {}}, "remove": [], "add": [], "lookUp": [host(16)]})
@@ -335,7 +335,7 @@ fn reading_looks_up_the_routes_the_app_last_wrote() {
 fn quitting_removes_the_apps_routes_wherever_the_network_is() {
     let mut os_side = started();
     os_side.write_added(1, &[host(16), host(17)], 1);
-    let id = os_side.request(1, remove());
+    let id = os_side.request(1, &remove());
     assert_eq!(os_side.change(3), removal(&[added(16), added(17)]));
     os_side.changed(None, &[], &[], &[]);
     assert_eq!(os_side.route_reply(id), json!({"removed": {}}));
@@ -380,14 +380,14 @@ fn a_route_another_app_still_wants_stays() {
     assert!(os_side.connect_app(2, 502));
     os_side.write_added(1, &[host(16), host(17)], 1);
     // The second app wants one of them, which the Helper added already.
-    let id = os_side.request(2, write(&[host(16)]));
+    let id = os_side.request(2, &write(&[host(16)]));
     os_side.change(3);
     os_side.changed(Some(network()), &[], &[host(16)], &[]);
     os_side.route_reply(id);
     os_side.disconnect_app(1);
     assert_eq!(os_side.change(4), removal(&[added(17)]));
     os_side.changed(None, &[], &[], &[]);
-    let id = os_side.request(2, remove());
+    let id = os_side.request(2, &remove());
     assert_eq!(os_side.change(5), removal(&[added(16)]));
     os_side.changed(None, &[], &[], &[]);
     assert_eq!(os_side.route_reply(id), json!({"removed": {}}));
@@ -398,8 +398,8 @@ fn a_route_another_app_still_wants_stays() {
 fn the_os_side_gets_one_change_at_a_time() {
     let mut os_side = started();
     assert!(os_side.connect_app(2, 502));
-    let first = os_side.request(1, write(&[host(16)]));
-    let second = os_side.request(2, write(&[host(17)]));
+    let first = os_side.request(1, &write(&[host(16)]));
+    let second = os_side.request(2, &write(&[host(17)]));
     os_side.change(1);
     let meanwhile = os_side.received_within(Duration::from_millis(300));
     assert!(meanwhile.is_empty(), "{meanwhile:#?}");
@@ -418,7 +418,7 @@ fn the_os_side_gets_one_change_at_a_time() {
 #[test]
 fn a_closed_connection_changes_no_route() {
     let mut os_side = started();
-    let id = os_side.request(9, write(&[host(16)]));
+    let id = os_side.request(9, &write(&[host(16)]));
     assert_eq!(
         os_side.route_reply(id),
         json!({"failure": {"_0": {"code": "notAuthorized", "message": "the app connection is closed"}}})
@@ -429,7 +429,7 @@ fn a_closed_connection_changes_no_route() {
 #[test]
 fn an_unreadable_request_is_refused() {
     let mut os_side = started();
-    let id = os_side.request(1, json!({"writeBypassRoutes": {"json": "{}"}}));
+    let id = os_side.request(1, &json!({"writeBypassRoutes": {"json": "{}"}}));
     assert_eq!(
         os_side.route_reply(id),
         json!({"failure": {"_0": {"code": "invalidRequest", "message": "could not decode the route request"}}})
@@ -464,7 +464,7 @@ fn the_routes_an_earlier_helper_added_are_removed_before_ready() {
 
     // It stays the Helper's: the first change of an app removes it.
     assert!(os_side.connect_app(1, 501));
-    let id = os_side.request(1, write(&[host(18)]));
+    let id = os_side.request(1, &write(&[host(18)]));
     os_side.change(2);
     os_side.changed(Some(network()), &[], &[], &[]);
     assert_eq!(os_side.change(3)["remove"], json!([added(17)]));

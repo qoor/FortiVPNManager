@@ -34,7 +34,7 @@ fn starts_from_the_saved_list_without_changes() {
 #[test]
 fn edits_are_changes() {
     let mut draft = ListDraft::new(vec![host()]);
-    draft.set_rows(rows(&["10.30.161.16", "  10.30.170.0/24 ", ""]));
+    draft.set_rows(&rows(&["10.30.161.16", "  10.30.170.0/24 ", ""]));
     assert_eq!(draft.rows(), rows(&["10.30.161.16", "10.30.170.0/24"]));
     assert!(draft.has_changes());
     assert_eq!(draft.entries(), Some(vec![host(), network()]));
@@ -43,14 +43,14 @@ fn edits_are_changes() {
 #[test]
 fn respelling_is_no_change() {
     let mut draft = ListDraft::new(vec![host()]);
-    draft.set_rows(rows(&["10.30.161.16/32"]));
+    draft.set_rows(&rows(&["10.30.161.16/32"]));
     assert!(!draft.has_changes());
 }
 
 #[test]
 fn problem_rows_block_saving() {
     let mut draft = ListDraft::new(vec![]);
-    draft.set_rows(rows(&[
+    draft.set_rows(&rows(&[
         "10.30.161",
         "10.30.161.16",
         "10.30.161.16/32",
@@ -88,7 +88,7 @@ fn problem_rows_block_saving() {
 #[test]
 fn overlapping_rows_block_saving() {
     let mut draft = ListDraft::new(vec![]);
-    draft.set_rows(rows(&["10.30.170.0/24", "10.30.170.9", "10.30.0.0/16"]));
+    draft.set_rows(&rows(&["10.30.170.0/24", "10.30.170.9", "10.30.0.0/16"]));
     let overlap = RowProblem::Overlap {
         other: "10.30.170.0/24".into(),
     };
@@ -107,7 +107,7 @@ fn without_edits_the_rows_follow_the_saved_list() {
 #[test]
 fn outside_changes_merge_into_edits() {
     let mut draft = ListDraft::new(vec![host(), network()]);
-    draft.set_rows(rows(&["10.30.161.16", "10.30.170.0/24", "10.30.99"]));
+    draft.set_rows(&rows(&["10.30.161.16", "10.30.170.0/24", "10.30.99"]));
     // Elsewhere: `network` removed, `other` added.
     draft.merge_saved(vec![host(), other()]);
     assert_eq!(
@@ -129,7 +129,7 @@ fn add_skips_an_entry_already_listed() {
 #[test]
 fn rows_overlapping_an_entry() {
     let mut draft = ListDraft::new(vec![network()]);
-    draft.set_rows(rows(&["10.30.170.0/24", "not an address"]));
+    draft.set_rows(&rows(&["10.30.170.0/24", "not an address"]));
     assert!(draft.has_row_overlapping(&network()));
     assert!(draft.has_row_overlapping(&net("10.30.170.5")));
     assert!(draft.has_row_overlapping(&net("10.30.0.0/16")));
@@ -139,7 +139,7 @@ fn rows_overlapping_an_entry() {
 #[test]
 fn merge_does_not_repeat_a_row_the_user_already_typed() {
     let mut draft = ListDraft::new(vec![host()]);
-    draft.set_rows(rows(&["10.30.161.16", "10.50.100.10/32"]));
+    draft.set_rows(&rows(&["10.30.161.16", "10.50.100.10/32"]));
     draft.merge_saved(vec![host(), other()]);
     assert_eq!(draft.rows(), rows(&["10.30.161.16", "10.50.100.10/32"]));
     assert!(!draft.has_changes());
@@ -153,15 +153,15 @@ fn the_vpn_servers_address_is_a_problem_target_row() {
     let mut drafts = RuleDrafts::new(Vec::new(), vec![network()], Some(server));
     drafts
         .targets
-        .set_rows(rows(&["10.30.170.0/24", "10.30.161.16/32"]));
+        .set_rows(&rows(&["10.30.170.0/24", "10.30.161.16/32"]));
     assert_eq!(drafts.targets.problems(), [(1, RowProblem::VpnServer {})]);
     assert_eq!(drafts.entries(), None);
-    drafts.targets.set_rows(rows(&["10.30.161.0/24"]));
-    drafts.networks.set_rows(rows(&["10.30.161.16"]));
+    drafts.targets.set_rows(&rows(&["10.30.161.0/24"]));
+    drafts.networks.set_rows(&rows(&["10.30.161.16"]));
     assert_eq!(drafts.targets.problems(), []);
     assert_eq!(drafts.networks.problems(), []);
     // The settings name another server now.
     drafts.set_vpn_server(None);
-    drafts.targets.set_rows(rows(&["10.30.161.16"]));
+    drafts.targets.set_rows(&rows(&["10.30.161.16"]));
     assert_eq!(drafts.entries(), Some((vec![host()], vec![host()])));
 }

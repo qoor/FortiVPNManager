@@ -173,7 +173,7 @@ fn wake_rules_while_connected() {
         );
         h.advance(wake.sleep);
         h.wake();
-        let effects = h.settle(wake.observation);
+        let effects = h.settle(&wake.observation);
         if let Some(reason) = wake.expected {
             let stop = if reason == AttemptReason::Proactive {
                 StopReason::ProactiveReconnect
@@ -209,7 +209,7 @@ fn an_unsettled_wake_after_the_planned_time_defers_the_proactive_reconnect() {
     h.sleep();
     h.advance(4.0 * 3600.0);
     h.wake();
-    let effects = h.settle(observe().via(None).unsettled());
+    let effects = h.settle(&observe().via(None).unsettled());
     assert_eq!(
         timer_set(&effects, TimerKind::ProactiveReconnect),
         Some(h.now + secs(60.0))
@@ -238,7 +238,7 @@ fn the_proactive_timer_is_suspended_until_the_wake_is_judged() {
     h.advance(60.0);
     h.wake();
     assert_eq!(h.timer(TimerKind::ProactiveReconnect), None);
-    let effects = h.settle(observe());
+    let effects = h.settle(&observe());
     assert_eq!(
         timer_set(&effects, TimerKind::ProactiveReconnect),
         Some(planned)
@@ -279,7 +279,7 @@ fn sleep_while_connecting_stops_the_attempt_and_resumes_after_the_wake() {
     h.advance(600.0);
     h.wake();
     assert!(h.network_wait().is_some());
-    let resumed = h.settle(observe().dead());
+    let resumed = h.settle(&observe().dead());
     assert!(resumed.contains(&Effect::CheckReadiness), "{resumed:?}");
     assert_eq!(reason(&h), Some(AttemptReason::AfterSleep));
 }
@@ -291,7 +291,7 @@ fn a_wake_without_network_keeps_waiting() {
     h.sleep();
     h.wake();
     assert!(!checks_readiness(
-        &h.settle(observe().dead().via(None).unsettled())
+        &h.settle(&observe().dead().via(None).unsettled())
     ));
     assert_eq!(
         h.network_wait().map(|(reason, _)| reason),
@@ -360,7 +360,7 @@ fn sleep_while_waiting_cancels_the_timer_but_keeps_the_auth_gap() {
     );
     h.advance(20.0);
     h.wake();
-    h.settle(observe());
+    h.settle(&observe());
     assert_eq!(
         h.retry_wait(),
         Some((failed_at + secs(90.0), RetryReason::AuthCooldown))
@@ -386,7 +386,10 @@ fn a_tunnel_that_dies_during_sleep_reconnects_after_the_wake() {
         h.connection_timers()
     );
     h.wake();
-    assert!(h.settle(observe().dead()).contains(&Effect::CheckReadiness));
+    assert!(
+        h.settle(&observe().dead())
+            .contains(&Effect::CheckReadiness)
+    );
 }
 
 #[test]
@@ -440,7 +443,7 @@ fn incomplete_routing_on_the_same_underlay_reconnects_as_a_lost_tunnel() {
     let mut h = Harness::new();
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
-    let effects = connection_effects(&h.set_path_with_routing(online(), Some(false)));
+    let effects = connection_effects(&h.set_path_with_routing(&online(), Some(false)));
     assert_eq!(
         effects,
         [
@@ -464,7 +467,7 @@ fn an_underlay_change_with_incomplete_routing_reconnects_for_the_network() {
     let mut h = Harness::new();
     h.launch_connected();
     assert_eq!(
-        stop_reasons(&h.set_path_with_routing(online_via(ethernet()), Some(false))),
+        stop_reasons(&h.set_path_with_routing(&online_via(ethernet()), Some(false))),
         [StopReason::Reconnect]
     );
     assert_eq!(
@@ -479,7 +482,7 @@ fn complete_or_unchecked_routing_keeps_the_tunnel() {
         let mut h = Harness::new();
         h.launch_connected();
         assert_eq!(
-            connection_effects(&h.set_path_with_routing(online(), routing)),
+            connection_effects(&h.set_path_with_routing(&online(), routing)),
             []
         );
         assert!(h.connected().is_some());

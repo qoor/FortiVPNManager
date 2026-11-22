@@ -166,7 +166,7 @@ fn a_wake_past_the_planned_time_keeping_the_tunnel_prepares_the_next_one() {
     h.sleep();
     h.advance(175.5 * 60.0);
     h.wake();
-    let effects = h.settle(observe());
+    let effects = h.settle(&observe());
     assert_eq!(stop_reasons(&effects), []);
     assert_eq!(reason(&h), Some(AttemptReason::Proactive));
     shows_connected_on(&h, &old);
@@ -180,7 +180,7 @@ fn a_wake_that_does_not_keep_the_tunnel_stops_it_first_as_before() {
         h.sleep();
         h.advance(175.5 * 60.0);
         h.wake();
-        let effects = h.settle(observation);
+        let effects = h.settle(&observation);
         assert_eq!(stop_reasons(&effects), [StopReason::ProactiveReconnect]);
         assert_eq!(
             after(&h),
@@ -195,7 +195,7 @@ fn without_a_network_the_old_tunnel_is_stopped_first() {
     h.sleep();
     h.advance(175.5 * 60.0);
     h.wake();
-    h.settle(observe().via(None).unsettled());
+    h.settle(&observe().via(None).unsettled());
     assert!(h.connected().is_some());
     assert_eq!(
         stop_reasons(&h.fire(TimerKind::ProactiveReconnect)),
@@ -218,7 +218,7 @@ fn a_session_too_close_to_its_end_stops_first() {
     h.advance(4.0 * 3600.0);
     h.wake();
     assert_eq!(
-        stop_reasons(&h.settle(observe())),
+        stop_reasons(&h.settle(&observe())),
         [StopReason::ProactiveReconnect]
     );
 }
@@ -865,7 +865,7 @@ fn sleep_stops_the_preparation_and_the_wake_prepares_again() {
     );
     h.advance(30.0);
     h.wake();
-    h.settle(observe());
+    h.settle(&observe());
     assert!(h.connected().is_some());
     h.fire(TimerKind::Retry);
     start_replacement(&mut h, &old);
@@ -924,7 +924,7 @@ fn a_late_exit_of_a_stopped_preparation_changes_nothing() {
     h.sleep();
     h.advance(30.0);
     h.wake();
-    h.settle(observe());
+    h.settle(&observe());
     let before = h.cm.phase.clone();
     assert_eq!(
         connection_effects(

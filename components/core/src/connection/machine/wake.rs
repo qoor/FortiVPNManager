@@ -57,7 +57,7 @@ impl ConnectionManager {
         self.check_away_limit();
     }
 
-    pub(in crate::connection) fn wake_settled(&mut self, observation: WakeObservation) {
+    pub(in crate::connection) fn wake_settled(&mut self, observation: &WakeObservation) {
         let slept_for = self.pending_wake.take().unwrap_or(Duration::ZERO);
         self.path = Some(PathSnapshot {
             satisfied: observation.path_satisfied,

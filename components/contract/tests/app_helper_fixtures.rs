@@ -16,9 +16,9 @@ fn fixture(text: &str) -> Value {
 }
 
 /// `value` encodes to the fixture and the fixture decodes to `value`.
-fn both_ways<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: T, text: &str) {
-    assert_eq!(to_value(&value).unwrap(), fixture(text));
-    assert_eq!(serde_json::from_str::<T>(text).unwrap(), value);
+fn both_ways<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T, text: &str) {
+    assert_eq!(to_value(value).unwrap(), fixture(text));
+    assert_eq!(&serde_json::from_str::<T>(text).unwrap(), value);
 }
 
 const ATTEMPT: &str = "E621E1F8-C36C-495A-93FC-0C247A3E6E5F";
@@ -51,7 +51,7 @@ fn at(seconds: f64) -> SystemTime {
 #[test]
 fn run_request() {
     both_ways(
-        RunRequest {
+        &RunRequest {
             attempt_id: attempt(),
             replacing: None,
             session_id: SessionId(277_070_470),
@@ -70,7 +70,7 @@ fn run_request() {
 #[test]
 fn run_request_without_realm() {
     both_ways(
-        RunRequest {
+        &RunRequest {
             attempt_id: attempt(),
             replacing: None,
             session_id: SessionId(277_070_471),
@@ -89,7 +89,7 @@ fn run_request_without_realm() {
 #[test]
 fn run_request_replacing_a_run() {
     both_ways(
-        RunRequest {
+        &RunRequest {
             attempt_id: OTHER_ATTEMPT.parse().unwrap(),
             replacing: Some(attempt()),
             session_id: SessionId(277_070_472),
@@ -117,7 +117,7 @@ fn milestones_in_order() {
         TunnelUp,
     ];
     both_ways(
-        milestones,
+        &milestones,
         include_str!("fixtures/app-helper/milestones.json"),
     );
     assert!(milestones.is_sorted());
@@ -142,7 +142,7 @@ fn stop_reasons() {
         Replaced,
     ];
     both_ways(
-        reasons,
+        &reasons,
         include_str!("fixtures/app-helper/stop_reasons.json"),
     );
 }
@@ -165,7 +165,7 @@ fn stop_initiators() {
         },
     ];
     both_ways(
-        initiators,
+        &initiators,
         include_str!("fixtures/app-helper/stop_initiators.json"),
     );
 }
@@ -173,7 +173,7 @@ fn stop_initiators() {
 #[test]
 fn end_facts() {
     both_ways(
-        full_facts(),
+        &full_facts(),
         include_str!("fixtures/app-helper/end_facts.json"),
     );
 }
@@ -190,7 +190,7 @@ fn end_facts_tunnel_setup_failed() {
         end_code: -4,
     };
     both_ways(
-        facts,
+        &facts,
         include_str!("fixtures/app-helper/end_facts_tunnel_setup_failed.json"),
     );
 }
@@ -205,7 +205,7 @@ fn helper_events() {
         },
     };
     both_ways(
-        tunnel_up,
+        &tunnel_up,
         include_str!("fixtures/app-helper/helper_event_milestone.json"),
     );
 
@@ -217,7 +217,7 @@ fn helper_events() {
         },
     };
     both_ways(
-        gateway,
+        &gateway,
         include_str!("fixtures/app-helper/helper_event_milestone_without_ip.json"),
     );
 
@@ -228,7 +228,7 @@ fn helper_events() {
         },
     };
     both_ways(
-        exited,
+        &exited,
         include_str!("fixtures/app-helper/helper_event_exited.json"),
     );
 }
@@ -241,7 +241,7 @@ fn output_sources() {
         OutputSource::Helper,
     ];
     both_ways(
-        sources,
+        &sources,
         include_str!("fixtures/app-helper/output_sources.json"),
     );
 }
@@ -275,7 +275,10 @@ fn output_lines() {
             "VPN account password: \\x1b[0m",
         ),
     ];
-    both_ways(lines, include_str!("fixtures/app-helper/output_lines.json"));
+    both_ways(
+        &lines,
+        include_str!("fixtures/app-helper/output_lines.json"),
+    );
 }
 
 #[test]
@@ -295,7 +298,10 @@ fn output_batch() {
             },
         ],
     };
-    both_ways(batch, include_str!("fixtures/app-helper/output_batch.json"));
+    both_ways(
+        &batch,
+        include_str!("fixtures/app-helper/output_batch.json"),
+    );
 }
 
 #[test]
@@ -308,7 +314,7 @@ fn helper_statuses() {
         routing_complete,
     };
     both_ways(
-        [
+        &[
             status(true, Some(true)),
             status(true, Some(false)),
             status(false, None),
@@ -336,7 +342,7 @@ fn helper_errors() {
         ),
     ];
     both_ways(
-        errors,
+        &errors,
         include_str!("fixtures/app-helper/helper_errors.json"),
     );
 }
@@ -397,7 +403,7 @@ fn ethernet_snapshot() -> BypassRoutesSnapshot {
 #[test]
 fn bypass_routes_requests() {
     both_ways(
-        BypassRoutesRequest::Write {
+        &BypassRoutesRequest::Write {
             expected: ethernet_snapshot(),
             routes: vec![
                 route("10.30.161.16", "255.255.255.255", "10.20.161.1"),
@@ -407,7 +413,7 @@ fn bypass_routes_requests() {
         include_str!("fixtures/app-helper/bypass_routes_request_write.json"),
     );
     both_ways(
-        BypassRoutesRequest::Remove {},
+        &BypassRoutesRequest::Remove {},
         include_str!("fixtures/app-helper/bypass_routes_request_remove.json"),
     );
 }
@@ -415,18 +421,18 @@ fn bypass_routes_requests() {
 #[test]
 fn bypass_routes_replies() {
     both_ways(
-        BypassRoutesReply::Success {
+        &BypassRoutesReply::Success {
             snapshot: ethernet_snapshot(),
             routes: vec![route("10.30.161.16", "255.255.255.255", "10.20.161.1")],
         },
         include_str!("fixtures/app-helper/bypass_routes_reply_success.json"),
     );
     both_ways(
-        BypassRoutesReply::Removed {},
+        &BypassRoutesReply::Removed {},
         include_str!("fixtures/app-helper/bypass_routes_reply_removed.json"),
     );
     both_ways(
-        BypassRoutesReply::Failure {
+        &BypassRoutesReply::Failure {
             error: HelperError {
                 code: HelperErrorCode::WrongPhase,
                 message: "the network changed since it was read; read it again".into(),
@@ -453,7 +459,7 @@ fn not_authorized() -> HelperError {
 fn update_prepare_request() {
     let folder = "/Users/alice/Library/Caches/FortiVPNManager/Update";
     both_ways(
-        UpdatePrepareRequest {
+        &UpdatePrepareRequest {
             installer_path: format!("{folder}/FortiVPNManager-26.2.0.pkg"),
             checksums_path: format!("{folder}/SHA256SUMS.txt"),
             signature_path: format!("{folder}/SHA256SUMS.txt.sig"),
@@ -489,7 +495,7 @@ fn update_prepare_replies() {
         },
     ];
     both_ways(
-        replies,
+        &replies,
         include_str!("fixtures/app-helper/update_prepare_replies.json"),
     );
 }
@@ -497,7 +503,7 @@ fn update_prepare_replies() {
 #[test]
 fn update_install_request() {
     both_ways(
-        UpdateInstallRequest {
+        &UpdateInstallRequest {
             install_id: INSTALL,
         },
         include_str!("fixtures/app-helper/update_install_request.json"),
@@ -525,7 +531,7 @@ fn update_install_replies() {
         },
     ];
     both_ways(
-        replies,
+        &replies,
         include_str!("fixtures/app-helper/update_install_replies.json"),
     );
 }
@@ -542,7 +548,7 @@ fn prepared_update_replies() {
         },
     ];
     both_ways(
-        replies,
+        &replies,
         include_str!("fixtures/app-helper/prepared_update_replies.json"),
     );
 }
@@ -556,7 +562,7 @@ fn update_discard_replies() {
         },
     ];
     both_ways(
-        replies,
+        &replies,
         include_str!("fixtures/app-helper/update_discard_replies.json"),
     );
 }
@@ -588,7 +594,7 @@ fn update_results() {
         },
     ];
     both_ways(
-        results,
+        &results,
         include_str!("fixtures/app-helper/update_results.json"),
     );
 }

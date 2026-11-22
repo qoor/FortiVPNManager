@@ -120,7 +120,7 @@ impl Runtime {
     }
 
     pub(crate) fn set_bypass_rows(&mut self, list: BypassList, rows: Vec<String>) {
-        self.drafts().list_mut(list).set_rows(rows);
+        self.drafts().list_mut(list).set_rows(&rows);
         self.save_bypass_rules();
     }
 
@@ -231,7 +231,7 @@ impl Runtime {
             |runtime, response| match runtime.routes_reply(response) {
                 Ok((snapshot, routes)) => {
                     runtime.bypass.read_failures = 0;
-                    runtime.plan_and_write(snapshot, &routes);
+                    runtime.plan_and_write(&snapshot, &routes);
                 }
                 Err(error) => runtime.sync_failed(SyncFailure {
                     failure: error,
@@ -298,7 +298,7 @@ impl Runtime {
     }
 
     /// Writes the planned routes unless they are the ones in place already, or the app quits.
-    fn plan_and_write(&mut self, snapshot: BypassRoutesSnapshot, in_place: &[BypassRoute]) {
+    fn plan_and_write(&mut self, snapshot: &BypassRoutesSnapshot, in_place: &[BypassRoute]) {
         if self.bypass.quitting {
             return self.sync_done();
         }

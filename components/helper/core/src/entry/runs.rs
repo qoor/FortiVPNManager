@@ -261,7 +261,7 @@ impl Entry {
             Report::Log(level, category, message) => self.os.log(level, category, message),
             Report::Stuck => {
                 if !matches!(self.lifecycle, Lifecycle::Exiting) {
-                    self.exit(FromEntry::AbortAfterDraining {});
+                    self.exit(&FromEntry::AbortAfterDraining {});
                 }
             }
         }
@@ -316,7 +316,7 @@ impl Entry {
         );
         let idle = self.runs.is_empty();
         match self.lifecycle {
-            Lifecycle::ShuttingDown { .. } if idle => self.exit(FromEntry::ExitAfterDraining {}),
+            Lifecycle::ShuttingDown { .. } if idle => self.exit(&FromEntry::ExitAfterDraining {}),
             Lifecycle::Serving if idle && self.executable_replaced => self.exit_for_replacement(),
             Lifecycle::Serving
             | Lifecycle::ShuttingDown { .. }

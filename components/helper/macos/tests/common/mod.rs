@@ -211,7 +211,7 @@ impl OsSide {
     }
 
     /// Sends `request` from `app` and returns its id; does not wait for the reply.
-    pub fn request(&mut self, app: u64, request: Value) -> u64 {
+    pub fn request(&mut self, app: u64, request: &Value) -> u64 {
         self.last_request += 1;
         let id = self.last_request;
         self.send(json!({"request": {"id": id, "app": app, "request": request}}));
@@ -250,12 +250,12 @@ impl OsSide {
 
     /// Sends a connect request for `attempt` and returns its reply.
     pub fn connect(&mut self, app: u64, attempt: &str) -> Option<Value> {
-        let id = self.request(app, connect_request(attempt));
+        let id = self.request(app, &connect_request(attempt));
         self.reply(id)
     }
 
     pub fn status(&mut self, app: u64) -> Value {
-        let id = self.request(app, json!({"status": {}}));
+        let id = self.request(app, &json!({"status": {}}));
         self.reply_json(id)
     }
 
@@ -362,7 +362,7 @@ impl OsSide {
         self.network_changes()[answered].clone()
     }
 
-    pub fn answer_network(&mut self, kind: &str, outcome: Value) -> Value {
+    pub fn answer_network(&mut self, kind: &str, outcome: &Value) -> Value {
         let change = self.next_network_change();
         assert!(change.get(kind).is_some(), "not {kind}: {change:#}");
         self.send(json!({"networkChanged": {"outcome": outcome}}));
@@ -370,8 +370,8 @@ impl OsSide {
     }
 
     pub fn bring_up(&mut self, app: u64) {
-        self.answer_network("lookUp", looked_up(outside_routes()));
-        self.answer_network("apply", applied(outside_routes()));
+        self.answer_network("lookUp", &looked_up(&outside_routes()));
+        self.answer_network("apply", &applied(&outside_routes()));
         self.wait_for_milestone(app, TUNNEL_UP);
     }
 }
@@ -388,11 +388,11 @@ pub fn outside_routes() -> Value {
     json!([route(GATEWAY), route("10.20.161.16")])
 }
 
-pub fn looked_up(missing: Value) -> Value {
+pub fn looked_up(missing: &Value) -> Value {
     json!({"lookedUp": {"dnsServiceID": "svc", "missing": missing}})
 }
 
-pub fn applied(added: Value) -> Value {
+pub fn applied(added: &Value) -> Value {
     json!({"applied": {"added": added, "left": []}})
 }
 
@@ -411,7 +411,7 @@ fn embedded(json: &Value) -> Value {
 }
 
 pub fn connect_request(attempt: &str) -> Value {
-    connect_request_with(json!({
+    connect_request_with(&json!({
         "attemptID": attempt,
         "sessionID": 277_070_470,
         "host": GATEWAY,
@@ -423,7 +423,7 @@ pub fn connect_request(attempt: &str) -> Value {
     }))
 }
 
-pub fn connect_request_with(run_request: Value) -> Value {
+pub fn connect_request_with(run_request: &Value) -> Value {
     json!({"connect": {"json": run_request.to_string()}})
 }
 

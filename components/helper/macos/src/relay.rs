@@ -44,15 +44,17 @@ pub(crate) struct ClientLink {
 impl ClientLink {
     /// An encoded `HelperEvent`.
     fn send_event(&self, data: &[u8]) {
-        self.peer.send(sel!(event:), data, callback_failed);
+        self.peer
+            .send(sel!(event:), data, |error| callback_failed(&error));
     }
 
     fn send_output(&self, data: &[u8]) {
-        self.peer.send(sel!(output:), data, callback_failed);
+        self.peer
+            .send(sel!(output:), data, |error| callback_failed(&error));
     }
 }
 
-fn callback_failed(error: String) {
+fn callback_failed(error: &str) {
     log(
         LogCategory::Helper,
         Level::Debug,

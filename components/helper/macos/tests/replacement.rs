@@ -32,7 +32,7 @@ fn connect(attempt: &str, replacing: Option<&str>) -> Value {
     if let Some(replacing) = replacing {
         request["replacingAttemptID"] = json!(replacing);
     }
-    connect_request_with(request)
+    connect_request_with(&request)
 }
 
 fn events_of(os_side: &OsSide, attempt: &str) -> Vec<(usize, Value)> {
@@ -67,10 +67,10 @@ fn wait_for_exit_of(os_side: &mut OsSide, attempt: &str) -> Value {
 
 fn first_run_up(os_side: &mut OsSide) {
     assert!(os_side.connect_app(1, 501));
-    let id = os_side.request(1, connect(ATTEMPT, None));
+    let id = os_side.request(1, &connect(ATTEMPT, None));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("lookUp", looked_up(outside_routes()));
-    os_side.answer_network("apply", applied(outside_routes()));
+    os_side.answer_network("lookUp", &looked_up(&outside_routes()));
+    os_side.answer_network("apply", &applied(&outside_routes()));
     os_side.wait_until("the first tunnel", |os_side| {
         milestones_of(os_side, ATTEMPT).contains(&TUNNEL_UP)
     });
@@ -81,9 +81,9 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
     let mut os_side = start("10.10.0.6");
     first_run_up(&mut os_side);
 
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    let look_up = os_side.answer_network("lookUp", looked_up(json!([])));
+    let look_up = os_side.answer_network("lookUp", &looked_up(&json!([])));
     assert_eq!(look_up["tunnel"]["name"], "utun10");
     let prepare = os_side.next_network_change();
     assert_eq!(prepare["prepare"]["settings"]["tunnel"]["name"], "utun10");
@@ -96,7 +96,7 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
         os_side.scratch.recorded("run.json.2"),
         json!({"dnsServiceID": "", "routes": []})
     );
-    os_side.send(json!({"networkChanged": {"outcome": applied(json!([]))}}));
+    os_side.send(json!({"networkChanged": {"outcome": applied(&json!([]))}}));
 
     let switch = os_side.next_network_change();
     assert_eq!(switch["switch"]["settings"]["tunnel"]["name"], "utun10");
@@ -108,9 +108,9 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
         milestones_of(&os_side, NEW),
         [STARTED, CONNECTED_TO_GATEWAY, AUTHENTICATED]
     );
-    os_side.send(json!({"networkChanged": {"outcome": applied(json!([]))}}));
+    os_side.send(json!({"networkChanged": {"outcome": applied(&json!([]))}}));
 
-    let revert = os_side.answer_network("revert", reverted());
+    let revert = os_side.answer_network("revert", &reverted());
     assert_eq!(
         revert,
         json!({"changes": {"dnsServiceID": "", "routes": []}})
@@ -138,7 +138,7 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
             .any(|line| line.contains(&format!("run {ATTEMPT} exited")))
     });
 
-    let id = os_side.request(1, disconnect(NEW, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(NEW, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
     let revert = os_side.next_network_change();
     assert_eq!(revert["revert"], json!({"changes": owned}));
@@ -160,16 +160,16 @@ fn when_the_old_run_ends_during_the_preparation_the_new_one_applies_everything_i
     let mut os_side = start("10.10.0.6");
     first_run_up(&mut os_side);
 
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("lookUp", looked_up(json!([])));
+    os_side.answer_network("lookUp", &looked_up(&json!([])));
     let prepare = os_side.next_network_change();
     assert!(prepare.get("prepare").is_some(), "{prepare:#}");
-    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
-    os_side.send(json!({"networkChanged": {"outcome": applied(json!([]))}}));
+    os_side.send(json!({"networkChanged": {"outcome": applied(&json!([]))}}));
 
-    let revert = os_side.answer_network("revert", reverted());
+    let revert = os_side.answer_network("revert", &reverted());
     assert_eq!(
         revert,
         json!({"changes": {"dnsServiceID": "svc", "routes": outside_routes()}})
@@ -179,7 +179,7 @@ fn when_the_old_run_ends_during_the_preparation_the_new_one_applies_everything_i
         facts["stopInitiator"],
         json!({"helper": {"_0": "userDisconnect"}})
     );
-    os_side.answer_network("lookUp", looked_up(outside_routes()));
+    os_side.answer_network("lookUp", &looked_up(&outside_routes()));
     let apply = os_side.next_network_change();
     assert_eq!(apply["apply"]["settings"]["tunnel"]["name"], "utun10");
     assert!(apply["apply"].get("previous").is_none(), "{apply:#}");
@@ -187,7 +187,7 @@ fn when_the_old_run_ends_during_the_preparation_the_new_one_applies_everything_i
     let owned = json!({"dnsServiceID": "svc", "routes": outside_routes()});
     assert_eq!(os_side.scratch.run_directory_names(), ["run.json"]);
     assert_eq!(os_side.scratch.recorded("run.json"), owned);
-    os_side.send(json!({"networkChanged": {"outcome": applied(outside_routes())}}));
+    os_side.send(json!({"networkChanged": {"outcome": applied(&outside_routes())}}));
     os_side.wait_until("the new tunnel", |os_side| {
         milestones_of(os_side, NEW).contains(&TUNNEL_UP)
     });
@@ -198,9 +198,9 @@ fn when_the_old_run_ends_during_the_preparation_the_new_one_applies_everything_i
             .any(|change| change.get("switch").is_some())
     );
 
-    let id = os_side.request(1, disconnect(NEW, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(NEW, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
-    let revert = os_side.answer_network("revert", reverted());
+    let revert = os_side.answer_network("revert", &reverted());
     assert_eq!(revert, json!({"changes": owned}));
     wait_for_exit_of(&mut os_side, NEW);
 }
@@ -210,10 +210,10 @@ fn a_switch_that_keeps_failing_ends_both_runs_as_network_setup_failures() {
     let mut os_side = start("10.10.0.6");
     first_run_up(&mut os_side);
 
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("lookUp", looked_up(json!([])));
-    os_side.answer_network("prepare", applied(json!([])));
+    os_side.answer_network("lookUp", &looked_up(&json!([])));
+    os_side.answer_network("prepare", &applied(&json!([])));
     let failed = json!({"failed": {
         "step": "routes",
         "error": "route -n change failed",
@@ -221,11 +221,11 @@ fn a_switch_that_keeps_failing_ends_both_runs_as_network_setup_failures() {
         "left": [],
     }});
     for _ in 0..4 {
-        os_side.answer_network("switch", failed.clone());
+        os_side.answer_network("switch", &failed.clone());
     }
     let owned = json!({"changes": {"dnsServiceID": "svc", "routes": outside_routes()}});
     for _ in 0..2 {
-        let revert = os_side.answer_network("revert", reverted());
+        let revert = os_side.answer_network("revert", &reverted());
         assert_eq!(revert, owned);
     }
     for (attempt, furthest) in [(NEW, AUTHENTICATED), (ATTEMPT, TUNNEL_UP)] {
@@ -245,9 +245,9 @@ fn a_new_run_given_the_old_runs_address_ends_without_touching_the_old_one() {
     let mut os_side = start("10.10.0.5");
     first_run_up(&mut os_side);
 
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("lookUp", looked_up(json!([])));
+    os_side.answer_network("lookUp", &looked_up(&json!([])));
     let facts = wait_for_exit_of(&mut os_side, NEW);
     assert_eq!(facts["tunnelAddressInUse"], true);
     assert_eq!(
@@ -261,9 +261,9 @@ fn a_new_run_given_the_old_runs_address_ends_without_touching_the_old_one() {
             .all(|(_, kind)| kind.get("exited").is_none())
     );
 
-    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
-    let revert = os_side.answer_network("revert", reverted());
+    let revert = os_side.answer_network("revert", &reverted());
     assert_eq!(
         revert,
         json!({"changes": {"dnsServiceID": "svc", "routes": outside_routes()}})
@@ -276,39 +276,39 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
     let mut os_side = start("10.10.0.6");
     assert!(os_side.connect_app(1, 501));
     assert!(os_side.connect_app(2, 502));
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
         error("unknownAttempt", "the connection to replace is not running")
     );
-    let id = os_side.request(1, connect(ATTEMPT, None));
+    let id = os_side.request(1, &connect(ATTEMPT, None));
     assert_eq!(os_side.reply(id), None);
     let look_up = os_side.next_network_change();
     assert!(look_up.get("lookUp").is_some(), "{look_up:#}");
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
         error("wrongPhase", "the connection to replace is not up")
     );
-    os_side.send(json!({"networkChanged": {"outcome": looked_up(outside_routes())}}));
-    os_side.answer_network("apply", applied(outside_routes()));
+    os_side.send(json!({"networkChanged": {"outcome": looked_up(&outside_routes())}}));
+    os_side.answer_network("apply", &applied(&outside_routes()));
     os_side.wait_until("the first tunnel", |os_side| {
         milestones_of(os_side, ATTEMPT).contains(&TUNNEL_UP)
     });
 
-    let id = os_side.request(2, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(2, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
         error("notAuthorized", "the VPN run belongs to another user")
     );
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    let id = os_side.request(1, connect(THIRD, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(THIRD, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
         error("busy", "a replacement connection is already running")
     );
-    let id = os_side.request(1, connect(THIRD, None));
+    let id = os_side.request(1, &connect(THIRD, None));
     assert_eq!(
         os_side.reply(id),
         error("busy", "openconnect is already running")
@@ -340,7 +340,7 @@ fn a_connect_that_reuses_a_running_attempt_id_is_invalid() {
         (ATTEMPT, None),
         (lowercase.as_str(), Some(ATTEMPT)),
     ] {
-        let id = os_side.request(1, connect(attempt, replacing));
+        let id = os_side.request(1, &connect(attempt, replacing));
         assert_eq!(
             os_side.reply(id),
             error(
@@ -350,9 +350,9 @@ fn a_connect_that_reuses_a_running_attempt_id_is_invalid() {
             "{attempt} replacing {replacing:?}"
         );
     }
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
-    let id = os_side.request(1, connect(NEW, Some(ATTEMPT)));
+    let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
         error(

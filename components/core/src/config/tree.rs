@@ -64,7 +64,7 @@ pub(super) fn build(text: &str) -> Result<Tree<'_>, ConfigProblem> {
     let mut root = None;
     let mut documents = 0;
     for item in Parser::new_from_str(text) {
-        let (event, span) = item.map_err(scan_problem)?;
+        let (event, span) = item.map_err(|error| scan_problem(&error))?;
         let location = location(&span.start);
         let node = match event {
             Event::Nothing | Event::StreamStart | Event::DocumentEnd => continue,
@@ -187,7 +187,7 @@ pub(super) fn scalar_text<'n>(node: &'n Node<'_>) -> Option<&'n str> {
     }
 }
 
-fn scan_problem(error: ScanError) -> ConfigProblem {
+fn scan_problem(error: &ScanError) -> ConfigProblem {
     let kind = match error.info() {
         "while parsing node, found unknown anchor" => ConfigProblemKind::AnchorOrAlias {},
         "recursion limit exceeded" => ConfigProblemKind::NestingTooDeep {},

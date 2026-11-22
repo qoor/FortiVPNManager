@@ -43,7 +43,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(os_side.connect(1, ATTEMPT), None);
     os_side.wait_for_milestone(1, OTP_PROMPTED);
-    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    let id = os_side.request(1, &submit_otp(ATTEMPT, OTP));
     assert_eq!(os_side.reply(id), None);
     os_side.bring_up(1);
     os_side.wait_until("the tunnel log", |os_side| {
@@ -63,8 +63,8 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         record,
         json!({"outsideChanges": {"dnsServiceID": "svc", "routes": outside_routes()}})
     );
-    let status = os_side.request(1, json!({"status": {}}));
-    os_side.answer_network("check", json!({"checked": {"complete": true}}));
+    let status = os_side.request(1, &json!({"status": {}}));
+    os_side.answer_network("check", &json!({"checked": {"complete": true}}));
     assert_eq!(
         os_side.reply_json(status),
         json!({
@@ -74,9 +74,9 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         })
     );
 
-    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("revert", reverted());
+    os_side.answer_network("revert", &reverted());
     let facts = os_side.wait_for_exit(1);
     assert_eq!(facts["furthestMilestone"], TUNNEL_UP);
     assert_eq!(
@@ -241,14 +241,14 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
         ),
     ];
     for (app, request, expected) in refused {
-        let id = os_side.request(app, request);
+        let id = os_side.request(app, &request);
         assert_eq!(os_side.reply(id), expected);
     }
 
     // Any connection of the owner's user may control the run; attempt IDs ignore case.
-    let id = os_side.request(2, submit_otp(&ATTEMPT.to_lowercase(), OTP));
+    let id = os_side.request(2, &submit_otp(&ATTEMPT.to_lowercase(), OTP));
     assert_eq!(os_side.reply(id), None);
-    let id = os_side.request(1, submit_otp(ATTEMPT, OTP));
+    let id = os_side.request(1, &submit_otp(ATTEMPT, OTP));
     assert_eq!(
         os_side.reply(id),
         error(
@@ -258,14 +258,14 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     );
     os_side.bring_up(1);
     // A stop names the run it is for.
-    let id = os_side.request(2, disconnect("", "userDisconnect"));
+    let id = os_side.request(2, &disconnect("", "userDisconnect"));
     assert_eq!(
         os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
     );
-    let id = os_side.request(2, disconnect(ATTEMPT, "notAReason"));
+    let id = os_side.request(2, &disconnect(ATTEMPT, "notAReason"));
     assert_eq!(os_side.reply(id), None);
-    os_side.answer_network("revert", reverted());
+    os_side.answer_network("revert", &reverted());
     let facts = os_side.wait_for_exit(1);
     // An unknown reason counts as the user's.
     assert_eq!(
@@ -275,12 +275,12 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     assert_eq!(os_side.events(2), Vec::<Value>::new());
 
     // With no run, every attempt is unknown.
-    let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
+    let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(
         os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
     );
-    let id = os_side.request(1, submit_otp("", OTP));
+    let id = os_side.request(1, &submit_otp("", OTP));
     assert_eq!(
         os_side.reply(id),
         error("unknownAttempt", "not the active connection attempt")
@@ -291,10 +291,10 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
 fn a_bad_connect_request_starts_nothing() {
     let mut os_side = OsSide::start(Setup::default());
     assert!(os_side.connect_app(1, 501));
-    let undecodable = os_side.request(1, json!({"connect": {"json": "{\"host\": 1}"}}));
+    let undecodable = os_side.request(1, &json!({"connect": {"json": "{\"host\": 1}"}}));
     let invalid = os_side.request(
         1,
-        connect_request_with(json!({
+        &connect_request_with(&json!({
             "attemptID": ATTEMPT,
             "sessionID": 277_070_470,
             "host": GATEWAY,
@@ -350,13 +350,13 @@ fn the_status_of_an_up_run_waits_for_its_routing_check() {
         ),
     ];
     for (outcome, routing_complete) in outcomes {
-        let status = os_side.request(1, json!({"status": {}}));
+        let status = os_side.request(1, &json!({"status": {}}));
         let late = os_side.received_within(Duration::from_millis(200));
         assert!(
             !late.iter().any(|message| message["reply"]["id"] == status),
             "{late:#?}"
         );
-        let check = os_side.answer_network("check", outcome);
+        let check = os_side.answer_network("check", &outcome);
         assert_eq!(check["settings"]["tunnel"]["name"], "utun9");
         assert_eq!(
             check["outside"],
@@ -393,7 +393,7 @@ fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(os_side.connect(1, ATTEMPT), None);
     os_side.wait_for_milestone(1, OTP_PROMPTED);
-    let status = os_side.request(1, json!({"status": {}}));
+    let status = os_side.request(1, &json!({"status": {}}));
     os_side.disconnect_app(1);
 
     assert_eq!(os_side.reply_json(status)["sessionRunning"], true);
@@ -417,10 +417,10 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
     assert!(os_side.connect_app(1, 501));
     os_side.disconnect_app(1);
     let gone = error("notAuthorized", "the app connection is closed");
-    let connect = os_side.request(1, connect_request(ATTEMPT));
-    let otp = os_side.request(1, submit_otp(ATTEMPT, OTP));
-    let stop = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
-    let status = os_side.request(1, json!({"status": {}}));
+    let connect = os_side.request(1, &connect_request(ATTEMPT));
+    let otp = os_side.request(1, &submit_otp(ATTEMPT, OTP));
+    let stop = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
+    let status = os_side.request(1, &json!({"status": {}}));
     assert_eq!(os_side.reply(connect), gone);
     assert_eq!(os_side.reply(otp), gone);
     assert_eq!(os_side.reply(stop), gone);
@@ -440,7 +440,7 @@ fn replies_carry_the_request_id_they_answer() {
     let mut os_side = OsSide::start(Setup::default());
     assert!(os_side.connect_app(1, 501));
     let ids: Vec<u64> = (0..5)
-        .map(|_| os_side.request(1, json!({"status": {}})))
+        .map(|_| os_side.request(1, &json!({"status": {}})))
         .collect();
     os_side.wait_until("all replies", |os_side| {
         ids.iter().all(|&id| !os_side.replies(id).is_empty())

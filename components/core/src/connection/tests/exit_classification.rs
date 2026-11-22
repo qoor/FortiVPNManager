@@ -15,7 +15,7 @@ struct Case {
     otp_in_spam: bool,
 }
 
-fn outcome(facts: EndFacts, case: Case) -> Outcome {
+fn outcome(facts: &EndFacts, case: &Case) -> Outcome {
     classify(&ExitContext {
         facts: &facts,
         seen_milestone: case.seen,
@@ -27,7 +27,7 @@ fn outcome(facts: EndFacts, case: Case) -> Outcome {
 }
 
 fn plain(facts: EndFacts) -> Outcome {
-    outcome(facts, Case::default())
+    outcome(&facts, &Case::default())
 }
 
 fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> EndFacts {
@@ -61,8 +61,8 @@ fn certificate_rejection_before_the_otp_was_submitted() {
     );
     assert_eq!(
         outcome(
-            cert(Milestone::Started, &[a], Some(Milestone::Started)),
-            Case {
+            &cert(Milestone::Started, &[a], Some(Milestone::Started)),
+            &Case {
                 cert_retry_used: true,
                 ..Case::default()
             }
@@ -95,8 +95,8 @@ fn the_server_ending_or_rejecting_the_session_after_the_tunnel() {
         );
         assert_eq!(
             outcome(
-                ended(Milestone::Authenticated).code(code).facts(),
-                Case {
+                &ended(Milestone::Authenticated).code(code).facts(),
+                &Case {
                     seen: Some(Milestone::TunnelUp),
                     ..Case::default()
                 }
@@ -138,11 +138,11 @@ fn any_other_end_after_the_tunnel_is_a_network_error() {
     );
     assert_eq!(
         outcome(
-            ended(Milestone::TunnelUp)
+            &ended(Milestone::TunnelUp)
                 .by_helper(StopReason::AttemptTimeout)
                 .code(-EPIPE)
                 .facts(),
-            Case {
+            &Case {
                 app_stop: Some(StopReason::AttemptTimeout),
                 ..Case::default()
             }
@@ -186,10 +186,10 @@ fn a_repeated_prompt_is_a_rejected_login_or_otp() {
     }
     assert_eq!(
         outcome(
-            ended(Milestone::ConnectedToGateway)
+            &ended(Milestone::ConnectedToGateway)
                 .by_helper(StopReason::PromptRepeated)
                 .facts(),
-            Case {
+            &Case {
                 seen: Some(Milestone::OtpSubmitted),
                 ..Case::default()
             }
@@ -212,12 +212,12 @@ fn a_certificate_rejected_after_the_login_is_counted() {
     );
     assert_eq!(
         outcome(
-            cert(
+            &cert(
                 Milestone::Authenticated,
                 &[a.as_str()],
                 Some(Milestone::Authenticated)
             ),
-            Case {
+            &Case {
                 cert_retry_used: true,
                 ..Case::default()
             }
@@ -243,11 +243,11 @@ fn a_tunnel_device_that_could_not_be_set_up_is_counted() {
 fn an_otp_not_received_by_the_apps_deadline_is_counted() {
     assert_eq!(
         outcome(
-            ended(Milestone::OtpPrompted)
+            &ended(Milestone::OtpPrompted)
                 .by_helper(StopReason::OtpTimeout)
                 .code(-EINTR)
                 .facts(),
-            Case {
+            &Case {
                 app_stop: Some(StopReason::OtpTimeout),
                 ..Case::default()
             }
@@ -256,11 +256,11 @@ fn an_otp_not_received_by_the_apps_deadline_is_counted() {
     );
     assert_eq!(
         outcome(
-            ended(Milestone::OtpPrompted)
+            &ended(Milestone::OtpPrompted)
                 .by_helper(StopReason::OtpTimeout)
                 .code(-EINTR)
                 .facts(),
-            Case {
+            &Case {
                 app_stop: Some(StopReason::OtpTimeout),
                 otp_in_spam: true,
                 ..Case::default()
@@ -300,11 +300,11 @@ fn any_other_end_before_the_tunnel_is_a_network_error() {
         );
         assert_eq!(
             outcome(
-                ended(furthest)
+                &ended(furthest)
                     .by_helper(StopReason::AttemptTimeout)
                     .code(-EINTR)
                     .facts(),
-                Case {
+                &Case {
                     app_stop: Some(StopReason::AttemptTimeout),
                     ..Case::default()
                 }
@@ -315,8 +315,8 @@ fn any_other_end_before_the_tunnel_is_a_network_error() {
     }
     assert_eq!(
         outcome(
-            ended(Milestone::Started).facts(),
-            Case {
+            &ended(Milestone::Started).facts(),
+            &Case {
                 seen: Some(Milestone::OtpSubmitted),
                 ..Case::default()
             }
@@ -335,8 +335,8 @@ fn gmail_session_failures_come_first() {
     };
     assert_eq!(
         outcome(
-            facts(),
-            Case {
+            &facts(),
+            &Case {
                 app_stop: Some(StopReason::OtpUnavailable),
                 otp_failure: Some(OtpFailure::Authentication),
                 ..Case::default()
@@ -346,8 +346,8 @@ fn gmail_session_failures_come_first() {
     );
     assert_eq!(
         outcome(
-            facts(),
-            Case {
+            &facts(),
+            &Case {
                 app_stop: Some(StopReason::OtpUnavailable),
                 otp_failure: Some(OtpFailure::Network),
                 ..Case::default()

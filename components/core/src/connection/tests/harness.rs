@@ -653,12 +653,12 @@ impl Harness {
     /// The OS reports `path`; after it stayed unchanged long enough, the manager looks at it.
     /// Takes 3 seconds.
     pub(super) fn set_path(&mut self, path: Path) -> Vec<Effect> {
-        self.set_path_with_routing(path, None)
+        self.set_path_with_routing(&path, None)
     }
 
     pub(super) fn set_path_with_routing(
         &mut self,
-        path: Path,
+        path: &Path,
         routing_complete: Option<bool>,
     ) -> Vec<Effect> {
         self.send(Input::NetworkPathChanged {
@@ -684,7 +684,7 @@ impl Harness {
 
     /// Answers the looks at the network after the wake until the manager judges it; returns the
     /// effects of that judgment. Unsettled, it takes the 30 seconds the manager waits.
-    pub(super) fn settle(&mut self, observation: Observe) -> Vec<Effect> {
+    pub(super) fn settle(&mut self, observation: &Observe) -> Vec<Effect> {
         let deadline = self.wake_at.expect("woke") + Duration::from_secs(30);
         if observation.settled {
             loop {

@@ -412,13 +412,13 @@ impl Entry {
                 path.display()
             ),
         );
-        self.exit(FromEntry::ExitAfterDraining {});
+        self.exit(&FromEntry::ExitAfterDraining {});
     }
 
     fn termination_requested(&mut self) {
         match self.lifecycle {
             Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } if self.runs.is_empty() => {
-                self.exit(FromEntry::ExitAfterDraining {});
+                self.exit(&FromEntry::ExitAfterDraining {});
             }
             Lifecycle::Serving | Lifecycle::ExitingWhenIdle { .. } => {
                 for held in self.runs.values() {
@@ -442,7 +442,7 @@ impl Entry {
                     "an app that asked the Helper to exit kept its connection open; exiting anyway"
                         .to_owned(),
                 );
-                self.exit(FromEntry::ExitAfterDraining {});
+                self.exit(&FromEntry::ExitAfterDraining {});
             }
             Lifecycle::ShuttingDown { .. } => {
                 self.os.log(
@@ -451,7 +451,7 @@ impl Entry {
                     "the run did not finish after the termination request; exiting anyway"
                         .to_owned(),
                 );
-                self.exit(FromEntry::ExitNow {});
+                self.exit(&FromEntry::ExitNow {});
             }
             Lifecycle::Serving | Lifecycle::Exiting => {
                 unreachable!("only a lifecycle with a deadline passes it")
@@ -459,7 +459,7 @@ impl Entry {
         }
     }
 
-    fn exit(&mut self, message: FromEntry) {
+    fn exit(&mut self, message: &FromEntry) {
         self.os.send(&message);
         self.lifecycle = Lifecycle::Exiting;
     }
@@ -552,7 +552,7 @@ impl Entry {
         if let Lifecycle::ExitingWhenIdle { asking, .. } = &self.lifecycle
             && asking.is_empty()
         {
-            self.exit(FromEntry::ExitAfterDraining {});
+            self.exit(&FromEntry::ExitAfterDraining {});
         }
     }
 }

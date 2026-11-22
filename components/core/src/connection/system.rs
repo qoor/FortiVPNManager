@@ -159,7 +159,7 @@ impl ConnectionManager {
         } else {
             // Judged without a network; what survived does not matter then.
             settle.late = true;
-            self.wake_settled(WakeObservation {
+            self.wake_settled(&WakeObservation {
                 path_satisfied: false,
                 underlay: None,
                 session_running: false,
@@ -246,7 +246,7 @@ impl ConnectionManager {
         (self.next_probe, host)
     }
 
-    pub(super) fn network_probed(&mut self, result: ProbeResult) {
+    pub(super) fn network_probed(&mut self, result: &ProbeResult) {
         let for_path = self
             .path_probe
             .as_ref()
@@ -281,7 +281,7 @@ impl ConnectionManager {
         } else {
             self.wake_settle = None;
             let tunnel_up = self.tunnel_interface_up(&result.addresses);
-            self.wake_settled(WakeObservation {
+            self.wake_settled(&WakeObservation {
                 path_satisfied: true,
                 underlay,
                 session_running: result.session_running.unwrap_or(false),

@@ -175,7 +175,7 @@ impl ListDraft {
     }
 
     /// Replaces the rows with the list editor's; blank rows are dropped.
-    pub fn set_rows(&mut self, rows: Vec<String>) {
+    pub fn set_rows(&mut self, rows: &[String]) {
         self.rows = rows
             .iter()
             .map(|row| row.trim())
