@@ -36,9 +36,6 @@ extern "system" fn route_changed(
     signal();
 }
 
-/// Sends to `changed` whenever an address of an interface or a route of the routing table is added,
-/// changed or removed, for as long as the process runs.
-///
 /// # Errors
 ///
 /// Returns the Windows error code when Windows cannot report the changes.

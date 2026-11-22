@@ -107,7 +107,6 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         };
     }
 
-    /// <summary>On every address change, including the first.</summary>
     private void PathChanged() =>
         post(new SystemEvent.NetworkPathChanged(SystemFacts.PathSatisfied(), SystemFacts.PathInterfaces()));
 }

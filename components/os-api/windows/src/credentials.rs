@@ -13,9 +13,6 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain([0]).collect()
 }
 
-/// The secret of the user's generic credential `target`, decoded as UTF-8 with invalid bytes
-/// replaced; `None` when there is no such credential.
-///
 /// # Errors
 ///
 /// Returns the Windows error code when Credential Manager fails, such as in a session the user did
@@ -50,9 +47,6 @@ pub fn read(target: &str) -> Result<Option<String>, Error> {
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
-/// Saves `secret` as the user's generic credential `target`, for `user_name`, on this PC only,
-/// replacing the one there.
-///
 /// # Errors
 ///
 /// Returns the Windows error code when Credential Manager fails, such as in a session the user did

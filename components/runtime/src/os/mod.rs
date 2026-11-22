@@ -92,7 +92,6 @@ pub(crate) enum OsResponse {
     InterfaceAddresses { addresses: Vec<InterfaceAddress> },
 }
 
-/// The failure's description for the log: the OS's, or one naming its code.
 pub(crate) fn describe(failure: &SecretStoreFailure) -> String {
     failure
         .description

@@ -51,8 +51,6 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Windows's description of the error `code` in the user's language, trimmed as .NET's
-/// `Win32Exception` trims it; `None` when Windows has none.
 #[must_use]
 pub fn message(code: u32) -> Option<String> {
     let mut buffer: *mut u16 = ptr::null_mut();
