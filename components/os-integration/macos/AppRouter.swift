@@ -59,10 +59,6 @@ final class AppRouter {
     reply: @escaping @Sendable (AppInternal.PortResponse) -> Void
   ) {
     switch request {
-    case .readSecret(let item): reply(SecretStore.read(item))
-    case .hasSecret(let item): reply(SecretStore.exists(item))
-    case .writeSecret(let item, let value): reply(SecretStore.write(value, to: item))
-    case .deleteSecret(let item): reply(SecretStore.delete(item))
     case .helperRegistration: reply(ServiceRegistration.helperStatus())
     case .registerHelper: reply(ServiceRegistration.registerHelper())
     case .helperBuild: Task { await relay.build(reply: reply) }

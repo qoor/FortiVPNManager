@@ -13,7 +13,7 @@ use fvm_contract::app_helper::{
 };
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
-    HelperCall, LogCategory, LogLevel, PortAction, PortRequest, PortResponse, SecretItem,
+    HelperCall, LogCategory, LogLevel, PortAction, PortRequest, PortResponse,
 };
 use fvm_contract::app_internal::section::Section;
 use fvm_contract::app_internal::{
@@ -25,7 +25,7 @@ use jiff::tz::TimeZone;
 
 use crate::config_file::ConfigFile;
 use crate::log_file::{self, LogFile};
-use crate::os::{OsRequest, OsResponse};
+use crate::os::{OsRequest, OsResponse, SecretItem};
 use crate::state_file::StateFile;
 use crate::timers::{Timer, Timers};
 
@@ -528,40 +528,36 @@ impl Runtime {
             username: account.username.clone(),
             host: account.host.clone(),
         };
-        self.request(
-            PortRequest::ReadSecret { item },
-            move |runtime, response| {
-                if !runtime.cm.wants_run(&attempt) {
-                    // Settled like a run the Helper could not start: the stop already decided,
-                    // or else the network's failure.
-                    runtime.feed(connection::Input::RunRejected(
-                        attempt,
-                        fvm_contract::app_helper::HelperErrorCode::InternalError,
-                    ));
-                    return;
+        self.ask_os(OsRequest::ReadSecret { item }, move |runtime, response| {
+            if !runtime.cm.wants_run(&attempt) {
+                // Settled like a run the Helper could not start: the stop already decided,
+                // or else the network's failure.
+                runtime.feed(connection::Input::RunRejected(
+                    attempt,
+                    fvm_contract::app_helper::HelperErrorCode::InternalError,
+                ));
+                return;
+            }
+            let OsResponse::Secret {
+                value: Some(SecretText(password)),
+            } = response
+            else {
+                // The readiness check found it moments ago; treat it like a Helper refusal.
+                runtime.feed(connection::Input::RunRejected(
+                    attempt,
+                    fvm_contract::app_helper::HelperErrorCode::InternalError,
+                ));
+                return;
+            };
+            let request: RunRequest =
+                account.run_request(attempt.clone(), session, replacing, password);
+            let json = SecretText(serde_json::to_string(&request).expect("a run request encodes"));
+            runtime.call_helper(HelperCall::Connect { json }, move |runtime, response| {
+                if let Some(code) = helper_failure(runtime, &attempt, "connect", &response) {
+                    runtime.feed(connection::Input::RunRejected(attempt, code));
                 }
-                let PortResponse::Secret {
-                    value: Some(SecretText(password)),
-                } = response
-                else {
-                    // The readiness check found it moments ago; treat it like a Helper refusal.
-                    runtime.feed(connection::Input::RunRejected(
-                        attempt,
-                        fvm_contract::app_helper::HelperErrorCode::InternalError,
-                    ));
-                    return;
-                };
-                let request: RunRequest =
-                    account.run_request(attempt.clone(), session, replacing, password);
-                let json =
-                    SecretText(serde_json::to_string(&request).expect("a run request encodes"));
-                runtime.call_helper(HelperCall::Connect { json }, move |runtime, response| {
-                    if let Some(code) = helper_failure(runtime, &attempt, "connect", &response) {
-                        runtime.feed(connection::Input::RunRejected(attempt, code));
-                    }
-                });
-            },
-        );
+            });
+        });
     }
 
     fn log_helper_refusal(&mut self, what: &str, response: &PortResponse) {

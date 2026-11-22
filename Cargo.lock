@@ -451,6 +451,7 @@ version = "0.0.0"
 dependencies = [
  "widestring",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -467,6 +468,8 @@ dependencies = [
  "rustix",
  "rustls",
  "rustls-platform-verifier 0.6.2",
+ "security-framework",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "socket2",

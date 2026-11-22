@@ -521,6 +521,7 @@
       "saveError": {
         "secretStore": {
           "failure": {
+            "code": -25308,
             "description": "User interaction is not allowed."
           }
         }
@@ -715,7 +716,7 @@
             "password": {
               "notSaved": {
                 "failure": {
-                  "description": "User interaction is not allowed."
+                  "code": -25293
                 }
               }
             },

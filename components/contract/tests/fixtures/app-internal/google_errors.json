@@ -101,6 +101,7 @@
   {
     "secretStore": {
       "failure": {
+        "code": -25308,
         "description": "User interaction is not allowed."
       }
     }

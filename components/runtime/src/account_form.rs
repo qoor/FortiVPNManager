@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::command::AccountForm;
 use fvm_contract::app_internal::port::{
-    FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
-    SecretStoreFailure,
+    FortiClientConnection, LogCategory, LogLevel, PortRequest, PortResponse, SecretStoreFailure,
 };
 use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{
@@ -25,6 +24,7 @@ use fvm_core::openfortivpn_settings;
 
 use crate::files;
 use crate::orchestration::{ClientSettings, Runtime};
+use crate::os::{OsRequest, OsResponse, SecretItem};
 
 /// An openfortivpn config file is small; anything larger is not one.
 const MAX_IMPORT_BYTES: u64 = 64 * 1024;
@@ -336,7 +336,7 @@ impl Runtime {
                 username: saved.vpn.username.clone(),
                 host: saved.vpn.host.clone(),
             };
-            writes.push(PortRequest::WriteSecret {
+            writes.push(OsRequest::WriteSecret {
                 item,
                 value: SecretText(vpn_password),
             });
@@ -347,9 +347,9 @@ impl Runtime {
             };
             let normalized = normalized_app_password(&app_password);
             writes.push(if normalized.is_empty() {
-                PortRequest::DeleteSecret { item }
+                OsRequest::DeleteSecret { item }
             } else {
-                PortRequest::WriteSecret {
+                OsRequest::WriteSecret {
                     item,
                     value: SecretText(normalized),
                 }
@@ -375,16 +375,16 @@ impl Runtime {
     /// Writes the secrets in order, stopping at the first failure.
     fn write_secrets(
         &mut self,
-        mut writes: Vec<PortRequest>,
+        mut writes: Vec<OsRequest>,
         done: impl FnOnce(&mut Runtime, Option<SecretStoreFailure>) + 'static,
     ) {
         if writes.is_empty() {
             return done(self, None);
         }
         let request = writes.remove(0);
-        self.request(request, move |runtime, response| match response {
-            PortResponse::SecretChanged {} => runtime.write_secrets(writes, done),
-            PortResponse::SecretStoreFailed { failure } => done(runtime, Some(failure)),
+        self.ask_os(request, move |runtime, response| match response {
+            OsResponse::SecretChanged => runtime.write_secrets(writes, done),
+            OsResponse::SecretStoreFailed { failure } => done(runtime, Some(failure)),
             other => panic!("a secret write answered with {other:?}"),
         });
     }
@@ -646,15 +646,15 @@ impl Runtime {
             username: saved.vpn.username,
             host: saved.vpn.host,
         };
-        self.request(
-            PortRequest::WriteSecret {
+        self.ask_os(
+            OsRequest::WriteSecret {
                 item,
                 value: password,
             },
             move |runtime, response| {
                 let password = match response {
-                    PortResponse::SecretChanged {} => ImportedPassword::Saved {},
-                    PortResponse::SecretStoreFailed { failure } => {
+                    OsResponse::SecretChanged => ImportedPassword::Saved {},
+                    OsResponse::SecretStoreFailed { failure } => {
                         ImportedPassword::NotSaved { failure }
                     }
                     other => panic!("a secret write answered with {other:?}"),

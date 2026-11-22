@@ -1,13 +1,6 @@
 extension AppInternal {
   /// What the runtime asks of the OS (components/contract/src/app_internal/port.rs).
   enum PortRequest: Decodable, Equatable, Sendable {
-    case readSecret(item: SecretItem)
-    /// Never reads the secret, so the OS asks the user for nothing.
-    case hasSecret(item: SecretItem)
-    case writeSecret(item: SecretItem, value: String)
-    /// Deleting a missing item succeeds.
-    case deleteSecret(item: SecretItem)
-
     case helperRegistration
     case registerHelper
     /// A connection whose Helper answers with the app's build counts as verified. Retried once on
@@ -31,11 +24,6 @@ extension AppInternal {
   }
 
   enum PortResponse: Encodable, Sendable {
-    case secret(value: String?)
-    case hasSecret(exists: Bool)
-    case secretChanged
-    case secretStoreFailed(failure: SecretStoreFailure)
-
     case registration(status: RegistrationStatus)
     case registered
     case registrationFailed(error: RegistrationError)
@@ -80,15 +68,9 @@ extension AppInternal {
     case approveQuit
   }
 
-  enum SecretItem: Decodable, Equatable, Sendable {
-    case vpnPassword(username: String, host: String)
-    case gmailAppPassword(address: String)
-    case googleRefreshToken(address: String)
-    case googleClientSecret(clientId: String)
-  }
-
-  struct SecretStoreFailure: Codable, Equatable, Sendable {
-    var description: String
+  struct SecretStoreFailure: Decodable, Equatable, Sendable {
+    var description: String?
+    var code: Int32
   }
 
   /// One call on the Helper over the one connection the OS integration keeps (see
@@ -161,26 +143,5 @@ extension AppInternal {
   enum UserNotification: Decodable, Equatable, Sendable {
     case exceptionRulesNotApplied(retries: Int, failure: BypassFailure)
     case updateAvailable(version: String)
-  }
-}
-
-extension AppInternal.SecretItem {
-  /// The login Keychain service of this secret. Changing it loses the items already saved.
-  var keychainService: String {
-    switch self {
-    case .vpnPassword: "com.qoor.FortiVPNManager.vpn"
-    case .gmailAppPassword: "com.qoor.FortiVPNManager.gmail"
-    case .googleRefreshToken, .googleClientSecret: "com.qoor.FortiVPNManager.google"
-    }
-  }
-
-  /// The login Keychain account of this secret, kept like `keychainService`.
-  var keychainAccount: String {
-    switch self {
-    case .vpnPassword(let username, let host): "\(username)@\(host)"
-    case .gmailAppPassword(let address): address
-    case .googleRefreshToken(let address): "refresh-token:\(address.lowercased())"
-    case .googleClientSecret(let clientId): "client-secret:\(clientId)"
-    }
   }
 }

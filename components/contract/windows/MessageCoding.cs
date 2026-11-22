@@ -287,10 +287,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.InstallFailure.HelperFailed), TypeInfoPropertyName = "InstallFailureHelperFailed")]
 [JsonSerializable(typeof(AppInternal.InstallFailure.HelperRefused), TypeInfoPropertyName = "InstallFailureHelperRefused")]
 
-[JsonSerializable(typeof(AppInternal.PortRequest.ReadSecret), TypeInfoPropertyName = "PortRequestReadSecret")]
-[JsonSerializable(typeof(AppInternal.PortRequest.HasSecret), TypeInfoPropertyName = "PortRequestHasSecret")]
-[JsonSerializable(typeof(AppInternal.PortRequest.WriteSecret), TypeInfoPropertyName = "PortRequestWriteSecret")]
-[JsonSerializable(typeof(AppInternal.PortRequest.DeleteSecret), TypeInfoPropertyName = "PortRequestDeleteSecret")]
 [JsonSerializable(typeof(AppInternal.PortRequest.HelperRegistration), TypeInfoPropertyName = "PortRequestHelperRegistration")]
 [JsonSerializable(typeof(AppInternal.PortRequest.RegisterHelper), TypeInfoPropertyName = "PortRequestRegisterHelper")]
 [JsonSerializable(typeof(AppInternal.PortRequest.HelperBuild), TypeInfoPropertyName = "PortRequestHelperBuild")]
@@ -304,10 +300,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.PortRequest.FortiClientConnections), TypeInfoPropertyName = "PortRequestFortiClientConnections")]
 [JsonSerializable(typeof(AppInternal.PortRequest.StartUpdateWaiter), TypeInfoPropertyName = "PortRequestStartUpdateWaiter")]
 
-[JsonSerializable(typeof(AppInternal.PortResponse.Secret), TypeInfoPropertyName = "PortResponseSecret")]
-[JsonSerializable(typeof(AppInternal.PortResponse.HasSecret), TypeInfoPropertyName = "PortResponseHasSecret")]
-[JsonSerializable(typeof(AppInternal.PortResponse.SecretChanged), TypeInfoPropertyName = "PortResponseSecretChanged")]
-[JsonSerializable(typeof(AppInternal.PortResponse.SecretStoreFailed), TypeInfoPropertyName = "PortResponseSecretStoreFailed")]
 [JsonSerializable(typeof(AppInternal.PortResponse.Registration), TypeInfoPropertyName = "PortResponseRegistration")]
 [JsonSerializable(typeof(AppInternal.PortResponse.Registered), TypeInfoPropertyName = "PortResponseRegistered")]
 [JsonSerializable(typeof(AppInternal.PortResponse.RegistrationFailed), TypeInfoPropertyName = "PortResponseRegistrationFailed")]
@@ -332,10 +324,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.PortAction.StopUpdateWaiter), TypeInfoPropertyName = "PortActionStopUpdateWaiter")]
 [JsonSerializable(typeof(AppInternal.PortAction.ApproveQuit), TypeInfoPropertyName = "PortActionApproveQuit")]
 
-[JsonSerializable(typeof(AppInternal.SecretItem.VpnPassword), TypeInfoPropertyName = "SecretItemVpnPassword")]
-[JsonSerializable(typeof(AppInternal.SecretItem.GmailAppPassword), TypeInfoPropertyName = "SecretItemGmailAppPassword")]
-[JsonSerializable(typeof(AppInternal.SecretItem.GoogleRefreshToken), TypeInfoPropertyName = "SecretItemGoogleRefreshToken")]
-[JsonSerializable(typeof(AppInternal.SecretItem.GoogleClientSecret), TypeInfoPropertyName = "SecretItemGoogleClientSecret")]
 
 [JsonSerializable(typeof(AppInternal.HelperCall.Connect), TypeInfoPropertyName = "HelperCallConnect")]
 [JsonSerializable(typeof(AppInternal.HelperCall.SubmitOtp), TypeInfoPropertyName = "HelperCallSubmitOtp")]

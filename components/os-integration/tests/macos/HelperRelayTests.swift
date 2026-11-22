@@ -19,31 +19,6 @@ private let updateCalls: [(AppInternal.HelperCall, String, String)] = [
 
 @MainActor
 struct HelperRelayTests {
-  @Test func keychainNamesStayAsBefore() {
-    let cases: [(AppInternal.SecretItem, String, String)] = [
-      (
-        .vpnPassword(username: "alice", host: "vpn.example.com"), "com.qoor.FortiVPNManager.vpn",
-        "alice@vpn.example.com"
-      ),
-      (
-        .gmailAppPassword(address: "otp@example.com"), "com.qoor.FortiVPNManager.gmail",
-        "otp@example.com"
-      ),
-      (
-        .googleRefreshToken(address: "OTP@Example.com"), "com.qoor.FortiVPNManager.google",
-        "refresh-token:otp@example.com"
-      ),
-      (
-        .googleClientSecret(clientId: "123-abc"), "com.qoor.FortiVPNManager.google",
-        "client-secret:123-abc"
-      ),
-    ]
-    for (item, service, account) in cases {
-      #expect(item.keychainService == service)
-      #expect(item.keychainAccount == account)
-    }
-  }
-
   @Test func aSecretCallChecksTheBuildOnceThenRelays() async throws {
     let helper = FakeHelper(build: "100")
     let relay = Relay(helpers: [helper])

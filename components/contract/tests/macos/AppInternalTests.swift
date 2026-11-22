@@ -149,31 +149,6 @@ struct AppInternalTests {
   @Test func systemEvents() throws {
     #expect(try encodesLikeFixture(AppInternal.Expected.systemEvents, "system_events.json"))
   }
-
-  // MARK: Keychain
-
-  @Test func secretsKeepTheirKeychainItems() {
-    let items: [AppInternal.SecretItem] = [
-      .vpnPassword(username: "alice", host: "vpn.example.com"),
-      .gmailAppPassword(address: "Alice@example.com"),
-      .googleRefreshToken(address: "Alice@Example.com"),
-      .googleClientSecret(clientId: "987-xyz.apps.googleusercontent.com"),
-    ]
-    #expect(
-      items.map(\.keychainService) == [
-        "com.qoor.FortiVPNManager.vpn",
-        "com.qoor.FortiVPNManager.gmail",
-        "com.qoor.FortiVPNManager.google",
-        "com.qoor.FortiVPNManager.google",
-      ])
-    #expect(
-      items.map(\.keychainAccount) == [
-        "alice@vpn.example.com",
-        "Alice@example.com",
-        "refresh-token:alice@example.com",
-        "client-secret:987-xyz.apps.googleusercontent.com",
-      ])
-  }
 }
 
 /// The values the fixtures hold, written inside the namespace so the nested type names resolve.
@@ -188,7 +163,8 @@ extension AppInternal {
       Date(timeIntervalSince1970: Double(millis) / 1000)
     }
 
-    static let storeFailure = SecretStoreFailure(description: "User interaction is not allowed.")
+    static let storeFailure = SecretStoreFailure(
+      description: "User interaction is not allowed.", code: -25308)
 
     static let unreadableFile = ConfigFileError.unreadableFile(
       path: configPath,
@@ -672,7 +648,10 @@ extension AppInternal {
         accountForm(4, importReport: .imported(report: importReport(.notSavedWithoutUsername)))),
       configSection(
         accountForm(
-          4, importReport: .imported(report: importReport(.notSaved(failure: storeFailure))))),
+          4,
+          importReport: .imported(
+            report: importReport(
+              .notSaved(failure: SecretStoreFailure(description: nil, code: -25293)))))),
       configSection(accountForm(4, importReport: .imported(report: importReport(nil)))),
       configSection(
         accountForm(
@@ -852,21 +831,6 @@ extension AppInternal {
     ]
 
     static let portRequests: [FromRuntime] = [
-      .portRequest(
-        id: 1, request: .readSecret(item: .vpnPassword(username: "alice", host: "vpn.example.com"))),
-      .portRequest(
-        id: 2, request: .hasSecret(item: .gmailAppPassword(address: "alice@example.com"))),
-      .portRequest(
-        id: 3,
-        request: .writeSecret(
-          item: .googleRefreshToken(address: "Alice@Example.com"), value: "1//0g-refresh"
-        )),
-      .portRequest(
-        id: 4,
-        request: .deleteSecret(
-          item: .googleClientSecret(
-            clientId: "987-xyz.apps.googleusercontent.com"
-          ))),
       .portRequest(id: 5, request: .helperRegistration),
       .portRequest(id: 6, request: .registerHelper),
       .portRequest(id: 7, request: .helperBuild),
@@ -1009,11 +973,6 @@ extension AppInternal {
     ]
 
     static let portResponses: [ToRuntime] = [
-      .portResponse(id: 1, response: .secret(value: "p@ss")),
-      .portResponse(id: 1, response: .secret(value: nil)),
-      .portResponse(id: 2, response: .hasSecret(exists: true)),
-      .portResponse(id: 3, response: .secretChanged),
-      .portResponse(id: 4, response: .secretStoreFailed(failure: storeFailure)),
       .portResponse(id: 5, response: .registration(status: .notRegistered)),
       .portResponse(id: 5, response: .registration(status: .enabled)),
       .portResponse(id: 5, response: .registration(status: .requiresApproval)),

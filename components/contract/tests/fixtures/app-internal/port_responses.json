@@ -1,54 +1,6 @@
 [
   {
     "portResponse": {
-      "id": 1,
-      "response": {
-        "secret": {
-          "value": "p@ss"
-        }
-      }
-    }
-  },
-  {
-    "portResponse": {
-      "id": 1,
-      "response": {
-        "secret": {}
-      }
-    }
-  },
-  {
-    "portResponse": {
-      "id": 2,
-      "response": {
-        "hasSecret": {
-          "exists": true
-        }
-      }
-    }
-  },
-  {
-    "portResponse": {
-      "id": 3,
-      "response": {
-        "secretChanged": {}
-      }
-    }
-  },
-  {
-    "portResponse": {
-      "id": 4,
-      "response": {
-        "secretStoreFailed": {
-          "failure": {
-            "description": "User interaction is not allowed."
-          }
-        }
-      }
-    }
-  },
-  {
-    "portResponse": {
       "id": 5,
       "response": {
         "registration": {

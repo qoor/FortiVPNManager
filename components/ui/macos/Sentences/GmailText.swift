@@ -37,7 +37,7 @@ extension AppInternal.GoogleError {
     case .network(let detail):
       String(localized: "Couldn't reach Google: \(detail)")
     case .secretStore(let failure):
-      String(localized: "Keychain error: \(failure.description)")
+      String(localized: "Keychain error: \(failure.text)")
     case .config(let error):
       error.message
     }
@@ -138,7 +138,7 @@ extension AppInternal.GmailTestFailure {
     case .enterAppPassword:
       String(localized: "Enter the app password.")
     case .appPasswordUnreadable(let failure):
-      String(localized: "Couldn't read the app password from Keychain: \(failure.description)")
+      String(localized: "Couldn't read the app password from Keychain: \(failure.text)")
     case .imapLoginRejected(let serverText):
       if let serverText, !serverText.isEmpty {
         String(
@@ -163,7 +163,7 @@ extension AppInternal.GmailTestFailure {
     case .clientRejected:
       String(localized: "Google rejected the OAuth client. Import the client JSON again.")
     case .secretStore(let failure):
-      String(localized: "Keychain error: \(failure.description)")
+      String(localized: "Keychain error: \(failure.text)")
     case .otherAccount(let authorized, let expected):
       String(localized: "Connected as \(authorized). Connect again with \(expected).")
     case .accessTokenRejected:

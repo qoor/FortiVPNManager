@@ -22,7 +22,7 @@ public static class GmailText
         GoogleError.WrongAccount wrong => L("You signed in as %@, but the Gmail address is %@. Sign in with that account.", wrong.Actual, wrong.Expected),
         GoogleError.GmailApiRefused refused => L("The Gmail API refused access (%@). Check that it's enabled in Google Cloud.", refused.Reason),
         GoogleError.Network network => L("Couldn't reach Google: %@", network.Detail),
-        GoogleError.SecretStore store => L("Credential Manager error: %@", store.Failure.Description),
+        GoogleError.SecretStore store => L("Credential Manager error: %@", store.Failure.Text()),
         GoogleError.Config config => config.Error.Message(),
         _ => throw new InvalidOperationException($"unknown Google error {error}"),
     };
@@ -84,7 +84,7 @@ public static class GmailText
     {
         GmailTestFailure.EnterAddress => L("Enter the Gmail address."),
         GmailTestFailure.EnterAppPassword => L("Enter the app password."),
-        GmailTestFailure.AppPasswordUnreadable unreadable => L("Couldn't read the app password from Credential Manager: %@", unreadable.Failure.Description),
+        GmailTestFailure.AppPasswordUnreadable unreadable => L("Couldn't read the app password from Credential Manager: %@", unreadable.Failure.Text()),
         GmailTestFailure.ImapLoginRejected { ServerText: { Length: > 0 } text } =>
             L("Gmail rejected the sign-in. Check the address, app password and IMAP setting. (%@)", text),
         GmailTestFailure.ImapLoginRejected => L("Gmail rejected the sign-in. Check the address, app password and IMAP setting."),
@@ -94,7 +94,7 @@ public static class GmailText
         GmailTestFailure.NotSignedIn => L("Sign in with Google first."),
         GmailTestFailure.AccessRevoked => L("Google access was revoked or has expired. Sign in with Google again."),
         GmailTestFailure.ClientRejected => L("Google rejected the OAuth client. Import the client JSON again."),
-        GmailTestFailure.SecretStore store => L("Credential Manager error: %@", store.Failure.Description),
+        GmailTestFailure.SecretStore store => L("Credential Manager error: %@", store.Failure.Text()),
         GmailTestFailure.OtherAccount other => L("Connected as %@. Connect again with %@.", other.Authorized, other.Expected),
         GmailTestFailure.AccessTokenRejected => L("Google rejected the access token. Sign in with Google again."),
         GmailTestFailure.GmailApiRefused refused => L("The Gmail API refused access (%@). Check that it's enabled in Google Cloud.", refused.Reason),

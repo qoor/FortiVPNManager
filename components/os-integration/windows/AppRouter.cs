@@ -82,18 +82,6 @@ public sealed class AppRouter
     {
         switch (request)
         {
-            case PortRequest.ReadSecret read:
-                reply(SecretStore.Read(read.Item));
-                break;
-            case PortRequest.HasSecret has:
-                reply(SecretStore.Exists(has.Item));
-                break;
-            case PortRequest.WriteSecret write:
-                reply(SecretStore.Write(write.Value, write.Item));
-                break;
-            case PortRequest.DeleteSecret delete:
-                reply(SecretStore.Delete(delete.Item));
-                break;
             case PortRequest.HelperRegistration:
                 reply(ServiceRegistration.HelperStatus());
                 break;

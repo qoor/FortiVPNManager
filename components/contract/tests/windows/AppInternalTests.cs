@@ -173,8 +173,6 @@ public class AppInternalTests
         string[] shown =
         [
             new AccountForm("vpn.example.com", "alice", "", "alice@example.com", "vpn-secret", "app-secret").ToString(),
-            new PortRequest.WriteSecret(new SecretItem.GmailAppPassword("alice@example.com"), "app-secret").ToString(),
-            new PortResponse.Secret("vpn-secret").ToString(),
             new HelperCall.Connect("""{"password":"vpn-secret"}""").ToString(),
             new HelperCall.SubmitOtp("attempt", "123456").ToString(),
             new AppFacts("1", "26.1.0", true, "Asia/Seoul", new SignInPages("a", "b", "c"), "client-secret").ToString(),

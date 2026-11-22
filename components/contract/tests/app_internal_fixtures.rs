@@ -74,7 +74,8 @@ fn secret(text: &str) -> SecretText {
 
 fn store_failure() -> SecretStoreFailure {
     SecretStoreFailure {
-        description: "User interaction is not allowed.".into(),
+        description: Some("User interaction is not allowed.".into()),
+        code: -25308,
     }
 }
 
@@ -1110,7 +1111,10 @@ fn config_sections_with_imports() -> Vec<ConfigSection> {
         config_section(
             imported(ClientSettingsImport::Imported {
                 report: import_report(Some(ImportedPassword::NotSaved {
-                    failure: store_failure(),
+                    failure: SecretStoreFailure {
+                        description: None,
+                        code: -25293,
+                    },
                 })),
             }),
             None,
@@ -1645,7 +1649,7 @@ fn port_requests() {
     pin(
         "port_requests.json",
         [
-            secret_and_registration_requests(),
+            registration_requests(),
             helper_calls(),
             system_and_update_requests(),
         ]
@@ -1653,43 +1657,9 @@ fn port_requests() {
     );
 }
 
-fn secret_and_registration_requests() -> Vec<FromRuntime> {
+fn registration_requests() -> Vec<FromRuntime> {
     let request = |id, request| FromRuntime::PortRequest { id, request };
     vec![
-        request(
-            1,
-            PortRequest::ReadSecret {
-                item: SecretItem::VpnPassword {
-                    username: "alice".into(),
-                    host: "vpn.example.com".into(),
-                },
-            },
-        ),
-        request(
-            2,
-            PortRequest::HasSecret {
-                item: SecretItem::GmailAppPassword {
-                    address: "alice@example.com".into(),
-                },
-            },
-        ),
-        request(
-            3,
-            PortRequest::WriteSecret {
-                item: SecretItem::GoogleRefreshToken {
-                    address: "Alice@Example.com".into(),
-                },
-                value: secret("1//0g-refresh"),
-            },
-        ),
-        request(
-            4,
-            PortRequest::DeleteSecret {
-                item: SecretItem::GoogleClientSecret {
-                    client_id: "987-xyz.apps.googleusercontent.com".into(),
-                },
-            },
-        ),
         request(5, PortRequest::HelperRegistration {}),
         request(6, PortRequest::RegisterHelper {}),
         request(7, PortRequest::HelperBuild {}),
@@ -1951,7 +1921,7 @@ fn port_responses() {
     decodes(
         "port_responses.json",
         &[
-            secret_and_registration_responses(),
+            registration_responses(),
             helper_responses(),
             system_and_update_responses(),
         ]
@@ -1959,26 +1929,11 @@ fn port_responses() {
     );
 }
 
-fn secret_and_registration_responses() -> Vec<ToRuntime> {
+fn registration_responses() -> Vec<ToRuntime> {
     use RegistrationStatus::*;
     let response = |id, response| ToRuntime::PortResponse { id, response };
     let registration = |id, status| response(id, PortResponse::Registration { status });
     vec![
-        response(
-            1,
-            PortResponse::Secret {
-                value: Some(secret("p@ss")),
-            },
-        ),
-        response(1, PortResponse::Secret { value: None }),
-        response(2, PortResponse::HasSecret { exists: true }),
-        response(3, PortResponse::SecretChanged {}),
-        response(
-            4,
-            PortResponse::SecretStoreFailed {
-                failure: store_failure(),
-            },
-        ),
         registration(5, NotRegistered),
         registration(5, Enabled),
         registration(5, RequiresApproval),
@@ -2172,28 +2127,13 @@ fn debug_output_redacts_secrets() {
                     app_password: secret("abcdefghijklmnop"),
                 },
             },
-            PortRequest::WriteSecret {
-                item: SecretItem::GmailAppPassword {
-                    address: "alice@example.com".into(),
-                },
-                value: secret("qrstuvwxyzabcdef"),
-            },
             HelperCall::SubmitOtp {
                 attempt: attempt(),
                 code: secret("987654"),
             },
-            PortResponse::Secret {
-                value: Some(secret("token-xyz")),
-            },
         )
     );
-    for secret in [
-        "hunter2",
-        "abcdefghijklmnop",
-        "qrstuvwxyzabcdef",
-        "987654",
-        "token-xyz",
-    ] {
+    for secret in ["hunter2", "abcdefghijklmnop", "987654"] {
         assert!(!debug.contains(secret), "{debug}");
     }
     assert!(debug.contains("<redacted>"), "{debug}");

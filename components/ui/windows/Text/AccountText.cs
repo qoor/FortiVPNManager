@@ -34,7 +34,7 @@ public static class AccountText
         AccountSaveError.AccountValue value => value.Problem.Message(),
         AccountSaveError.InvalidVpnPassword password => L("The VPN password can't contain line breaks and must be at most %lld bytes.", password.MaxBytes),
         AccountSaveError.Config config => config.Error.Message(),
-        AccountSaveError.SecretStore store => L("Couldn't save the password to Credential Manager: %@", store.Failure.Description),
+        AccountSaveError.SecretStore store => L("Couldn't save the password to Credential Manager: %@", store.Failure.Text()),
         _ => throw new InvalidOperationException($"unknown account save error {error}"),
     };
 
@@ -53,4 +53,7 @@ public static class AccountText
     /// <summary>The prompt of an empty password field.</summary>
     public static string StoredPrompt(bool stored) =>
         stored ? L("Saved in Credential Manager · type to change") : L("Required");
+
+    public static string Text(this SecretStoreFailure failure) =>
+        failure.Description ?? $"Unknown error (0x{failure.Code:x})";
 }

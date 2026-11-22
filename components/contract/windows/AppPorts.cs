@@ -10,19 +10,6 @@ public static partial class AppInternal
     {
         private PortRequest() { }
 
-        public sealed record ReadSecret(SecretItem Item) : PortRequest;
-
-        /// <summary>Never reads the secret, so the OS asks the user for nothing.</summary>
-        public sealed record HasSecret(SecretItem Item) : PortRequest;
-
-        public sealed record WriteSecret(SecretItem Item, string Value) : PortRequest
-        {
-            public override string ToString() => $"WriteSecret {{ Item = {Item}, Value = <redacted> }}";
-        }
-
-        /// <summary>Deleting a missing item succeeds.</summary>
-        public sealed record DeleteSecret(SecretItem Item) : PortRequest;
-
         public sealed record HelperRegistration : PortRequest;
         public sealed record RegisterHelper : PortRequest;
 
@@ -52,16 +39,6 @@ public static partial class AppInternal
     public abstract record PortResponse
     {
         private PortResponse() { }
-
-        public sealed record Secret(string? Value = null) : PortResponse
-        {
-            public override string ToString() =>
-                $"Secret {{ Value = {(Value is null ? "none" : "<redacted>")} }}";
-        }
-
-        public sealed record HasSecret(bool Exists) : PortResponse;
-        public sealed record SecretChanged : PortResponse;
-        public sealed record SecretStoreFailed(SecretStoreFailure Failure) : PortResponse;
 
         public sealed record Registration(RegistrationStatus Status) : PortResponse;
         public sealed record Registered : PortResponse;
@@ -118,18 +95,7 @@ public static partial class AppInternal
         public sealed record ApproveQuit : PortAction;
     }
 
-    [JsonConverter(typeof(CasesConverter<SecretItem>))]
-    public abstract record SecretItem
-    {
-        private SecretItem() { }
-
-        public sealed record VpnPassword(string Username, string Host) : SecretItem;
-        public sealed record GmailAppPassword(string Address) : SecretItem;
-        public sealed record GoogleRefreshToken(string Address) : SecretItem;
-        public sealed record GoogleClientSecret(string ClientId) : SecretItem;
-    }
-
-    public sealed record SecretStoreFailure(string Description);
+    public sealed record SecretStoreFailure(int Code, string? Description = null);
 
     /// <summary>
     /// One call on the Helper over the one connection the OS integration keeps (see

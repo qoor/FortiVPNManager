@@ -57,7 +57,9 @@ impl Runtime {
     ) {
         let (id, session_running) = (probe.id, probe.session_running);
         self.ask_os(OsRequest::InterfaceAddresses, move |runtime, response| {
-            let OsResponse::InterfaceAddresses { addresses } = response;
+            let OsResponse::InterfaceAddresses { addresses } = response else {
+                panic!("an addresses answer")
+            };
             let mut result = ProbeResult {
                 id,
                 gateway_ip,

@@ -1,16 +1,21 @@
 #![cfg(windows)]
 #![allow(unsafe_code)]
 
+pub mod credentials;
 pub mod crypto;
 pub mod library;
 pub mod network;
 pub mod process;
 
-use std::fmt;
-use std::io;
+use std::{fmt, io, ptr, slice};
 
 use windows_sys::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS, NO_ERROR, WIN32_ERROR,
+    ERROR_FILE_NOT_FOUND, ERROR_NOT_FOUND, ERROR_OBJECT_ALREADY_EXISTS, LocalFree, NO_ERROR,
+    WIN32_ERROR,
+};
+use windows_sys::Win32::System::Diagnostics::Debug::{
+    FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_ARGUMENT_ARRAY, FORMAT_MESSAGE_FROM_SYSTEM,
+    FORMAT_MESSAGE_IGNORE_INSERTS, FormatMessageW,
 };
 
 /// A failed Windows API call: which call, and the Win32 error code it returned.
@@ -44,6 +49,40 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+/// Windows's description of the error `code` in the user's language, trimmed as .NET's
+/// `Win32Exception` trims it; `None` when Windows has none.
+#[must_use]
+pub fn message(code: u32) -> Option<String> {
+    let mut buffer: *mut u16 = ptr::null_mut();
+    // SAFETY: With ALLOCATE_BUFFER, the buffer argument is the address of `buffer`, which the call
+    // points to a string it allocates of the length it returns.
+    let length = unsafe {
+        FormatMessageW(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER
+                | FORMAT_MESSAGE_FROM_SYSTEM
+                | FORMAT_MESSAGE_IGNORE_INSERTS
+                | FORMAT_MESSAGE_ARGUMENT_ARRAY,
+            ptr::null(),
+            code,
+            0,
+            (&raw mut buffer).cast(),
+            0,
+            ptr::null(),
+        )
+    };
+    if length == 0 {
+        return None;
+    }
+    // SAFETY: After a success, `buffer` holds `length` UTF-16 units and is freed once, after they
+    // were copied.
+    let text = unsafe {
+        let text = String::from_utf16_lossy(slice::from_raw_parts(buffer, length as usize));
+        LocalFree(buffer.cast());
+        text
+    };
+    Some(text.trim_end_matches(|c: char| c <= ' ').to_owned())
+}
 
 fn check(operation: &'static str, code: WIN32_ERROR) -> Result<(), Error> {
     if code == NO_ERROR {

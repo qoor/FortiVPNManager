@@ -7,12 +7,13 @@ use std::time::Duration;
 use fvm_contract::app_helper::HelperStatus;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::port::{
-    HelperCall, LogCategory, LogLevel, PortRequest, PortResponse, RegistrationStatus, SecretItem,
+    HelperCall, LogCategory, LogLevel, PortRequest, PortResponse, RegistrationStatus,
 };
 use fvm_contract::validation;
 use fvm_core::connection::{self, HelperFacts, ReadinessFacts, StoredSecrets};
 
 use crate::orchestration::Runtime;
+use crate::os::{self, OsRequest, OsResponse, SecretItem};
 
 /// Gives the system time to start the replaced Helper.
 const HELPER_RESTART_WAIT: Duration = Duration::from_secs(1);
@@ -148,15 +149,15 @@ impl Runtime {
             then(self, false);
             return;
         };
-        self.request(
-            PortRequest::HasSecret { item },
+        self.ask_os(
+            OsRequest::HasSecret { item },
             move |runtime, response| match response {
-                PortResponse::HasSecret { exists } => then(runtime, exists),
-                PortResponse::SecretStoreFailed { failure } => {
+                OsResponse::HasSecret { exists } => then(runtime, exists),
+                OsResponse::SecretStoreFailed { failure } => {
                     runtime.system_log(
                         LogLevel::Error,
                         LogCategory::Readiness,
-                        format!("keychain lookup failed: {}", failure.description),
+                        format!("keychain lookup failed: {}", os::describe(&failure)),
                     );
                     then(runtime, false);
                 }

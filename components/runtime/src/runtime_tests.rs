@@ -24,7 +24,7 @@ use fvm_contract::app_internal::command::{AccountForm, BypassList, Command};
 use fvm_contract::app_internal::event::SystemEvent;
 use fvm_contract::app_internal::port::{
     FortiClientConnection, HelperCall, HelperChannelFailure, LogCategory, PortAction, PortRequest,
-    PortResponse, RegistrationStatus, SecretItem, SecretStoreFailure, UserNotification,
+    PortResponse, RegistrationStatus, SecretStoreFailure, UserNotification,
 };
 use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::{
@@ -41,7 +41,7 @@ use serde_json::{Value, json};
 
 use crate::net::Reply;
 use crate::orchestration::{self, ClientSettings, Input, Outgoing, Paths, Runtime};
-use crate::os::{OsRequest, OsResponse};
+use crate::os::{OsRequest, OsResponse, SecretItem};
 use crate::timers::Timer;
 
 const APP_BUILD: &str = "100";
@@ -367,15 +367,49 @@ impl App {
     fn take(&mut self, message: Outgoing) {
         match message {
             Outgoing::App(message) => self.take_from_runtime(message),
-            Outgoing::Os {
-                id,
-                request: OsRequest::InterfaceAddresses,
-            } => {
-                let response = OsResponse::InterfaceAddresses {
-                    addresses: Vec::new(),
-                };
+            Outgoing::Os { id, request } => {
+                if let OsRequest::ReadSecret {
+                    item: SecretItem::GmailAppPassword { .. },
+                } = &request
+                    && self.holds.gmail_reads
+                {
+                    self.held_gmail_reads += 1;
+                    return;
+                }
+                let response = self.answer_os(request);
                 self.inputs.send(Input::Os { id, response }).unwrap();
             }
+        }
+    }
+
+    fn answer_os(&mut self, request: OsRequest) -> OsResponse {
+        match request {
+            OsRequest::ReadSecret { item } => OsResponse::Secret {
+                value: self.secret(&item),
+            },
+            OsRequest::HasSecret { item } => OsResponse::HasSecret {
+                exists: self.secret(&item).is_some(),
+            },
+            OsRequest::WriteSecret { .. } if self.answers.secret_writes_fail => {
+                OsResponse::SecretStoreFailed {
+                    failure: SecretStoreFailure {
+                        description: Some("denied".into()),
+                        code: -25293,
+                    },
+                }
+            }
+            OsRequest::WriteSecret { item, value } => {
+                self.secrets.retain(|(other, _)| *other != item);
+                self.secrets.push((item, value));
+                OsResponse::SecretChanged
+            }
+            OsRequest::DeleteSecret { item } => {
+                self.secrets.retain(|(other, _)| *other != item);
+                OsResponse::SecretChanged
+            }
+            OsRequest::InterfaceAddresses => OsResponse::InterfaceAddresses {
+                addresses: Vec::new(),
+            },
         }
     }
 
@@ -393,14 +427,6 @@ impl App {
             }
             FromRuntime::PortRequest { id, request } => {
                 self.requests.push(request.clone());
-                if let PortRequest::ReadSecret {
-                    item: SecretItem::GmailAppPassword { .. },
-                } = &request
-                    && self.holds.gmail_reads
-                {
-                    self.held_gmail_reads += 1;
-                    return;
-                }
                 if let PortRequest::CallHelper { call } = &request
                     && is_route_call(call)
                     && self.holds.route_calls
@@ -431,28 +457,6 @@ impl App {
 
     fn answer(&mut self, request: PortRequest) -> PortResponse {
         match request {
-            PortRequest::ReadSecret { item } => PortResponse::Secret {
-                value: self.secret(&item),
-            },
-            PortRequest::HasSecret { item } => PortResponse::HasSecret {
-                exists: self.secret(&item).is_some(),
-            },
-            PortRequest::WriteSecret { .. } if self.answers.secret_writes_fail => {
-                PortResponse::SecretStoreFailed {
-                    failure: SecretStoreFailure {
-                        description: "denied".into(),
-                    },
-                }
-            }
-            PortRequest::WriteSecret { item, value } => {
-                self.secrets.retain(|(other, _)| *other != item);
-                self.secrets.push((item, value));
-                PortResponse::SecretChanged {}
-            }
-            PortRequest::DeleteSecret { item } => {
-                self.secrets.retain(|(other, _)| *other != item);
-                PortResponse::SecretChanged {}
-            }
             PortRequest::HelperRegistration {} => PortResponse::Registration {
                 status: self.helper_registration,
             },

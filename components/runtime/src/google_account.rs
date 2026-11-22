@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use fvm_contract::app_internal::port::{
-    LogCategory, LogLevel, PortRequest, PortResponse, SecretItem, SecretStoreFailure,
+    LogCategory, LogLevel, PortRequest, PortResponse, SecretStoreFailure,
 };
 use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{GoogleError, OAuthClientSource};
@@ -23,6 +23,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::files;
 use crate::net;
 use crate::orchestration::{Queue, Runtime};
+use crate::os::{self, OsRequest, OsResponse, SecretItem};
 
 const SIGN_IN_TIMEOUT: Duration = Duration::from_mins(5);
 /// A browser connection that sends nothing in this time is dropped.
@@ -66,7 +67,7 @@ impl TokenFailure {
             Self::NotSignedIn => "not signed in with Google".into(),
             Self::Revoked => "the Google authorization was revoked or has expired".into(),
             Self::ClientRejected => "Google refused the OAuth client".into(),
-            Self::SecretStore(failure) => format!("keychain: {}", failure.description),
+            Self::SecretStore(failure) => format!("keychain: {}", os::describe(failure)),
             Self::Network(detail) => format!("network error: {detail}"),
             Self::Server(detail) => format!("Google token endpoint: {detail}"),
         }
@@ -167,25 +168,22 @@ impl Runtime {
                 let item = SecretItem::GoogleClientSecret {
                     client_id: client_id.clone(),
                 };
-                self.request(
-                    PortRequest::ReadSecret { item },
-                    move |runtime, response| {
-                        let result = match response {
-                            PortResponse::Secret {
-                                value: Some(secret),
-                            } if !secret.0.is_empty() => Ok(OAuthClient {
-                                client_id,
-                                client_secret: secret,
-                            }),
-                            PortResponse::Secret { .. } => Err(TokenFailure::NoClient),
-                            PortResponse::SecretStoreFailed { failure } => {
-                                Err(TokenFailure::SecretStore(failure))
-                            }
-                            other => panic!("a secret read answered with {other:?}"),
-                        };
-                        then(runtime, result);
-                    },
-                );
+                self.ask_os(OsRequest::ReadSecret { item }, move |runtime, response| {
+                    let result = match response {
+                        OsResponse::Secret {
+                            value: Some(secret),
+                        } if !secret.0.is_empty() => Ok(OAuthClient {
+                            client_id,
+                            client_secret: secret,
+                        }),
+                        OsResponse::Secret { .. } => Err(TokenFailure::NoClient),
+                        OsResponse::SecretStoreFailed { failure } => {
+                            Err(TokenFailure::SecretStore(failure))
+                        }
+                        other => panic!("a secret read answered with {other:?}"),
+                    };
+                    then(runtime, result);
+                });
             }
             OAuthClientSource::BuiltIn { .. } => {
                 let client = self.built_in_client().expect("the source is built in");
@@ -226,33 +224,30 @@ impl Runtime {
             let item = SecretItem::GoogleRefreshToken {
                 address: address.clone(),
             };
-            runtime.request(
-                PortRequest::ReadSecret { item },
-                move |runtime, response| {
-                    let refresh_token = match response {
-                        PortResponse::Secret { value: Some(token) } if !token.0.is_empty() => token,
-                        PortResponse::Secret { .. } => {
-                            return then(runtime, Err(TokenFailure::NotSignedIn));
-                        }
-                        PortResponse::SecretStoreFailed { failure } => {
-                            return then(runtime, Err(TokenFailure::SecretStore(failure)));
-                        }
-                        other => panic!("a secret read answered with {other:?}"),
-                    };
-                    let body = oauth::refresh_body(
-                        &refresh_token.0,
-                        &client.client_id,
-                        &client.client_secret.0,
-                    );
-                    let queue = runtime.queue();
-                    runtime.tasks.spawn(async move {
-                        let reply = net::post_form(oauth::TOKEN_ENDPOINT, &body).await;
-                        queue.run(move |runtime| {
-                            runtime.token_refreshed(key, refresh_token, reply, then);
-                        });
+            runtime.ask_os(OsRequest::ReadSecret { item }, move |runtime, response| {
+                let refresh_token = match response {
+                    OsResponse::Secret { value: Some(token) } if !token.0.is_empty() => token,
+                    OsResponse::Secret { .. } => {
+                        return then(runtime, Err(TokenFailure::NotSignedIn));
+                    }
+                    OsResponse::SecretStoreFailed { failure } => {
+                        return then(runtime, Err(TokenFailure::SecretStore(failure)));
+                    }
+                    other => panic!("a secret read answered with {other:?}"),
+                };
+                let body = oauth::refresh_body(
+                    &refresh_token.0,
+                    &client.client_id,
+                    &client.client_secret.0,
+                );
+                let queue = runtime.queue();
+                runtime.tasks.spawn(async move {
+                    let reply = net::post_form(oauth::TOKEN_ENDPOINT, &body).await;
+                    queue.run(move |runtime| {
+                        runtime.token_refreshed(key, refresh_token, reply, then);
                     });
-                },
-            );
+                });
+            });
         });
     }
 
@@ -289,9 +284,9 @@ impl Runtime {
                     address: address.clone(),
                 };
                 // Only the token that was refused is deleted, not one a newer sign-in stored.
-                self.request(PortRequest::ReadSecret { item: item.clone() }, move |runtime, response| {
-                    if matches!(response, PortResponse::Secret { value: Some(ref current) } if *current == refresh_token) {
-                        runtime.request(PortRequest::DeleteSecret { item }, |runtime, _| {
+                self.ask_os(OsRequest::ReadSecret { item: item.clone() }, move |runtime, response| {
+                    if matches!(response, OsResponse::Secret { value: Some(ref current) } if *current == refresh_token) {
+                        runtime.ask_os(OsRequest::DeleteSecret { item }, |runtime, _| {
                             runtime.google.tokens.clear();
                             runtime.refresh_google_state();
                         });
@@ -408,17 +403,17 @@ impl Runtime {
         self.google.error = None;
         self.reset_gmail_test();
         let item = SecretItem::GoogleRefreshToken { address };
-        self.request(
-            PortRequest::ReadSecret { item: item.clone() },
+        self.ask_os(
+            OsRequest::ReadSecret { item: item.clone() },
             move |runtime, response| {
                 let token = match response {
-                    PortResponse::Secret { value } => value,
+                    OsResponse::Secret { value } => value,
                     _ => None,
                 };
-                runtime.request(
-                    PortRequest::DeleteSecret { item },
+                runtime.ask_os(
+                    OsRequest::DeleteSecret { item },
                     move |runtime, response| {
-                        if let PortResponse::SecretStoreFailed { failure } = response {
+                        if let OsResponse::SecretStoreFailed { failure } = response {
                             runtime.google.disconnecting = false;
                             runtime.google.error = Some(GoogleError::SecretStore { failure });
                             return;
@@ -506,13 +501,13 @@ impl Runtime {
         let item = SecretItem::GoogleClientSecret {
             client_id: client.client_id.clone(),
         };
-        self.request(
-            PortRequest::WriteSecret {
+        self.ask_os(
+            OsRequest::WriteSecret {
                 item,
                 value: client.client_secret.clone(),
             },
             move |runtime, response| {
-                if let PortResponse::SecretStoreFailed { failure } = response {
+                if let OsResponse::SecretStoreFailed { failure } = response {
                     runtime.google.error = Some(GoogleError::SecretStore { failure });
                     return;
                 }
@@ -530,8 +525,8 @@ impl Runtime {
                 if previous != client.client_id {
                     let address = normalized(&runtime.config.settings().otp.gmail_address);
                     if !address.is_empty() {
-                        runtime.request(
-                            PortRequest::DeleteSecret {
+                        runtime.ask_os(
+                            OsRequest::DeleteSecret {
                                 item: SecretItem::GoogleRefreshToken { address },
                             },
                             |_, _| {},
@@ -541,7 +536,7 @@ impl Runtime {
                         let item = SecretItem::GoogleClientSecret {
                             client_id: previous_import,
                         };
-                        runtime.request(PortRequest::DeleteSecret { item }, |_, _| {});
+                        runtime.ask_os(OsRequest::DeleteSecret { item }, |_, _| {});
                     }
                     runtime.google.tokens.clear();
                 }
@@ -579,8 +574,8 @@ impl Runtime {
             return;
         }
         self.config_reloaded();
-        self.request(
-            PortRequest::DeleteSecret {
+        self.ask_os(
+            OsRequest::DeleteSecret {
                 item: SecretItem::GoogleClientSecret {
                     client_id: imported,
                 },
@@ -589,8 +584,8 @@ impl Runtime {
         );
         let address = normalized(&self.config.settings().otp.gmail_address);
         if !keep_authorization && !address.is_empty() {
-            self.request(
-                PortRequest::DeleteSecret {
+            self.ask_os(
+                OsRequest::DeleteSecret {
                     item: SecretItem::GoogleRefreshToken { address },
                 },
                 |_, _| {},
@@ -681,20 +676,20 @@ async fn sign_in(
             let item = SecretItem::GoogleRefreshToken {
                 address: address.clone(),
             };
-            runtime.request(
-                PortRequest::WriteSecret {
+            runtime.ask_os(
+                OsRequest::WriteSecret {
                     item,
                     value: refresh_token,
                 },
                 move |runtime, response| match response {
-                    PortResponse::SecretChanged {} => {
+                    OsResponse::SecretChanged => {
                         runtime
                             .google
                             .tokens
                             .insert((address, client_id), (access_token, expires));
                         reply(Ok(()));
                     }
-                    PortResponse::SecretStoreFailed { failure } => {
+                    OsResponse::SecretStoreFailed { failure } => {
                         reply(Err(Some(GoogleError::SecretStore { failure })));
                     }
                     other => panic!("a secret write answered with {other:?}"),

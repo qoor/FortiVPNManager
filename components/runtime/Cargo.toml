@@ -27,6 +27,8 @@ rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 nix = { workspace = true, features = ["net"] }
+security-framework.workspace = true
+security-framework-sys.workspace = true
 socket2.workspace = true
 
 [target.'cfg(windows)'.dependencies]

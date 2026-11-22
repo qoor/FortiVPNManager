@@ -12,16 +12,6 @@ use crate::app_helper::{AttemptId, StopReason};
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum PortRequest {
-    /// Answered by `Secret`, or `SecretStoreFailed`.
-    ReadSecret { item: SecretItem },
-    /// Answered by `HasSecret`, or `SecretStoreFailed`. Never reads the secret, so the OS asks the
-    /// user for nothing.
-    HasSecret { item: SecretItem },
-    /// Answered by `SecretChanged`, or `SecretStoreFailed`.
-    WriteSecret { item: SecretItem, value: SecretText },
-    /// Answered by `SecretChanged`, or `SecretStoreFailed`; deleting a missing item succeeds.
-    DeleteSecret { item: SecretItem },
-
     /// The Helper's registration as a system service. Answered by `Registration`.
     HelperRegistration {},
     /// Answered by `Registered`, or `RegistrationFailed`.
@@ -60,17 +50,6 @@ pub enum PortRequest {
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum PortResponse {
-    Secret {
-        value: Option<SecretText>,
-    },
-    HasSecret {
-        exists: bool,
-    },
-    SecretChanged {},
-    SecretStoreFailed {
-        failure: SecretStoreFailure,
-    },
-
     Registration {
         status: RegistrationStatus,
     },
@@ -162,30 +141,12 @@ pub enum PortAction {
     ApproveQuit {},
 }
 
-/// A secret the app keeps in the OS's secret storage.
+/// Why the secret storage failed: the OS's error code, and its description when the OS has one.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum SecretItem {
-    VpnPassword {
-        username: String,
-        host: String,
-    },
-    GmailAppPassword {
-        address: String,
-    },
-    /// Matches the address without regard to case.
-    GoogleRefreshToken {
-        address: String,
-    },
-    GoogleClientSecret {
-        client_id: String,
-    },
-}
-
-/// Why the secret storage failed, as the OS describes it.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct SecretStoreFailure {
-    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub code: i32,
 }
 
 /// One call on the Helper, over the one connection the OS integration keeps. It opens a new one

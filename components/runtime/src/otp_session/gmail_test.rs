@@ -1,4 +1,3 @@
-use fvm_contract::app_internal::port::{PortRequest, PortResponse, SecretItem};
 use fvm_contract::app_internal::section::{
     GmailSection, GmailTest, GmailTestFailure, GoogleAccountStatus, ImapFailure,
 };
@@ -10,6 +9,7 @@ use super::api_session::{ApiFailure, api_call};
 use super::imap_session::{ImapError, imap_log_in};
 use crate::google_account::{TokenFailure, normalized};
 use crate::orchestration::{Queue, Runtime};
+use crate::os::{OsRequest, OsResponse, SecretItem};
 
 impl Runtime {
     pub(crate) fn reset_gmail_test(&mut self) {
@@ -61,13 +61,12 @@ impl Runtime {
                 match typed {
                     Some(password) => test(self, password),
                     None => {
-                        self.request(
-                            PortRequest::ReadSecret { item },
-                            move |runtime, response| match response {
-                                PortResponse::Secret {
+                        self.ask_os(OsRequest::ReadSecret { item }, move |runtime, response| {
+                            match response {
+                                OsResponse::Secret {
                                     value: Some(password),
                                 } if !password.0.is_empty() => test(runtime, password.0),
-                                PortResponse::Secret { .. } => {
+                                OsResponse::Secret { .. } => {
                                     finish(
                                         runtime,
                                         GmailTest::Failed {
@@ -75,7 +74,7 @@ impl Runtime {
                                         },
                                     );
                                 }
-                                PortResponse::SecretStoreFailed { failure } => {
+                                OsResponse::SecretStoreFailed { failure } => {
                                     finish(
                                         runtime,
                                         GmailTest::Failed {
@@ -86,8 +85,8 @@ impl Runtime {
                                     );
                                 }
                                 other => panic!("a secret read answered with {other:?}"),
-                            },
-                        );
+                            }
+                        });
                     }
                 }
             }

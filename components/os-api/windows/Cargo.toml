@@ -6,6 +6,7 @@ publish.workspace = true
 [target.'cfg(windows)'.dependencies]
 widestring.workspace = true
 windows-sys.workspace = true
+zeroize.workspace = true
 
 [lints]
 workspace = true

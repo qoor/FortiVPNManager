@@ -44,7 +44,7 @@ extension AppInternal.AccountSaveError {
     case .config(let error):
       error.message
     case .secretStore(let failure):
-      String(localized: "Couldn't save the password to Keychain: \(failure.description)")
+      String(localized: "Couldn't save the password to Keychain: \(failure.text)")
     }
   }
 }
@@ -103,8 +103,12 @@ extension AppInternal.ImportReport {
     case .saved: (String(localized: "Saved the password to Keychain."), .success)
     case .notSavedWithoutUsername:
       (String(localized: "Password not saved: no username."), .warning)
-    case .notSaved(let failure): (failure.description, .warning)
+    case .notSaved(let failure): (failure.text, .warning)
     case nil: (String(localized: "The file has no password. Enter it in Account."), .info)
     }
   }
+}
+
+extension AppInternal.SecretStoreFailure {
+  var text: String { description ?? String(localized: "Keychain error \(code)") }
 }

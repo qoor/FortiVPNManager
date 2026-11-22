@@ -1,64 +1,6 @@
 [
   {
     "portRequest": {
-      "id": 1,
-      "request": {
-        "readSecret": {
-          "item": {
-            "vpnPassword": {
-              "host": "vpn.example.com",
-              "username": "alice"
-            }
-          }
-        }
-      }
-    }
-  },
-  {
-    "portRequest": {
-      "id": 2,
-      "request": {
-        "hasSecret": {
-          "item": {
-            "gmailAppPassword": {
-              "address": "alice@example.com"
-            }
-          }
-        }
-      }
-    }
-  },
-  {
-    "portRequest": {
-      "id": 3,
-      "request": {
-        "writeSecret": {
-          "item": {
-            "googleRefreshToken": {
-              "address": "Alice@Example.com"
-            }
-          },
-          "value": "1//0g-refresh"
-        }
-      }
-    }
-  },
-  {
-    "portRequest": {
-      "id": 4,
-      "request": {
-        "deleteSecret": {
-          "item": {
-            "googleClientSecret": {
-              "clientId": "987-xyz.apps.googleusercontent.com"
-            }
-          }
-        }
-      }
-    }
-  },
-  {
-    "portRequest": {
       "id": 5,
       "request": {
         "helperRegistration": {}

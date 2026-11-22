@@ -14,9 +14,7 @@ mod imap_session;
 use std::time::SystemTime;
 
 use fvm_contract::app_helper::AttemptId;
-use fvm_contract::app_internal::port::{
-    LogCategory, LogLevel, PortRequest, PortResponse, SecretItem,
-};
+use fvm_contract::app_internal::port::{LogCategory, LogLevel};
 use fvm_contract::app_internal::problem::ConfigFileError;
 use fvm_contract::app_internal::section::GmailTest;
 use fvm_contract::app_internal::{OtpMethod, SecretText};
@@ -25,6 +23,7 @@ use tokio::sync::mpsc;
 
 use crate::google_account::normalized;
 use crate::orchestration::Runtime;
+use crate::os::{OsRequest, OsResponse, SecretItem};
 use api_session::api_session;
 use imap_session::imap_session;
 
@@ -102,18 +101,13 @@ impl Runtime {
             // On an input of its own, like the Keychain's answer: a failure feeds the core, which
             // is in the middle of this effect's input.
             None => self.queue().run(move |runtime| read(runtime, None)),
-            Some(item) => self.request(
-                PortRequest::ReadSecret { item },
-                move |runtime, response| {
-                    let password = match response {
-                        PortResponse::Secret { value } => {
-                            value.filter(|password| !password.0.is_empty())
-                        }
-                        _ => None,
-                    };
-                    read(runtime, password);
-                },
-            ),
+            Some(item) => self.ask_os(OsRequest::ReadSecret { item }, move |runtime, response| {
+                let password = match response {
+                    OsResponse::Secret { value } => value.filter(|password| !password.0.is_empty()),
+                    _ => None,
+                };
+                read(runtime, password);
+            }),
         }
     }
 
