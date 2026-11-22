@@ -98,6 +98,7 @@ git submodule update --init third_party/openconnect
 - Windows 11 or later, x64
 - Rust (install with [rustup](https://rustup.rs))
 - .NET 10 SDK
+- [Git for Windows](https://gitforwindows.org)
 - The **Desktop development with C++** workload of Visual Studio Build Tools
 - Build tools for the OpenConnect library: [MSYS2](https://www.msys2.org)
   - Installed in `C:\msys64`, the installer's default folder

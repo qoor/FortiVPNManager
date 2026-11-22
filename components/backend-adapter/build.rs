@@ -1,4 +1,6 @@
 use std::env;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -62,6 +64,10 @@ fn main() {
         }
     } else {
         let bin = format!("{out_dir}/bin");
+        match fs::remove_dir_all(&bin) {
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            result => result.unwrap(),
+        }
         let status = unzip.args(["-d", &bin]).status().unwrap();
         assert!(status.success(), "unzip {zip} failed");
         println!("cargo:rustc-link-search=native={bin}");

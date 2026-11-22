@@ -95,8 +95,7 @@ paths:
   - 빈 환경(env -i)에서 빌드 시 직접 지정 필요
   - ACLOCAL_PATH: 없으면 pkg.m4(/ucrt64/share/aclocal) 미발견, autoconf 실패
   - COMSPEC: 없으면 Windows용 도구(windres 등)의 하위 명령 실행 실패
-- mingw-w64 헤더(2026-08 이후): sec_api/stdlib_s.h 제거, stdlib.h로 통합
-  - OpenConnect upstream 미대응, fork 수정으로 대응
+- mingw-w64 최신 헤더: sec_api/stdlib_s.h 없음, stdlib.h로 통합
 
 # GitHub
 - releases/latest: 초안 릴리스 미포함

@@ -98,6 +98,7 @@ git submodule update --init third_party/openconnect
 - Windows 11 이상, x64
 - Rust ([rustup](https://rustup.rs)으로 설치)
 - .NET 10 SDK
+- [Git for Windows](https://gitforwindows.org)
 - Visual Studio Build Tools의 **C++를 사용한 데스크톱 개발** 워크로드
 - OpenConnect 라이브러리 빌드 도구: [MSYS2](https://www.msys2.org)
   - 설치 프로그램 기본 폴더(`C:\msys64`)에 설치

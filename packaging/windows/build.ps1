@@ -84,11 +84,18 @@ function Add-LanguageTransform([string] $package, [string] $localized, [int] $la
 
 if ($PSCmdlet.ParameterSetName -eq 'Build') {
     $Build = (Get-Date).ToString('yyyyMMddHHmmss')
-    $env:FVM_BUILD = $Build
-    $messages = Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-windows')
-    Remove-Item Env:FVM_BUILD
-    [void](Invoke-Cargo @('rustc', '--release', '--package', 'fvm-runtime', '--lib', '--crate-type', 'cdylib'))
-    $RustOutput = Join-Path $root 'target\release'
+    Push-Location $root
+    try {
+        $env:FVM_BUILD = $Build
+        $messages = Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-windows')
+        Remove-Item Env:FVM_BUILD
+        [void](Invoke-Cargo @('rustc', '--release', '--package', 'fvm-runtime', '--lib', '--crate-type', 'cdylib'))
+        $metadata = & cargo metadata --format-version 1 --no-deps
+        if ($LASTEXITCODE -ne 0) { throw "cargo metadata failed with exit code $LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+    $RustOutput = Join-Path ($metadata | ConvertFrom-Json).target_directory 'release'
     $adapter = $messages | Where-Object { $_ -match '"reason":"build-script-executed"' } | ForEach-Object { $_ | ConvertFrom-Json } |
         Where-Object { $_.package_id -match '#fvm-backend-adapter@' }
     $libraries = Join-Path $adapter.out_dir 'bin'
