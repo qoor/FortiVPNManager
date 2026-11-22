@@ -34,8 +34,8 @@ fn back(h: &mut Harness) -> Vec<Effect> {
     h.send(Input::ScreenUnlocked)
 }
 
-fn boundary(at: std::time::SystemTime, edge: Edge) -> Option<Boundary> {
-    Some(Boundary { at, edge })
+fn boundary(at: std::time::SystemTime, edge: Edge) -> Boundary {
+    Boundary { at, edge }
 }
 
 // MARK: Window math
@@ -67,11 +67,11 @@ fn the_latest_boundary_looks_back_across_the_weekend() {
     let schedule = weekday_hours();
     assert_eq!(
         schedule.latest_boundary(at(23, 10, 0, 0), &seoul()),
-        boundary(at(22, 18, 0, 0), Edge::End)
+        Some(boundary(at(22, 18, 0, 0), Edge::End))
     );
     assert_eq!(
         schedule.latest_boundary(at(18, 9, 0, 0), &seoul()),
-        boundary(at(18, 9, 0, 0), Edge::Start)
+        Some(boundary(at(18, 9, 0, 0), Edge::Start))
     );
 }
 
@@ -80,11 +80,11 @@ fn the_next_boundary_is_strictly_later() {
     let schedule = weekday_hours();
     assert_eq!(
         schedule.next_boundary(at(22, 18, 0, 0), &seoul()),
-        boundary(at(25, 9, 0, 0), Edge::Start)
+        Some(boundary(at(25, 9, 0, 0), Edge::Start))
     );
     assert_eq!(
         schedule.next_boundary(at(18, 9, 0, 0), &seoul()),
-        boundary(at(18, 18, 0, 0), Edge::End)
+        Some(boundary(at(18, 18, 0, 0), Edge::End))
     );
     assert_eq!(
         schedule.next_start(at(18, 9, 0, 0), &seoul()),
@@ -113,7 +113,7 @@ fn a_single_day_repeats_weekly() {
     );
     assert_eq!(
         sundays.latest_boundary(at(23, 12, 0, 0), &seoul()),
-        boundary(at(17, 23, 59, 0), Edge::End)
+        Some(boundary(at(17, 23, 59, 0), Edge::End))
     );
 }
 

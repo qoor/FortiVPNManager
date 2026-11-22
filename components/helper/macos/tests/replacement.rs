@@ -279,7 +279,10 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
     let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
-        error("unknownAttempt", "the connection to replace is not running")
+        Some(error(
+            "unknownAttempt",
+            "the connection to replace is not running"
+        ))
     );
     let id = os_side.request(1, &connect(ATTEMPT, None));
     assert_eq!(os_side.reply(id), None);
@@ -288,7 +291,7 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
     let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
-        error("wrongPhase", "the connection to replace is not up")
+        Some(error("wrongPhase", "the connection to replace is not up"))
     );
     os_side.send(json!({"networkChanged": {"outcome": looked_up(&outside_routes())}}));
     os_side.answer_network("apply", &applied(&outside_routes()));
@@ -299,19 +302,22 @@ fn a_replacement_is_accepted_only_for_the_owner_of_an_up_run_once() {
     let id = os_side.request(2, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
-        error("notAuthorized", "the VPN run belongs to another user")
+        Some(error(
+            "notAuthorized",
+            "the VPN run belongs to another user"
+        ))
     );
     let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(os_side.reply(id), None);
     let id = os_side.request(1, &connect(THIRD, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
-        error("busy", "a replacement connection is already running")
+        Some(error("busy", "a replacement connection is already running"))
     );
     let id = os_side.request(1, &connect(THIRD, None));
     assert_eq!(
         os_side.reply(id),
-        error("busy", "openconnect is already running")
+        Some(error("busy", "openconnect is already running"))
     );
     assert!(os_side.has_log(&format!(
         "notice helper: 0277070471 run {NEW} started for uid 501 with openconnect 9.21, replacing \
@@ -343,10 +349,10 @@ fn a_connect_that_reuses_a_running_attempt_id_is_invalid() {
         let id = os_side.request(1, &connect(attempt, replacing));
         assert_eq!(
             os_side.reply(id),
-            error(
+            Some(error(
                 "invalidRequest",
                 "the attempt ID belongs to a running connection"
-            ),
+            )),
             "{attempt} replacing {replacing:?}"
         );
     }
@@ -355,9 +361,9 @@ fn a_connect_that_reuses_a_running_attempt_id_is_invalid() {
     let id = os_side.request(1, &connect(NEW, Some(ATTEMPT)));
     assert_eq!(
         os_side.reply(id),
-        error(
+        Some(error(
             "invalidRequest",
             "the attempt ID belongs to a running connection"
-        )
+        ))
     );
 }

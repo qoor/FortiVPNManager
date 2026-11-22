@@ -165,14 +165,14 @@ fn crlf_line_endings_and_a_leading_bom() {
     // The BOM is not counted in columns.
     assert_eq!(
         load_error("\u{FEFF}vpn:\n  port: 0443\n").unwrap().location,
-        loc(2, 9)
+        Some(loc(2, 9))
     );
     // CRLF counts as one line break.
     assert_eq!(
         load_error("vpn:\r\n  host: gw\r\n  port: 0443\r\n")
             .unwrap()
             .location,
-        loc(3, 9)
+        Some(loc(3, 9))
     );
 }
 
@@ -207,7 +207,7 @@ fn integers_must_be_canonical() {
             },
             "{raw}"
         );
-        assert_eq!(error.location, loc(2, 9), "{raw}");
+        assert_eq!(error.location, Some(loc(2, 9)), "{raw}");
     }
 }
 
@@ -239,7 +239,7 @@ fn every_integer_field_uses_the_strict_rule() {
             panic!("unexpected {:?}", error.kind)
         };
         assert_eq!(error_path, path);
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -252,7 +252,7 @@ fn quoted_numbers_have_their_own_problem() {
             "{literal}: {:?}",
             error.kind
         );
-        assert_eq!(error.location, loc(2, 9));
+        assert_eq!(error.location, Some(loc(2, 9)));
     }
 }
 
@@ -266,7 +266,7 @@ fn a_quoted_non_number_is_a_type_mismatch() {
             expected: ValueKind::Integer
         }
     );
-    assert_eq!(error.location, loc(2, 9));
+    assert_eq!(error.location, Some(loc(2, 9)));
 }
 
 #[test]
@@ -281,7 +281,7 @@ fn quoted_booleans_have_their_own_problem() {
             "{literal}: {:?}",
             error.kind
         );
-        assert_eq!(error.location, loc(2, 27));
+        assert_eq!(error.location, Some(loc(2, 27)));
     }
 }
 
@@ -310,7 +310,7 @@ fn yaml_1_1_booleans_and_numbers_are_not_booleans() {
                 raw: raw.into()
             }
         );
-        assert_eq!(error.location, loc(2, 37));
+        assert_eq!(error.location, Some(loc(2, 37)));
     }
 }
 
@@ -434,7 +434,7 @@ fn the_margin_must_be_less_than_the_session() {
             session: 30
         }
     );
-    assert_eq!(error.location, loc(3, 57));
+    assert_eq!(error.location, Some(loc(3, 57)));
     // Margin key order does not matter, and the default margin fits the smallest session.
     assert_eq!(
         kind(
@@ -473,7 +473,7 @@ fn anchors_and_aliases_are_refused_at_the_anchor() {
     ] {
         let error = load_error(&yaml).unwrap();
         assert_eq!(error.kind, ConfigProblemKind::AnchorOrAlias {}, "{yaml:?}");
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -481,7 +481,7 @@ fn anchors_and_aliases_are_refused_at_the_anchor() {
 fn an_undefined_alias_is_reported_as_an_alias() {
     let error = load_error("vpn:\n  port: *nope\n").unwrap();
     assert_eq!(error.kind, ConfigProblemKind::AnchorOrAlias {});
-    assert_eq!(error.location, loc(2, 9));
+    assert_eq!(error.location, Some(loc(2, 9)));
 }
 
 #[test]
@@ -496,7 +496,7 @@ fn merge_keys_are_refused() {
     ] {
         let error = load_error(yaml).unwrap();
         assert_eq!(error.kind, ConfigProblemKind::MergeKey {}, "{yaml:?}");
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -508,7 +508,7 @@ fn a_quoted_merge_lookalike_is_just_an_unknown_key() {
             kind: ConfigWarningKind::UnknownKey {
                 path: "vpn.<<".into()
             },
-            location: loc(2, 3)
+            location: Some(loc(2, 3))
         }]
     );
 }
@@ -554,7 +554,7 @@ fn explicit_tags_are_refused() {
             ConfigProblemKind::ExplicitTag { tag: tag.into() },
             "{yaml:?}"
         );
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -569,7 +569,7 @@ fn the_root_must_be_a_mapping() {
     ] {
         let error = load_error(yaml).unwrap();
         assert_eq!(error.kind, ConfigProblemKind::RootNotMapping {}, "{yaml:?}");
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -656,7 +656,7 @@ fn wrong_node_kinds() {
             },
             "{yaml:?}"
         );
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -664,5 +664,5 @@ fn wrong_node_kinds() {
 fn complex_keys_are_refused() {
     let error = load_error("vpn:\n  ? [a, b]\n  : c\n").unwrap();
     assert_eq!(error.kind, ConfigProblemKind::ComplexKey {});
-    assert_eq!(error.location, loc(2, 5));
+    assert_eq!(error.location, Some(loc(2, 5)));
 }

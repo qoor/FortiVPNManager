@@ -26,10 +26,6 @@ fn empty() -> ImportedSettings {
     }
 }
 
-fn some(text: &str) -> Option<String> {
-    Some(text.to_owned())
-}
-
 fn password(settings: &ImportedSettings) -> Option<&str> {
     settings.password.as_ref().map(|secret| secret.0.as_str())
 }
@@ -57,9 +53,9 @@ fn every_value_of_the_user_file_shape_is_imported() {
     assert_eq!(
         read(&user_file_shape()),
         ImportedSettings {
-            host: some("203.0.113.10"),
+            host: Some("203.0.113.10".to_owned()),
             port: 8443,
-            username: some("alice"),
+            username: Some("alice".to_owned()),
             password: Some(SecretText("s3cr3t".into())),
             unknown_keys: vec!["insecure-cert".into()],
             ..empty()
@@ -72,9 +68,9 @@ fn an_unknown_key_before_other_keys_does_not_stop_reading() {
     let settings = read(&format!(
         "insecure-cert = 1\nhost = 203.0.113.10\nport = 8443\nusername = alice\npassword = s3cr3t\ntrusted-cert = {PIN_A}"
     ));
-    assert_eq!(settings.host, some("203.0.113.10"));
+    assert_eq!(settings.host, Some("203.0.113.10".to_owned()));
     assert_eq!(settings.port, 8443);
-    assert_eq!(settings.username, some("alice"));
+    assert_eq!(settings.username, Some("alice".to_owned()));
     assert_eq!(password(&settings), Some("s3cr3t"));
     assert_eq!(settings.trusted_cert_pins, [PIN_A]);
     assert_eq!(settings.unknown_keys, ["insecure-cert"]);
@@ -85,9 +81,9 @@ fn unknown_keys_in_the_middle_are_reported_once_in_order() {
     let settings = read(
         "host = vpn.example.com\ninsecure-cert = 1\nport = 10443\nbogus = x\ninsecure-cert = 0\nusername = alice",
     );
-    assert_eq!(settings.host, some("vpn.example.com"));
+    assert_eq!(settings.host, Some("vpn.example.com".to_owned()));
     assert_eq!(settings.port, 10443);
-    assert_eq!(settings.username, some("alice"));
+    assert_eq!(settings.username, Some("alice".to_owned()));
     assert_eq!(settings.unknown_keys, ["insecure-cert", "bogus"]);
     assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
@@ -138,9 +134,9 @@ fn spacing_variants_crlf_and_bom_are_accepted() {
         assert_eq!(
             read(text),
             ImportedSettings {
-                host: some("vpn.example.com"),
+                host: Some("vpn.example.com".to_owned()),
                 port: 8443,
-                username: some("alice"),
+                username: Some("alice".to_owned()),
                 ..empty()
             },
             "{text:?}"
@@ -154,9 +150,9 @@ fn comments_and_blank_lines_are_skipped_but_a_hash_inside_a_value_stays() {
         "# openfortivpn config\n#host = commented.example.com\n   # indented comment = with equals sign\n\t\n\
          host = vpn.example.com\npassword = p#ss # not a comment\nrealm = staff",
     );
-    assert_eq!(settings.host, some("vpn.example.com"));
+    assert_eq!(settings.host, Some("vpn.example.com".to_owned()));
     assert_eq!(password(&settings), Some("p#ss # not a comment"));
-    assert_eq!(settings.realm, some("staff"));
+    assert_eq!(settings.realm, Some("staff".to_owned()));
     assert_eq!(settings.unknown_keys, Vec::<String>::new());
     assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
@@ -165,7 +161,7 @@ fn comments_and_blank_lines_are_skipped_but_a_hash_inside_a_value_stays() {
 fn a_line_splits_at_the_first_equals_sign() {
     let settings = read("password = a=b==\nusername==alice\n");
     assert_eq!(password(&settings), Some("a=b=="));
-    assert_eq!(settings.username, some("=alice"));
+    assert_eq!(settings.username, Some("=alice".to_owned()));
 }
 
 #[test]
@@ -173,7 +169,7 @@ fn malformed_lines_are_reported_with_one_based_numbers() {
     let settings = read(
         "host = vpn.example.com\nthis line has no equals sign\n= value without key\nport = 8443",
     );
-    assert_eq!(settings.host, some("vpn.example.com"));
+    assert_eq!(settings.host, Some("vpn.example.com".to_owned()));
     assert_eq!(settings.port, 8443);
     assert_eq!(settings.unreadable_lines, [2, 3]);
 }
@@ -183,7 +179,7 @@ fn later_lines_override_earlier_ones_and_empty_values_clear() {
     let settings = read(
         "host = first.example.com\nhost = second.example.com\nusername = alice\nusername =\nrealm =\npassword =\t",
     );
-    assert_eq!(settings.host, some("second.example.com"));
+    assert_eq!(settings.host, Some("second.example.com".to_owned()));
     assert_eq!(settings.username, None);
     assert_eq!(settings.realm, None);
     assert_eq!(settings.password, None);
@@ -256,7 +252,7 @@ fn ignored_openfortivpn_options_differ_from_unknown_keys() {
     );
     // `pppd` only exists in non-pppd builds; keys are case-sensitive (strcmp).
     assert_eq!(settings.unknown_keys, ["pppd", "Host"]);
-    assert_eq!(settings.host, some("vpn.example.com"));
+    assert_eq!(settings.host, Some("vpn.example.com".to_owned()));
 }
 
 #[test]
@@ -295,9 +291,9 @@ fn invalid_utf8_is_reported_per_line_instead_of_decoded_lossily() {
     bytes.extend([0xFF, 0x3D, 0x31, 0x0A]); // "\xFF=1"
     bytes.extend(b"username = alice\n");
     let settings = super::read(&bytes);
-    assert_eq!(settings.host, some("vpn.example.com"));
+    assert_eq!(settings.host, Some("vpn.example.com".to_owned()));
     assert_eq!(settings.password, None);
-    assert_eq!(settings.username, some("alice"));
+    assert_eq!(settings.username, Some("alice".to_owned()));
     assert_eq!(settings.unknown_keys, ["\u{FF}key"]);
     assert_eq!(settings.unreadable_lines, [2, 4]);
 }
@@ -313,7 +309,7 @@ fn empty_or_comment_only_files_import_nothing() {
 fn the_last_line_without_a_newline_is_read() {
     assert_eq!(
         read("host = vpn.example.com\nrealm = staff").realm,
-        some("staff")
+        Some("staff".to_owned())
     );
 }
 

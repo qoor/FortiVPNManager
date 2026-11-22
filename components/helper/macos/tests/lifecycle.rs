@@ -32,7 +32,10 @@ fn exit_when_idle_exits_once_the_asking_app_disconnects_and_admits_no_one_meanwh
     assert!(!os_side.connect_app(2, 501));
     assert_eq!(
         os_side.connect(1, ATTEMPT),
-        error("busy", "the Helper is shutting down; try again shortly")
+        Some(error(
+            "busy",
+            "the Helper is shutting down; try again shortly"
+        ))
     );
     let again = os_side.request(1, &json!({"exitWhenIdle": {}}));
     assert!(os_side.reply_flag(again));
@@ -205,7 +208,10 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
     assert!(!os_side.connect_app(2, 501));
     assert_eq!(
         os_side.connect(1, OTHER_ATTEMPT),
-        error("busy", "the Helper is shutting down; try again shortly")
+        Some(error(
+            "busy",
+            "the Helper is shutting down; try again shortly"
+        ))
     );
     os_side.answer_network("revert", &reverted());
     os_side.wait_until("the exit", |os_side| {
@@ -315,6 +321,9 @@ fn a_replaced_helper_that_is_idle_refuses_new_connections_and_exits() {
     // The app that is still connected gets its answers.
     assert_eq!(
         os_side.connect(1, ATTEMPT),
-        error("busy", "the Helper is shutting down; try again shortly")
+        Some(error(
+            "busy",
+            "the Helper is shutting down; try again shortly"
+        ))
     );
 }

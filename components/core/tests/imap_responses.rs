@@ -42,11 +42,11 @@ fn untagged(status: Status, code: Option<ResponseCode>, text: &str) -> Response 
     }
 }
 
-fn code(name: &str, argument: Option<&str>) -> Option<ResponseCode> {
-    Some(ResponseCode::Other {
+fn code(name: &str, argument: Option<&str>) -> ResponseCode {
+    ResponseCode::Other {
         name: name.into(),
         argument: argument.map(Into::into),
-    })
+    }
 }
 
 fn other(line: &str) -> Response {
@@ -234,7 +234,7 @@ fn greeting_and_capability() {
             tagged(
                 "A0001",
                 Status::Ok,
-                code("CAPABILITY", Some("IMAP4rev1 IDLE MOVE SPECIAL-USE")),
+                Some(code("CAPABILITY", Some("IMAP4rev1 IDLE MOVE SPECIAL-USE"))),
                 "user@example.com authenticated (Success)"
             ),
         ]
@@ -249,7 +249,7 @@ fn status_responses() {
             tagged(
                 "A0001",
                 Status::No,
-                code("AUTHENTICATIONFAILED", None),
+                Some(code("AUTHENTICATIONFAILED", None)),
                 "Invalid credentials (Failure)",
             ),
         ),
@@ -271,7 +271,7 @@ fn status_responses() {
             tagged(
                 "a7",
                 Status::Ok,
-                code("READ-WRITE", None),
+                Some(code("READ-WRITE", None)),
                 "[Gmail]/All Mail selected. (Success)",
             ),
         ),
@@ -281,10 +281,10 @@ fn status_responses() {
             tagged(
                 "A0004",
                 Status::No,
-                code(
+                Some(code(
                     "WEBALERT",
                     Some("https://accounts.google.com/signin/continue?x=1"),
-                ),
+                )),
                 "Web login required.",
             ),
         ),
@@ -293,13 +293,18 @@ fn status_responses() {
             tagged(
                 "A0005",
                 Status::No,
-                code("TRYCREATE", None),
+                Some(code("TRYCREATE", None)),
                 "No folder [Gmail]/Nope (Failure)",
             ),
         ),
         (
             "A0006 OK [READ-ONLY] Examined",
-            tagged("A0006", Status::Ok, code("READ-ONLY", None), "Examined"),
+            tagged(
+                "A0006",
+                Status::Ok,
+                Some(code("READ-ONLY", None)),
+                "Examined",
+            ),
         ),
         (
             "* NO [UNAVAILABLE] Temporary System Problem",
@@ -311,7 +316,11 @@ fn status_responses() {
         ),
         (
             "* BAD [CLIENTBUG] Unknown command",
-            untagged(Status::Bad, code("CLIENTBUG", None), "Unknown command"),
+            untagged(
+                Status::Bad,
+                Some(code("CLIENTBUG", None)),
+                "Unknown command",
+            ),
         ),
         (
             "* BYE System error",
@@ -353,10 +362,10 @@ fn select_replies_produce_a_snapshot() {
             other(r"* FLAGS (\Answered \Flagged \Draft \Deleted \Seen $NotPhishing $Phishing)"),
             untagged(
                 Status::Ok,
-                code(
+                Some(code(
                     "PERMANENTFLAGS",
                     Some(r"(\Answered \Flagged \Draft \Deleted \Seen $NotPhishing $Phishing \*)")
-                ),
+                )),
                 "Flags permitted.",
             ),
             untagged(
@@ -371,11 +380,11 @@ fn select_replies_produce_a_snapshot() {
                 Some(ResponseCode::UidNext(512_345)),
                 "Predicted next UID."
             ),
-            untagged(Status::Ok, code("HIGHESTMODSEQ", Some("9876543")), ""),
+            untagged(Status::Ok, Some(code("HIGHESTMODSEQ", Some("9876543"))), ""),
             tagged(
                 "A0003",
                 Status::Ok,
-                code("READ-WRITE", None),
+                Some(code("READ-WRITE", None)),
                 "[Gmail]/&yATMtLz0rQDVaA- selected. (Success)"
             ),
         ]
@@ -402,7 +411,7 @@ fn a_snapshot_needs_both_codes() {
     ]));
     assert_eq!(
         bad_number[1],
-        untagged(Status::Ok, code("UIDNEXT", Some("99999999999")), "")
+        untagged(Status::Ok, Some(code("UIDNEXT", Some("99999999999"))), "")
     );
     assert_eq!(MailboxSnapshot::from_select_responses(&bad_number), None);
 }
@@ -626,7 +635,7 @@ fn move_replies() {
         vec![
             untagged(
                 Status::Ok,
-                code("COPYUID", Some("7 512345:512346 901:902")),
+                Some(code("COPYUID", Some("7 512345:512346 901:902"))),
                 "(Success)"
             ),
             other("* 48214 EXPUNGE"),

@@ -241,10 +241,10 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(
         os_side.connect(1, ATTEMPT),
-        error(
+        Some(error(
             "internalError",
             &format!("could not prepare the run directory: {unusable}")
-        )
+        ))
     );
     assert!(os_side.logs().iter().any(|line| {
         line == &format!("error helper: cannot prepare the run directory: {unusable}")

@@ -204,14 +204,14 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
 
     assert_eq!(
         os_side.connect(2, OTHER_ATTEMPT),
-        error("busy", "openconnect is already running")
+        Some(error("busy", "openconnect is already running"))
     );
     assert_eq!(
         os_side.connect(3, OTHER_ATTEMPT),
-        error(
+        Some(error(
             "notAuthorized",
             "a VPN run started by another user is active"
-        )
+        ))
     );
     let refused = [
         (
@@ -242,7 +242,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     ];
     for (app, request, expected) in refused {
         let id = os_side.request(app, &request);
-        assert_eq!(os_side.reply(id), expected);
+        assert_eq!(os_side.reply(id), Some(expected));
     }
 
     // Any connection of the owner's user may control the run; attempt IDs ignore case.
@@ -251,17 +251,17 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     let id = os_side.request(1, &submit_otp(ATTEMPT, OTP));
     assert_eq!(
         os_side.reply(id),
-        error(
+        Some(error(
             "wrongPhase",
             "an OTP was already submitted for this attempt"
-        )
+        ))
     );
     os_side.bring_up(1);
     // A stop names the run it is for.
     let id = os_side.request(2, &disconnect("", "userDisconnect"));
     assert_eq!(
         os_side.reply(id),
-        error("unknownAttempt", "not the active connection attempt")
+        Some(error("unknownAttempt", "not the active connection attempt"))
     );
     let id = os_side.request(2, &disconnect(ATTEMPT, "notAReason"));
     assert_eq!(os_side.reply(id), None);
@@ -278,12 +278,12 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
     let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(
         os_side.reply(id),
-        error("unknownAttempt", "not the active connection attempt")
+        Some(error("unknownAttempt", "not the active connection attempt"))
     );
     let id = os_side.request(1, &submit_otp("", OTP));
     assert_eq!(
         os_side.reply(id),
-        error("unknownAttempt", "not the active connection attempt")
+        Some(error("unknownAttempt", "not the active connection attempt"))
     );
 }
 
@@ -307,11 +307,14 @@ fn a_bad_connect_request_starts_nothing() {
     );
     assert_eq!(
         os_side.reply(undecodable),
-        error("invalidRequest", "could not decode the connect request")
+        Some(error(
+            "invalidRequest",
+            "could not decode the connect request"
+        ))
     );
     assert_eq!(
         os_side.reply(invalid),
-        error("invalidRequest", "port 0 is refused")
+        Some(error("invalidRequest", "port 0 is refused"))
     );
     assert_eq!(os_side.status(1)["sessionRunning"], false);
     assert_eq!(os_side.events(1), Vec::<Value>::new());
@@ -421,9 +424,9 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
     let otp = os_side.request(1, &submit_otp(ATTEMPT, OTP));
     let stop = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     let status = os_side.request(1, &json!({"status": {}}));
-    assert_eq!(os_side.reply(connect), gone);
-    assert_eq!(os_side.reply(otp), gone);
-    assert_eq!(os_side.reply(stop), gone);
+    assert_eq!(os_side.reply(connect), Some(gone.clone()));
+    assert_eq!(os_side.reply(otp), Some(gone.clone()));
+    assert_eq!(os_side.reply(stop), Some(gone));
     assert_eq!(os_side.reply_json(status)["sessionRunning"], false);
 
     let late = os_side.received_within(Duration::from_millis(300));

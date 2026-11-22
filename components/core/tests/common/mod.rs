@@ -39,8 +39,8 @@ pub fn validation_error(settings: &Settings) -> Option<ConfigProblemKind> {
     }
 }
 
-pub fn loc(line: u32, column: u32) -> Option<LineColumn> {
-    Some(LineColumn { line, column })
+pub fn loc(line: u32, column: u32) -> LineColumn {
+    LineColumn { line, column }
 }
 
 pub fn time(hour: u8, minute: u8) -> TimeOfDay {

@@ -435,6 +435,6 @@ pub fn disconnect(attempt: &str, reason: &str) -> Value {
     json!({"disconnect": {"attempt": attempt, "reason": reason}})
 }
 
-pub fn error(code: &str, message: &str) -> Option<Value> {
-    Some(json!({"code": code, "message": message}))
+pub fn error(code: &str, message: &str) -> Value {
+    json!({"code": code, "message": message})
 }

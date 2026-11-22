@@ -21,7 +21,7 @@ fn kind(yaml: &str) -> ConfigProblemKind {
 fn warning(kind: ConfigWarningKind, line: u32, column: u32) -> ConfigWarning {
     ConfigWarning {
         kind,
-        location: loc(line, column),
+        location: Some(loc(line, column)),
     }
 }
 
@@ -54,7 +54,7 @@ fn duplicate_keys() {
 fn multiple_documents_are_refused() {
     let error = load_error("vpn: {}\n---\notp: {}\n").unwrap();
     assert_eq!(error.kind, ConfigProblemKind::MultipleDocuments {});
-    assert_eq!(error.location, loc(2, 1));
+    assert_eq!(error.location, Some(loc(2, 1)));
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn syntax_errors_carry_line_and_column() {
             "{yaml:?}: {:?}",
             error.kind
         );
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -158,11 +158,14 @@ fn invalid_utf8_is_located() {
     bytes.extend(b"b\"\n");
     let error = config::read(&bytes).unwrap_err();
     assert_eq!(error.kind, ConfigProblemKind::InvalidUtf8 {});
-    assert_eq!(error.location, loc(2, 11));
+    assert_eq!(error.location, Some(loc(2, 11)));
     // A truncated multi-byte sequence after non-ASCII text on the first line.
     let mut truncated = "# \u{D55C}\u{AE00}".as_bytes().to_vec();
     truncated.extend([0xED, 0x95]);
-    assert_eq!(config::read(&truncated).unwrap_err().location, loc(1, 5));
+    assert_eq!(
+        config::read(&truncated).unwrap_err().location,
+        Some(loc(1, 5))
+    );
     // An encoded surrogate (invalid in UTF-8).
     assert_eq!(
         config::read(&[0x61, 0x3A, 0x20, 0xED, 0xA0, 0x80])
@@ -189,7 +192,7 @@ fn raw_characters_the_reader_refuses_are_located() {
             ConfigProblemKind::DisallowedCharacter { scalar },
             "{yaml:?}"
         );
-        assert_eq!(error.location, location, "{yaml:?}");
+        assert_eq!(error.location, Some(location), "{yaml:?}");
     }
 }
 
@@ -202,7 +205,7 @@ fn raw_next_line_and_separators_are_refused() {
             error.kind,
             ConfigProblemKind::DisallowedCharacter { scalar }
         );
-        assert_eq!(error.location, loc(2, 11));
+        assert_eq!(error.location, Some(loc(2, 11)));
     }
 }
 
@@ -281,7 +284,7 @@ fn a_newer_version_is_refused() {
         error.kind,
         ConfigProblemKind::NewerSchemaVersion { version: 2 }
     );
-    assert_eq!(error.location, loc(1, 17));
+    assert_eq!(error.location, Some(loc(1, 17)));
 }
 
 #[test]
@@ -305,7 +308,7 @@ fn invalid_versions() {
         ("schema_version: v1\n", "invalid"),
     ] {
         let error = load_error(yaml).unwrap();
-        assert_eq!(error.location, loc(1, 17), "{yaml:?}");
+        assert_eq!(error.location, Some(loc(1, 17)), "{yaml:?}");
         let matched = match (&error.kind, expected) {
             (
                 ConfigProblemKind::OutOfRange {
@@ -527,7 +530,7 @@ fn a_dtls_value_that_is_not_a_boolean_is_an_error_at_the_value() {
     ] {
         let error = load_error(&format!("vpn:\n  host: vpn.example.com\n  dtls: {raw}\n")).unwrap();
         assert_eq!(error.kind, expected, "{raw}");
-        assert_eq!(error.location, loc(3, 9), "{raw}");
+        assert_eq!(error.location, Some(loc(3, 9)), "{raw}");
     }
 }
 
@@ -574,7 +577,7 @@ fn other_otp_methods_are_errors_at_the_value() {
             },
             "{raw}"
         );
-        assert_eq!(error.location, loc(3, 11), "{raw}");
+        assert_eq!(error.location, Some(loc(3, 11)), "{raw}");
     }
 }
 
@@ -614,6 +617,6 @@ fn the_client_id_refuses_control_characters() {
             },
             "{literal}"
         );
-        assert_eq!(error.location, loc(2, 21));
+        assert_eq!(error.location, Some(loc(2, 21)));
     }
 }

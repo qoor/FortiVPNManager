@@ -26,7 +26,7 @@ impl ConnectionManager {
         let phase = replaced.as_ref().unwrap_or(&self.phase);
         let attention = matches!(phase, Phase::SetupRequired(_) | Phase::Failed(_));
         ConnectionSection {
-            icon: self.icon(phase),
+            icon: Self::icon(phase),
             status: self.status(phase),
             wait_reason: match phase {
                 Phase::WaitingRetry { reason, .. } => Some(self.wait_reason(*reason)),
@@ -115,7 +115,7 @@ impl ConnectionManager {
         }
     }
 
-    fn icon(&self, phase: &Phase) -> ConnectionIcon {
+    fn icon(phase: &Phase) -> ConnectionIcon {
         match phase {
             Phase::Connected(_) => ConnectionIcon::Connected,
             // Waiting for an away user is not a reconnect under way.

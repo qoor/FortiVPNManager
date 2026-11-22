@@ -70,7 +70,11 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
     let handler = move |control| match control {
         ServiceControl::Stop | ServiceControl::Preshutdown | ServiceControl::Shutdown => {
             if let Some(status) = status_side.get() {
-                report(status, ServiceState::StopPending, ServiceExitCode::Win32(0));
+                report(
+                    *status,
+                    ServiceState::StopPending,
+                    ServiceExitCode::Win32(0),
+                );
             }
             // Stop is accepted only once the Helper runs.
             if let Some(helper) = control_side.get() {
@@ -94,7 +98,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
     };
     let _ = status.set(handle);
     report(
-        &handle,
+        handle,
         ServiceState::StartPending,
         ServiceExitCode::Win32(0),
     );
@@ -131,7 +135,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
                 &format!("cannot open the pipe {PIPE_NAME}: {error}"),
             );
             report(
-                &handle,
+                handle,
                 ServiceState::Stopped,
                 ServiceExitCode::ServiceSpecific(2),
             );
@@ -139,7 +143,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
         }
     };
     let helper = helper.get_or_init(|| started);
-    report(&handle, ServiceState::Running, ServiceExitCode::Win32(0));
+    report(handle, ServiceState::Running, ServiceExitCode::Win32(0));
     log(
         LogLevel::Notice,
         LogCategory::Helper,
@@ -153,7 +157,7 @@ extern "system" fn service_main(_argument_count: u32, _arguments: *mut *mut u16)
             end_for_restart();
         }
     }
-    report(&handle, ServiceState::Stopped, ServiceExitCode::Win32(0));
+    report(handle, ServiceState::Stopped, ServiceExitCode::Win32(0));
     // The other threads would keep the process alive.
     std::process::exit(0);
 }
@@ -179,7 +183,7 @@ fn event_log() -> Log {
 /// shutdown notices, the pending states say how long to wait, and `exit_code` tells how a stopped
 /// service ended.
 fn report(
-    handle: &service_control_handler::ServiceStatusHandle,
+    handle: service_control_handler::ServiceStatusHandle,
     state: ServiceState,
     exit_code: ServiceExitCode,
 ) {

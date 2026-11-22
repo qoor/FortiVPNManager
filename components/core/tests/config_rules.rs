@@ -59,7 +59,7 @@ fn entries_are_read_in_canonical_spelling_and_repeats_dropped() {
                 path: "routes.bypass_vpn".into(),
                 index: 2
             },
-            location: loc(5, 7),
+            location: Some(loc(5, 7)),
         }]
     );
 }
@@ -77,7 +77,7 @@ fn a_malformed_entry_fails_the_file_at_the_entry() {
             problem: AddressProblem::Malformed {},
         }
     );
-    assert_eq!(error.location, loc(4, 7));
+    assert_eq!(error.location, Some(loc(4, 7)));
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn overlapping_entries_fail_the_file() {
             other: "10.30.161.0/24".into()
         }
     );
-    assert_eq!(error.location, loc(4, 7));
+    assert_eq!(error.location, Some(loc(4, 7)));
     assert_eq!(
         load_error("routes:\n  networks: [10.20.161.0/24, 10.20.0.0/16]\n")
             .unwrap()
@@ -256,7 +256,7 @@ fn the_vpn_servers_address_is_no_exception_target() {
             path: "routes.bypass_vpn".into(),
         }
     );
-    assert_eq!(error.location, loc(7, 7));
+    assert_eq!(error.location, Some(loc(7, 7)));
     let named =
         decode("vpn:\n  host: \"vpn.example.com\"\nroutes:\n  bypass_vpn: [10.30.161.16]\n");
     assert_eq!(named.settings.routes.bypass_vpn, [bypass_host()]);
@@ -323,7 +323,7 @@ fn other_time_spellings_are_errors_at_the_value() {
             "{raw}: {:?}",
             error.kind
         );
-        assert_eq!(error.location, loc(3, 12), "{raw}");
+        assert_eq!(error.location, Some(loc(3, 12)), "{raw}");
     }
 }
 
@@ -351,7 +351,7 @@ fn the_end_must_be_later_than_the_start() {
             end: time(9, 0)
         }
     );
-    assert_eq!(error.location, loc(2, 36));
+    assert_eq!(error.location, Some(loc(2, 36)));
     assert_eq!(
         load_error("connection:\n  schedule: { start: \"18:00\" }\n")
             .unwrap()
@@ -393,7 +393,7 @@ fn unknown_day_names_are_errors_at_the_item() {
         };
         assert_eq!(path, "connection.schedule.days");
         assert_eq!(allowed, &["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
-        assert_eq!(error.location, loc(2, 27), "{raw}");
+        assert_eq!(error.location, Some(loc(2, 27)), "{raw}");
     }
 }
 
@@ -420,7 +420,7 @@ fn unknown_schedule_keys_are_warnings() {
             kind: ConfigWarningKind::UnknownKey {
                 path: "connection.schedule.holidays".into()
             },
-            location: loc(2, 30),
+            location: Some(loc(2, 30)),
         }]
     );
 }
