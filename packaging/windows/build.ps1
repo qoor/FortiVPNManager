@@ -85,6 +85,8 @@ function Add-LanguageTransform([string] $package, [string] $localized, [int] $la
 if ($PSCmdlet.ParameterSetName -eq 'Build') {
     $Build = (Get-Date).ToString('yyyyMMddHHmmss')
     Push-Location $root
+    $encoding = [Console]::OutputEncoding
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
     try {
         $env:FVM_BUILD = $Build
         $messages = Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-windows')
@@ -93,6 +95,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Build') {
         $metadata = & cargo metadata --format-version 1 --no-deps
         if ($LASTEXITCODE -ne 0) { throw "cargo metadata failed with exit code $LASTEXITCODE" }
     } finally {
+        [Console]::OutputEncoding = $encoding
         Pop-Location
     }
     $RustOutput = Join-Path ($metadata | ConvertFrom-Json).target_directory 'release'

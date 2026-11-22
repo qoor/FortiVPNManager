@@ -52,6 +52,7 @@ if [ "${2-}" != build ]; then
         for tool in gcc pkgconf autoconf automake libtoolize make perl curl git zip unzip; do
             command -v "$tool" >/dev/null || { echo "error: $tool not found: pacman -S --needed $packages" >&2; exit 1; }
         done
+        owners=$(pacman -Qo /ucrt64/bin/gcc.exe /ucrt64/bin/ld.exe /ucrt64/include/stdlib.h /ucrt64/lib/libucrt.a)
     fi
     hash=$(
         {
@@ -64,7 +65,7 @@ if [ "${2-}" != build ]; then
             elif [ "$system" = Darwin ]; then
                 readlink "$brew/opt/mingw-w64"
             else
-                pacman -Qo /ucrt64/bin/gcc.exe /ucrt64/bin/ld.exe /ucrt64/include/stdlib.h /ucrt64/lib/libucrt.a
+                echo "$owners"
             fi
         } | sha256 | cut -c 1-16
     )
