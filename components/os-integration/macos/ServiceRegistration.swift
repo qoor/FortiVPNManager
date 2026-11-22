@@ -6,57 +6,59 @@ import ServiceManagement
 /// somewhere else.
 @MainActor
 enum ServiceRegistration {
-    // Compare paths, not URLs: URL equality counts the trailing slash that Bundle.bundleURL carries.
-    nonisolated static func isInstalledCopy(at bundleURL: URL) -> Bool {
-        bundleURL.resolvingSymlinksInPath().path == "/Applications/FortiVPNManager.app"
-    }
+  // Compare paths, not URLs: URL equality counts the trailing slash that Bundle.bundleURL carries.
+  nonisolated static func isInstalledCopy(at bundleURL: URL) -> Bool {
+    bundleURL.resolvingSymlinksInPath().path == "/Applications/FortiVPNManager.app"
+  }
 
-    static func helperStatus() -> AppInternal.PortResponse {
-        .registration(status: status(of: helper))
-    }
+  static func helperStatus() -> AppInternal.PortResponse {
+    .registration(status: status(of: helper))
+  }
 
-    static func registerHelper() -> AppInternal.PortResponse {
-        change { try helper.register() }
-    }
+  static func registerHelper() -> AppInternal.PortResponse {
+    change { try helper.register() }
+  }
 
-    static func loginItemStatus() -> AppInternal.PortResponse {
-        .registration(status: status(of: .mainApp))
-    }
+  static func loginItemStatus() -> AppInternal.PortResponse {
+    .registration(status: status(of: .mainApp))
+  }
 
-    static func setLoginItem(_ enabled: Bool) -> AppInternal.PortResponse {
-        change {
-            if enabled {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-        }
+  static func setLoginItem(_ enabled: Bool) -> AppInternal.PortResponse {
+    change {
+      if enabled {
+        try SMAppService.mainApp.register()
+      } else {
+        try SMAppService.mainApp.unregister()
+      }
     }
+  }
 
-    /// Login Items & Extensions, where the Helper's background activity is approved.
-    static func openApprovalSettings() {
-        SMAppService.openSystemSettingsLoginItems()
+  /// Login Items & Extensions, where the Helper's background activity is approved.
+  static func openApprovalSettings() {
+    SMAppService.openSystemSettingsLoginItems()
+  }
+
+  private static var helper: SMAppService { .daemon(plistName: FortiIdentifiers.helperPlistName) }
+
+  private static func change(_ body: () throws -> Void) -> AppInternal.PortResponse {
+    guard isInstalledCopy(at: Bundle.main.bundleURL) else {
+      return .registrationFailed(error: .notInstalledCopy)
     }
-
-    private static var helper: SMAppService { .daemon(plistName: FortiIdentifiers.helperPlistName) }
-
-    private static func change(_ body: () throws -> Void) -> AppInternal.PortResponse {
-        guard isInstalledCopy(at: Bundle.main.bundleURL) else { return .registrationFailed(error: .notInstalledCopy) }
-        do {
-            try body()
-            return .registered
-        } catch {
-            return .registrationFailed(error: .failed(description: error.localizedDescription))
-        }
+    do {
+      try body()
+      return .registered
+    } catch {
+      return .registrationFailed(error: .failed(description: error.localizedDescription))
     }
+  }
 
-    private static func status(of service: SMAppService) -> AppInternal.RegistrationStatus {
-        switch service.status {
-        case .notRegistered: .notRegistered
-        case .enabled: .enabled
-        case .requiresApproval: .requiresApproval
-        case .notFound: .notFound
-        @unknown default: .notFound
-        }
+  private static func status(of service: SMAppService) -> AppInternal.RegistrationStatus {
+    switch service.status {
+    case .notRegistered: .notRegistered
+    case .enabled: .enabled
+    case .requiresApproval: .requiresApproval
+    case .notFound: .notFound
+    @unknown default: .notFound
     }
+  }
 }
