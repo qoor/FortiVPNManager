@@ -253,26 +253,6 @@
   },
   {
     "portResponse": {
-      "id": 18,
-      "response": {
-        "interfaceAddresses": {
-          "addresses": [
-            {
-              "name": "en0",
-              "up": true,
-              "ipv4": "10.20.161.20"
-            },
-            {
-              "name": "ppp0",
-              "up": true
-            }
-          ]
-        }
-      }
-    }
-  },
-  {
-    "portResponse": {
       "id": 19,
       "response": {
         "primaryRouter": {

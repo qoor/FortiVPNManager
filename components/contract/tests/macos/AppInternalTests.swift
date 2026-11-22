@@ -895,7 +895,6 @@ extension AppInternal {
             json: #"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#
           ))),
       .portRequest(id: 17, request: .routeInterface(destination: "203.0.113.10")),
-      .portRequest(id: 18, request: .interfaceAddresses),
       .portRequest(id: 19, request: .primaryRouter),
       .portRequest(id: 20, request: .screenState),
       .portRequest(
@@ -1046,12 +1045,6 @@ extension AppInternal {
       .portResponse(id: 8, response: .helperBuildMismatch(helperBuild: "20261108090000")),
       .portResponse(id: 17, response: .routeInterface(interface: "en0")),
       .portResponse(id: 17, response: .routeInterface(interface: nil)),
-      .portResponse(
-        id: 18,
-        response: .interfaceAddresses(addresses: [
-          InterfaceAddress(name: "en0", up: true, ipv4: "10.20.161.20"),
-          InterfaceAddress(name: "ppp0", up: true, ipv4: nil),
-        ])),
       .portResponse(id: 19, response: .primaryRouter(router: "10.20.161.1")),
       .portResponse(id: 19, response: .primaryRouter(router: nil)),
       .portResponse(id: 20, response: .screenState(locked: true, displaysAsleep: false)),

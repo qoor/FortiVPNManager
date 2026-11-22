@@ -37,8 +37,6 @@ pub enum PortRequest {
 
     /// The interface the routing table uses for `destination`. Answered by `RouteInterface`.
     RouteInterface { destination: Ipv4Addr },
-    /// Answered by `InterfaceAddresses`.
-    InterfaceAddresses {},
     /// The primary network's IPv4 router. Answered by `PrimaryRouter`.
     PrimaryRouter {},
     /// Answered by `ScreenState`.
@@ -101,9 +99,6 @@ pub enum PortResponse {
 
     RouteInterface {
         interface: Option<String>,
-    },
-    InterfaceAddresses {
-        addresses: Vec<InterfaceAddress>,
     },
     PrimaryRouter {
         router: Option<Ipv4Addr>,
@@ -279,15 +274,6 @@ pub enum RegistrationError {
     NotInstalledCopy {},
     /// As the OS describes it.
     Failed { description: String },
-}
-
-/// One address of a network interface; an interface appears once per address.
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InterfaceAddress {
-    pub name: String,
-    pub up: bool,
-    pub ipv4: Option<Ipv4Addr>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]

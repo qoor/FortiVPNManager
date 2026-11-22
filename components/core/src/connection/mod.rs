@@ -30,7 +30,7 @@ use fvm_contract::app_helper::{
     AttemptId, HelperErrorCode, HelperEvent, RunRequest, SessionId, StopReason,
 };
 use fvm_contract::app_internal::event::PathInterface;
-use fvm_contract::app_internal::port::{InterfaceAddress, RegistrationError};
+use fvm_contract::app_internal::port::RegistrationError;
 use fvm_contract::app_internal::{OtpMethod, SecretText};
 use jiff::tz::TimeZone;
 
@@ -432,6 +432,14 @@ pub struct GatewayLookup {
     /// The address resolved earlier for `host`. Without it the runtime resolves `host`; inside the
     /// tunnel, DNS may answer with another address, so it is resolved once per host.
     pub known_ip: Option<Ipv4Addr>,
+}
+
+/// An IPv4 address of a network interface.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct InterfaceAddress {
+    pub name: String,
+    pub up: bool,
+    pub ipv4: Ipv4Addr,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

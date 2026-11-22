@@ -51,20 +51,6 @@ internal static class SystemFacts
         return NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(nic => Ipv4Index(nic) == index)?.Name;
     }
 
-    /// <summary>Every IPv4 address of every interface; an interface without one appears once without an address.</summary>
-    public static IReadOnlyList<InterfaceAddress> InterfaceAddresses() =>
-        NetworkInterface.GetAllNetworkInterfaces()
-            .SelectMany(nic =>
-            {
-                var up = nic.OperationalStatus == OperationalStatus.Up;
-                var addresses = nic.GetIPProperties().UnicastAddresses
-                    .Where(unicast => unicast.Address.AddressFamily == AddressFamily.InterNetwork)
-                    .Select(unicast => new InterfaceAddress(nic.Name, up, unicast.Address.ToString()))
-                    .ToList();
-                return addresses.Count > 0 ? addresses : [new InterfaceAddress(nic.Name, up)];
-            })
-            .ToList();
-
     /// <summary>The next hop of the default route the routing table picks.</summary>
     public static string? PrimaryRouter() =>
         GetBestRoute(0, 0, out var route) == 0 && route.NextHop != 0

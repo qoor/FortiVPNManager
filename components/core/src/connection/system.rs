@@ -5,11 +5,10 @@ use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime};
 
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
-use fvm_contract::app_internal::port::InterfaceAddress;
 
 use super::machine::{ConnectionManager, Phase};
 use super::policy::{self, elapsed};
-use super::{Effect, GatewayLookup, NetworkProbe, ProbeResult};
+use super::{Effect, GatewayLookup, InterfaceAddress, NetworkProbe, ProbeResult};
 
 /// The physical route to the gateway: the interface the routing table uses for its IPv4 address,
 /// and this Mac's address on it.
@@ -292,9 +291,10 @@ impl ConnectionManager {
     fn underlay(&self, result: &ProbeResult) -> Option<Underlay> {
         let name = result.route_interface.as_ref()?;
         let tunnel_ip = self.tunnel_ip();
-        let carries_tunnel = result.addresses.iter().any(|address| {
-            address.name == *name && address.ipv4.is_some() && address.ipv4 == tunnel_ip
-        });
+        let carries_tunnel = result
+            .addresses
+            .iter()
+            .any(|address| address.name == *name && Some(address.ipv4) == tunnel_ip);
         let virtual_interface = self.raw_path.as_ref().is_some_and(|path| {
             path.interfaces
                 .iter()
@@ -308,8 +308,8 @@ impl ConnectionManager {
             address: result
                 .addresses
                 .iter()
-                .find(|address| address.name == *name && address.ipv4.is_some())
-                .and_then(|address| address.ipv4),
+                .find(|address| address.name == *name)
+                .map(|address| address.ipv4),
         })
     }
 
@@ -319,7 +319,7 @@ impl ConnectionManager {
         self.tunnel_ip().is_none_or(|ip| {
             addresses
                 .iter()
-                .any(|address| address.ipv4 == Some(ip) && address.up)
+                .any(|address| address.ipv4 == ip && address.up)
         })
     }
 

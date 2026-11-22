@@ -1757,7 +1757,6 @@ fn system_and_update_requests() -> Vec<FromRuntime> {
                 destination: Ipv4Addr::new(203, 0, 113, 10),
             },
         ),
-        request(18, PortRequest::InterfaceAddresses {}),
         request(19, PortRequest::PrimaryRouter {}),
         request(20, PortRequest::ScreenState {}),
         request(
@@ -2054,23 +2053,6 @@ fn system_and_update_responses() -> Vec<ToRuntime> {
             },
         ),
         response(17, PortResponse::RouteInterface { interface: None }),
-        response(
-            18,
-            PortResponse::InterfaceAddresses {
-                addresses: vec![
-                    InterfaceAddress {
-                        name: "en0".into(),
-                        up: true,
-                        ipv4: Some(Ipv4Addr::new(10, 20, 161, 20)),
-                    },
-                    InterfaceAddress {
-                        name: "ppp0".into(),
-                        up: true,
-                        ipv4: None,
-                    },
-                ],
-            },
-        ),
         response(
             19,
             PortResponse::PrimaryRouter {

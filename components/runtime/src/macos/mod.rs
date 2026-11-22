@@ -10,7 +10,7 @@ use std::thread;
 use fvm_core::auto_update::LATEST_RELEASE_URL;
 
 use crate::orchestration::{self, ClientSettings, Input, Paths};
-use crate::{auto_update, link};
+use crate::{auto_update, link, os};
 
 /// Starts the runtime and returns Swift's end of its socketpair, which Swift then owns.
 #[allow(unsafe_code)] // The C symbol Swift calls; exporting a fixed name needs the unsafe attribute.
@@ -30,10 +30,11 @@ pub fn start() -> UnixStream {
     let (inputs, received) = mpsc::channel();
     let from_swift = inputs.clone();
     let reader = ours.try_clone().expect("cloning the socket to Swift");
-    let out = link::connect(reader, ours, move |message| {
+    let app = link::connect(reader, ours, move |message| {
         // The runtime thread lives as long as the process.
         let _ = from_swift.send(Input::App(message));
     });
+    let out = os::connect(app, inputs.clone());
     thread::Builder::new()
         .name("fvm-runtime".into())
         .spawn(move || {

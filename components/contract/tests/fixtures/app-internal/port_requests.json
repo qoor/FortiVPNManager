@@ -216,14 +216,6 @@
   },
   {
     "portRequest": {
-      "id": 18,
-      "request": {
-        "interfaceAddresses": {}
-      }
-    }
-  },
-  {
-    "portRequest": {
       "id": 19,
       "request": {
         "primaryRouter": {}

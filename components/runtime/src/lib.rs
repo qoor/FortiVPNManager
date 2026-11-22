@@ -3,8 +3,8 @@
 //! asks the judgment core what to do and carries it out: Helper requests in order, timers on the
 //! wall clock, OTP sessions, the Google account, config.yaml, state.json and the log file, syncing
 //! the exception routes, checking for and installing updates, and the sections and log lines the UI
-//! shows. Whatever differs per OS goes through ports; how each OS starts the runtime lives in that
-//! OS's module.
+//! shows. Whatever differs per OS goes through ports, or through the runtime's own OS thread in
+//! `os`; how each OS starts the runtime lives in that OS's module.
 
 mod account_form;
 mod auto_update;
@@ -20,6 +20,7 @@ pub mod macos;
 mod net;
 mod network_probe;
 mod orchestration;
+mod os;
 mod otp_session;
 mod readiness;
 #[cfg(test)]

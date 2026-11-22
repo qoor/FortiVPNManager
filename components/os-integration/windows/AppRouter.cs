@@ -110,9 +110,6 @@ public sealed class AppRouter
             case PortRequest.RouteInterface route:
                 reply(new PortResponse.RouteInterface(SystemFacts.RouteInterface(route.Destination)));
                 break;
-            case PortRequest.InterfaceAddresses:
-                reply(new PortResponse.InterfaceAddresses(SystemFacts.InterfaceAddresses()));
-                break;
             case PortRequest.PrimaryRouter:
                 reply(new PortResponse.PrimaryRouter(SystemFacts.PrimaryRouter()));
                 break;

@@ -17,7 +17,6 @@ extension AppInternal {
     case callHelper(call: HelperCall)
 
     case routeInterface(destination: String)
-    case interfaceAddresses
     case primaryRouter
     case screenState
 
@@ -49,7 +48,6 @@ extension AppInternal {
     case helperBuildMismatch(helperBuild: String)
 
     case routeInterface(interface: String?)
-    case interfaceAddresses(addresses: [InterfaceAddress])
     case primaryRouter(router: String?)
     case screenState(locked: Bool, displaysAsleep: Bool)
 
@@ -137,13 +135,6 @@ extension AppInternal {
   enum RegistrationError: Codable, Equatable, Sendable {
     case notInstalledCopy
     case failed(description: String)
-  }
-
-  /// An interface appears once per address.
-  struct InterfaceAddress: Encodable, Sendable {
-    var name: String
-    var up: Bool
-    var ipv4: String?
   }
 
   enum LogLevel: String, Decodable, Sendable {

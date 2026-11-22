@@ -25,6 +25,7 @@ use jiff::tz::TimeZone;
 
 use crate::config_file::ConfigFile;
 use crate::log_file::{self, LogFile};
+use crate::os::{OsRequest, OsResponse};
 use crate::state_file::StateFile;
 use crate::timers::{Timer, Timers};
 
@@ -35,9 +36,19 @@ pub(crate) enum Input {
     Timer(Timer),
     /// Work that finished elsewhere, carried on in the queue.
     Done(Box<dyn FnOnce(&mut Runtime) + Send>),
+    Os {
+        id: u64,
+        response: OsResponse,
+    },
+}
+
+pub(crate) enum Outgoing {
+    App(FromRuntime),
+    Os { id: u64, request: OsRequest },
 }
 
 type PortReply = Box<dyn FnOnce(&mut Runtime, PortResponse)>;
+type OsReply = Box<dyn FnOnce(&mut Runtime, OsResponse)>;
 
 /// Puts work on the runtime's queue from any thread or task.
 #[derive(Clone)]
@@ -102,12 +113,13 @@ pub(crate) struct Runtime {
     pub(crate) config: ConfigFile,
     pub(crate) state: StateFile,
     pub(crate) log: LogFile,
-    out: Sender<FromRuntime>,
+    out: Sender<Outgoing>,
     pub(crate) inputs: Sender<Input>,
     pub(crate) timers: Timers,
     pub(crate) tasks: tokio::runtime::Runtime,
     next_port_id: u64,
     port_replies: HashMap<u64, PortReply>,
+    os_replies: HashMap<u64, OsReply>,
     /// Tunnel calls go one at a time; the next waits for the previous answer.
     helper_busy: bool,
     quit_approved: bool,
@@ -134,7 +146,7 @@ pub(crate) fn run(
     update_url: String,
     inputs: Sender<Input>,
     received: Receiver<Input>,
-    out: Sender<FromRuntime>,
+    out: Sender<Outgoing>,
 ) {
     let Input::App(ToRuntime::Launched { facts }) =
         received.recv().expect("the input queue stays open")
@@ -155,7 +167,7 @@ impl Runtime {
         paths: Paths,
         update_url: String,
         inputs: Sender<Input>,
-        out: Sender<FromRuntime>,
+        out: Sender<Outgoing>,
     ) -> Self {
         let time_zone = TimeZone::get(&facts.time_zone).unwrap_or(TimeZone::UTC);
         let mut config = ConfigFile::new(paths.config);
@@ -193,6 +205,7 @@ impl Runtime {
             tasks,
             next_port_id: 0,
             port_replies: HashMap::new(),
+            os_replies: HashMap::new(),
             helper_busy: false,
             quit_approved: false,
             helper_queue: VecDeque::new(),
@@ -254,6 +267,13 @@ impl Runtime {
             }
             Input::Timer(Timer::UpdateCheck) => self.check_for_updates(),
             Input::Done(work) => work(self),
+            Input::Os { id, response } => {
+                let reply = self
+                    .os_replies
+                    .remove(&id)
+                    .expect("an answer to a request the runtime sent");
+                reply(self, response);
+            }
         }
     }
 
@@ -261,7 +281,7 @@ impl Runtime {
 
     pub(crate) fn send(&self, message: FromRuntime) {
         // The writer thread lives as long as the process.
-        let _ = self.out.send(message);
+        let _ = self.out.send(Outgoing::App(message));
     }
 
     pub(crate) fn request(
@@ -273,6 +293,17 @@ impl Runtime {
         let id = self.next_port_id;
         self.port_replies.insert(id, Box::new(reply));
         self.send(FromRuntime::PortRequest { id, request });
+    }
+
+    pub(crate) fn ask_os(
+        &mut self,
+        request: OsRequest,
+        reply: impl FnOnce(&mut Runtime, OsResponse) + 'static,
+    ) {
+        self.next_port_id += 1;
+        let id = self.next_port_id;
+        self.os_replies.insert(id, Box::new(reply));
+        let _ = self.out.send(Outgoing::Os { id, request });
     }
 
     pub(crate) fn action(&self, action: PortAction) {

@@ -13,7 +13,9 @@ public class SystemFactsTests
     {
         var loopback = SystemFacts.RouteInterface("127.0.0.1");
         Assert.NotNull(loopback);
-        Assert.Contains(SystemFacts.InterfaceAddresses(), address => address.Name == loopback && address.Ipv4 == "127.0.0.1");
+        Assert.Contains(
+            NetworkInterface.GetAllNetworkInterfaces(),
+            nic => nic.Name == loopback && nic.GetIPProperties().UnicastAddresses.Any(unicast => unicast.Address.Equals(IPAddress.Loopback)));
     }
 
     [Fact]

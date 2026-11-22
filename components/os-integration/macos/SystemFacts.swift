@@ -1,5 +1,4 @@
 import CoreGraphics
-import Darwin
 import Foundation
 import SystemConfiguration
 
@@ -24,34 +23,6 @@ nonisolated enum SystemFacts {
     return nil
   }
 
-  /// Every address of every interface, from getifaddrs.
-  static func interfaceAddresses() -> [AppInternal.InterfaceAddress] {
-    var head: UnsafeMutablePointer<ifaddrs>?
-    guard unsafe getifaddrs(&head) == 0, let first = unsafe head else { return [] }
-    defer { unsafe freeifaddrs(first) }
-    var result: [AppInternal.InterfaceAddress] = []
-    var cursor: UnsafeMutablePointer<ifaddrs>? = unsafe first
-    while let entry = unsafe cursor {
-      unsafe cursor = unsafe entry.pointee.ifa_next
-      guard let rawName = unsafe entry.pointee.ifa_name else { continue }
-      var ipv4: String?
-      if let address = unsafe entry.pointee.ifa_addr,
-        unsafe address.pointee.sa_family == sa_family_t(AF_INET)
-      {
-        ipv4 = unsafe address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
-          unsafe ipv4String($0.pointee.sin_addr)
-        }
-      }
-      unsafe result.append(
-        AppInternal.InterfaceAddress(
-          name: String(cString: rawName),
-          up: entry.pointee.ifa_flags & UInt32(IFF_UP) != 0,
-          ipv4: ipv4
-        ))
-    }
-    return result
-  }
-
   /// The Router of `State:/Network/Global/IPv4`, the primary network's.
   static func primaryRouter() -> String? {
     guard let store = SCDynamicStoreCreate(nil, "FortiVPNManager" as CFString, nil, nil),
@@ -74,11 +45,6 @@ nonisolated enum SystemFacts {
   private static func isScreenLocked() -> Bool {
     guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
     return (session["CGSSessionScreenIsLocked"] as? Bool) ?? false
-  }
-
-  private static func ipv4String(_ address: in_addr) -> String {
-    let value = UInt32(bigEndian: address.s_addr)
-    return [24, 16, 8, 0].map { String((value >> $0) & 0xFF) }.joined(separator: ".")
   }
 
   /// Runs a fixed command with only PATH and hands over its standard output when it exits with 0.

@@ -12,7 +12,7 @@ use std::thread;
 use fvm_core::auto_update::LATEST_RELEASE_URL;
 
 use crate::orchestration::{self, ClientSettings, Input, Paths};
-use crate::{auto_update, link};
+use crate::{auto_update, link, os};
 
 /// The app's ends of the runtime's two pipes, which the app then owns.
 #[repr(C)]
@@ -46,10 +46,11 @@ pub fn start() -> (PipeReader, PipeWriter) {
     let (app_reader, runtime_writer) = pipe();
     let (inputs, received) = mpsc::channel();
     let from_app = inputs.clone();
-    let out = link::connect(runtime_reader, runtime_writer, move |message| {
+    let app = link::connect(runtime_reader, runtime_writer, move |message| {
         // The runtime thread lives as long as the process.
         let _ = from_app.send(Input::App(message));
     });
+    let out = os::connect(app, inputs.clone());
     thread::Builder::new()
         .name("fvm-runtime".into())
         .spawn(move || {

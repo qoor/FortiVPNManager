@@ -35,7 +35,6 @@ public static partial class AppInternal
         public sealed record CallHelper(HelperCall Call) : PortRequest;
 
         public sealed record RouteInterface(string Destination) : PortRequest;
-        public sealed record InterfaceAddresses : PortRequest;
         public sealed record PrimaryRouter : PortRequest;
         public sealed record ScreenState : PortRequest;
 
@@ -82,7 +81,6 @@ public static partial class AppInternal
         public sealed record HelperBuildMismatch([property: JsonPropertyName("helperBuild")] string Build) : PortResponse;
 
         public sealed record RouteInterface([property: JsonPropertyName("interface")] string? Name = null) : PortResponse;
-        public sealed record InterfaceAddresses(IReadOnlyList<InterfaceAddress> Addresses) : PortResponse;
         public sealed record PrimaryRouter(string? Router = null) : PortResponse;
         public sealed record ScreenState(bool Locked, bool DisplaysAsleep) : PortResponse;
 
@@ -196,9 +194,6 @@ public static partial class AppInternal
         public sealed record NotInstalledCopy : RegistrationError;
         public sealed record Failed(string Description) : RegistrationError;
     }
-
-    /// <summary>An interface appears once per address.</summary>
-    public sealed record InterfaceAddress(string Name, bool Up, string? Ipv4 = null);
 
     /// <summary>A FortiClient SSL VPN connection: its name and its Server value, usually host:port.</summary>
     public sealed record FortiClientConnection(string Name, string Server);

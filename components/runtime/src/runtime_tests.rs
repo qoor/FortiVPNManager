@@ -40,7 +40,8 @@ use fvm_core::auto_update::{Check, Release, Version};
 use serde_json::{Value, json};
 
 use crate::net::Reply;
-use crate::orchestration::{self, ClientSettings, Input, Paths, Runtime};
+use crate::orchestration::{self, ClientSettings, Input, Outgoing, Paths, Runtime};
+use crate::os::{OsRequest, OsResponse};
 use crate::timers::Timer;
 
 const APP_BUILD: &str = "100";
@@ -67,7 +68,7 @@ connection:
 struct App {
     folder: PathBuf,
     inputs: Sender<Input>,
-    out: Receiver<FromRuntime>,
+    out: Receiver<Outgoing>,
     secrets: Vec<(SecretItem, SecretText)>,
     answers: Answers,
     helper_registration: RegistrationStatus,
@@ -363,7 +364,22 @@ impl App {
         }
     }
 
-    fn take(&mut self, message: FromRuntime) {
+    fn take(&mut self, message: Outgoing) {
+        match message {
+            Outgoing::App(message) => self.take_from_runtime(message),
+            Outgoing::Os {
+                id,
+                request: OsRequest::InterfaceAddresses,
+            } => {
+                let response = OsResponse::InterfaceAddresses {
+                    addresses: Vec::new(),
+                };
+                self.inputs.send(Input::Os { id, response }).unwrap();
+            }
+        }
+    }
+
+    fn take_from_runtime(&mut self, message: FromRuntime) {
         match message {
             FromRuntime::Section { section } => {
                 if let Section::AutoUpdate { section } = &section {
@@ -450,9 +466,6 @@ impl App {
             PortRequest::CallHelper { call } => self.helper(call),
             PortRequest::RouteInterface { .. } => PortResponse::RouteInterface {
                 interface: Some("en0".into()),
-            },
-            PortRequest::InterfaceAddresses {} => PortResponse::InterfaceAddresses {
-                addresses: Vec::new(),
             },
             PortRequest::PrimaryRouter {} => {
                 let router = self

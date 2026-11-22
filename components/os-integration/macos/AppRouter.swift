@@ -69,8 +69,6 @@ final class AppRouter {
     case .callHelper(let call): Task { await relay.handle(call, reply: reply) }
     case .routeInterface(let destination):
       SystemFacts.routeInterface(to: destination) { reply(.routeInterface(interface: $0)) }
-    case .interfaceAddresses:
-      reply(.interfaceAddresses(addresses: SystemFacts.interfaceAddresses()))
     case .primaryRouter: reply(.primaryRouter(router: SystemFacts.primaryRouter()))
     case .screenState: reply(SystemFacts.screenState())
     case .openBrowser(let url):

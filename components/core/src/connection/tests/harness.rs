@@ -10,7 +10,6 @@ use fvm_contract::app_helper::{
     StopInitiator, StopReason,
 };
 use fvm_contract::app_internal::event::{InterfaceKind, PathInterface};
-use fvm_contract::app_internal::port::InterfaceAddress;
 use fvm_contract::app_internal::{OtpMethod, SecretText, TimeOfDay, Weekday};
 use jiff::civil::date;
 use jiff::tz::{self, TimeZone};
@@ -18,8 +17,9 @@ use jiff::tz::{self, TimeZone};
 use super::super::machine::{Attempt, Phase, RetryReason, Session, Stop};
 use super::super::system::Underlay;
 use super::super::{
-    ConnectionManager, ConnectionSettings, Effect, FailureLedger, HelperFacts, Input, Launch,
-    ReadinessFacts, Schedule, Settings, Startup, StoredSecrets, TimerId, TimerKind, VpnAccount,
+    ConnectionManager, ConnectionSettings, Effect, FailureLedger, HelperFacts, Input,
+    InterfaceAddress, Launch, ReadinessFacts, Schedule, Settings, Startup, StoredSecrets, TimerId,
+    TimerKind, VpnAccount,
 };
 
 pub(super) const APP_BUILD: &str = "100";
@@ -727,13 +727,17 @@ impl Harness {
         routing_complete: Option<bool>,
     ) -> Vec<Effect> {
         let mut addresses = vec![
-            address("lo0", true, Some(Ipv4Addr::LOCALHOST)),
-            address("en0", true, Some(Ipv4Addr::new(192, 168, 0, 10))),
-            address("ppp0", tunnel_up, tunnel_up.then_some(TUNNEL_IP)),
+            address("lo0", Ipv4Addr::LOCALHOST),
+            address("en0", Ipv4Addr::new(192, 168, 0, 10)),
         ];
+        if tunnel_up {
+            addresses.push(address("ppp0", TUNNEL_IP));
+        }
         if let Some(underlay) = underlay {
             addresses.retain(|entry| entry.name != underlay.interface);
-            addresses.push(address(&underlay.interface, true, underlay.address));
+            if let Some(ipv4) = underlay.address {
+                addresses.push(address(&underlay.interface, ipv4));
+            }
         }
         self.send(Input::NetworkProbed(super::super::ProbeResult {
             id: probe,
@@ -753,10 +757,10 @@ fn stop_attempt(stop: &Stop) -> AttemptId {
     text[start..start + 36].parse().unwrap()
 }
 
-pub(super) fn address(name: &str, up: bool, ipv4: Option<Ipv4Addr>) -> InterfaceAddress {
+pub(super) fn address(name: &str, ipv4: Ipv4Addr) -> InterfaceAddress {
     InterfaceAddress {
         name: name.to_owned(),
-        up,
+        up: true,
         ipv4,
     }
 }
