@@ -86,7 +86,7 @@ impl Runtime {
                     &config::MIN_SLEEP_MINUTES,
                 ),
             },
-            options_error: self.options.options_error.clone(),
+            options_error: self.options.config_error.clone(),
             open_at_login: self.options.open_at_login.clone(),
             log_file: self.log_file_path(),
         }

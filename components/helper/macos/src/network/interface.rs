@@ -31,12 +31,12 @@ pub(crate) fn read(name: &str) -> Option<Interface> {
             Level::Error,
             &format!(
                 "ifconfig {name} failed ({}): {}",
-                result.status, result.error_output
+                result.status, result.stderr
             ),
         );
         return None;
     }
-    parse(&result.output)
+    parse(&result.stdout)
 }
 
 pub(crate) fn owners(address: Ipv4Addr) -> Option<Vec<String>> {
@@ -126,7 +126,7 @@ pub(crate) fn change(name: &str, arguments: &[String]) -> bool {
     argv.extend_from_slice(arguments);
     let result = command::run(IFCONFIG, &argv);
     if !result.succeeded() {
-        let message = format!("{}{}", result.error_output, result.output);
+        let message = format!("{}{}", result.stderr, result.stdout);
         log(
             LogCategory::Routes,
             Level::Error,

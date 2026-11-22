@@ -15,8 +15,8 @@ const LIMIT: Duration = Duration::from_secs(10);
 
 pub(crate) struct Output {
     pub status: Status,
-    pub output: String,
-    pub error_output: String,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 impl Output {
@@ -29,7 +29,7 @@ impl Output {
 pub(crate) enum Status {
     Exited(i32),
     Signaled(i32),
-    /// `error_output` then says why.
+    /// `stderr` then says why.
     SpawnFailed(i32),
 }
 
@@ -60,8 +60,8 @@ pub(crate) fn run(executable: &str, arguments: &[String]) -> Output {
             let code = error.raw_os_error().unwrap_or(Errno::ENOENT as i32);
             return Output {
                 status: Status::SpawnFailed(code),
-                output: String::new(),
-                error_output: format!("{} (errno {code})", Errno::from_raw(code).desc()),
+                stdout: String::new(),
+                stderr: format!("{} (errno {code})", Errno::from_raw(code).desc()),
             };
         }
     };
@@ -79,12 +79,12 @@ pub(crate) fn run(executable: &str, arguments: &[String]) -> Output {
         })
     };
     let mut output = Vec::new();
-    let mut error_output = Vec::new();
+    let mut stderr = Vec::new();
     if let Some(mut pipe) = child.stdout.take() {
         let _ = pipe.read_to_end(&mut output);
     }
     if let Some(mut pipe) = child.stderr.take() {
-        let _ = pipe.read_to_end(&mut error_output);
+        let _ = pipe.read_to_end(&mut stderr);
     }
     let status = child
         .wait()
@@ -102,8 +102,8 @@ pub(crate) fn run(executable: &str, arguments: &[String]) -> Output {
     };
     Output {
         status,
-        output: String::from_utf8_lossy(&output).into_owned(),
-        error_output: String::from_utf8_lossy(&error_output).into_owned(),
+        stdout: String::from_utf8_lossy(&output).into_owned(),
+        stderr: String::from_utf8_lossy(&stderr).into_owned(),
     }
 }
 
@@ -122,9 +122,9 @@ mod tests {
     fn a_tool_gets_its_arguments_and_only_path() {
         let result = run("/usr/bin/env", &[]);
         assert!(result.succeeded());
-        assert_eq!(result.output, "PATH=/usr/bin:/bin:/usr/sbin:/sbin\n");
+        assert_eq!(result.stdout, "PATH=/usr/bin:/bin:/usr/sbin:/sbin\n");
         let result = run("/bin/echo", &strings(&["a b", "$HOME"]));
-        assert_eq!(result.output, "a b $HOME\n");
+        assert_eq!(result.stdout, "a b $HOME\n");
     }
 
     #[test]
@@ -134,8 +134,8 @@ mod tests {
             &strings(&["-c", "echo out; echo err >&2; exit 3"]),
         );
         assert_eq!(result.status, Status::Exited(3));
-        assert_eq!(result.output, "out\n");
-        assert_eq!(result.error_output, "err\n");
+        assert_eq!(result.stdout, "out\n");
+        assert_eq!(result.stderr, "err\n");
         assert!(!result.succeeded());
     }
 
@@ -143,7 +143,7 @@ mod tests {
     fn a_missing_tool_is_a_failed_spawn() {
         let result = run("/nonexistent/tool", &[]);
         assert_eq!(result.status, Status::SpawnFailed(2));
-        assert_eq!(result.error_output, "No such file or directory (errno 2)");
+        assert_eq!(result.stderr, "No such file or directory (errno 2)");
         assert_eq!(result.status.to_string(), "spawnFailed(errno: 2)");
     }
 

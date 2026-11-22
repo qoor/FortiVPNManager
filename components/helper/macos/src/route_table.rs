@@ -170,12 +170,12 @@ pub(crate) fn read(family: Family) -> Option<Vec<Row>> {
                 "netstat -rn -f {} failed ({}): {}",
                 family.name(),
                 result.status,
-                result.error_output
+                result.stderr
             ),
         );
         return None;
     }
-    Some(parse(&result.output, family))
+    Some(parse(&result.stdout, family))
 }
 
 /// The routes of `netstat -rn -f inet`'s or `-f inet6`'s output, after its header line. netstat
@@ -319,9 +319,9 @@ pub(crate) fn change(arguments: &[String]) -> bool {
     let mut argv = vec!["-n".to_owned()];
     argv.extend_from_slice(arguments);
     let result = command::run(ROUTE, &argv);
-    let succeeded = result.succeeded() && result.error_output.trim().is_empty();
+    let succeeded = result.succeeded() && result.stderr.trim().is_empty();
     if !succeeded {
-        let message = format!("{}{}", result.error_output, result.output);
+        let message = format!("{}{}", result.stderr, result.stdout);
         log(
             LogCategory::Routes,
             Level::Error,

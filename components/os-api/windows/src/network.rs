@@ -872,16 +872,26 @@ mod tests {
         succeeded.then(|| String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
-    /// The key's server list as the registry holds it: `None` without the key, `Some(None)` with
-    /// the key but no list.
-    fn registered_servers(key: &str, value: &str, kind: &str) -> Option<Option<String>> {
-        reg(&["query", key])?;
-        let list = reg(&["query", key, "/v", value]).map(|output| {
-            let line = output.lines().find(|line| line.contains(kind));
-            let (_, list) = line.and_then(|line| line.split_once(kind)).unwrap();
-            list.trim().to_owned()
-        });
-        Some(list)
+    fn registered_servers(key: &str, value: &str, kind: &str) -> Registered {
+        if reg(&["query", key]).is_none() {
+            return Registered::NoKey;
+        }
+        match reg(&["query", key, "/v", value]) {
+            None => Registered::NoValue,
+            Some(output) => {
+                let line = output.lines().find(|line| line.contains(kind));
+                let (_, list) = line.and_then(|line| line.split_once(kind)).unwrap();
+                Registered::Value(list.trim().to_owned())
+            }
+        }
+    }
+
+    /// A registry value as reg.exe finds it.
+    #[derive(Clone, Debug, PartialEq)]
+    enum Registered {
+        NoKey,
+        NoValue,
+        Value(String),
     }
 
     #[test]
@@ -892,13 +902,13 @@ mod tests {
         );
         assert_eq!(
             registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
-            None
+            Registered::NoKey
         );
         let error = clear_wins_servers(guid).unwrap_err();
         assert!(error.not_found(), "{error}");
         assert_eq!(
             registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
-            None
+            Registered::NoKey
         );
     }
 
@@ -923,9 +933,9 @@ mod tests {
             let undo = Undo(move || {
                 let key = undo_key.as_str();
                 match &undo_before {
-                    None => reg(&["delete", key, "/f"]),
-                    Some(None) => reg(&["delete", key, "/v", "NameServer", "/f"]),
-                    Some(Some(list)) => reg(&[
+                    Registered::NoKey => reg(&["delete", key, "/f"]),
+                    Registered::NoValue => reg(&["delete", key, "/v", "NameServer", "/f"]),
+                    Registered::Value(list) => reg(&[
                         "add",
                         key,
                         "/v",
@@ -938,7 +948,7 @@ mod tests {
                     ]),
                 };
             });
-            if before.is_none() {
+            if before == Registered::NoKey {
                 assert_eq!(dns_servers(loopback, family), Ok(Vec::new()));
             }
             let guid = interface(loopback).unwrap().guid;

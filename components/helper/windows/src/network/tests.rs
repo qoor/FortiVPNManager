@@ -29,14 +29,26 @@ fn reg(args: &[&str]) -> Option<String> {
     succeeded.then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-fn registered_servers(key: &str, value: &str, kind: &str) -> Option<Option<String>> {
-    reg(&["query", key])?;
-    let list = reg(&["query", key, "/v", value]).map(|output| {
-        let line = output.lines().find(|line| line.contains(kind));
-        let (_, list) = line.and_then(|line| line.split_once(kind)).unwrap();
-        list.trim().to_owned()
-    });
-    Some(list)
+fn registered_servers(key: &str, value: &str, kind: &str) -> Registered {
+    if reg(&["query", key]).is_none() {
+        return Registered::NoKey;
+    }
+    match reg(&["query", key, "/v", value]) {
+        None => Registered::NoValue,
+        Some(output) => {
+            let line = output.lines().find(|line| line.contains(kind));
+            let (_, list) = line.and_then(|line| line.split_once(kind)).unwrap();
+            Registered::Value(list.trim().to_owned())
+        }
+    }
+}
+
+/// A registry value as reg.exe finds it.
+#[derive(Clone, Debug, PartialEq)]
+enum Registered {
+    NoKey,
+    NoValue,
+    Value(String),
 }
 
 fn quiet() -> Log {
@@ -83,9 +95,9 @@ fn put_back_loopback_dns() -> Undo<impl FnMut()> {
     Undo(move || {
         let key = key.as_str();
         match &before {
-            None => reg(&["delete", key, "/f"]),
-            Some(None) => reg(&["delete", key, "/v", "NameServer", "/f"]),
-            Some(Some(list)) => reg(&[
+            Registered::NoKey => reg(&["delete", key, "/f"]),
+            Registered::NoValue => reg(&["delete", key, "/v", "NameServer", "/f"]),
+            Registered::Value(list) => reg(&[
                 "add",
                 key,
                 "/v",
@@ -340,9 +352,9 @@ fn wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid() {
         let _ = netsh(&["interface", "ipv4", "delete", "winsservers", &index, "all"]);
         let key = undo_key.as_str();
         match &undo_before {
-            None => reg(&["delete", key, "/f"]),
-            Some(None) => reg(&["delete", key, "/v", "NameServerList", "/f"]),
-            Some(Some(list)) => reg(&[
+            Registered::NoKey => reg(&["delete", key, "/f"]),
+            Registered::NoValue => reg(&["delete", key, "/v", "NameServerList", "/f"]),
+            Registered::Value(list) => reg(&[
                 "add",
                 key,
                 "/v",
@@ -359,19 +371,19 @@ fn wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid() {
     set_wins_servers(loopback, &[], &servers).ok().unwrap();
     assert_eq!(
         registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
-        Some(Some(r"192.0.2.137\0192.0.2.138".to_owned()))
+        Registered::Value(r"192.0.2.137\0192.0.2.138".to_owned())
     );
     network::clear_wins_servers(&guid).unwrap();
     assert_eq!(
         registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
-        Some(Some(String::new()))
+        Registered::Value(String::new())
     );
     reg(&["delete", &key, "/v", "NameServerList", "/f"]).unwrap();
     let error = network::clear_wins_servers(&guid).unwrap_err();
     assert!(error.not_found(), "{error}");
     assert_eq!(
         registered_servers(&key, "NameServerList", "REG_MULTI_SZ"),
-        Some(None)
+        Registered::NoValue
     );
 }
 

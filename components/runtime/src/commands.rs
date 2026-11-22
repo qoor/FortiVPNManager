@@ -15,7 +15,7 @@ use crate::orchestration::Runtime;
 
 /// The settings the General and Connection panes change outside the Account draft, and the login item.
 pub(crate) struct Options {
-    pub(crate) options_error: Option<ConfigFileError>,
+    pub(crate) config_error: Option<ConfigFileError>,
     pub(crate) hours_error: Option<ScheduleHoursError>,
     pub(crate) open_at_login: OpenAtLogin,
 }
@@ -23,7 +23,7 @@ pub(crate) struct Options {
 impl Options {
     pub(crate) fn new(installed_copy: bool) -> Self {
         Self {
-            options_error: None,
+            config_error: None,
             hours_error: None,
             open_at_login: OpenAtLogin {
                 available: installed_copy,
@@ -136,7 +136,7 @@ impl Runtime {
                 }
             }
         });
-        self.options.options_error = result.err();
+        self.options.config_error = result.err();
     }
 
     /// Saved only when the end is later than the start; until then the pickers show the problem.

@@ -41,7 +41,7 @@ pub struct Run {
     inputs: Sender<Input>,
     returned: Arc<AtomicBool>,
     /// The thread that calls `on_report`.
-    run_thread: ThreadId,
+    report_thread: ThreadId,
     name: String,
 }
 
@@ -168,7 +168,7 @@ impl Run {
             client_name,
             inputs,
             returned,
-            run_thread: watcher.thread().id(),
+            report_thread: watcher.thread().id(),
             name,
         }
     }
@@ -187,7 +187,7 @@ impl Run {
     pub fn submit_otp(&self, code: String) -> Result<(), HelperError> {
         assert_ne!(
             thread::current().id(),
-            self.run_thread,
+            self.report_thread,
             "submit_otp from on_report would wait for its own thread"
         );
         let code = Zeroizing::new(code);
@@ -215,7 +215,7 @@ impl Run {
     pub fn stop(&self, reason: StopReason) {
         assert_ne!(
             thread::current().id(),
-            self.run_thread,
+            self.report_thread,
             "stop is not for on_report"
         );
         let _ = self.inputs.send(Input::Stop(reason));
@@ -233,7 +233,7 @@ impl Run {
     pub fn replaceable(&self) -> Result<Replaced, NotReplaceable> {
         assert_ne!(
             thread::current().id(),
-            self.run_thread,
+            self.report_thread,
             "replaceable from on_report would wait for its own thread"
         );
         let (reply, answer) = mpsc::sync_channel(1);
@@ -253,7 +253,7 @@ impl Run {
     pub fn routing_check(&self) -> Option<NetworkChange> {
         assert_ne!(
             thread::current().id(),
-            self.run_thread,
+            self.report_thread,
             "routing_check from on_report would wait for its own thread"
         );
         let (reply, answer) = mpsc::sync_channel(1);
