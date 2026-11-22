@@ -57,6 +57,7 @@ struct SettingsView: View {
 /// The search field and the panes, or the panes with the settings that match the search.
 private struct SettingsSidebar: View {
   @Bindable var navigation: SettingsNavigation
+  @FocusState private var listFocused: Bool
 
   private enum Row: Hashable {
     case pane(SettingsPane)
@@ -70,7 +71,8 @@ private struct SettingsSidebar: View {
       SettingsSearchField(
         text: $navigation.searchText,
         focusRequest: navigation.searchFocusRequest,
-        onSubmit: navigation.revealFirstResult
+        onSubmit: navigation.revealFirstResult,
+        onMoveDown: { listFocused = true }
       )
       .controlSize(.large)
       .frame(height: 28)
@@ -92,6 +94,7 @@ private struct SettingsSidebar: View {
         }
       }
       .listStyle(.sidebar)
+      .focused($listFocused)
       .overlay {
         if navigation.visiblePanes.isEmpty {
           Text("No Results")
@@ -129,9 +132,11 @@ private struct SettingsSearchField: NSViewRepresentable {
   @Binding var text: String
   let focusRequest: Int
   let onSubmit: @MainActor () -> Void
+  let onMoveDown: @MainActor () -> Void
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(text: $text, focusRequest: focusRequest, onSubmit: onSubmit)
+    Coordinator(
+      text: $text, focusRequest: focusRequest, onSubmit: onSubmit, onMoveDown: onMoveDown)
   }
 
   func makeNSView(context: Context) -> NSSearchField {
@@ -147,11 +152,11 @@ private struct SettingsSearchField: NSViewRepresentable {
   func updateNSView(_ field: NSSearchField, context: Context) {
     context.coordinator.text = $text
     context.coordinator.onSubmit = onSubmit
+    context.coordinator.onMoveDown = onMoveDown
     if field.stringValue != text { field.stringValue = text }
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
       DispatchQueue.main.async {
-        unsafe field.window?.makeFirstResponder(field)
         field.selectText(nil)
       }
     }
@@ -162,11 +167,16 @@ private struct SettingsSearchField: NSViewRepresentable {
     var text: Binding<String>
     var focusRequest: Int
     var onSubmit: @MainActor () -> Void
+    var onMoveDown: @MainActor () -> Void
 
-    init(text: Binding<String>, focusRequest: Int, onSubmit: @escaping @MainActor () -> Void) {
+    init(
+      text: Binding<String>, focusRequest: Int, onSubmit: @escaping @MainActor () -> Void,
+      onMoveDown: @escaping @MainActor () -> Void
+    ) {
       self.text = text
       self.focusRequest = focusRequest
       self.onSubmit = onSubmit
+      self.onMoveDown = onMoveDown
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -185,14 +195,7 @@ private struct SettingsSearchField: NSViewRepresentable {
         onSubmit()
       case #selector(NSResponder.moveDown(_:)):
         onSubmit()
-        var ancestor = unsafe control.superview
-        while let view = ancestor {
-          if let list = view.firstDescendant(NSOutlineView.self) {
-            unsafe control.window?.makeFirstResponder(list)
-            break
-          }
-          ancestor = unsafe view.superview
-        }
+        onMoveDown()
       default:
         return false
       }
@@ -224,6 +227,7 @@ private struct SidebarWidthLock: NSViewRepresentable {
   final class LockView: NSView {
     private let width: CGFloat
     private var scheduled = false
+    private weak var hostWindow: NSWindow?
 
     init(width: CGFloat) {
       self.width = width
@@ -235,31 +239,34 @@ private struct SidebarWidthLock: NSViewRepresentable {
       fatalError("not used")
     }
 
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+      super.viewWillMove(toWindow: newWindow)
+      hostWindow = newWindow
+    }
+
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
       schedule()
     }
 
     func schedule() {
-      guard unsafe window != nil, !scheduled else { return }
+      guard hostWindow != nil, !scheduled else { return }
       scheduled = true
       DispatchQueue.main.async { [weak self] in
         guard let self else { return }
         scheduled = false
-        var ancestor = unsafe superview
-        while let view = ancestor {
-          if let split = view as? NSSplitView, split.isVertical, split.subviews.count > 1 {
-            if let controller = split.delegate as? NSSplitViewController,
-              let sidebar = controller.splitViewItems.first
-            {
-              sidebar.minimumThickness = width
-              sidebar.maximumThickness = width
-            }
-            split.setPosition(width, ofDividerAt: 0)
-            return
-          }
-          ancestor = unsafe view.superview
+        guard
+          let split = hostWindow?.contentView?.firstDescendant(
+            NSSplitView.self,
+            where: { $0.isVertical && $0.subviews.count > 1 && isDescendant(of: $0) })
+        else { return }
+        if let controller = split.delegate as? NSSplitViewController,
+          let sidebar = controller.splitViewItems.first
+        {
+          sidebar.minimumThickness = width
+          sidebar.maximumThickness = width
         }
+        split.setPosition(width, ofDividerAt: 0)
       }
     }
   }

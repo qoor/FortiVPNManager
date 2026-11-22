@@ -119,6 +119,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   /// Rows that arrived while an edit was in progress; shown when it ends.
   private var pending:
     (rows: [String], problemRows: Set<Int>, messages: [Int: AddressListEditor.RowMessage])?
+  private weak var hostWindow: NSWindow?
 
   private static let cellID = NSUserInterfaceItemIdentifier("addressRow")
   /// Where a row's text starts: the inset of the other rows' labels, the list spanning the form row.
@@ -157,8 +158,9 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   }
 
   override func viewWillMove(toWindow newWindow: NSWindow?) {
-    if newWindow == nil, editingRow != nil { unsafe window?.makeFirstResponder(nil) }
+    if newWindow == nil, editingRow != nil { hostWindow?.makeFirstResponder(nil) }
     super.viewWillMove(toWindow: newWindow)
+    hostWindow = newWindow
   }
 
   // MARK: - Layout
@@ -275,7 +277,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   }
 
   fileprivate func addRow() {
-    if editingRow != nil { unsafe window?.makeFirstResponder(tableView) }
+    if editingRow != nil { hostWindow?.makeFirstResponder(tableView) }
     guard canAdd else { return }
     if !hasNewRow {
       hasNewRow = true
@@ -320,7 +322,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     field.isEditable = true
     field.isSelectable = true
     cell.showProblem(false, message: nil)
-    unsafe window?.makeFirstResponder(field)
+    hostWindow?.makeFirstResponder(field)
   }
 
   // MARK: - Editing
@@ -330,7 +332,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   {
     guard commandSelector == #selector(NSResponder.cancelOperation(_:)) else { return false }
     cancelsEdit = true
-    unsafe window?.makeFirstResponder(tableView)
+    hostWindow?.makeFirstResponder(tableView)
     return true
   }
 
@@ -378,7 +380,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     }
     reload()
     // Return keeps the keyboard in the list; a click elsewhere keeps its own focus.
-    if movement == .return { unsafe window?.makeFirstResponder(tableView) }
+    if movement == .return { hostWindow?.makeFirstResponder(tableView) }
     if let proposed { onChange?(proposed) }
   }
 }
@@ -433,7 +435,6 @@ private final class AddressCellView: NSTableCellView {
     field.cell?.isScrollable = true
     field.cell?.wraps = false
     field.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-    unsafe textField = field
     mark.contentTintColor = .systemRed
     mark.setContentHuggingPriority(.required, for: .horizontal)
     message.font = .systemFont(ofSize: NSFont.smallSystemFontSize + 1)
