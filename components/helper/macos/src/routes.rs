@@ -25,33 +25,14 @@ use crate::{HELPER_ID, log};
 /// Carries out `change`, as `BypassRoutesChange` describes it: one read of the table before the
 /// changes and, if there were any, one after them.
 pub(crate) fn change(change: &BypassRoutesChange) -> BypassRoutesOutcome {
-    let network = match &change.network {
-        NetworkCheck::Skip {} => None,
-        NetworkCheck::Read {} => match primary_network() {
-            Ok(read) => Some(read),
-            Err(error) => return BypassRoutesOutcome::Refused { error },
-        },
-        NetworkCheck::Expect { network: expected } => match primary_network() {
-            Ok(read) if read != *expected => {
-                return BypassRoutesOutcome::Refused {
-                    error: error(
-                        HelperErrorCode::WrongPhase,
-                        "the network changed since it was read; read it again",
-                    ),
-                };
-            }
-            Ok(read) => Some(read),
-            Err(error) => return BypassRoutesOutcome::Refused { error },
-        },
+    let network = match checked_network(&change.network) {
+        Ok(network) => network,
+        Err(error) => return BypassRoutesOutcome::Refused { error },
     };
     if !change.add.is_empty()
-        && !network.as_ref().is_some_and(|network| {
-            change.add.len() <= MAX_ENTRIES
-                && change.add.iter().collect::<HashSet<_>>().len() == change.add.len()
-                && change.add.iter().all(|route| {
-                    route.gateway == network.router && Ipv4Network::from_route(route).is_ok()
-                })
-        })
+        && !network
+            .as_ref()
+            .is_some_and(|network| writable(&change.add, &network.router))
     {
         return BypassRoutesOutcome::Refused {
             error: error(
@@ -142,6 +123,31 @@ pub(crate) fn change(change: &BypassRoutesChange) -> BypassRoutesOutcome {
         found,
         left,
     }
+}
+
+fn checked_network(check: &NetworkCheck) -> Result<Option<BypassRoutesSnapshot>, HelperError> {
+    match check {
+        NetworkCheck::Skip {} => Ok(None),
+        NetworkCheck::Read {} => Ok(Some(primary_network()?)),
+        NetworkCheck::Expect { network: expected } => {
+            let read = primary_network()?;
+            if read != *expected {
+                return Err(error(
+                    HelperErrorCode::WrongPhase,
+                    "the network changed since it was read; read it again",
+                ));
+            }
+            Ok(Some(read))
+        }
+    }
+}
+
+fn writable(routes: &[BypassRoute], gateway: &str) -> bool {
+    routes.len() <= MAX_ENTRIES
+        && routes.iter().collect::<HashSet<_>>().len() == routes.len()
+        && routes
+            .iter()
+            .all(|route| route.gateway == gateway && Ipv4Network::from_route(route).is_ok())
 }
 
 /// The primary service with its IPv4 router, this Mac's first IPv4 address and mask on it, and its

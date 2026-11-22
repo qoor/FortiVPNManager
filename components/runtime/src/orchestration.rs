@@ -464,28 +464,7 @@ impl Runtime {
                 });
             }
             Effect::Note { attempt, note } => {
-                let text = match note {
-                    Note::ScheduledHoursStarted => "‹schedule: scheduled hours started, connecting›".to_owned(),
-                    Note::ReconnectHeldWhileAway => {
-                        "‹schedule: outside the scheduled hours and away, the reconnect waits until you return›".to_owned()
-                    }
-                    Note::ReconnectsSuspended { away_minutes } => format!(
-                        "‹schedule: away for {away_minutes} min outside the scheduled hours, automatic reconnects stopped›"
-                    ),
-                    Note::WaitingForStaleOtp => {
-                        "‹waiting for the stopped attempt's OTP email before signing in again›".to_owned()
-                    }
-                    Note::StaleOtpTrashed => {
-                        "‹the stopped attempt's OTP email is in the trash, signing in again›".to_owned()
-                    }
-                    Note::StaleOtpSessionEnded => {
-                        "‹the stopped attempt's Gmail session ended before its OTP email was trashed, signing in again›".to_owned()
-                    }
-                    Note::StaleOtpWaitRanOut => format!(
-                        "‹the stopped attempt's OTP email was not trashed within {} s, signing in again›",
-                        connection::STALE_OTP_WAIT.as_secs()
-                    ),
-                };
+                let text = note_text(note);
                 match attempt {
                     Some(attempt) => self.attempt_note(&attempt, text),
                     None => self.note(text),
@@ -802,5 +781,30 @@ pub(crate) fn helper_failure(
             Some(HelperErrorCode::InternalError)
         }
         other => panic!("a Helper call answered with {other:?}"),
+    }
+}
+
+fn note_text(note: Note) -> String {
+    match note {
+        Note::ScheduledHoursStarted => "‹schedule: scheduled hours started, connecting›".to_owned(),
+        Note::ReconnectHeldWhileAway => {
+            "‹schedule: outside the scheduled hours and away, the reconnect waits until you return›".to_owned()
+        }
+        Note::ReconnectsSuspended { away_minutes } => format!(
+            "‹schedule: away for {away_minutes} min outside the scheduled hours, automatic reconnects stopped›"
+        ),
+        Note::WaitingForStaleOtp => {
+            "‹waiting for the stopped attempt's OTP email before signing in again›".to_owned()
+        }
+        Note::StaleOtpTrashed => {
+            "‹the stopped attempt's OTP email is in the trash, signing in again›".to_owned()
+        }
+        Note::StaleOtpSessionEnded => {
+            "‹the stopped attempt's Gmail session ended before its OTP email was trashed, signing in again›".to_owned()
+        }
+        Note::StaleOtpWaitRanOut => format!(
+            "‹the stopped attempt's OTP email was not trashed within {} s, signing in again›",
+            connection::STALE_OTP_WAIT.as_secs()
+        ),
     }
 }

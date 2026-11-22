@@ -43,24 +43,7 @@ impl Entry {
                 "the Helper is shutting down; try again shortly",
             ));
         }
-        let replaced = match &request.replacing {
-            Some(replacing) => Some(self.replaceable(replacing, uid)?),
-            None => match self.runs.values().next() {
-                Some(held) if held.owner_uid == uid => {
-                    return Err(error(
-                        HelperErrorCode::Busy,
-                        format!("{} is already running", held.run.client_name()),
-                    ));
-                }
-                Some(_) => {
-                    return Err(error(
-                        HelperErrorCode::NotAuthorized,
-                        "a VPN run started by another user is active",
-                    ));
-                }
-                None => None,
-            },
-        };
+        let replaced = self.run_to_replace(request, uid)?;
         let slot = if self
             .runs
             .values()
@@ -132,6 +115,27 @@ impl Entry {
             },
         );
         Ok(())
+    }
+
+    fn run_to_replace(
+        &self,
+        request: &RunRequest,
+        uid: u32,
+    ) -> Result<Option<Replaced>, HelperError> {
+        match &request.replacing {
+            Some(replacing) => Ok(Some(self.replaceable(replacing, uid)?)),
+            None => match self.runs.values().next() {
+                Some(held) if held.owner_uid == uid => Err(error(
+                    HelperErrorCode::Busy,
+                    format!("{} is already running", held.run.client_name()),
+                )),
+                Some(_) => Err(error(
+                    HelperErrorCode::NotAuthorized,
+                    "a VPN run started by another user is active",
+                )),
+                None => Ok(None),
+            },
+        }
     }
 
     fn replaceable(&self, replacing: &AttemptId, uid: u32) -> Result<Replaced, HelperError> {

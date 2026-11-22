@@ -11,7 +11,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, ThreadId};
+use std::thread::{self, JoinHandle, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
@@ -34,6 +34,8 @@ use crate::watchdog::Beat;
 pub use network::{NotReplaceable, Replaced};
 
 const LOCK: &str = "the saving slot is never held across a panic";
+
+type Saving = Arc<Mutex<Option<JoinHandle<Result<(), String>>>>>;
 
 /// Controls a started run. Dropping it does not stop the run.
 pub struct Run {
@@ -72,35 +74,8 @@ impl Run {
         let port = u16::try_from(request.port).expect("the backend checked the port");
         let attempt = request.attempt_id.to_string();
         let (inputs, received) = mpsc::channel();
-        let saving: Arc<Mutex<Option<_>>> = Arc::default();
-        let link = Arc::new(Link::new(
-            {
-                let inputs = inputs.clone();
-                move |event| {
-                    let _ = inputs.send(Input::Session(event));
-                }
-            },
-            {
-                let saving = Arc::clone(&saving);
-                let secrets = Arc::clone(&secrets);
-                let attempt = attempt.clone();
-                let host = request.host.clone();
-                let pins = request.trusted_certs.clone();
-                move |mut cookie: Zeroizing<String>| {
-                    let secret = SessionSecret {
-                        host,
-                        port,
-                        pins,
-                        cookie: mem::take(&mut *cookie),
-                    };
-                    let saver = thread::Builder::new()
-                        .name("fvm-session-secret".to_owned())
-                        .spawn(move || secrets.save(&attempt, &secret.encode()))
-                        .expect("starting the session secret thread");
-                    *saving.lock().expect(LOCK) = Some(saver);
-                }
-            },
-        ));
+        let saving: Saving = Arc::default();
+        let link = session_link(&inputs, &saving, &secrets, &attempt, request, port);
         let session = SessionRequest {
             host: request.host.clone(),
             port,
@@ -290,6 +265,44 @@ impl Run {
 
 pub(crate) struct Ended {
     failures: Vec<String>,
+}
+
+fn session_link(
+    inputs: &Sender<Input>,
+    saving: &Saving,
+    secrets: &Arc<dyn SecretStore>,
+    attempt: &str,
+    request: &RunRequest,
+    port: u16,
+) -> Arc<Link> {
+    Arc::new(Link::new(
+        {
+            let inputs = inputs.clone();
+            move |event| {
+                let _ = inputs.send(Input::Session(event));
+            }
+        },
+        {
+            let saving = Arc::clone(saving);
+            let secrets = Arc::clone(secrets);
+            let attempt = attempt.to_owned();
+            let host = request.host.clone();
+            let pins = request.trusted_certs.clone();
+            move |mut cookie: Zeroizing<String>| {
+                let secret = SessionSecret {
+                    host,
+                    port,
+                    pins,
+                    cookie: mem::take(&mut *cookie),
+                };
+                let saver = thread::Builder::new()
+                    .name("fvm-session-secret".to_owned())
+                    .spawn(move || secrets.save(&attempt, &secret.encode()))
+                    .expect("starting the session secret thread");
+                *saving.lock().expect(LOCK) = Some(saver);
+            }
+        },
+    ))
 }
 
 fn finish_session(

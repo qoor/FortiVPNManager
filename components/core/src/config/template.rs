@@ -11,15 +11,28 @@ use fvm_contract::app_internal::problem::ConfigProblemKind;
 
 use super::text::disallowed_in_value;
 use super::{
-    AWAY_MINUTES, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES,
-    OTP_METHODS, PORTS, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, WEEKDAYS, minutes,
-    normalized_days,
+    AWAY_MINUTES, Connection, MARGIN_MINUTES, MAX_FILE_BYTES, MAX_TRUSTED_CERTS, MIN_SLEEP_MINUTES,
+    OTP_METHODS, Otp, PORTS, Routes, SCHEMA_VERSION, SESSION_MAX_MINUTES, Settings, Vpn, WEEKDAYS,
+    minutes, normalized_days,
 };
 use crate::bypass_rules::vpn_server_target;
 
 /// Settings that pass come back unchanged when the text is read. The certificate values are not
 /// checked again: only the contract's rule produces them.
 pub(super) fn write(settings: &Settings) -> Result<String, ConfigProblemKind> {
+    check_values(settings)?;
+    check_route_lists(settings)?;
+    let text = render(settings);
+    if text.len() > MAX_FILE_BYTES {
+        return Err(ConfigProblemKind::FileTooLarge {
+            byte_count: text.len() as u64,
+            limit: MAX_FILE_BYTES as u64,
+        });
+    }
+    Ok(text)
+}
+
+fn check_values(settings: &Settings) -> Result<(), ConfigProblemKind> {
     let strings = [
         ("vpn.host", &settings.vpn.host),
         ("vpn.username", &settings.vpn.username),
@@ -81,6 +94,10 @@ pub(super) fn write(settings: &Settings) -> Result<String, ConfigProblemKind> {
             end: schedule.end,
         });
     }
+    Ok(())
+}
+
+fn check_route_lists(settings: &Settings) -> Result<(), ConfigProblemKind> {
     let lists = [
         ("routes.networks", &settings.routes.networks),
         ("routes.bypass_vpn", &settings.routes.bypass_vpn),
@@ -115,50 +132,12 @@ pub(super) fn write(settings: &Settings) -> Result<String, ConfigProblemKind> {
             path: "routes.bypass_vpn".to_owned(),
         });
     }
-    let text = render(settings);
-    if text.len() > MAX_FILE_BYTES {
-        return Err(ConfigProblemKind::FileTooLarge {
-            byte_count: text.len() as u64,
-            limit: MAX_FILE_BYTES as u64,
-        });
-    }
-    Ok(text)
+    Ok(())
 }
 
 fn render(settings: &Settings) -> String {
-    let vpn = &settings.vpn;
-    let otp = &settings.otp;
-    let connection = &settings.connection;
-    let proactive = &connection.proactive_reconnect;
-    let after_sleep = &connection.reconnect_after_sleep;
-    let schedule = &connection.schedule;
-    let method = OTP_METHODS
-        .iter()
-        .find(|&&(_, method)| method == otp.method)
-        .map(|&(spelling, _)| spelling)
-        .expect("every method has a spelling");
-    let days = normalized_days(&schedule.days)
-        .iter()
-        .map(|&day| {
-            let &(spelling, _) = WEEKDAYS
-                .iter()
-                .find(|&&(_, weekday)| weekday == day)
-                .expect("every day has a spelling");
-            spelling
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    let time = |time: TimeOfDay| quoted(&format!("{:02}:{:02}", time.hour, time.minute));
-    assert!(
-        vpn.trusted_cert_pins.len() <= MAX_TRUSTED_CERTS,
-        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values"
-    );
-    let trusted_cert_pins = list(&vpn.trusted_cert_pins);
-    let networks = list(&settings.routes.networks);
-    let bypass_vpn = list(&settings.routes.bypass_vpn);
-    let (shortest_prefix, longest_prefix) = (MIN_PREFIX_LENGTH, MAX_PREFIX_LENGTH);
     format!(
-        r#"# FortiVPNManager configuration file
+        r"# FortiVPNManager configuration file
 #
 # - Passwords (VPN password, Gmail app password) and the Google sign-in live in the OS credential store (macOS Keychain, Windows Credential Manager), not in this file.
 # - The app rewrites this file when you save in Settings and when it records a new server certificate. Comments you added and unknown keys are removed then.
@@ -167,7 +146,22 @@ fn render(settings: &Settings) -> String {
 # - This file contains the server and account details, so do not commit it to a public repository (dotfiles etc.).
 # - Changes take effect from the next connection. The session max time and proactive reconnect margin are recalculated immediately, and the routes section is applied right away.
 schema_version: {SCHEMA_VERSION}
-vpn:
+{vpn}{otp}{connection}{routes}",
+        vpn = render_vpn(&settings.vpn),
+        otp = render_otp(&settings.otp),
+        connection = render_connection(&settings.connection),
+        routes = render_routes(&settings.routes),
+    )
+}
+
+fn render_vpn(vpn: &Vpn) -> String {
+    assert!(
+        vpn.trusted_cert_pins.len() <= MAX_TRUSTED_CERTS,
+        "the app keeps at most {MAX_TRUSTED_CERTS} certificate values"
+    );
+    let trusted_cert_pins = list(&vpn.trusted_cert_pins);
+    format!(
+        r#"vpn:
   # VPN gateway address (host name or IPv4 address).
   host: {host}
   # VPN gateway port (e.g. 8443). 443 is the default when the file has no value.
@@ -182,14 +176,54 @@ vpn:
   # When the certificate changes, the app automatically adds the new value at the front (up to {MAX_TRUSTED_CERTS} entries). A new server address or port clears them.
   # Public key pins of the certificate (pin-sha256:...), used by openconnect.
   trusted_cert_pins:{trusted_cert_pins}
-otp:
+"#,
+        host = quoted(&vpn.host),
+        port = vpn.port,
+        username = quoted(&vpn.username),
+        realm = quoted(&vpn.realm),
+        dtls = vpn.dtls,
+    )
+}
+
+fn render_otp(otp: &Otp) -> String {
+    let method = OTP_METHODS
+        .iter()
+        .find(|&&(_, method)| method == otp.method)
+        .map(|&(spelling, _)| spelling)
+        .expect("every method has a spelling");
+    format!(
+        r#"otp:
   # Gmail (Google Workspace) address that receives the OTP emails. The app password is in the credential store.
   gmail_address: {gmail_address}
   # How the app reads the OTP emails: "imap" (Gmail app password) or "gmail_api" (Gmail API with Google sign-in; falls back to IMAP when the sign-in fails and an app password is stored).
   method: {method}
   # OAuth client ID of the Google Cloud desktop app used by "gmail_api". Set by importing the client JSON in Settings; its client secret is in the credential store.
   google_client_id: {google_client_id}
-connection:
+"#,
+        gmail_address = quoted(&otp.gmail_address),
+        method = quoted(method),
+        google_client_id = quoted(&otp.google_client_id),
+    )
+}
+
+fn render_connection(connection: &Connection) -> String {
+    let proactive = &connection.proactive_reconnect;
+    let after_sleep = &connection.reconnect_after_sleep;
+    let schedule = &connection.schedule;
+    let days = normalized_days(&schedule.days)
+        .iter()
+        .map(|&day| {
+            let &(spelling, _) = WEEKDAYS
+                .iter()
+                .find(|&&(_, weekday)| weekday == day)
+                .expect("every day has a spelling");
+            spelling
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let time = |time: TimeOfDay| quoted(&format!("{:02}:{:02}", time.hour, time.minute));
+    format!(
+        r#"connection:
   # Connect automatically when the app starts.
   auto_connect_on_launch: {auto_connect_on_launch}
   # Time until the server forcibly ends the session (minutes, {session_range}).
@@ -201,21 +235,7 @@ connection:
   # Scheduled hours. When enabled is true, connect at start ("HH:mm") on the listed days (mon, tue, wed, thu, fri, sat, sun); start must be earlier than end.
   # The end never disconnects. After it, reconnects wait while you are away (screen locked or off, or the computer asleep) and stop once you have been away for away_minutes minutes ({away_range}).
   schedule: {{ enabled: {schedule_enabled}, days: [{days}], start: {start}, end: {end}, away_minutes: {away_minutes} }}
-routes:
-  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this computer's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
-  networks:{networks}
-  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the default gateway of the active network (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this computer's own network need no route and are skipped.
-  # The app adds these routes only while it keeps the VPN up (connecting, connected, or waiting to reconnect), and removes them when the VPN is disconnected or stopped and when the app quits. The VPN server's own address can't be a target. The app never adds entries here, and routes added outside the app are left alone.
-  bypass_vpn:{bypass_vpn}
 "#,
-        host = quoted(&vpn.host),
-        port = vpn.port,
-        username = quoted(&vpn.username),
-        realm = quoted(&vpn.realm),
-        dtls = vpn.dtls,
-        gmail_address = quoted(&otp.gmail_address),
-        method = quoted(method),
-        google_client_id = quoted(&otp.google_client_id),
         auto_connect_on_launch = connection.auto_connect_on_launch,
         session_range = range(SESSION_MAX_MINUTES),
         session_max_minutes = connection.session_max_minutes,
@@ -230,6 +250,21 @@ routes:
         start = time(schedule.start),
         end = time(schedule.end),
         away_minutes = schedule.away_minutes,
+    )
+}
+
+fn render_routes(routes: &Routes) -> String {
+    let networks = list(&routes.networks);
+    let bypass_vpn = list(&routes.bypass_vpn);
+    let (shortest_prefix, longest_prefix) = (MIN_PREFIX_LENGTH, MAX_PREFIX_LENGTH);
+    format!(
+        r#"routes:
+  # Networks where the exception rules apply (e.g. "10.20.161.0/24", /{shortest_prefix}-/{longest_prefix}, up to {MAX_ENTRIES} entries). The rules are used only while this computer's IPv4 address is inside one of them; on any other network everything goes through the VPN. Entries must not overlap. The app never adds entries here.
+  networks:{networks}
+  # Exception targets: IPv4 hosts (e.g. "10.30.161.16") or networks (e.g. "10.30.170.0/24") that skip the VPN and go out directly through the default gateway of the active network (up to {MAX_ENTRIES} entries, which must not overlap). Targets on this computer's own network need no route and are skipped.
+  # The app adds these routes only while it keeps the VPN up (connecting, connected, or waiting to reconnect), and removes them when the VPN is disconnected or stopped and when the app quits. The VPN server's own address can't be a target. The app never adds entries here, and routes added outside the app are left alone.
+  bypass_vpn:{bypass_vpn}
+"#
     )
 }
 

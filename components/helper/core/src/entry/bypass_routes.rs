@@ -363,36 +363,7 @@ impl Entry {
                     step: WriteStep::LookingUp,
                 },
                 BypassRoutesOutcome::Changed { network, found, .. },
-            ) => {
-                match self.write_changes(app, &expected, &routes, &found) {
-                    Ok(Some(change)) => {
-                        let unwanted = change.remove.clone();
-                        let job = Job::Write {
-                            app,
-                            id,
-                            expected,
-                            routes,
-                            step: WriteStep::Changing { unwanted },
-                        };
-                        return self.send_bypass_job(job, change);
-                    }
-                    Ok(None) => {}
-                    Err(error) => {
-                        self.reply_bypass(id, &BypassRoutesReply::Failure { error });
-                        return self.start_bypass_job();
-                    }
-                }
-                let snapshot = network.expect("a write reads the network");
-                let service_id = snapshot.service_id.clone();
-                self.bypass_routes
-                    .wanted
-                    .insert(app, Wanted { service_id, routes });
-                let reply = BypassRoutesReply::Success {
-                    snapshot,
-                    routes: found,
-                };
-                self.reply_bypass(id, &reply);
-            }
+            ) => return self.looked_up_for_write(app, id, expected, routes, network, found),
             (
                 Job::Write {
                     id,
@@ -422,35 +393,15 @@ impl Entry {
                 },
             ) => {
                 let snapshot = network.expect("a write reads the network");
-                let service_id = &snapshot.service_id;
-                let bypass = &mut self.bypass_routes;
-                let listed = |list: &[AddedRoute], added: &AddedRoute| {
-                    list.iter()
-                        .any(|other| same_route(other, &added.route, &added.service_id))
-                };
-                bypass
-                    .added
-                    .retain(|route| !listed(&unwanted, route) || listed(&left, route));
-                for route in added {
-                    if !bypass
-                        .added
-                        .iter()
-                        .any(|kept| same_route(kept, &route, service_id))
-                    {
-                        bypass.added.push(AddedRoute {
-                            route,
-                            service_id: service_id.clone(),
-                        });
-                    }
-                }
-                bypass.wanted.insert(
+                self.keep_added(&snapshot.service_id, &unwanted, added, &left);
+                self.bypass_routes.wanted.insert(
                     app,
                     Wanted {
                         service_id: snapshot.service_id.clone(),
                         routes,
                     },
                 );
-                let added = bypass.added.clone();
+                let added = self.bypass_routes.added.clone();
                 self.record_added(&added);
                 let reply = BypassRoutesReply::Success {
                     snapshot,
@@ -471,6 +422,75 @@ impl Entry {
             (Job::Disconnected { unwanted, .. }, outcome) => self.removed(&unwanted, outcome),
         }
         self.start_bypass_job();
+    }
+
+    fn looked_up_for_write(
+        &mut self,
+        app: u64,
+        id: u64,
+        expected: BypassRoutesSnapshot,
+        routes: Vec<BypassRoute>,
+        network: Option<BypassRoutesSnapshot>,
+        found: Vec<BypassRoute>,
+    ) {
+        match self.write_changes(app, &expected, &routes, &found) {
+            Ok(Some(change)) => {
+                let unwanted = change.remove.clone();
+                let job = Job::Write {
+                    app,
+                    id,
+                    expected,
+                    routes,
+                    step: WriteStep::Changing { unwanted },
+                };
+                return self.send_bypass_job(job, change);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.reply_bypass(id, &BypassRoutesReply::Failure { error });
+                return self.start_bypass_job();
+            }
+        }
+        let snapshot = network.expect("a write reads the network");
+        let service_id = snapshot.service_id.clone();
+        self.bypass_routes
+            .wanted
+            .insert(app, Wanted { service_id, routes });
+        let reply = BypassRoutesReply::Success {
+            snapshot,
+            routes: found,
+        };
+        self.reply_bypass(id, &reply);
+        self.start_bypass_job();
+    }
+
+    fn keep_added(
+        &mut self,
+        service_id: &str,
+        unwanted: &[AddedRoute],
+        added: Vec<BypassRoute>,
+        left: &[AddedRoute],
+    ) {
+        let bypass = &mut self.bypass_routes;
+        let listed = |list: &[AddedRoute], added: &AddedRoute| {
+            list.iter()
+                .any(|other| same_route(other, &added.route, &added.service_id))
+        };
+        bypass
+            .added
+            .retain(|route| !listed(unwanted, route) || listed(left, route));
+        for route in added {
+            if !bypass
+                .added
+                .iter()
+                .any(|kept| same_route(kept, &route, service_id))
+            {
+                bypass.added.push(AddedRoute {
+                    route,
+                    service_id: service_id.to_owned(),
+                });
+            }
+        }
     }
 
     /// The change that makes `routes` the app's, now that the table is known to have `found` of

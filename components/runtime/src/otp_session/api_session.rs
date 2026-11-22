@@ -111,16 +111,15 @@ pub(super) async fn api_session(
         Err(failure) => return report(failed(&failure)),
     };
     let started_at = SystemTime::now();
-    let mut cursor = profile.usable_history_id().map(str::to_owned);
+    let mut mailbox = Mailbox {
+        cursor: profile.usable_history_id().map(str::to_owned),
+        ..Mailbox::default()
+    };
     report(Report::Ready);
     let mut prompted_at = None;
     let mut selection: Option<otp_mail::GmailSelection> = None;
     let mut trashing_stale = false;
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut pending: Vec<MessageRef> = Vec::new();
-    let mut messages: Vec<MessageMetadata> = Vec::new();
     let mut polls = 0u32;
-    let mut failures = 0u32;
     // A control that came while waiting for the next poll.
     let mut received = None;
     let ending = loop {
@@ -153,40 +152,16 @@ pub(super) async fn api_session(
         let poll_started = Instant::now();
         polls += 1;
         let prompted = prompted_at.expect("searching");
-        let result = api_poll(
-            &queue,
-            &address,
-            &mut cursor,
-            &mut seen,
-            &mut pending,
-            &mut messages,
-        )
-        .await;
-        match result {
-            Ok(()) => failures = 0,
-            Err(failure) if failure.is_transient() => {
-                failures += 1;
-                let detail = format!(
-                    "Gmail API poll failed ({failures}/{MAX_POLL_FAILURES}): {}",
-                    failure.describe()
-                );
-                queue.run(move |runtime| {
-                    runtime.system_log(LogLevel::Notice, LogCategory::Otp, detail);
-                });
-                if failures >= MAX_POLL_FAILURES {
-                    return report(failed(&failure));
-                }
-                if matches!(failure, ApiFailure::Api(ApiError::RateLimited)) {
-                    tokio::time::sleep(RATE_LIMIT_BACKOFF).await;
-                    continue;
-                }
-            }
-            Err(failure) => return report(failed(&failure)),
+        match mailbox.poll(&queue, &address).await {
+            Polled::Done => {}
+            Polled::Retry => continue,
+            Polled::Failed(failure) => return report(failed(&failure)),
         }
-        let not_before = cursor
+        let not_before = mailbox
+            .cursor
             .is_none()
             .then(|| started_at - otp_mail::ARRIVAL_TOLERANCE);
-        if let Some(found) = otp_mail::select_gmail(prompted, &messages, not_before) {
+        if let Some(found) = otp_mail::select_gmail(prompted, &mailbox.messages, not_before) {
             if !trashing_stale {
                 let note = api_timing_note(prompted, found.arrived_at, polls);
                 report(Report::CodeFound {
@@ -203,6 +178,27 @@ pub(super) async fn api_session(
             () = tokio::time::sleep(remaining) => {}
         }
     };
+    end_session(
+        &queue,
+        &address,
+        ending,
+        selection,
+        prompted_at,
+        trashing_stale,
+        &report,
+    )
+    .await;
+}
+
+async fn end_session(
+    queue: &Queue,
+    address: &str,
+    ending: Option<Control>,
+    selection: Option<otp_mail::GmailSelection>,
+    prompted_at: Option<SystemTime>,
+    trashing_stale: bool,
+    report: &impl Fn(Report),
+) {
     match ending {
         Some(Control::Finish) => {
             let mut not_trashed = None;
@@ -212,7 +208,7 @@ pub(super) async fn api_session(
             {
                 let trashed = match gmail_api::trash(&id) {
                     Some(request) => {
-                        api_call(&queue, &address, &request, gmail_api::trash_from_response)
+                        api_call(queue, address, &request, gmail_api::trash_from_response)
                             .await
                             .map_err(|failure| failure.describe())
                     }
@@ -232,8 +228,8 @@ pub(super) async fn api_session(
         Some(Control::Close { check_spam: true }) => {
             if let Some(prompted_at) = prompted_at
                 && let Ok(refs) = api_call(
-                    &queue,
-                    &address,
+                    queue,
+                    address,
                     &otp_mail::gmail_spam_search(),
                     gmail_api::messages_from_response,
                 )
@@ -243,8 +239,7 @@ pub(super) async fn api_session(
                 for reference in refs {
                     if let Some(request) = gmail_api::message_metadata(&reference.id)
                         && let Ok(message) =
-                            api_call(&queue, &address, &request, MessageMetadata::from_response)
-                                .await
+                            api_call(queue, address, &request, MessageMetadata::from_response).await
                     {
                         spam.push(message);
                     }
@@ -265,33 +260,79 @@ fn failed(failure: &ApiFailure) -> Report {
     }
 }
 
-/// One poll: the messages added since the cursor (or found by search once the history is gone),
-/// then the metadata of the ones not fetched yet.
-async fn api_poll(
-    queue: &Queue,
-    address: &str,
-    cursor: &mut Option<String>,
-    seen: &mut HashSet<String>,
-    pending: &mut Vec<MessageRef>,
-    messages: &mut Vec<MessageMetadata>,
-) -> Result<(), ApiFailure> {
-    let references = match cursor.clone() {
-        Some(start) => match history(queue, address, &start).await {
-            Ok((references, latest)) => {
-                if let Some(latest) = latest {
-                    *cursor = Some(latest);
-                }
-                references
-            }
-            Err(ApiFailure::Api(ApiError::NotFound)) => {
-                queue.run(|runtime| {
-                    runtime.system_log(
-                        LogLevel::Notice,
-                        LogCategory::Otp,
-                        "Gmail history ID is no longer valid; searching instead",
-                    );
+#[derive(Default)]
+struct Mailbox {
+    cursor: Option<String>,
+    seen: HashSet<String>,
+    pending: Vec<MessageRef>,
+    messages: Vec<MessageMetadata>,
+    failures: u32,
+}
+
+enum Polled {
+    Done,
+    Retry,
+    Failed(ApiFailure),
+}
+
+impl Mailbox {
+    async fn poll(&mut self, queue: &Queue, address: &str) -> Polled {
+        match self.read(queue, address).await {
+            Ok(()) => self.failures = 0,
+            Err(failure) if failure.is_transient() => {
+                self.failures += 1;
+                let detail = format!(
+                    "Gmail API poll failed ({}/{MAX_POLL_FAILURES}): {}",
+                    self.failures,
+                    failure.describe()
+                );
+                queue.run(move |runtime| {
+                    runtime.system_log(LogLevel::Notice, LogCategory::Otp, detail);
                 });
-                *cursor = None;
+                if self.failures >= MAX_POLL_FAILURES {
+                    return Polled::Failed(failure);
+                }
+                if matches!(failure, ApiFailure::Api(ApiError::RateLimited)) {
+                    tokio::time::sleep(RATE_LIMIT_BACKOFF).await;
+                    return Polled::Retry;
+                }
+            }
+            Err(failure) => return Polled::Failed(failure),
+        }
+        Polled::Done
+    }
+
+    /// One poll: the messages added since the cursor (or found by search once the history is gone),
+    /// then the metadata of the ones not fetched yet.
+    async fn read(&mut self, queue: &Queue, address: &str) -> Result<(), ApiFailure> {
+        let references = match self.cursor.clone() {
+            Some(start) => match history(queue, address, &start).await {
+                Ok((references, latest)) => {
+                    if let Some(latest) = latest {
+                        self.cursor = Some(latest);
+                    }
+                    references
+                }
+                Err(ApiFailure::Api(ApiError::NotFound)) => {
+                    queue.run(|runtime| {
+                        runtime.system_log(
+                            LogLevel::Notice,
+                            LogCategory::Otp,
+                            "Gmail history ID is no longer valid; searching instead",
+                        );
+                    });
+                    self.cursor = None;
+                    api_call(
+                        queue,
+                        address,
+                        &otp_mail::gmail_search(),
+                        gmail_api::messages_from_response,
+                    )
+                    .await?
+                }
+                Err(failure) => return Err(failure),
+            },
+            None => {
                 api_call(
                     queue,
                     address,
@@ -300,49 +341,41 @@ async fn api_poll(
                 )
                 .await?
             }
-            Err(failure) => return Err(failure),
-        },
-        None => {
-            api_call(
-                queue,
-                address,
-                &otp_mail::gmail_search(),
-                gmail_api::messages_from_response,
-            )
-            .await?
-        }
-    };
-    for reference in references {
-        if seen.contains(&reference.id) || pending.iter().any(|other| other.id == reference.id) {
-            continue;
-        }
-        if otp_mail::is_excluded_gmail_message(&reference.label_ids) {
-            seen.insert(reference.id);
-        } else {
-            pending.push(reference);
-        }
-    }
-    let mut first_error = None;
-    for reference in std::mem::take(pending) {
-        let Some(request) = gmail_api::message_metadata(&reference.id) else {
-            seen.insert(reference.id);
-            continue;
         };
-        match api_call(queue, address, &request, MessageMetadata::from_response).await {
-            Ok(message) => {
-                seen.insert(reference.id);
-                messages.push(message);
+        for reference in references {
+            if self.seen.contains(&reference.id)
+                || self.pending.iter().any(|other| other.id == reference.id)
+            {
+                continue;
             }
-            Err(ApiFailure::Api(ApiError::NotFound)) => {
-                seen.insert(reference.id);
-            }
-            Err(failure) => {
-                pending.push(reference);
-                first_error.get_or_insert(failure);
+            if otp_mail::is_excluded_gmail_message(&reference.label_ids) {
+                self.seen.insert(reference.id);
+            } else {
+                self.pending.push(reference);
             }
         }
+        let mut first_error = None;
+        for reference in std::mem::take(&mut self.pending) {
+            let Some(request) = gmail_api::message_metadata(&reference.id) else {
+                self.seen.insert(reference.id);
+                continue;
+            };
+            match api_call(queue, address, &request, MessageMetadata::from_response).await {
+                Ok(message) => {
+                    self.seen.insert(reference.id);
+                    self.messages.push(message);
+                }
+                Err(ApiFailure::Api(ApiError::NotFound)) => {
+                    self.seen.insert(reference.id);
+                }
+                Err(failure) => {
+                    self.pending.push(reference);
+                    first_error.get_or_insert(failure);
+                }
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
-    first_error.map_or(Ok(()), Err)
 }
 
 /// The messages added since `start`, and the history ID to go on from when every page was read.

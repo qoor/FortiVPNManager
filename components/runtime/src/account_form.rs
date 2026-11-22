@@ -616,7 +616,17 @@ impl Runtime {
                 report.port, report.trusted_certs, report.unknown_keys
             ),
         );
-        let Some(password) = imported.password else {
+        self.save_imported_password(imported.password, saved, report, done);
+    }
+
+    fn save_imported_password(
+        &mut self,
+        password: Option<SecretText>,
+        saved: Settings,
+        report: ImportReport,
+        done: Box<dyn FnOnce(&mut Runtime)>,
+    ) {
+        let Some(password) = password else {
             return self.finish_import(ClientSettingsImport::Imported { report }, done);
         };
         if saved.vpn.username.is_empty() {

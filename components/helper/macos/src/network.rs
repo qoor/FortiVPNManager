@@ -151,17 +151,235 @@ fn apply(
             remove.to_vec(),
         );
     };
-    let name = &settings.tunnel.name;
-    let mut tried: Vec<OutsideRoute> = Vec::new();
-    let finish = |failure: Option<Failure>, table: Option<&[Row]>, tried: &[OutsideRoute]| {
+    let applying = Applying {
+        settings,
+        previous,
+        remove,
+        add,
+        outside,
+        routes_and_dns,
+        store,
+        families,
+        wanted,
+        stale,
+    };
+    let mut tried = Vec::new();
+    if let Err((step, error)) = applying.change(&before, &mut tried) {
+        return applying.failure(step, error, &tried);
+    }
+    applying.confirm(&tried)
+}
+
+struct Applying<'a> {
+    settings: &'a NetworkSettings,
+    previous: Option<&'a NetworkSettings>,
+    remove: &'a [OutsideRoute],
+    add: &'a [OutsideRoute],
+    outside: &'a [IpNetwork],
+    routes_and_dns: bool,
+    store: SCDynamicStore,
+    families: HashSet<Family>,
+    wanted: Vec<Route>,
+    stale: Vec<Route>,
+}
+
+impl Applying<'_> {
+    fn change(&self, before: &[Row], tried: &mut Vec<OutsideRoute>) -> Result<(), Failure> {
+        let settings = self.settings;
+        let store = &self.store;
+        let name = &settings.tunnel.name;
+        for route in self.stale.iter().filter(|route| has(before, route)) {
+            route_table::delete(route);
+        }
+        if let Some(previous) = self.previous {
+            for arguments in interface::removals(previous, settings) {
+                interface::change(name, &arguments);
+            }
+        }
+        for route in self.remove {
+            if let Some(system) = system_route(route, store)
+                && has(before, &system)
+            {
+                route_table::delete(&system);
+            }
+        }
+
+        let Some(current) = interface::read(name) else {
+            return Err((
+                NetworkStep::Addresses,
+                format!("the tunnel {name} could not be read"),
+            ));
+        };
+        for (step, arguments) in interface::changes(settings, &current) {
+            if !interface::change(name, &arguments) {
+                return Err((
+                    step,
+                    format!("ifconfig {name} {} failed", arguments.join(" ")),
+                ));
+            }
+        }
+        for route in self.add {
+            let Some(system) = system_route(route, store) else {
+                return Err((
+                    NetworkStep::OutsideRoutes,
+                    format!(
+                        "the network service {} has no IPv6 interface",
+                        route.service_id
+                    ),
+                ));
+            };
+            if has(before, &system) || tried.contains(route) {
+                continue;
+            }
+            tried.push(route.clone());
+            if !route_table::add_replacing_copies(&system, before) {
+                return Err((
+                    NetworkStep::OutsideRoutes,
+                    format!("route -n {} failed", system.add_arguments().join(" ")),
+                ));
+            }
+        }
+        for route in self.wanted.iter().filter(|route| !has(before, route)) {
+            if !route_table::add_replacing_copies(route, before) {
+                return Err((
+                    NetworkStep::Routes,
+                    format!("route -n {} failed", route.add_arguments().join(" ")),
+                ));
+            }
+        }
+        if self.routes_and_dns && !write_dns(settings, store) {
+            return Err((
+                NetworkStep::Dns,
+                "the DNS settings could not be written".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn confirm(&self, tried: &[OutsideRoute]) -> NetworkOutcome {
+        let settings = self.settings;
+        let store = &self.store;
+        let name = &settings.tunnel.name;
+        let Some(current) = interface::read(name) else {
+            return self.failure(
+                NetworkStep::Addresses,
+                format!("the tunnel {name} could not be read"),
+                tried,
+            );
+        };
+        if let Some(step) = current.mismatch(settings, self.previous) {
+            let what = if step == NetworkStep::Mtu {
+                "MTU"
+            } else {
+                "addresses"
+            };
+            return self.failure(
+                step,
+                format!("the tunnel {name} does not have its {what} after ifconfig"),
+                tried,
+            );
+        }
+        let Some(after) = read_table(&self.families) else {
+            return self.finish(
+                Some((
+                    NetworkStep::OutsideRoutes,
+                    "the routing table could not be read".to_owned(),
+                )),
+                None,
+                tried,
+            );
+        };
+        let missing: Vec<String> = self
+            .add
+            .iter()
+            .filter(|route| is_in(Some(&after), route, store) != Some(true))
+            .map(|route| {
+                format!(
+                    "{}/{}",
+                    route.destination.address, route.destination.prefix_length
+                )
+            })
+            .collect();
+        if !missing.is_empty() {
+            return self.finish(
+                Some((
+                    NetworkStep::OutsideRoutes,
+                    format!("the routing table lacks {}", missing.join(", ")),
+                )),
+                Some(&after),
+                tried,
+            );
+        }
+        let wrong: Vec<&Route> = self
+            .wanted
+            .iter()
+            .filter(|route| !has(&after, route))
+            .chain(self.stale.iter().filter(|route| has(&after, route)))
+            .collect();
+        if !wrong.is_empty() {
+            return self.finish(
+                Some((
+                    NetworkStep::Routes,
+                    format!("the routing table lacks or still has {}", describe(&wrong)),
+                )),
+                Some(&after),
+                tried,
+            );
+        }
+        if self.routes_and_dns && !has_dns(settings, store) {
+            return self.finish(
+                Some((
+                    NetworkStep::Dns,
+                    "the DNS settings were not kept".to_owned(),
+                )),
+                Some(&after),
+                tried,
+            );
+        }
+        if !self.routes_and_dns {
+            return self.finish(None, Some(&after), tried);
+        }
+        let Some(owners) = interface::owners(interface::ipv4_address(settings)) else {
+            return self.finish(
+                Some((
+                    NetworkStep::Addresses,
+                    "the interface addresses could not be read".to_owned(),
+                )),
+                Some(&after),
+                tried,
+            );
+        };
+        self.finish(
+            routing_problem(settings, self.outside, &after, &owners),
+            Some(&after),
+            tried,
+        )
+    }
+
+    fn failure(&self, step: NetworkStep, error: String, tried: &[OutsideRoute]) -> NetworkOutcome {
+        self.finish(
+            Some((step, error)),
+            read_table(&self.families).as_deref(),
+            tried,
+        )
+    }
+
+    fn finish(
+        &self,
+        failure: Option<Failure>,
+        table: Option<&[Row]>,
+        tried: &[OutsideRoute],
+    ) -> NetworkOutcome {
+        let name = &self.settings.tunnel.name;
         let added = tried
             .iter()
-            .filter(|route| is_in(table, route, &store).unwrap_or(true))
+            .filter(|route| is_in(table, route, &self.store).unwrap_or(true))
             .cloned()
             .collect();
-        let left = remove
+        let left = self
+            .remove
             .iter()
-            .filter(|route| is_in(table, route, &store).unwrap_or(true))
+            .filter(|route| is_in(table, route, &self.store).unwrap_or(true))
             .cloned()
             .collect();
         let Some((step, error)) = failure else {
@@ -186,175 +404,7 @@ fn apply(
             added,
             left,
         }
-    };
-    let failure = |step: NetworkStep, error: String, tried: &[OutsideRoute]| {
-        finish(Some((step, error)), read_table(&families).as_deref(), tried)
-    };
-
-    for route in stale.iter().filter(|route| has(&before, route)) {
-        route_table::delete(route);
     }
-    if let Some(previous) = previous {
-        for arguments in interface::removals(previous, settings) {
-            interface::change(name, &arguments);
-        }
-    }
-    for route in remove {
-        if let Some(system) = system_route(route, &store)
-            && has(&before, &system)
-        {
-            route_table::delete(&system);
-        }
-    }
-
-    let Some(current) = interface::read(name) else {
-        return failure(
-            NetworkStep::Addresses,
-            format!("the tunnel {name} could not be read"),
-            &tried,
-        );
-    };
-    for (step, arguments) in interface::changes(settings, &current) {
-        if !interface::change(name, &arguments) {
-            return failure(
-                step,
-                format!("ifconfig {name} {} failed", arguments.join(" ")),
-                &tried,
-            );
-        }
-    }
-    for route in add {
-        let Some(system) = system_route(route, &store) else {
-            return failure(
-                NetworkStep::OutsideRoutes,
-                format!(
-                    "the network service {} has no IPv6 interface",
-                    route.service_id
-                ),
-                &tried,
-            );
-        };
-        if has(&before, &system) || tried.contains(route) {
-            continue;
-        }
-        tried.push(route.clone());
-        if !route_table::add_replacing_copies(&system, &before) {
-            return failure(
-                NetworkStep::OutsideRoutes,
-                format!("route -n {} failed", system.add_arguments().join(" ")),
-                &tried,
-            );
-        }
-    }
-    for route in wanted.iter().filter(|route| !has(&before, route)) {
-        if !route_table::add_replacing_copies(route, &before) {
-            return failure(
-                NetworkStep::Routes,
-                format!("route -n {} failed", route.add_arguments().join(" ")),
-                &tried,
-            );
-        }
-    }
-    if routes_and_dns && !write_dns(settings, &store) {
-        return failure(
-            NetworkStep::Dns,
-            "the DNS settings could not be written".to_owned(),
-            &tried,
-        );
-    }
-
-    let Some(current) = interface::read(name) else {
-        return failure(
-            NetworkStep::Addresses,
-            format!("the tunnel {name} could not be read"),
-            &tried,
-        );
-    };
-    if let Some(step) = current.mismatch(settings, previous) {
-        let what = if step == NetworkStep::Mtu {
-            "MTU"
-        } else {
-            "addresses"
-        };
-        return failure(
-            step,
-            format!("the tunnel {name} does not have its {what} after ifconfig"),
-            &tried,
-        );
-    }
-    let Some(after) = read_table(&families) else {
-        return finish(
-            Some((
-                NetworkStep::OutsideRoutes,
-                "the routing table could not be read".to_owned(),
-            )),
-            None,
-            &tried,
-        );
-    };
-    let missing: Vec<String> = add
-        .iter()
-        .filter(|route| is_in(Some(&after), route, &store) != Some(true))
-        .map(|route| {
-            format!(
-                "{}/{}",
-                route.destination.address, route.destination.prefix_length
-            )
-        })
-        .collect();
-    if !missing.is_empty() {
-        return finish(
-            Some((
-                NetworkStep::OutsideRoutes,
-                format!("the routing table lacks {}", missing.join(", ")),
-            )),
-            Some(&after),
-            &tried,
-        );
-    }
-    let wrong: Vec<&Route> = wanted
-        .iter()
-        .filter(|route| !has(&after, route))
-        .chain(stale.iter().filter(|route| has(&after, route)))
-        .collect();
-    if !wrong.is_empty() {
-        return finish(
-            Some((
-                NetworkStep::Routes,
-                format!("the routing table lacks or still has {}", describe(&wrong)),
-            )),
-            Some(&after),
-            &tried,
-        );
-    }
-    if routes_and_dns && !has_dns(settings, &store) {
-        return finish(
-            Some((
-                NetworkStep::Dns,
-                "the DNS settings were not kept".to_owned(),
-            )),
-            Some(&after),
-            &tried,
-        );
-    }
-    if !routes_and_dns {
-        return finish(None, Some(&after), &tried);
-    }
-    let Some(owners) = interface::owners(interface::ipv4_address(settings)) else {
-        return finish(
-            Some((
-                NetworkStep::Addresses,
-                "the interface addresses could not be read".to_owned(),
-            )),
-            Some(&after),
-            &tried,
-        );
-    };
-    finish(
-        routing_problem(settings, outside, &after, &owners),
-        Some(&after),
-        &tried,
-    )
 }
 
 fn switch_traffic(

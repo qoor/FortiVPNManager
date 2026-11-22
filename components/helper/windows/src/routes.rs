@@ -33,20 +33,7 @@ pub(crate) fn change_bypass_routes(change: &BypassRoutesChange, log: &Log) -> By
 
 fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, HelperError> {
     let before = read_table(log)?;
-    let primary = match &change.network {
-        NetworkCheck::Skip {} => None,
-        NetworkCheck::Read {} => Some(primary(&before, log)?),
-        NetworkCheck::Expect { network } => {
-            let primary = primary(&before, log)?;
-            if primary.network != *network {
-                return Err(error(
-                    HelperErrorCode::WrongPhase,
-                    "the network changed since it was read; read it again",
-                ));
-            }
-            Some(primary)
-        }
-    };
+    let primary = checked_primary(&change.network, &before, log)?;
     let to_add = match &primary {
         _ if change.add.is_empty() => Vec::new(),
         Some(primary) if writable(&change.add, &primary.network.router) => change
@@ -145,6 +132,27 @@ fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, 
         found,
         left,
     })
+}
+
+fn checked_primary(
+    check: &NetworkCheck,
+    table: &[Route],
+    log: &Log,
+) -> Result<Option<Primary>, HelperError> {
+    match check {
+        NetworkCheck::Skip {} => Ok(None),
+        NetworkCheck::Read {} => Ok(Some(primary(table, log)?)),
+        NetworkCheck::Expect { network } => {
+            let primary = primary(table, log)?;
+            if primary.network != *network {
+                return Err(error(
+                    HelperErrorCode::WrongPhase,
+                    "the network changed since it was read; read it again",
+                ));
+            }
+            Ok(Some(primary))
+        }
+    }
 }
 
 /// Whether the Helper writes `routes`: at most a list's worth, no repeats, and each to an exception

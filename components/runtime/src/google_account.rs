@@ -13,7 +13,9 @@ use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{GoogleError, OAuthClientSource};
 use fvm_contract::app_internal::{SecretText, SignInPages};
 use fvm_core::gmail_api::{self, ApiError, Profile};
-use fvm_core::oauth::{self, CallbackDecision, HeadParse, OAuthClient, Pkce, TokenError};
+use fvm_core::oauth::{
+    self, CallbackDecision, HeadParse, OAuthClient, Pkce, TokenError, TokenGrant,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
@@ -669,11 +671,51 @@ async fn sign_in(
         }
         _ = cancelled => return Err(None),
     };
+    let (grant, refresh_token) =
+        exchange_code(&code, &client, &redirect_uri, &pkce, &address).await?;
+    let client_id = client.client_id.clone();
+    let access_token = grant.access_token.clone();
+    let expires = SystemTime::now() + grant.expires_in;
+    queue
+        .ask(move |runtime, reply| {
+            let item = SecretItem::GoogleRefreshToken {
+                address: address.clone(),
+            };
+            runtime.request(
+                PortRequest::WriteSecret {
+                    item,
+                    value: refresh_token,
+                },
+                move |runtime, response| match response {
+                    PortResponse::SecretChanged {} => {
+                        runtime
+                            .google
+                            .tokens
+                            .insert((address, client_id), (access_token, expires));
+                        reply(Ok(()));
+                    }
+                    PortResponse::SecretStoreFailed { failure } => {
+                        reply(Err(Some(GoogleError::SecretStore { failure })));
+                    }
+                    other => panic!("a secret write answered with {other:?}"),
+                },
+            );
+        })
+        .await
+}
+
+async fn exchange_code(
+    code: &SecretText,
+    client: &OAuthClient,
+    redirect_uri: &str,
+    pkce: &Pkce,
+    address: &str,
+) -> Result<(TokenGrant, SecretText), Option<GoogleError>> {
     let body = oauth::authorization_code_body(
         &code.0,
         &client.client_id,
         &client.client_secret.0,
-        &redirect_uri,
+        redirect_uri,
         pkce.verifier(),
     );
     let reply = net::post_form(oauth::TOKEN_ENDPOINT, &body)
@@ -710,42 +752,14 @@ async fn sign_in(
             return Err(Some(api_error(error)));
         }
     };
-    if !profile.belongs_to(&address) {
+    if !profile.belongs_to(address) {
         revoke(&refresh_token).await;
         return Err(Some(GoogleError::WrongAccount {
-            expected: address,
+            expected: address.to_owned(),
             actual: profile.email_address,
         }));
     }
-    let client_id = client.client_id.clone();
-    let access_token = grant.access_token.clone();
-    let expires = SystemTime::now() + grant.expires_in;
-    queue
-        .ask(move |runtime, reply| {
-            let item = SecretItem::GoogleRefreshToken {
-                address: address.clone(),
-            };
-            runtime.request(
-                PortRequest::WriteSecret {
-                    item,
-                    value: refresh_token,
-                },
-                move |runtime, response| match response {
-                    PortResponse::SecretChanged {} => {
-                        runtime
-                            .google
-                            .tokens
-                            .insert((address, client_id), (access_token, expires));
-                        reply(Ok(()));
-                    }
-                    PortResponse::SecretStoreFailed { failure } => {
-                        reply(Err(Some(GoogleError::SecretStore { failure })));
-                    }
-                    other => panic!("a secret write answered with {other:?}"),
-                },
-            );
-        })
-        .await
+    Ok((grant, refresh_token))
 }
 
 pub(crate) fn api_error(error: ApiError) -> GoogleError {
