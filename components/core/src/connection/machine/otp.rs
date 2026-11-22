@@ -5,7 +5,7 @@ use crate::connection::ledger::Failure;
 use crate::connection::policy::{self, elapsed};
 use crate::connection::{Effect, Note, OtpFailure};
 
-use super::{ConnectionManager, Phase, RetryReason, Stage, StaleOtp};
+use super::{ConnectionManager, OtpSession, Phase, RetryReason, Stage, StaleOtp};
 
 impl ConnectionManager {
     pub(super) fn otp_session_ready(&mut self, id: &AttemptId) {
@@ -42,10 +42,10 @@ impl ConnectionManager {
         let Phase::Connecting(attempt) = &mut self.phase else {
             return;
         };
-        if attempt.id != *id || !attempt.otp_session_open {
+        if attempt.id != *id || attempt.otp_session != OtpSession::Open {
             return;
         }
-        attempt.otp_session_open = false;
+        attempt.otp_session = OtpSession::Closed;
         match attempt.stage {
             // The VPN client was never started: a Gmail credential problem costs no VPN login.
             Stage::PreparingOtp => match (attempt.replacing.take(), failure) {
@@ -77,14 +77,13 @@ impl ConnectionManager {
         if attempt.id != *id
             || attempt.stage != Stage::Run
             || attempt.otp_prompted_at.is_none()
-            || attempt.otp_submitted
+            || attempt.otp_session == OtpSession::Submitted
             || attempt.stop_requested.is_some()
         {
             return;
         }
-        attempt.otp_submitted = true;
         // The session moves the used emails to the trash and closes itself after the submission.
-        attempt.otp_session_open = false;
+        attempt.otp_session = OtpSession::Submitted;
         self.effects.push(Effect::SubmitOtp {
             attempt: attempt.id.clone(),
             code,
@@ -136,7 +135,7 @@ impl ConnectionManager {
             return;
         }
         attempt.stage = Stage::PreparingOtp;
-        attempt.otp_session_open = true;
+        attempt.otp_session = OtpSession::Open;
         self.effects.push(Effect::OpenOtpSession {
             attempt: attempt.id.clone(),
         });

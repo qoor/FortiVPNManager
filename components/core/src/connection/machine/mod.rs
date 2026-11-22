@@ -149,9 +149,8 @@ pub(super) struct Attempt {
     /// When the credentials went out; the gateway sends the code email once it accepts them.
     credentials_sent_at: Option<SystemTime>,
     otp_prompted_at: Option<SystemTime>,
-    otp_submitted: bool,
-    /// The OTP session is open and this attempt's; it closes itself after the submission.
-    otp_session_open: bool,
+    /// Open while the OTP session is this attempt's; it closes itself after the submission.
+    otp_session: OtpSession,
     otp_failure: Option<OtpFailure>,
     otp_in_spam: bool,
     /// The stop the app asked for; the exit is still classified.
@@ -159,6 +158,13 @@ pub(super) struct Attempt {
     /// The account when the attempt began: its readiness check was for it and its run uses it.
     pub(super) account: VpnAccount,
     pub(super) replacing: Option<Session>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum OtpSession {
+    Closed,
+    Open,
+    Submitted,
 }
 
 impl Attempt {
@@ -169,9 +175,10 @@ impl Attempt {
     /// turn it off on the app's quit and the Mac's sleep, at the OTP time limit and after a
     /// rejected login.
     fn close_otp_session(&mut self, check_spam: bool, search: bool) -> Option<Effect> {
-        if !mem::take(&mut self.otp_session_open) {
+        if self.otp_session != OtpSession::Open {
             return None;
         }
+        self.otp_session = OtpSession::Closed;
         Some(match self.credentials_sent_at {
             Some(sent_at) if search && self.milestone <= Some(Milestone::OtpPrompted) => {
                 Effect::TrashStaleOtp {
@@ -541,7 +548,7 @@ impl ConnectionManager {
             Phase::Connecting(attempt) if attempt.stop_requested.is_none() => {
                 wanted.insert(TimerKind::AttemptDeadline, attempt.deadline);
                 if attempt.stage == Stage::Run
-                    && !attempt.otp_submitted
+                    && attempt.otp_session != OtpSession::Submitted
                     && let Some(prompted) = attempt.otp_prompted_at
                 {
                     wanted.insert(TimerKind::OtpDeadline, prompted + policy::OTP_DEADLINE);
@@ -984,7 +991,7 @@ impl ConnectionManager {
         };
         if attempt.stage != Stage::Run
             || attempt.otp_prompted_at.is_none()
-            || attempt.otp_submitted
+            || attempt.otp_session == OtpSession::Submitted
             || attempt.stop_requested.is_some()
         {
             return;

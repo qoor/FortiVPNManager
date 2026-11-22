@@ -59,9 +59,15 @@ impl ConnectionManager {
 
     pub(in crate::connection) fn wake_settled(&mut self, observation: &WakeObservation) {
         let slept_for = self.pending_wake.take().unwrap_or(Duration::ZERO);
-        self.path = Some(PathSnapshot {
-            satisfied: observation.path_satisfied,
-            underlay: observation.underlay.clone(),
+        self.path = Some(match observation {
+            WakeObservation::NoNetwork => PathSnapshot {
+                satisfied: false,
+                underlay: None,
+            },
+            WakeObservation::NetworkBack { underlay, .. } => PathSnapshot {
+                satisfied: true,
+                underlay: underlay.clone(),
+            },
         });
         match &self.phase {
             // The wake rules judge a tunnel that was up across the sleep. One that came up after
@@ -76,7 +82,7 @@ impl ConnectionManager {
             Phase::WaitingNetwork {
                 reason,
                 delay_after_path,
-            } if observation.path_satisfied && !self.sleeping => {
+            } if matches!(observation, WakeObservation::NetworkBack { .. }) && !self.sleeping => {
                 self.resume_from_network_wait(*reason, *delay_after_path);
             }
             _ => {}
@@ -93,26 +99,29 @@ impl ConnectionManager {
         slept_for: Duration,
     ) {
         let may_reconnect = self.automatic_reconnect_allowed();
-        if !observation.path_satisfied {
+        let WakeObservation::NetworkBack {
+            underlay,
+            session_running,
+            tunnel_up,
+            routing_incomplete,
+        } = observation
+        else {
             // The network did not come back: keep the tunnel and judge it later.
             let earliest = self.now + policy::MINIMUM_PLANNED_LEAD;
             session.planned_reconnect = session.planned_reconnect.map(|at| at.max(earliest));
             self.phase = Phase::Connected(session);
             self.rearm_proactive_timer();
             return;
-        }
+        };
         let min_sleep =
             Duration::from_secs(u64::from(self.settings.connection.min_sleep_minutes) * 60);
         let planned_passed = may_reconnect
             && session
                 .planned_reconnect
                 .is_some_and(|planned| planned <= self.now);
-        let reason = if !observation.session_running
-            || !observation.tunnel_up
-            || observation.routing_incomplete
-        {
+        let reason = if !session_running || !tunnel_up || *routing_incomplete {
             Some(AttemptReason::TunnelLost)
-        } else if let (Some(old), Some(new)) = (&session.underlay, &observation.underlay)
+        } else if let (Some(old), Some(new)) = (&session.underlay, underlay)
             && old != new
         {
             Some(AttemptReason::NetworkChanged)
@@ -132,7 +141,7 @@ impl ConnectionManager {
             }
             (_, None) => {
                 if session.underlay.is_none() {
-                    session.underlay.clone_from(&observation.underlay);
+                    session.underlay.clone_from(underlay);
                 }
                 self.phase = Phase::Connected(session);
                 self.rearm_proactive_timer();

@@ -368,7 +368,10 @@ fn reconnect_now_is_ignored_when_nothing_is_wanted() {
     h.launch_with(false, None);
     assert_eq!(connection_effects(&h.send(Input::ReconnectNow)), []);
     h.send(Input::ReadinessChecked(super::super::ReadinessFacts {
-        vpn_password_stored: false,
+        secrets: super::super::StoredSecrets {
+            vpn_password: false,
+            gmail_credential: true,
+        },
         ..ready()
     }));
     assert_eq!(connection_effects(&h.send(Input::ReconnectNow)), []);

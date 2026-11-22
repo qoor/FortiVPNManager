@@ -68,23 +68,16 @@ struct App {
     inputs: Sender<Input>,
     out: Receiver<FromRuntime>,
     secrets: Vec<(SecretItem, SecretText)>,
-    secret_writes_fail: bool,
+    answers: Answers,
     helper_registration: RegistrationStatus,
     helper_build: String,
     /// The primary network; `None` when there is no network.
     service: Option<BypassRoutesSnapshot>,
     /// The app's exception routes the fake Helper keeps in the routing table.
     exception_routes: Vec<BypassRoute>,
-    /// Whether written routes stay in the routing table.
-    keeps_routes: bool,
-    /// The route calls find no Helper.
-    routes_unreachable: bool,
-    /// The route calls wait for `answer_held_route_calls`.
-    holds_route_calls: bool,
+    holds: Holds,
     held_route_calls: Vec<(u64, HelperCall)>,
-    holds_update_calls: bool,
     held_update_calls: Vec<(u64, HelperCall)>,
-    holds_gmail_reads: bool,
     held_gmail_reads: usize,
     /// The app's exception routes when the quit was approved, once it was.
     routes_at_quit: Option<Vec<BypassRoute>>,
@@ -103,6 +96,22 @@ struct App {
     update_url: String,
     update_sections: Vec<(Instant, AutoUpdateSection)>,
     log_at_waiter: Option<String>,
+}
+
+struct Answers {
+    secret_writes_fail: bool,
+    /// Whether written routes stay in the routing table.
+    keeps_routes: bool,
+    /// The route calls find no Helper.
+    routes_unreachable: bool,
+}
+
+#[derive(Default)]
+struct Holds {
+    /// The route calls wait for `answer_held_route_calls`.
+    route_calls: bool,
+    update_calls: bool,
+    gmail_reads: bool,
 }
 
 fn scratch() -> PathBuf {
@@ -144,13 +153,9 @@ impl App {
             helper_build: APP_BUILD.into(),
             service: None,
             exception_routes: Vec::new(),
-            keeps_routes: true,
-            routes_unreachable: false,
-            holds_route_calls: false,
+            holds: Holds::default(),
             held_route_calls: Vec::new(),
-            holds_update_calls: false,
             held_update_calls: Vec::new(),
-            holds_gmail_reads: false,
             held_gmail_reads: 0,
             routes_at_quit: None,
             requests: Vec::new(),
@@ -159,7 +164,11 @@ impl App {
             log: Vec::new(),
             open_settings: 0,
             forticlient: None,
-            secret_writes_fail: false,
+            answers: Answers {
+                secret_writes_fail: false,
+                keeps_routes: true,
+                routes_unreachable: false,
+            },
             waiter_failure: None,
             prepare_answer: helper_reply(&UpdatePrepareReply::Prepared {
                 version: version("26.2.0"),
@@ -370,21 +379,21 @@ impl App {
                 if let PortRequest::ReadSecret {
                     item: SecretItem::GmailAppPassword { .. },
                 } = &request
-                    && self.holds_gmail_reads
+                    && self.holds.gmail_reads
                 {
                     self.held_gmail_reads += 1;
                     return;
                 }
                 if let PortRequest::CallHelper { call } = &request
                     && is_route_call(call)
-                    && self.holds_route_calls
+                    && self.holds.route_calls
                 {
                     self.held_route_calls.push((id, call.clone()));
                     return;
                 }
                 if let PortRequest::CallHelper { call } = &request
                     && is_update_call(call)
-                    && self.holds_update_calls
+                    && self.holds.update_calls
                 {
                     self.held_update_calls.push((id, call.clone()));
                     return;
@@ -411,7 +420,7 @@ impl App {
             PortRequest::HasSecret { item } => PortResponse::HasSecret {
                 exists: self.secret(&item).is_some(),
             },
-            PortRequest::WriteSecret { .. } if self.secret_writes_fail => {
+            PortRequest::WriteSecret { .. } if self.answers.secret_writes_fail => {
                 PortResponse::SecretStoreFailed {
                     failure: SecretStoreFailure {
                         description: "denied".into(),
@@ -477,7 +486,7 @@ impl App {
     }
 
     fn answer_held_route_calls(&mut self) {
-        self.holds_route_calls = false;
+        self.holds.route_calls = false;
         for (id, call) in std::mem::take(&mut self.held_route_calls) {
             let response = self.helper(call);
             self.send(ToRuntime::PortResponse { id, response });
@@ -519,7 +528,7 @@ impl App {
                 PortResponse::HelperReplyFlag { value: true }
             }
             HelperCall::ReadBypassRoutes {} | HelperCall::WriteBypassRoutes { .. }
-                if self.routes_unreachable =>
+                if self.answers.routes_unreachable =>
             {
                 PortResponse::HelperUnreachable {
                     failure: HelperChannelFailure::ConnectionLost {},
@@ -542,7 +551,7 @@ impl App {
                             "message": "the network changed since it was read; read it again",
                         }}}));
                     }
-                    self.exception_routes = if self.keeps_routes {
+                    self.exception_routes = if self.answers.keeps_routes {
                         routes
                     } else {
                         Vec::new()
@@ -706,7 +715,7 @@ fn the_helpers_lines_of_another_attempt_start_no_block() {
         .push((vpn_password_item(), SecretText("vpn secret".into())));
     app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    app.holds_gmail_reads = true;
+    app.holds.gmail_reads = true;
     app.launch();
     app.settle();
     let other = app.start_run(Command::Connect {});
@@ -974,7 +983,7 @@ fn a_failed_password_write_stays_shown_after_a_commit_made_meanwhile() {
     app.write_config(ACCOUNT);
     app.launch();
     app.settle();
-    app.secret_writes_fail = true;
+    app.answers.secret_writes_fail = true;
     let (revision, form) = edited_form(&app, |form| {
         form.vpn_password = SecretText("new secret".into());
     });
@@ -1333,7 +1342,7 @@ fn routes_the_routing_table_did_not_keep_are_reported_and_retried() {
     let mut app = App::new();
     app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
     app.service = Some(office_wifi());
-    app.keeps_routes = false;
+    app.answers.keeps_routes = false;
     app.launch();
     want_the_vpn(&mut app);
     app.settle_until("the failure", |app| {
@@ -1374,7 +1383,7 @@ fn nothing_follows_an_approved_quit() {
         app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
         app.service = Some(office_wifi());
         app.helper_registration = RegistrationStatus::NotRegistered;
-        app.holds_route_calls = true;
+        app.holds.route_calls = true;
         app.launch();
         app.settle_until("the read under way", |app| !app.held_route_calls.is_empty());
         app.send(ToRuntime::Event {
@@ -1438,7 +1447,7 @@ fn a_file_naming_the_vpn_servers_address_as_a_target_is_refused() {
 #[test]
 fn a_read_that_fails_after_the_helper_connection_was_lost_is_retried() {
     let mut app = app_with_the_rule_applied();
-    app.routes_unreachable = true;
+    app.answers.routes_unreachable = true;
     app.send(ToRuntime::Event {
         event: SystemEvent::HelperConnectionLost {},
     });
@@ -1457,7 +1466,7 @@ fn a_read_that_fails_after_the_helper_connection_was_lost_is_retried() {
 #[test]
 fn a_read_that_still_fails_after_the_helper_connection_was_lost_stops_quietly() {
     let mut app = app_with_the_rule_applied();
-    app.routes_unreachable = true;
+    app.answers.routes_unreachable = true;
     app.send(ToRuntime::Event {
         event: SystemEvent::HelperConnectionLost {},
     });
@@ -1500,7 +1509,7 @@ fn routes_the_routing_table_still_did_not_keep_are_reported_once() {
     let mut app = App::new();
     app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
     app.service = Some(office_wifi());
-    app.keeps_routes = false;
+    app.answers.keeps_routes = false;
     app.launch();
     want_the_vpn(&mut app);
     app.settle_until("the first failure", |app| {
@@ -1539,8 +1548,8 @@ fn routes_the_routing_table_still_did_not_keep_are_reported_once() {
 fn writes_that_fail_once_the_helper_is_back_are_reported_after_reads_stopped_quietly() {
     let mut app = app_with_the_rule_applied();
     app.exception_routes.clear();
-    app.routes_unreachable = true;
-    app.keeps_routes = false;
+    app.answers.routes_unreachable = true;
+    app.answers.keeps_routes = false;
     app.send(ToRuntime::Event {
         event: SystemEvent::HelperConnectionLost {},
     });
@@ -1573,7 +1582,7 @@ fn writes_that_fail_once_the_helper_is_back_are_reported_after_reads_stopped_qui
         })
         .count();
     assert_eq!(notifications, 0);
-    app.routes_unreachable = false;
+    app.answers.routes_unreachable = false;
     for _ in 0..4 {
         let calls = app.route_calls();
         network_changed(&app);
@@ -1609,7 +1618,7 @@ fn a_failed_sync_is_tried_again_when_the_helper_answers() {
     let mut app = App::new();
     app.write_config(&format!("{ACCOUNT}{WITH_RULE}"));
     app.service = Some(office_wifi());
-    app.routes_unreachable = true;
+    app.answers.routes_unreachable = true;
     app.launch();
     app.settle_until("the failure", |app| {
         matches!(
@@ -1620,7 +1629,7 @@ fn a_failed_sync_is_tried_again_when_the_helper_answers() {
             })
         )
     });
-    app.routes_unreachable = false;
+    app.answers.routes_unreachable = false;
     // Registering again follows the approval with readiness checks.
     app.command(Command::RegisterHelper {});
     app.settle_until("the sync", |app| {
@@ -1637,7 +1646,7 @@ fn the_helpers_output_reaches_the_log_file_as_it_came() {
         .push((vpn_password_item(), SecretText("vpn secret".into())));
     app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    app.holds_gmail_reads = true;
+    app.holds.gmail_reads = true;
     app.launch();
     app.settle();
     let attempt = app.start_run(Command::Connect {});
@@ -1687,7 +1696,7 @@ fn reconnect_now_runs_the_next_tunnel_beside_the_connected_one() {
         .push((vpn_password_item(), SecretText("vpn secret".into())));
     app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    app.holds_gmail_reads = true;
+    app.holds.gmail_reads = true;
     app.launch();
     app.settle();
     let old = app.start_run(Command::Connect {});
@@ -2238,7 +2247,7 @@ impl App {
     }
 
     fn answer_held_update_calls(&mut self) {
-        self.holds_update_calls = false;
+        self.holds.update_calls = false;
         for (id, call) in std::mem::take(&mut self.held_update_calls) {
             let response = self.helper(call);
             self.send(ToRuntime::PortResponse { id, response });
@@ -2426,7 +2435,7 @@ fn a_launch_after_an_install_that_began_connected_connects_where_a_launch_would_
             .push((vpn_password_item(), SecretText("vpn secret".into())));
         app.secrets
             .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-        app.holds_gmail_reads = true;
+        app.holds.gmail_reads = true;
         let mut state = json!({"loginItemRegistered": false, "updateTargetVersion": "26.1.0"});
         if connected_before_update {
             state["connectedBeforeUpdate"] = json!(true);
@@ -2629,7 +2638,7 @@ fn download_half_the_installer(app: &mut App) {
 
 fn prepare_the_downloaded_update(app: &mut App, server: &Server) {
     let before = app.update_sections.len();
-    app.holds_update_calls = true;
+    app.holds.update_calls = true;
     server.release();
     app.settle_until("the held preparation", |app| {
         app.held_update_calls
@@ -3200,8 +3209,8 @@ fn update_calls_never_hold_up_the_connections_helper_calls() {
         .push((vpn_password_item(), SecretText("vpn secret".into())));
     app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    app.holds_gmail_reads = true;
-    app.holds_update_calls = true;
+    app.holds.gmail_reads = true;
+    app.holds.update_calls = true;
     app.update_url = server.url("/latest");
     app.launch_until_helper_runs();
     app.download_from(&server);
@@ -3261,7 +3270,7 @@ fn app_on_the_office_wifi_with_a_served_update(server: &Server) -> App {
         .push((vpn_password_item(), SecretText("vpn secret".into())));
     app.secrets
         .push((app_password_item(), SecretText("abcdabcdabcdabcd".into())));
-    app.holds_gmail_reads = true;
+    app.holds.gmail_reads = true;
     app.update_url = server.url("/latest");
     app.launch_until_helper_runs();
     app.download_from(server);

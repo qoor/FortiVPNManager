@@ -35,13 +35,15 @@ pub(super) struct RawPath {
 
 /// What survived a sleep, once the network came back or the wait for it ended.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(super) struct WakeObservation {
-    pub(super) path_satisfied: bool,
-    pub(super) underlay: Option<Underlay>,
-    pub(super) session_running: bool,
-    /// The tunnel interface is still there and up.
-    pub(super) tunnel_up: bool,
-    pub(super) routing_incomplete: bool,
+pub(super) enum WakeObservation {
+    NoNetwork,
+    NetworkBack {
+        underlay: Option<Underlay>,
+        session_running: bool,
+        /// The tunnel interface is still there and up.
+        tunnel_up: bool,
+        routing_incomplete: bool,
+    },
 }
 
 /// Waiting for the network after a wake: until it is back or the time is up, looking every
@@ -159,13 +161,7 @@ impl ConnectionManager {
         } else {
             // Judged without a network; what survived does not matter then.
             settle.late = true;
-            self.wake_settled(&WakeObservation {
-                path_satisfied: false,
-                underlay: None,
-                session_running: false,
-                tunnel_up: false,
-                routing_incomplete: false,
-            });
+            self.wake_settled(&WakeObservation::NoNetwork);
             self.wake_look_due();
         }
     }
@@ -281,8 +277,7 @@ impl ConnectionManager {
         } else {
             self.wake_settle = None;
             let tunnel_up = self.tunnel_interface_up(&result.addresses);
-            self.wake_settled(&WakeObservation {
-                path_satisfied: true,
+            self.wake_settled(&WakeObservation::NetworkBack {
                 underlay,
                 session_running: result.session_running.unwrap_or(false),
                 tunnel_up,

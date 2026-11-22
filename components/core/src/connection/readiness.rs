@@ -18,12 +18,17 @@ pub struct ReadinessFacts {
     /// The server address, username and Gmail address are set, and the VPN client would accept
     /// the account values.
     pub account_complete: bool,
+    pub secrets: StoredSecrets,
+    pub helper: HelperFacts,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct StoredSecrets {
     /// The secret storage holds a VPN password for the account.
-    pub vpn_password_stored: bool,
+    pub vpn_password: bool,
     /// The secret storage holds a Gmail app password, or with the Gmail API method the Google
     /// account is connected.
-    pub gmail_credential_stored: bool,
-    pub helper: HelperFacts,
+    pub gmail_credential: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -66,8 +71,8 @@ impl ReadinessFacts {
         let checks = [
             (self.config_valid, SetupNeed::ConfigFile),
             (self.account_complete, SetupNeed::AccountDetails),
-            (self.vpn_password_stored, SetupNeed::VpnPassword),
-            (self.gmail_credential_stored, SetupNeed::GmailCredential),
+            (self.secrets.vpn_password, SetupNeed::VpnPassword),
+            (self.secrets.gmail_credential, SetupNeed::GmailCredential),
         ];
         let mut missing: Vec<SetupNeed> = checks
             .into_iter()

@@ -37,8 +37,7 @@ pub(crate) struct Bypass {
     status: BypassStatus,
     current: Option<BypassRoutesSnapshot>,
     apply_error: Option<ConfigFileError>,
-    syncing: bool,
-    sync_requested: bool,
+    sync: SyncState,
     write_failures: u32,
     read_failures: u32,
     retry_generation: u64,
@@ -61,8 +60,7 @@ impl Default for Bypass {
             status: BypassStatus::Checking {},
             current: None,
             apply_error: None,
-            syncing: false,
-            sync_requested: false,
+            sync: SyncState::Idle,
             write_failures: 0,
             read_failures: 0,
             retry_generation: 0,
@@ -74,6 +72,14 @@ impl Default for Bypass {
             connection_lost: false,
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SyncState {
+    Idle,
+    Running,
+    RunAgain,
+    Requested,
 }
 
 /// Why reading or writing the routes failed, and whether it happened while writing.
@@ -206,8 +212,8 @@ impl Runtime {
         if self.bypass.quitting {
             return;
         }
-        if self.bypass.syncing {
-            self.bypass.sync_requested = true;
+        if matches!(self.bypass.sync, SyncState::Running | SyncState::RunAgain) {
+            self.bypass.sync = SyncState::RunAgain;
             return;
         }
         if !self.config.exists() {
@@ -225,7 +231,11 @@ impl Runtime {
         ) {
             self.bypass.status = BypassStatus::Checking {};
         }
-        self.bypass.syncing = true;
+        self.bypass.sync = if self.bypass.sync == SyncState::Requested {
+            SyncState::RunAgain
+        } else {
+            SyncState::Running
+        };
         self.call_helper(
             HelperCall::ReadBypassRoutes {},
             |runtime, response| match runtime.routes_reply(response) {
@@ -436,11 +446,19 @@ impl Runtime {
     }
 
     fn sync_done(&mut self) {
-        self.bypass.syncing = false;
+        let requested = self.bypass.sync == SyncState::RunAgain;
         if self.bypass.quitting {
+            self.bypass.sync = if requested {
+                SyncState::Requested
+            } else {
+                SyncState::Idle
+            };
             self.remove_routes_for_quit();
-        } else if std::mem::take(&mut self.bypass.sync_requested) {
-            self.sync_routes();
+        } else {
+            self.bypass.sync = SyncState::Idle;
+            if requested {
+                self.sync_routes();
+            }
         }
     }
 
@@ -464,7 +482,7 @@ impl Runtime {
             tokio::time::sleep(QUIT_REMOVAL_LIMIT).await;
             queue.run(move |runtime| runtime.bypass_routes_removed(generation));
         });
-        if !self.bypass.syncing {
+        if !matches!(self.bypass.sync, SyncState::Running | SyncState::RunAgain) {
             self.remove_routes_for_quit();
         }
     }

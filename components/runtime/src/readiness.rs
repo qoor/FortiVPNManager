@@ -10,7 +10,7 @@ use fvm_contract::app_internal::port::{
     HelperCall, LogCategory, LogLevel, PortRequest, PortResponse, RegistrationStatus, SecretItem,
 };
 use fvm_contract::validation;
-use fvm_core::connection::{self, HelperFacts, ReadinessFacts};
+use fvm_core::connection::{self, HelperFacts, ReadinessFacts, StoredSecrets};
 
 use crate::orchestration::Runtime;
 
@@ -107,8 +107,10 @@ impl Runtime {
         let mut facts = ReadinessFacts {
             config_valid: self.config.is_valid(),
             account_complete: account_values_usable && !address.is_empty(),
-            vpn_password_stored: false,
-            gmail_credential_stored: false,
+            secrets: StoredSecrets {
+                vpn_password: false,
+                gmail_credential: false,
+            },
             helper,
         };
         let vpn_item =
@@ -118,18 +120,18 @@ impl Runtime {
             });
         let method = settings.otp.method;
         self.has_secret(vpn_item, move |runtime, vpn_password_stored| {
-            facts.vpn_password_stored = vpn_password_stored;
+            facts.secrets.vpn_password = vpn_password_stored;
             let app_password = (!address.is_empty()).then(|| SecretItem::GmailAppPassword {
                 address: address.clone(),
             });
             runtime.has_secret(app_password, move |runtime, app_password_stored| {
                 if app_password_stored || method != OtpMethod::GmailApi || address.is_empty() {
-                    facts.gmail_credential_stored = app_password_stored;
+                    facts.secrets.gmail_credential = app_password_stored;
                     runtime.feed(connection::Input::ReadinessChecked(facts));
                     return;
                 }
                 runtime.gmail_api_authorized(&address, move |runtime, authorized| {
-                    facts.gmail_credential_stored = authorized;
+                    facts.secrets.gmail_credential = authorized;
                     runtime.feed(connection::Input::ReadinessChecked(facts));
                 });
             });

@@ -10,7 +10,7 @@ use crate::connection::ledger::Failure;
 use crate::connection::policy::{self, elapsed};
 
 use super::{
-    AfterStop, Attempt, AttemptReason, ConnectionManager, Phase, Renewal, RetryReason,
+    AfterStop, Attempt, AttemptReason, ConnectionManager, OtpSession, Phase, Renewal, RetryReason,
     SECONDS_FROM_1970_TO_2026, Session, Stage, Stop,
 };
 
@@ -95,8 +95,7 @@ impl ConnectionManager {
             milestone: None,
             credentials_sent_at: None,
             otp_prompted_at: None,
-            otp_submitted: false,
-            otp_session_open: false,
+            otp_session: OtpSession::Closed,
             otp_failure: None,
             otp_in_spam: false,
             stop_requested: None,
@@ -260,8 +259,7 @@ impl ConnectionManager {
             milestone: None,
             credentials_sent_at: None,
             otp_prompted_at: None,
-            otp_submitted: false,
-            otp_session_open: false,
+            otp_session: OtpSession::Closed,
             otp_failure: None,
             otp_in_spam: false,
             stop_requested: None,

@@ -19,7 +19,7 @@ use super::super::machine::{Attempt, Phase, RetryReason, Session, Stop};
 use super::super::system::Underlay;
 use super::super::{
     ConnectionManager, ConnectionSettings, Effect, FailureLedger, HelperFacts, Input, Launch,
-    ReadinessFacts, Schedule, Settings, Startup, TimerId, TimerKind, VpnAccount,
+    ReadinessFacts, Schedule, Settings, Startup, StoredSecrets, TimerId, TimerKind, VpnAccount,
 };
 
 pub(super) const APP_BUILD: &str = "100";
@@ -179,8 +179,10 @@ pub(super) fn ready() -> ReadinessFacts {
     ReadinessFacts {
         config_valid: true,
         account_complete: true,
-        vpn_password_stored: true,
-        gmail_credential_stored: true,
+        secrets: StoredSecrets {
+            vpn_password: true,
+            gmail_credential: true,
+        },
         helper: HelperFacts::Answered {
             build: APP_BUILD.to_owned(),
             status: Some(HelperStatus {

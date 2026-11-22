@@ -9,7 +9,9 @@ use crate::connection::ledger::Failure;
 use crate::connection::policy;
 use crate::connection::{Effect, OtpFailure};
 
-use super::{AfterStop, Attempt, ConnectionManager, Phase, RetryReason, Session, Stage};
+use super::{
+    AfterStop, Attempt, ConnectionManager, OtpSession, Phase, RetryReason, Session, Stage,
+};
 
 impl ConnectionManager {
     pub(super) fn helper_event(&mut self, event: HelperEvent) {
@@ -281,7 +283,7 @@ impl ConnectionManager {
     #[must_use]
     pub fn wants_otp_session(&self, id: &AttemptId) -> bool {
         matches!(&self.phase, Phase::Connecting(attempt)
-            if attempt.id == *id && attempt.otp_session_open)
+            if attempt.id == *id && attempt.otp_session == OtpSession::Open)
     }
 
     /// Whether a readiness check that found the Helper at `helper_build` should have it exit when

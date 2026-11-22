@@ -347,7 +347,7 @@ fn failures_before_the_run_count_as_other_failures_and_never_stop() {
     let (mut h, old) = connected();
     h.fire(TimerKind::ProactiveReconnect);
     let mut missing = ready();
-    missing.vpn_password_stored = false;
+    missing.secrets.vpn_password = false;
     h.send(Input::ReadinessChecked(missing));
     assert_eq!(renewal(&h).unwrap().tries, 1);
     let id = h.attempt().unwrap().id.clone();

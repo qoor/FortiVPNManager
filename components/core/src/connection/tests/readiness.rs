@@ -8,7 +8,7 @@ use super::super::machine::{AttemptReason, Phase, Stage};
 use super::super::readiness::SetupNeed;
 use super::super::{
     Effect, Failure, FailureLedger, HelperFacts, Input, OtpFailure, ReadinessFacts, Settings,
-    TimerKind, VpnAccount,
+    StoredSecrets, TimerKind, VpnAccount,
 };
 use super::harness::*;
 
@@ -18,7 +18,10 @@ fn reason(h: &Harness) -> Option<AttemptReason> {
 
 fn without_password() -> ReadinessFacts {
     ReadinessFacts {
-        vpn_password_stored: false,
+        secrets: StoredSecrets {
+            vpn_password: false,
+            gmail_credential: true,
+        },
         ..ready()
     }
 }
@@ -71,7 +74,10 @@ fn completing_the_setup_while_a_connection_is_wanted_connects() {
     let mut h = Harness::new();
     h.launch();
     h.send(Input::ReadinessChecked(ReadinessFacts {
-        gmail_credential_stored: false,
+        secrets: StoredSecrets {
+            vpn_password: true,
+            gmail_credential: false,
+        },
         ..ready()
     }));
     assert_eq!(
@@ -338,8 +344,10 @@ fn readiness_facts_map_to_setup_items() {
     assert_eq!(
         check(ReadinessFacts {
             account_complete: false,
-            vpn_password_stored: false,
-            gmail_credential_stored: false,
+            secrets: StoredSecrets {
+                vpn_password: false,
+                gmail_credential: false,
+            },
             ..ready()
         }),
         Phase::SetupRequired(vec![

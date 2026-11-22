@@ -65,8 +65,14 @@ pub(crate) struct Forms {
     app_password_stored: bool,
     /// The account the stored flags were looked up for.
     pub(crate) looked_up: Option<(String, String, String)>,
-    saving: bool,
-    save_again: bool,
+    saving: Saving,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Saving {
+    Idle,
+    Running,
+    RunAgain,
 }
 
 impl Default for Forms {
@@ -83,8 +89,7 @@ impl Default for Forms {
             vpn_password_stored: false,
             app_password_stored: false,
             looked_up: None,
-            saving: false,
-            save_again: false,
+            saving: Saving::Idle,
         }
     }
 }
@@ -265,8 +270,8 @@ impl Runtime {
     /// the account that was saved.
     pub(crate) fn save_account(&mut self) {
         let forms = &mut self.forms;
-        if forms.saving {
-            forms.save_again = true;
+        if forms.saving != Saving::Idle {
+            forms.saving = Saving::RunAgain;
             return;
         }
         if !forms.has_changes() {
@@ -350,14 +355,15 @@ impl Runtime {
                 }
             });
         }
-        self.forms.saving = true;
+        self.forms.saving = Saving::Running;
         self.write_secrets(writes, |runtime, failure| {
-            runtime.forms.saving = false;
+            let again =
+                std::mem::replace(&mut runtime.forms.saving, Saving::Idle) == Saving::RunAgain;
             runtime.forms.looked_up = None;
             runtime.look_up_stored_secrets();
             // Secret storage changes raise no event of their own.
             runtime.feed(connection::Input::RecheckReadiness);
-            if std::mem::take(&mut runtime.forms.save_again) {
+            if again {
                 runtime.save_account();
             }
             if let Some(failure) = failure {

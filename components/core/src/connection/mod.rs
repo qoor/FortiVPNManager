@@ -38,7 +38,7 @@ pub use certs::merge_trusted_certs;
 pub use ledger::{Failure, FailureLedger};
 pub use machine::ConnectionManager;
 pub use policy::STALE_OTP_WAIT;
-pub use readiness::{HelperFacts, ReadinessFacts};
+pub use readiness::{HelperFacts, ReadinessFacts, StoredSecrets};
 pub use schedule::Schedule;
 
 /// What the manager starts from, once per launch.
