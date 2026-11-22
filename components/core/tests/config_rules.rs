@@ -3,6 +3,8 @@
 
 mod common;
 
+use std::fmt::Write as _;
+
 use common::*;
 use fvm_contract::app_internal::Weekday;
 use fvm_contract::app_internal::problem::{
@@ -126,10 +128,10 @@ fn at_most_a_hundred_entries() {
         .collect();
     let yaml = format!(
         "routes:\n  bypass_vpn:\n{}",
-        hosts
-            .iter()
-            .map(|h| format!("    - {h}\n"))
-            .collect::<String>()
+        hosts.iter().fold(String::new(), |mut list, h| {
+            let _ = writeln!(list, "    - {h}");
+            list
+        })
     );
     let too_many = ConfigProblemKind::TooManyRouteEntries {
         path: "routes.bypass_vpn".into(),
@@ -474,6 +476,7 @@ fn valid_configs_pass() {
 
 #[test]
 fn each_rule() {
+    type Change = Box<dyn Fn(&mut Settings)>;
     let range = |path: &str, raw: &str, minimum, maximum| ConfigProblemKind::OutOfRange {
         path: path.into(),
         raw: raw.into(),
@@ -484,7 +487,6 @@ fn each_rule() {
         path: path.into(),
         scalar,
     };
-    type Change = Box<dyn Fn(&mut Settings)>;
     let cases: Vec<(Change, ConfigProblemKind)> = vec![
         (
             Box::new(|s| s.vpn.port = 0),

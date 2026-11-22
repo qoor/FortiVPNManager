@@ -13,7 +13,7 @@ use fvm_core::otp_mail::{
 
 /// 14-Oct-2026 10:19:00 +0900.
 fn prompted_at() -> SystemTime {
-    UNIX_EPOCH + Duration::from_mins(29865679)
+    UNIX_EPOCH + Duration::from_mins(29_865_679)
 }
 
 fn offset(seconds: f64) -> SystemTime {
@@ -54,8 +54,8 @@ fn gmail(
         serde_json::json!({"id": id, "labelIds": labels, "payload": {"headers": headers}});
     if let Some(seconds) = seconds_after_prompt {
         // Gmail sends `internalDate` as milliseconds in a string.
-        let millis = ((1_791_940_740.0 + seconds) * 1000.0_f64).round() as i64;
-        json["internalDate"] = serde_json::Value::String(millis.to_string());
+        let millis = (1_791_940_740.0 + seconds) * 1000.0_f64;
+        json["internalDate"] = serde_json::Value::String(format!("{millis:.0}"));
     }
     MessageMetadata::from_response(200, json.to_string().as_bytes()).unwrap()
 }

@@ -25,7 +25,7 @@ impl Child {
         let (stdin_read, stdin) = io::pipe()?;
         let (stdout, stdout_write) = io::pipe()?;
         let null = File::options().write(true).open(NULL_DEVICE)?;
-        let argv: Vec<CString> = iter::once(program)
+        let arguments: Vec<CString> = iter::once(program)
             .chain(args.iter().copied())
             .map(|arg| CString::new(arg).expect("the arguments hold no NUL"))
             .collect();
@@ -45,7 +45,7 @@ impl Child {
         attributes.set_flags(PosixSpawnFlags::from_bits_retain(
             libc::POSIX_SPAWN_CLOEXEC_DEFAULT,
         ))?;
-        let pid = posix_spawn(program, &actions, &attributes, &argv, &envp)?;
+        let pid = posix_spawn(program, &actions, &attributes, &arguments, &envp)?;
         let pid = Pid::from_raw(pid.as_raw()).expect("posix_spawn returns a positive pid");
         Ok((Self(pid), stdin, stdout))
     }

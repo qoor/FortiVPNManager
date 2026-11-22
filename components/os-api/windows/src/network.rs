@@ -535,7 +535,7 @@ pub fn clear_wins_servers(interface: &str) -> Result<(), Error> {
                 0,
                 REG_MULTI_SZ,
                 empty.as_ptr().cast(),
-                size_of_val(&empty) as u32,
+                u32::try_from(size_of_val(&empty)).expect("an empty list fits u32"),
             )
         };
         check("RegSetValueExW", code)

@@ -151,7 +151,7 @@ fn reply(tag_name: &str, body: Option<&str>, asset_names: &[&str]) -> Vec<u8> {
         .iter()
         .map(|name| {
             serde_json::json!({
-                "id": 318840001,
+                "id": 318_840_001,
                 "name": name,
                 "label": "",
                 "content_type": "application/octet-stream",
@@ -163,7 +163,7 @@ fn reply(tag_name: &str, body: Option<&str>, asset_names: &[&str]) -> Vec<u8> {
         .collect();
     serde_json::json!({
         "html_url": format!("https://github.com/qoor/FortiVPNManager/releases/tag/{tag_name}"),
-        "id": 261504822,
+        "id": 261_504_822,
         "tag_name": tag_name,
         "target_commitish": "main",
         "name": tag_name,

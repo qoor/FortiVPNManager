@@ -539,7 +539,7 @@ fn reconnect_now_during_a_proactive_preparation_turns_it_into_a_reconnect_now_re
     let id = start_replacement(&mut h, &old);
     h.run_milestones(&id, Milestone::OtpPrompted);
     shows_connected_on(&h, &old);
-    assert!(!h.cm.ledger.recent_auth_attempts.is_empty());
+    assert_ne!(h.cm.ledger.recent_auth_attempts, []);
 
     let effects = h.send(Input::ReconnectNow);
     assert_eq!(

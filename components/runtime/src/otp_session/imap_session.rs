@@ -250,10 +250,7 @@ async fn imap_search(
     };
     if !state.trashing_stale {
         let rounded = |from: SystemTime, to: SystemTime| {
-            to.duration_since(from)
-                .unwrap_or_default()
-                .as_secs_f64()
-                .round() as u64
+            (to.duration_since(from).unwrap_or_default() + Duration::from_millis(500)).as_secs()
         };
         let note = format!(
             "‹OTP mail: in Gmail {}s after the prompt · detected {}s after arrival ({trigger} · {} searches · {} IDLE notifications)›",

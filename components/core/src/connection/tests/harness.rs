@@ -603,7 +603,10 @@ impl Harness {
         ];
         for milestone in all.into_iter().filter(|milestone| *milestone <= last) {
             match milestone {
-                Milestone::Started | Milestone::ConnectedToGateway | Milestone::OtpPrompted => {
+                Milestone::Started
+                | Milestone::ConnectedToGateway
+                | Milestone::OtpPrompted
+                | Milestone::Authenticated => {
                     self.advance(1.0);
                     self.milestone_for(id, milestone, None);
                 }
@@ -614,10 +617,6 @@ impl Harness {
                         SecretText("123456".to_owned()),
                     ));
                     assert!(submits_otp(&effects), "{effects:?}");
-                    self.advance(1.0);
-                    self.milestone_for(id, milestone, None);
-                }
-                Milestone::Authenticated => {
                     self.advance(1.0);
                     self.milestone_for(id, milestone, None);
                 }

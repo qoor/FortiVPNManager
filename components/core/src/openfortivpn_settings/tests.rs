@@ -89,7 +89,7 @@ fn unknown_keys_in_the_middle_are_reported_once_in_order() {
     assert_eq!(settings.port, 10443);
     assert_eq!(settings.username, some("alice"));
     assert_eq!(settings.unknown_keys, ["insecure-cert", "bogus"]);
-    assert!(settings.unreadable_lines.is_empty());
+    assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
 
 #[test]
@@ -103,8 +103,8 @@ fn digests_of_either_case_are_skipped_without_a_report() {
         "trusted-cert = {DIGEST_A}\ntrusted-cert = {}\n",
         DIGEST_B.to_uppercase()
     ));
-    assert!(settings.trusted_cert_pins.is_empty());
-    assert!(settings.unreadable_lines.is_empty());
+    assert_eq!(settings.trusted_cert_pins, Vec::<String>::new());
+    assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
 
 #[test]
@@ -157,8 +157,8 @@ fn comments_and_blank_lines_are_skipped_but_a_hash_inside_a_value_stays() {
     assert_eq!(settings.host, some("vpn.example.com"));
     assert_eq!(password(&settings), Some("p#ss # not a comment"));
     assert_eq!(settings.realm, some("staff"));
-    assert!(settings.unknown_keys.is_empty());
-    assert!(settings.unreadable_lines.is_empty());
+    assert_eq!(settings.unknown_keys, Vec::<String>::new());
+    assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn later_lines_override_earlier_ones_and_empty_values_clear() {
     assert_eq!(settings.username, None);
     assert_eq!(settings.realm, None);
     assert_eq!(settings.password, None);
-    assert!(settings.unreadable_lines.is_empty());
+    assert_eq!(settings.unreadable_lines, Vec::<u32>::new());
 }
 
 #[test]
@@ -328,7 +328,7 @@ fn debug_output_redacts_the_password() {
 fn lines_follow_getline() {
     assert_eq!(lines(b"a\n\nb"), [b"a".as_slice(), b"", b"b"]);
     assert_eq!(lines(b"a\n").len(), 1);
-    assert!(lines(b"").is_empty());
+    assert_eq!(lines(b""), Vec::<&[u8]>::new());
     assert_eq!(lines(b"\n"), [b"".as_slice()]);
 }
 

@@ -212,7 +212,7 @@ impl NetworkJob {
 impl Drop for NetworkJob {
     fn drop(&mut self) {
         assert!(
-            !(self.answer.is_some() && !thread::panicking()),
+            self.answer.is_none() || thread::panicking(),
             "a network change was dropped unanswered; the run would wait for it forever"
         );
     }

@@ -1,5 +1,6 @@
 //! Reading and replacing the app's own small files: private to the user, written whole.
 
+use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -64,7 +65,10 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
     let mut random = [0u8; 6];
     for attempt in 0.. {
         getrandom::fill(&mut random).expect("random bytes from the OS");
-        let suffix: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let suffix: String = random.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        });
         let temporary = directory.join(format!(".{name}.{suffix}"));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -75,7 +79,7 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
                 set_private(&file)?;
                 return Ok((temporary, file));
             }
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempt < 10 => continue,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempt < 10 => {}
             Err(error) => return Err(error),
         }
     }
@@ -110,7 +114,10 @@ mod tests {
     fn scratch() -> PathBuf {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
-        let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let name: String = random.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        });
         std::env::temp_dir().join(format!("fvm-runtime-files-{name}"))
     }
 

@@ -371,6 +371,8 @@ fn readiness_facts_map_to_setup_items() {
 
 #[test]
 fn the_icon_and_buttons_follow_the_state() {
+    use ButtonState::{Enabled, Hidden};
+    use ConnectionIcon::*;
     let check = |h: &Harness, icon, connect, disconnect, reconnect_now| {
         let section = h.cm.connection_section();
         assert_eq!(section.icon, icon, "{:?}", h.cm.phase);
@@ -383,8 +385,6 @@ fn the_icon_and_buttons_follow_the_state() {
             h.cm.phase
         );
     };
-    use ButtonState::{Enabled, Hidden};
-    use ConnectionIcon::*;
 
     let mut h = Harness::new();
     h.launch_with(false, None);

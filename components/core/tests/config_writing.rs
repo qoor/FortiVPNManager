@@ -230,7 +230,7 @@ impl Seeded {
         z ^ (z >> 31)
     }
     fn range(&mut self, low: i64, high: i64) -> i64 {
-        low + (self.next() % (high - low + 1) as u64) as i64
+        low + i64::try_from(self.next() % u64::try_from(high - low + 1).unwrap()).unwrap()
     }
     fn coin(&mut self) -> bool {
         self.next() & 1 == 1
@@ -240,8 +240,9 @@ impl Seeded {
 fn random_networks(rng: &mut Seeded) -> Vec<Ipv4Network> {
     let mut networks: Vec<Ipv4Network> = Vec::new();
     for _ in 0..rng.range(0, 10) {
-        let prefix_length = rng.range(8, 32) as u32;
-        let address = (rng.range(1, 223) as u32) << 24 | (rng.next() as u32 & 0xFF_FFFF);
+        let prefix_length = u32::try_from(rng.range(8, 32)).unwrap();
+        let address = u32::try_from(rng.range(1, 223)).unwrap() << 24
+            | u32::try_from(rng.next() & 0xFF_FFFF).unwrap();
         let network = address & (u32::MAX << (32 - prefix_length));
         let text = format!("{}/{prefix_length}", std::net::Ipv4Addr::from(network));
         let Ok(network) = text.parse::<Ipv4Network>() else {
@@ -274,7 +275,10 @@ fn random_valid_configs_round_trip() {
     for _ in 0..300 {
         let mut string = || {
             (0..rng.range(0, 3))
-                .map(|_| pool[rng.range(0, pool.len() as i64 - 1) as usize].clone())
+                .map(|_| {
+                    let last = i64::try_from(pool.len()).unwrap() - 1;
+                    pool[usize::try_from(rng.range(0, last)).unwrap()].clone()
+                })
                 .collect::<String>()
         };
         let mut settings = Settings::default();
@@ -289,10 +293,10 @@ fn random_valid_configs_round_trip() {
             let mut encoded: String = (0..42)
                 .map(|_| {
                     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-                        [rng.range(0, 63) as usize] as char
+                        [usize::try_from(rng.range(0, 63)).unwrap()] as char
                 })
                 .collect();
-            encoded.push(b"AEIMQUYcgkosw048"[rng.range(0, 15) as usize] as char);
+            encoded.push(b"AEIMQUYcgkosw048"[usize::try_from(rng.range(0, 15)).unwrap()] as char);
             let pin = format!("pin-sha256:{encoded}=");
             if !settings.vpn.trusted_cert_pins.contains(&pin) {
                 settings.vpn.trusted_cert_pins.push(pin);
@@ -316,12 +320,12 @@ fn random_valid_configs_round_trip() {
         connection.schedule.enabled = rng.coin();
         connection.schedule.days = days.iter().copied().filter(|_| rng.coin()).collect();
         connection.schedule.start = TimeOfDay {
-            hour: (start / 60) as u8,
-            minute: (start % 60) as u8,
+            hour: u8::try_from(start / 60).unwrap(),
+            minute: u8::try_from(start % 60).unwrap(),
         };
         connection.schedule.end = TimeOfDay {
-            hour: (end / 60) as u8,
-            minute: (end % 60) as u8,
+            hour: u8::try_from(end / 60).unwrap(),
+            minute: u8::try_from(end % 60).unwrap(),
         };
         connection.schedule.away_minutes = rng.range(1, 1440);
         settings.routes.networks = random_networks(&mut rng);

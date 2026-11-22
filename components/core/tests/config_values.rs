@@ -415,7 +415,7 @@ fn range_limits() {
             );
             assert_eq!(
                 error.location.map(|location| location.line),
-                Some(yaml.lines().count() as u32)
+                Some(u32::try_from(yaml.lines().count()).unwrap())
             );
         }
     }

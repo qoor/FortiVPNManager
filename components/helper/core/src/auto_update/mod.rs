@@ -13,6 +13,7 @@ use windows as os;
 pub use os::RECORDS_DIRECTORY;
 
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -422,6 +423,8 @@ fn sha256(path: &Path) -> io::Result<String> {
         .finish()
         .as_ref()
         .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
+        .fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        }))
 }

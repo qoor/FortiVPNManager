@@ -58,8 +58,11 @@ pub(super) fn disallowed_in_value(value: &str) -> Option<char> {
 /// 1-based, counting Unicode scalars.
 pub(super) fn location(marker: &saphyr_parser::Marker) -> LineColumn {
     LineColumn {
-        line: marker.line() as u32,
-        column: marker.col() as u32 + 1,
+        line: u32::try_from(marker.line())
+            .expect("a config file of at most MAX_FILE_BYTES has fewer lines than u32::MAX"),
+        column: u32::try_from(marker.col())
+            .expect("a config file of at most MAX_FILE_BYTES has shorter lines than u32::MAX")
+            + 1,
     }
 }
 

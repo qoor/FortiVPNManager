@@ -65,7 +65,7 @@ pub(crate) fn run(executable: &str, arguments: &[String]) -> Output {
             };
         }
     };
-    let pid = Pid::from_raw(child.id() as i32);
+    let pid = Pid::from_raw(child.id().cast_signed());
     let reaped = Arc::new(AtomicBool::new(false));
     let (done, finished) = mpsc::channel::<()>();
     let killer = {

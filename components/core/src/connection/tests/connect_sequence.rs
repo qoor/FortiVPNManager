@@ -295,8 +295,8 @@ fn the_attempt_deadline_while_the_gmail_login_hangs_is_a_network_error() {
             check_spam: false
         })
     );
-    assert!(stop_reasons(&effects).is_empty());
-    assert!(run_starts(&effects).is_empty());
+    assert_eq!(stop_reasons(&effects), []);
+    assert_eq!(run_starts(&effects), []);
     assert_eq!(
         h.retry_wait().map(|(_, reason)| reason),
         Some(RetryReason::Network)

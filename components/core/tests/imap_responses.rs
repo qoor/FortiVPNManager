@@ -12,7 +12,7 @@ const MAX_LITERAL: usize = 1 << 20;
 const MAX_RESPONSE: usize = 4 << 20;
 
 fn lines(lines: &[&str]) -> String {
-    lines.iter().map(|line| format!("{line}\r\n")).collect()
+    lines.iter().flat_map(|line| [*line, "\r\n"]).collect()
 }
 
 fn literal(payload: &str) -> String {

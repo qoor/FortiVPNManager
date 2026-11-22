@@ -3,6 +3,8 @@
 
 mod common;
 
+use std::fmt::Write as _;
+
 use common::*;
 use fvm_contract::app_internal::OtpMethod;
 use fvm_contract::app_internal::problem::{
@@ -313,11 +315,13 @@ fn invalid_versions() {
                     ..
                 },
                 "out",
-            ) => path == "schema_version",
+            )
+            | (ConfigProblemKind::InvalidInteger { path, .. }, "invalid") => {
+                path == "schema_version"
+            }
             (ConfigProblemKind::QuotedNumber { path, raw }, "quoted") => {
                 path == "schema_version" && raw == "1"
             }
-            (ConfigProblemKind::InvalidInteger { path, .. }, "invalid") => path == "schema_version",
             _ => false,
         };
         assert!(matched, "{yaml:?}: {:?}", error.kind);
@@ -365,8 +369,10 @@ fn certificate_values_past_the_limit_are_dropped_with_one_warning() {
     let items: String = [&values[..4], &values[..1], &values[4..]]
         .concat()
         .iter()
-        .map(|value| format!("    - {value}\n"))
-        .collect();
+        .fold(String::new(), |mut items, value| {
+            let _ = writeln!(items, "    - {value}");
+            items
+        });
     let loaded = decode(&format!("vpn:\n  trusted_cert_pins:\n{items}"));
     assert_eq!(loaded.settings.vpn.trusted_cert_pins, values[..4]);
     assert_eq!(
@@ -384,7 +390,10 @@ fn pins_past_the_limit_are_dropped() {
         .iter()
         .map(|fill| format!("pin-sha256:{}=", fill.to_string().repeat(43)))
         .collect();
-    let items: String = pins.iter().map(|pin| format!("    - {pin}\n")).collect();
+    let items = pins.iter().fold(String::new(), |mut items, pin| {
+        let _ = writeln!(items, "    - {pin}");
+        items
+    });
     let yaml = format!("vpn:\n  trusted_cert_pins:\n{items}");
     let too_many = [warning(
         ConfigWarningKind::TooManyTrustedCerts { limit: 4 },

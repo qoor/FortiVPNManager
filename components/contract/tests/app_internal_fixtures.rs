@@ -278,6 +278,7 @@ fn connection_sections() {
 
 #[test]
 fn connection_kinds() {
+    use AfterDisconnect::*;
     use ConnectProgress::*;
     pin(
         "connect_progress.json",
@@ -291,7 +292,6 @@ fn connection_kinds() {
             OpeningTunnel,
         ],
     );
-    use AfterDisconnect::*;
     pin("after_disconnect.json", [Idle, Reconnect, Sleep, Quit]);
     pin(
         "failure_reasons.json",
@@ -510,6 +510,7 @@ fn gmail_section(test: GmailTest) -> GmailSection {
 
 #[test]
 fn gmail_sections() {
+    use GoogleConnectBlocker::*;
     pin(
         "gmail_sections.json",
         [
@@ -568,7 +569,6 @@ fn gmail_sections() {
             },
         ],
     );
-    use GoogleConnectBlocker::*;
     pin(
         "google_connect_blockers.json",
         [NoOAuthClient, EnterAddress, SaveAddressFirst],
@@ -949,7 +949,7 @@ fn config_sections() {
     let file = |path: &str| path.to_owned();
     pin(
         "config_sections.json",
-        [
+        vec![
             ConfigSection {
                 file: ConfigFileState {
                     path: file("/Users/alice/.config/FortiVPNManager/config.yaml"),
@@ -1347,6 +1347,7 @@ fn auto_update_sections() {
 
 #[test]
 fn settings_file_problems() {
+    use ConfigProblemKind::*;
     let config = "/Users/alice/.config/FortiVPNManager/config.yaml";
     pin(
         "config_file_errors.json",
@@ -1381,7 +1382,6 @@ fn settings_file_problems() {
         kind,
         location: Some(LineColumn { line: 2, column: 9 }),
     };
-    use ConfigProblemKind::*;
     let path = |text: &str| text.to_owned();
     pin(
         "config_problems.json",
@@ -1689,6 +1689,7 @@ fn port_requests() {
 
 #[test]
 fn port_actions() {
+    use LogCategory::*;
     let action = |action| FromRuntime::PortAction { action };
     let log = |level, category, message: &str| {
         action(PortAction::Log {
@@ -1697,7 +1698,6 @@ fn port_actions() {
             message: message.into(),
         })
     };
-    use LogCategory::*;
     pin(
         "port_actions.json",
         [
@@ -1764,9 +1764,9 @@ fn launched() {
 
 #[test]
 fn commands() {
+    use ConnectionOption::*;
     let command = |command| ToRuntime::Command { command };
     let option = |option| command(Command::SetConnectionOption { option });
-    use ConnectionOption::*;
     decodes(
         "commands.json",
         &[
@@ -1850,10 +1850,10 @@ fn commands() {
 
 #[test]
 fn port_responses() {
+    use RegistrationStatus::*;
     let response = |id, response| ToRuntime::PortResponse { id, response };
     let unreachable = |id, failure| response(id, PortResponse::HelperUnreachable { failure });
     let registration = |id, status| response(id, PortResponse::Registration { status });
-    use RegistrationStatus::*;
     decodes(
         "port_responses.json",
         &[
@@ -1993,12 +1993,12 @@ fn port_responses() {
 
 #[test]
 fn system_events() {
+    use InterfaceKind::*;
     let event = |event| ToRuntime::Event { event };
     let interface = |name: &str, kind| PathInterface {
         name: name.into(),
         kind,
     };
-    use InterfaceKind::*;
     decodes(
         "system_events.json",
         &[

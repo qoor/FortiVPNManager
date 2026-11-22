@@ -117,7 +117,8 @@ unsafe fn start(
         return Err(last_error("UpdateProcThreadAttribute"));
     }
     let mut startup = STARTUPINFOEXW::default();
-    startup.StartupInfo.cb = mem::size_of::<STARTUPINFOEXW>() as u32;
+    startup.StartupInfo.cb =
+        u32::try_from(mem::size_of::<STARTUPINFOEXW>()).expect("the structure size fits u32");
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     [
         startup.StartupInfo.hStdInput,

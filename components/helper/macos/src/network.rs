@@ -55,7 +55,7 @@ fn look_up(outside: &[IpNetwork]) -> NetworkOutcome {
     }) else {
         return failed(NetworkStep::Network, "no active network service", vec![]);
     };
-    let routes: Vec<OutsideRoute> = outside
+    let outside_routes: Vec<OutsideRoute> = outside
         .iter()
         .filter_map(|destination| {
             Some(OutsideRoute {
@@ -65,7 +65,7 @@ fn look_up(outside: &[IpNetwork]) -> NetworkOutcome {
             })
         })
         .collect();
-    let families = routes
+    let families = outside_routes
         .iter()
         .filter_map(|route| Some(system_route(route, &store)?.family))
         .collect();
@@ -76,7 +76,7 @@ fn look_up(outside: &[IpNetwork]) -> NetworkOutcome {
             vec![],
         );
     };
-    let missing = routes
+    let missing = outside_routes
         .into_iter()
         .filter(|route| is_in(Some(&table), route, &store) != Some(true))
         .collect();
@@ -619,7 +619,9 @@ fn address_bits(bytes: &[u8], prefix_length: u8) -> Vec<u8> {
         .iter()
         .enumerate()
         .map(|(index, byte)| {
-            let kept = (i32::from(prefix_length) - index as i32 * 8).clamp(0, 8);
+            let kept = (i32::from(prefix_length)
+                - i32::try_from(index).expect("an address has at most 16 bytes") * 8)
+                .clamp(0, 8);
             if kept == 8 {
                 *byte
             } else {
@@ -648,16 +650,16 @@ fn revert(changes: &OutsideChanges) -> NetworkOutcome {
         .filter_map(|route| Some(system_route(route, &store)?.family))
         .collect();
     let before = read_table(&families);
-    let mut changed = false;
+    let mut reverted = false;
     for route in &changes.routes {
         if let Some(system) = system_route(route, &store)
             && before.as_ref().is_some_and(|before| has(before, &system))
         {
             route_table::delete(&system);
-            changed = true;
+            reverted = true;
         }
     }
-    let after = if changed {
+    let after = if reverted {
         read_table(&families)
     } else {
         before

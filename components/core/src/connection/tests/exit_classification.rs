@@ -31,7 +31,7 @@ fn plain(facts: EndFacts) -> Outcome {
 }
 
 fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> EndFacts {
-    let certs: Vec<String> = certs.iter().map(|cert| cert.to_string()).collect();
+    let certs: Vec<String> = certs.iter().map(ToString::to_string).collect();
     ended(furthest).certs(&certs, at).facts()
 }
 

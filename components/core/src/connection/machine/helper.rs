@@ -178,11 +178,11 @@ impl ConnectionManager {
                 }
                 match (attempt.otp_failure, code) {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
-                    (Some(OtpFailure::Network), _) => self.network_failure(RetryReason::Network),
                     (None, HelperErrorCode::InvalidRequest | HelperErrorCode::NotAuthorized) => {
                         self.fail(Failure::Helper { code });
                     }
-                    (
+                    (Some(OtpFailure::Network), _)
+                    | (
                         None,
                         HelperErrorCode::Busy
                         | HelperErrorCode::WrongPhase

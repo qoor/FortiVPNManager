@@ -88,7 +88,7 @@ impl ConfigFile {
         if fingerprint.is_some() && fingerprint == self.seen {
             return false;
         }
-        self.seen = fingerprint.clone();
+        self.seen.clone_from(&fingerprint);
         let before = (
             self.settings.clone(),
             self.exists,
@@ -175,7 +175,7 @@ impl ConfigFile {
                     self.seen = fingerprint(&self.path)?;
                     return Ok(true);
                 }
-                Err(ConfigFileError::KeptChanging { .. }) if attempt < UPDATE_ATTEMPTS => continue,
+                Err(ConfigFileError::KeptChanging { .. }) if attempt < UPDATE_ATTEMPTS => {}
                 Err(error) => return Err(error),
             }
         }
@@ -394,11 +394,15 @@ fn resolve_target(path: &Path) -> Result<PathBuf, ConfigFileError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write as _;
 
     fn scratch() -> PathBuf {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
-        let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let name: String = random.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        });
         std::env::temp_dir().join(format!("fvm-runtime-config-{name}"))
     }
 

@@ -132,7 +132,7 @@ impl ConnectionManager {
             }
             (_, None) => {
                 if session.underlay.is_none() {
-                    session.underlay = observation.underlay.clone();
+                    session.underlay.clone_from(&observation.underlay);
                 }
                 self.phase = Phase::Connected(session);
                 self.rearm_proactive_timer();

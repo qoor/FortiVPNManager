@@ -59,7 +59,7 @@ fn last_error(operation: &'static str) -> Error {
         .expect("a failed call leaves an error code");
     Error {
         operation,
-        code: code as u32,
+        code: code.cast_unsigned(),
     }
 }
 

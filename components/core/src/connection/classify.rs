@@ -72,9 +72,8 @@ pub(super) fn classify(context: &ExitContext) -> Outcome {
     if furthest == Milestone::TunnelUp {
         return match context.app_stop {
             // The app's own deadline stop raced the tunnel coming up.
-            Some(_) => Outcome::NetworkError,
             None if [-EPIPE, -EPERM].contains(&facts.end_code) => Outcome::ServerSessionEnded,
-            None => Outcome::NetworkError,
+            Some(_) | None => Outcome::NetworkError,
         };
     }
 

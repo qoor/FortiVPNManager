@@ -136,9 +136,10 @@ pub(crate) fn run(
     received: Receiver<Input>,
     out: Sender<FromRuntime>,
 ) {
-    let facts = match received.recv().expect("the input queue stays open") {
-        Input::App(ToRuntime::Launched { facts }) => facts,
-        _ => panic!("the first message from the app is the launch"),
+    let Input::App(ToRuntime::Launched { facts }) =
+        received.recv().expect("the input queue stays open")
+    else {
+        panic!("the first message from the app is the launch");
     };
     let mut runtime = Runtime::launch(facts, paths, update_url, inputs, out);
     runtime.publish();
@@ -529,12 +530,10 @@ impl Runtime {
                     ));
                     return;
                 }
-                let password = if let PortResponse::Secret {
+                let PortResponse::Secret {
                     value: Some(SecretText(password)),
                 } = response
-                {
-                    password
-                } else {
+                else {
                     // The readiness check found it moments ago; treat it like a Helper refusal.
                     runtime.feed(connection::Input::RunRejected(
                         attempt,

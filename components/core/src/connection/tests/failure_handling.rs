@@ -442,7 +442,7 @@ fn a_gmail_auth_failure_fails_without_starting_the_client() {
         OtpFailure::Authentication,
     )));
     assert_eq!(h.cm.phase, Phase::Failed(Failure::GmailRejected));
-    assert!(run_starts(&effects).is_empty());
+    assert_eq!(run_starts(&effects), []);
     assert_eq!(
         effects,
         [
@@ -488,7 +488,7 @@ fn a_gmail_failure_while_the_tunnel_runs_stops_it() {
         h.exit(ended(Milestone::OtpPrompted).by_helper(StopReason::OtpUnavailable));
         match failure {
             OtpFailure::Authentication => {
-                assert_eq!(h.cm.phase, Phase::Failed(Failure::GmailRejected))
+                assert_eq!(h.cm.phase, Phase::Failed(Failure::GmailRejected));
             }
             OtpFailure::Network => assert_eq!(wait_reason(&h), Some(RetryReason::Network)),
         }
@@ -613,7 +613,7 @@ fn failed_only_clears_on_a_user_action() {
     let effects = h.send(Input::Connect);
     assert!(effects.contains(&Effect::CheckReadiness));
     assert_eq!(h.cm.ledger.consecutive_auth_failures, 0);
-    assert!(h.cm.ledger.recent_auth_attempts.is_empty());
+    assert_eq!(h.cm.ledger.recent_auth_attempts, []);
     assert!(h.cm.wants_connection);
 }
 
@@ -762,7 +762,9 @@ fn a_launch_stays_failed_when_the_restored_counter_is_used_up() {
 #[test]
 fn a_launch_enforces_the_restored_rolling_cap() {
     let mut h = Harness::new();
-    let mut attempts: Vec<_> = (1..=12).map(|n| h.now - secs(n as f64 * 60.0)).collect();
+    let mut attempts: Vec<_> = (1..=12)
+        .map(|n| h.now - secs(f64::from(n) * 60.0))
+        .collect();
     attempts.reverse();
     let effects = connection_effects(&h.launch_with(
         true,
@@ -799,7 +801,9 @@ fn a_launch_after_an_update_connects_and_clears_a_used_up_restored_counter() {
 #[test]
 fn a_launch_after_an_update_connects_and_clears_the_restored_rolling_cap() {
     let mut h = Harness::new();
-    let mut attempts: Vec<_> = (1..=12).map(|n| h.now - secs(n as f64 * 60.0)).collect();
+    let mut attempts: Vec<_> = (1..=12)
+        .map(|n| h.now - secs(f64::from(n) * 60.0))
+        .collect();
     attempts.reverse();
     let effects = h.launch_after_update(
         true,

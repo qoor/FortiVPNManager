@@ -602,11 +602,12 @@ impl Runtime {
 
 pub(crate) fn token_error(failure: TokenFailure) -> GoogleError {
     match failure {
-        TokenFailure::NoClient | TokenFailure::NotSignedIn => GoogleError::ClientRejected {},
         TokenFailure::Revoked => GoogleError::TokenRejected {
             detail: "invalid_grant".into(),
         },
-        TokenFailure::ClientRejected => GoogleError::ClientRejected {},
+        TokenFailure::NoClient | TokenFailure::NotSignedIn | TokenFailure::ClientRejected => {
+            GoogleError::ClientRejected {}
+        }
         TokenFailure::SecretStore(failure) => GoogleError::SecretStore { failure },
         TokenFailure::Network(detail) => GoogleError::Network { detail },
         TokenFailure::Server(detail) => GoogleError::TokenRejected { detail },

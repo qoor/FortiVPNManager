@@ -123,7 +123,7 @@ impl LogFile {
             // A symlink planted at the log path is not written through.
             options
                 .mode(0o600)
-                .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
+                .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits().cast_signed());
         }
         let file = options.open(&self.path)?;
         files::set_private(&file)?;
@@ -165,6 +165,7 @@ mod tests {
     use serde::Deserialize;
 
     use super::*;
+    use std::fmt::Write as _;
 
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -231,7 +232,10 @@ mod tests {
     fn an_attempt_is_set_apart_only_after_a_line_of_the_same_file() {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
-        let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let name: String = random.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        });
         let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
         let path = directory.join("vpn_backend.log");
         let note = |text: String, starts_attempt: bool| LogLine {
@@ -253,7 +257,7 @@ mod tests {
              1970-01-01T00:00:00.000+00:00 [▸] c\n"
         );
         // The line that fills the file starts the next one.
-        let big = note("x".repeat(MAX_FILE_BYTES as usize), true);
+        let big = note("x".repeat(usize::try_from(MAX_FILE_BYTES).unwrap()), true);
         assert_eq!(log.append(&[big], &TimeZone::UTC), None);
         let text = fs::read_to_string(&path).unwrap();
         assert!(text.starts_with("1970-01-01T00:00:00.000+00:00 [▸] xxx"));
@@ -264,7 +268,10 @@ mod tests {
     fn a_full_file_rotates_and_keeps_four_old_ones() {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
-        let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        let name: String = random.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        });
         let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
         let path = directory.join("vpn_backend.log");
         let mut log = LogFile::new(path.clone());

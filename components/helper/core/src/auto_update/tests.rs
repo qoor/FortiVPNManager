@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -36,8 +37,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
     digest::digest(&digest::SHA256, bytes)
         .as_ref()
         .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
 }
 
 pub(crate) fn installer_name(version: Version) -> String {

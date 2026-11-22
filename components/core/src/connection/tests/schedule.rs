@@ -291,7 +291,7 @@ fn the_end_keeps_the_tunnel_and_reconnects_while_the_user_is_present() {
     h.launch_connected();
     let effects = h.fire(TimerKind::Schedule);
     assert_eq!(h.now, at(18, 18, 0, 0));
-    assert!(stop_reasons(&effects).is_empty());
+    assert_eq!(stop_reasons(&effects), []);
     assert!(h.connected().is_some());
     assert!(h.timer(TimerKind::ProactiveReconnect).is_some());
     h.advance(3600.0);
@@ -366,7 +366,7 @@ fn the_away_limit_stops_reconnects_but_keeps_the_tunnel() {
     away(&mut h);
     let limit = h.fire(TimerKind::AwayLimit);
     assert_eq!(h.now, at(18, 20, 10, 0));
-    assert!(stop_reasons(&limit).is_empty());
+    assert_eq!(stop_reasons(&limit), []);
     assert!(h.connected().is_some());
     assert!(h.cm.reconnect_suspended);
     assert_eq!(h.cm.schedule_outlook(), Some(ScheduleOutlook::Suspended {}));
@@ -468,7 +468,7 @@ fn a_long_sleep_outside_the_hours_stops_reconnects_before_the_user_unlocks() {
     h.sleep();
     h.now = at(18, 21, 0, 0);
     let wake = h.wake();
-    assert!(stop_reasons(&wake).is_empty());
+    assert_eq!(stop_reasons(&wake), []);
     if h.timer(TimerKind::Schedule).is_some_and(|due| due <= h.now) {
         h.fire(TimerKind::Schedule);
     }
@@ -497,7 +497,7 @@ fn a_working_tunnel_is_kept_on_a_wake_while_reconnects_wait() {
     h.wake();
     assert!(!h.cm.reconnect_suspended);
     let settled = h.settle(observe());
-    assert!(stop_reasons(&settled).is_empty());
+    assert_eq!(stop_reasons(&settled), []);
     assert!(h.connected().is_some());
     assert_eq!(h.timer(TimerKind::ProactiveReconnect), None);
     let back_effects = back(&mut h);

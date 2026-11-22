@@ -186,8 +186,8 @@ fn another_gateway_or_prefix_is_another_route() {
 
 #[test]
 fn nothing_before_the_header_is_a_route() {
-    assert!(parse("", Family::Inet).is_empty());
-    assert!(parse("Routing tables\n\nInternet:\n", Family::Inet).is_empty());
+    assert_eq!(parse("", Family::Inet), []);
+    assert_eq!(parse("Routing tables\n\nInternet:\n", Family::Inet), []);
 }
 
 #[test]

@@ -140,7 +140,7 @@ impl Setup {
     }
 
     pub fn logging_out_to(mut self, gateway: &FakeGateway) -> Self {
-        self.request.host = "127.0.0.1".to_owned();
+        "127.0.0.1".clone_into(&mut self.request.host);
         self.request.port = i64::from(gateway.port);
         self
     }

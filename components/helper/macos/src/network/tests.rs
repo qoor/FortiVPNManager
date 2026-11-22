@@ -368,7 +368,7 @@ fn split_dns_answers_its_domains_without_marking_the_tunnel_primary() {
             string_array(&["corp.example.com", "example.net"]),
         ),
     ]);
-    assert!(entries.dns.unwrap().as_CFType() == expected.as_CFType());
+    assert_eq!(entries.dns.unwrap().as_CFType(), expected.as_CFType());
     assert!(entries.ipv4.is_none());
 }
 
@@ -379,7 +379,7 @@ fn full_dns_marks_the_tunnel_primary_only_in_the_running_state() {
         "ServerAddresses",
         string_array(&["10.30.0.53", "fd00:10::53"]),
     )]);
-    assert!(entries.dns.unwrap().as_CFType() == dns.as_CFType());
+    assert_eq!(entries.dns.unwrap().as_CFType(), dns.as_CFType());
     let ipv4 = dictionary(&[
         ("Addresses", string_array(&["10.212.133.105"])),
         ("SubnetMasks", string_array(&["255.255.255.255"])),
@@ -387,7 +387,7 @@ fn full_dns_marks_the_tunnel_primary_only_in_the_running_state() {
         ("InterfaceName", CFString::new("utun5").as_CFType()),
         ("OverridePrimary", CFNumber::from(1).as_CFType()),
     ]);
-    assert!(entries.ipv4.unwrap().as_CFType() == ipv4.as_CFType());
+    assert_eq!(entries.ipv4.unwrap().as_CFType(), ipv4.as_CFType());
 }
 
 #[test]

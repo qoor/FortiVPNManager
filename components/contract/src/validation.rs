@@ -229,7 +229,7 @@ pub fn certificate_value(text: &str) -> Option<String> {
     let (data, padding) = encoded.split_at_checked(43)?;
     let valid = padding == b"="
         && data.iter().all(|&byte| base64_value(byte).is_some())
-        && base64_value(data[42]).is_some_and(|value| value & 0b11 == 0);
+        && base64_value(data[42]).is_some_and(|value| value.trailing_zeros() >= 2);
     valid.then(|| text.to_owned())
 }
 

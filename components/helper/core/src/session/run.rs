@@ -123,9 +123,9 @@ impl Run {
                     }
                     let end = backend.run(session, &link);
                     let _ = inputs.send(Input::Returned(end));
-                    let saver = saving.lock().expect(LOCK).take();
-                    let saved = saver
-                        .map(|saver| saver.join().expect("saving a session secret never panics"));
+                    let save_thread = saving.lock().expect(LOCK).take();
+                    let saved = save_thread
+                        .map(|thread| thread.join().expect("saving a session secret never panics"));
                     let ended = finish_session(saved, secrets.as_ref(), &attempt);
                     let _ = inputs.send(Input::Ended(ended));
                 })

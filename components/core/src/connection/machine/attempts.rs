@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::time::{Duration, UNIX_EPOCH};
 
 use fvm_contract::app_helper::{AttemptId, EndFacts, SessionId, StopReason};
@@ -120,7 +121,10 @@ impl ConnectionManager {
         {
             *byte ^= count;
         }
-        let hex: String = bytes.iter().map(|byte| format!("{byte:02X}")).collect();
+        let hex: String = bytes.iter().fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02X}");
+            hex
+        });
         format!(
             "{}-{}-{}-{}-{}",
             &hex[0..8],
@@ -363,7 +367,7 @@ impl ConnectionManager {
         if merged == self.settings.account.trusted_certs {
             return;
         }
-        self.settings.account.trusted_certs = merged.clone();
+        self.settings.account.trusted_certs.clone_from(&merged);
         self.effects
             .push(Effect::SaveTrustedCerts { certs: merged });
     }

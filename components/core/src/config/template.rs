@@ -2,6 +2,7 @@
 //! keys this version does not know are lost on a write, a limit the user accepted.
 
 use std::fmt;
+use std::fmt::Write as _;
 use std::ops::RangeInclusive;
 
 use fvm_contract::app_helper::{MAX_ENTRIES, MAX_PREFIX_LENGTH, MIN_PREFIX_LENGTH};
@@ -88,8 +89,8 @@ pub(super) fn write(settings: &Settings) -> Result<String, ConfigProblemKind> {
         if list.len() > MAX_ENTRIES {
             return Err(ConfigProblemKind::TooManyRouteEntries {
                 path: path.to_owned(),
-                count: list.len() as u32,
-                limit: MAX_ENTRIES as u32,
+                count: u32::try_from(list.len()).unwrap_or(u32::MAX),
+                limit: u32::try_from(MAX_ENTRIES).expect("the limit fits u32"),
             });
         }
         for (index, entry) in list.iter().enumerate() {
@@ -97,13 +98,13 @@ pub(super) fn write(settings: &Settings) -> Result<String, ConfigProblemKind> {
             if earlier.contains(entry) {
                 return Err(ConfigProblemKind::DuplicateRouteEntry {
                     path: path.to_owned(),
-                    index: index as u32,
+                    index: u32::try_from(index).expect("a list within MAX_ENTRIES has u32 indices"),
                 });
             }
             if let Some(other) = earlier.iter().find(|other| other.overlaps(entry)) {
                 return Err(ConfigProblemKind::OverlappingRouteEntry {
                     path: path.to_owned(),
-                    index: index as u32,
+                    index: u32::try_from(index).expect("a list within MAX_ENTRIES has u32 indices"),
                     other: other.to_string(),
                 });
             }
@@ -241,10 +242,10 @@ fn list<T: fmt::Display>(values: &[T]) -> String {
     if values.is_empty() {
         return " []".to_owned();
     }
-    values
-        .iter()
-        .map(|value| format!("\n    - {}", quoted(&value.to_string())))
-        .collect()
+    values.iter().fold(String::new(), |mut list, value| {
+        let _ = write!(list, "\n    - {}", quoted(&value.to_string()));
+        list
+    })
 }
 
 /// A double-quoted scalar. Values that pass hold no character needing an escape other than the

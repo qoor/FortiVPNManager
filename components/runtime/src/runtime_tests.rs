@@ -1,7 +1,8 @@
 //! The runtime as the app drives it: a fake app side answers the port requests from an in-memory
 //! secret store, a fake Helper and a fake network, with the runtime's files in a scratch folder.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -107,7 +108,10 @@ struct App {
 fn scratch() -> PathBuf {
     let mut random = [0u8; 8];
     getrandom::fill(&mut random).unwrap();
-    let name: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let name: String = random.iter().fold(String::new(), |mut hex, byte| {
+        let _ = write!(hex, "{byte:02x}");
+        hex
+    });
     let folder = std::env::temp_dir().join(format!("fvm-runtime-app-{name}"));
     fs::create_dir_all(&folder).unwrap();
     folder
@@ -290,9 +294,9 @@ impl App {
         let attempt = self
             .ask(|runtime| runtime.cm.current_attempt().cloned())
             .unwrap();
-        let ready = attempt.clone();
+        let ready_attempt = attempt.clone();
         self.ask(move |runtime| {
-            runtime.feed(fvm_core::connection::Input::OtpSessionReady(ready));
+            runtime.feed(fvm_core::connection::Input::OtpSessionReady(ready_attempt));
         });
         self.settle_until("the run request", |app| app.run_requests().len() > runs);
         attempt
@@ -1747,10 +1751,17 @@ fn reconnect_now_runs_the_next_tunnel_beside_the_connected_one() {
             ("‹old: exited›", false),
         ]
     );
-    let (old_id, next_id) = (old_session.to_string(), next_session.to_string());
+    let (old_session_id, next_session_id) = (old_session.to_string(), next_session.to_string());
     assert_eq!(
         log_sessions(&app),
-        [&old_id, &old_id, &next_id, &old_id, &next_id, &old_id]
+        [
+            &old_session_id,
+            &old_session_id,
+            &next_session_id,
+            &old_session_id,
+            &next_session_id,
+            &old_session_id
+        ]
     );
 }
 
@@ -1905,7 +1916,7 @@ fn update_available(version: &str) -> UpdateStatus {
             "https://github.com/qoor/FortiVPNManager/releases/tag/v{version}"
         ),
         installer_bytes: INSTALLER_BYTES as u64,
-        release_note_titles: Default::default(),
+        release_note_titles: BTreeMap::default(),
     }
 }
 

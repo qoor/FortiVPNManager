@@ -226,7 +226,7 @@ impl<R: FnMut(Report)> Watch<R> {
                     missing,
                 },
             ) => self.looked_up(dns_service_id, missing),
-            (Asked::LookUp, NetworkOutcome::Failed { step, error, .. }) => {
+            (Asked::LookUp | Asked::Switch, NetworkOutcome::Failed { step, error, .. }) => {
                 self.network_failed(format!("{step:?}: {error}"));
             }
             (Asked::Apply { remove }, NetworkOutcome::Applied { added, left }) => {
@@ -262,9 +262,6 @@ impl<R: FnMut(Report)> Watch<R> {
                 self.network_failed(format!("{step:?}: {error}"));
             }
             (Asked::Switch, NetworkOutcome::Applied { .. }) => self.switched(),
-            (Asked::Switch, NetworkOutcome::Failed { step, error, .. }) => {
-                self.network_failed(format!("{step:?}: {error}"));
-            }
             (Asked::Revert, NetworkOutcome::Reverted { left }) => self.reverted(&left),
             (
                 Asked::Revert,
@@ -363,7 +360,7 @@ impl<R: FnMut(Report)> Watch<R> {
             }
         }
         if let Some(changes) = &mut self.record.outside_changes {
-            changes.routes = owned.clone();
+            changes.routes.clone_from(&owned);
             self.save_record();
         }
     }
@@ -638,7 +635,7 @@ impl<R: FnMut(Report)> Watch<R> {
                 self.network.next = None;
                 self.network.owned.retain(|route| !routes.contains(route));
                 if let Some(changes) = &mut self.record.outside_changes {
-                    changes.routes = self.network.owned.clone();
+                    changes.routes.clone_from(&self.network.owned);
                     if dns {
                         changes.dns_service_id = String::new();
                     }

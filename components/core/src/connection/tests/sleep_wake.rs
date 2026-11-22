@@ -174,33 +174,30 @@ fn wake_rules_while_connected() {
         h.advance(wake.sleep);
         h.wake();
         let effects = h.settle(wake.observation);
-        match wake.expected {
-            Some(reason) => {
-                let stop = if reason == AttemptReason::Proactive {
-                    StopReason::ProactiveReconnect
-                } else {
-                    StopReason::Reconnect
-                };
-                assert_eq!(stop_reasons(&effects), [stop], "{}", wake.name);
-                assert_eq!(
-                    after(&h),
-                    Some(AfterStop::Reconnect(reason)),
-                    "{}",
-                    wake.name
-                );
-                h.exit_for(&id, ended(Milestone::TunnelUp).by_helper(stop));
-                assert_eq!(self::reason(&h), Some(reason), "{}", wake.name);
-            }
-            None => {
-                assert!(stop_reasons(&effects).is_empty(), "{}", wake.name);
-                assert!(h.connected().is_some(), "{}", wake.name);
-                // The proactive timer is set again.
-                assert!(
-                    h.timer(TimerKind::ProactiveReconnect).is_some(),
-                    "{}",
-                    wake.name
-                );
-            }
+        if let Some(reason) = wake.expected {
+            let stop = if reason == AttemptReason::Proactive {
+                StopReason::ProactiveReconnect
+            } else {
+                StopReason::Reconnect
+            };
+            assert_eq!(stop_reasons(&effects), [stop], "{}", wake.name);
+            assert_eq!(
+                after(&h),
+                Some(AfterStop::Reconnect(reason)),
+                "{}",
+                wake.name
+            );
+            h.exit_for(&id, ended(Milestone::TunnelUp).by_helper(stop));
+            assert_eq!(self::reason(&h), Some(reason), "{}", wake.name);
+        } else {
+            assert!(stop_reasons(&effects).is_empty(), "{}", wake.name);
+            assert!(h.connected().is_some(), "{}", wake.name);
+            // The proactive timer is set again.
+            assert!(
+                h.timer(TimerKind::ProactiveReconnect).is_some(),
+                "{}",
+                wake.name
+            );
         }
     }
 }
@@ -540,7 +537,7 @@ fn other_path_reports_keep_the_tunnel() {
         assert_eq!(connection_effects(&h.set_path(path)), []);
         assert!(h.connected().is_some());
         // The underlay is still the one the session started on.
-        assert!(stop_reasons(&h.set_path(online())).is_empty());
+        assert_eq!(stop_reasons(&h.set_path(online())), []);
     }
 }
 

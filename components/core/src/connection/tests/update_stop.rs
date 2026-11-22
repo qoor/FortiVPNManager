@@ -78,7 +78,7 @@ fn an_attempt_under_way_stops_and_one_not_running_yet_ends_at_once() {
     let mut h = Harness::new();
     h.launch();
     let stop = h.send(Input::StopForUpdate);
-    assert!(stop_reasons(&stop).is_empty());
+    assert_eq!(stop_reasons(&stop), []);
     assert_eq!(stopped(&stop), 1);
     assert_eq!(h.cm.phase, Phase::Idle);
     assert_eq!(h.timer(TimerKind::QuitDeadline), None);
@@ -190,7 +190,7 @@ fn a_quit_during_the_stop_is_a_normal_quit() {
     let id = h.connected().unwrap().attempt.clone();
     h.send(Input::StopForUpdate);
     let quit = h.send(Input::QuitRequested);
-    assert!(stop_reasons(&quit).is_empty());
+    assert_eq!(stop_reasons(&quit), []);
     assert_eq!(h.stopping().map(|stop| stop.after), Some(AfterStop::Quit));
     let exit = h.exit_for(
         &id,

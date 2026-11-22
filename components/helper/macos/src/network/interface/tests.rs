@@ -179,7 +179,7 @@ fn the_given_mtu_and_ipv6_address_are_set() {
 fn a_tunnel_that_has_the_settings_is_left_alone() {
     let interface = parse(CONFIGURED).unwrap();
     let wanted = with_ipv6("FD00:10:0::5", 64);
-    assert!(changes(&wanted, &interface).is_empty());
+    assert_eq!(changes(&wanted, &interface), []);
     assert_eq!(interface.mismatch(&wanted, None), None);
 }
 
@@ -198,7 +198,7 @@ fn only_addresses_the_settings_no_longer_have_are_removed() {
         removals(&plain(), &settings("10.212.133.106", None, None)),
         [strings(&["inet", "10.212.133.105", "delete"])]
     );
-    assert!(removals(&dual, &dual).is_empty());
+    assert_eq!(removals(&dual, &dual), Vec::<Vec<String>>::new());
 }
 
 #[test]

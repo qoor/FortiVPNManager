@@ -99,7 +99,7 @@ mod tests {
             [Ok(b"second".to_vec())]
         );
         Keychain.delete(&name).unwrap();
-        assert!(named(Keychain.load_all().unwrap()).is_empty());
+        assert_eq!(named(Keychain.load_all().unwrap()), []);
         assert!(Keychain.delete(&name).is_err());
     }
 }

@@ -148,13 +148,13 @@ fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, 
 }
 
 /// Whether the Helper writes `routes`: at most a list's worth, no repeats, and each to an exception
-/// target through `router`.
-fn writable(routes: &[BypassRoute], router: &str) -> bool {
+/// target through `gateway`.
+fn writable(routes: &[BypassRoute], gateway: &str) -> bool {
     routes.len() <= MAX_ENTRIES
         && routes.iter().collect::<HashSet<_>>().len() == routes.len()
         && routes
             .iter()
-            .all(|route| route.gateway == router && Ipv4Network::from_route(route).is_ok())
+            .all(|route| route.gateway == gateway && Ipv4Network::from_route(route).is_ok())
 }
 
 /// Whether the table's `route` is `added` as the Helper added it: same destination, prefix and

@@ -397,13 +397,15 @@ impl<'t> Fields<'t, '_> {
                 .and_then(certificate_value);
             let kind = match value {
                 Some(value) if values.contains(&value) => ConfigWarningKind::DuplicateTrustedCert {
-                    index: index as u32,
+                    index: u32::try_from(index).expect(
+                        "a config file of at most MAX_FILE_BYTES has fewer items than u32::MAX",
+                    ),
                 },
                 Some(_) if values.len() == MAX_TRUSTED_CERTS => {
                     // Newest first: the rest are older values.
                     self.warn(
                         ConfigWarningKind::TooManyTrustedCerts {
-                            limit: MAX_TRUSTED_CERTS as u32,
+                            limit: u32::try_from(MAX_TRUSTED_CERTS).expect("the limit fits u32"),
                         },
                         item,
                     );
@@ -414,7 +416,9 @@ impl<'t> Fields<'t, '_> {
                     continue;
                 }
                 None => ConfigWarningKind::InvalidTrustedCert {
-                    index: index as u32,
+                    index: u32::try_from(index).expect(
+                        "a config file of at most MAX_FILE_BYTES has fewer items than u32::MAX",
+                    ),
                 },
             };
             self.warn(kind, item);
@@ -437,7 +441,8 @@ impl<'t> Fields<'t, '_> {
         let mut locations = Vec::new();
         for (index, &item) in items.iter().enumerate() {
             let item = self.tree.node(item);
-            let index = index as u32;
+            let index = u32::try_from(index)
+                .expect("a config file of at most MAX_FILE_BYTES has fewer items than u32::MAX");
             let raw = string(item, path)?.unwrap_or_default();
             let entry = raw.parse::<Ipv4Network>().map_err(|address_problem| {
                 problem(
@@ -477,8 +482,10 @@ impl<'t> Fields<'t, '_> {
             return Err(problem(
                 ConfigProblemKind::TooManyRouteEntries {
                     path: path.to_owned(),
-                    count: entries.len() as u32,
-                    limit: MAX_ENTRIES as u32,
+                    count: u32::try_from(entries.len()).expect(
+                        "a config file of at most MAX_FILE_BYTES has fewer items than u32::MAX",
+                    ),
+                    limit: u32::try_from(MAX_ENTRIES).expect("the limit fits u32"),
                 },
                 node,
             ));

@@ -46,7 +46,11 @@ impl Route {
         if mask.count_ones() != 32 - mask.trailing_zeros() {
             return None;
         }
-        Self::new(destination, mask.count_ones() as u8, gateway)
+        Self::new(
+            destination,
+            u8::try_from(mask.count_ones()).expect("a u32 mask has at most 32 ones"),
+            gateway,
+        )
     }
 
     pub fn new(destination: &str, prefix_length: u8, gateway: &str) -> Option<Self> {

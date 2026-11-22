@@ -11,7 +11,7 @@ use std::time::Duration;
 use fvm_contract::app_internal::SecretText;
 use fvm_contract::app_internal::section::{ImapFailure, ImapStep};
 use fvm_core::gmail_api::{self, Method};
-use fvm_core::imap::{Command, IDLE_DONE, Parser, Response, Status};
+use fvm_core::imap::{Command, IDLE_DONE, Parser, Response, Status, TagGenerator};
 use rustls::ClientConfig;
 use rustls_platform_verifier::BuilderVerifierExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -160,7 +160,7 @@ pub(crate) const IMAP_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 pub(crate) struct Imap {
     stream: TlsStream<TcpStream>,
     parser: Parser,
-    tags: fvm_core::imap::TagGenerator,
+    tags: TagGenerator,
     /// Responses read past the end of the last command.
     backlog: Vec<Response>,
 }
@@ -190,7 +190,7 @@ impl Imap {
         let mut imap = Self {
             stream,
             parser: Parser::default(),
-            tags: Default::default(),
+            tags: TagGenerator::default(),
             backlog: Vec::new(),
         };
         loop {
@@ -204,7 +204,7 @@ impl Imap {
                 Response::Bye { text, .. } => {
                     return Err(ImapFailure::ServerClosed { text: Some(text) });
                 }
-                _ => continue,
+                _ => {}
             }
         }
     }

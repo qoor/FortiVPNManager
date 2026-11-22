@@ -189,7 +189,7 @@ fn a_new_gateway_clears_the_certificate_list() {
         clears(&h.send(Input::SettingsChanged(with_account(moved.clone())))),
         1
     );
-    assert!(h.cm.settings.account.trusted_certs.is_empty());
+    assert_eq!(h.cm.settings.account.trusted_certs, Vec::<String>::new());
     moved.trusted_certs.clear();
     moved.port = 443;
     assert_eq!(
@@ -264,7 +264,7 @@ fn a_rejection_from_the_old_gateway_is_not_learned_for_the_new_one() {
         }
         let effects = h.exit_for(&first, rejected(&[digest('a')]));
         assert_eq!(saved_certs(&effects), None, "run started: {run_started}");
-        assert!(h.cm.settings.account.trusted_certs.is_empty());
+        assert_eq!(h.cm.settings.account.trusted_certs, Vec::<String>::new());
         assert_eq!(reason(&h), Some(AttemptReason::CertificateRetry));
         // The new gateway's own rejection is learned and retried once.
         let second = h.start_tunnel();
@@ -369,7 +369,7 @@ fn a_user_reset_keeps_the_cooldown() {
     };
     ledger.reset_for_user_action();
     assert_eq!(ledger.consecutive_auth_failures, 0);
-    assert!(ledger.recent_auth_attempts.is_empty());
+    assert_eq!(ledger.recent_auth_attempts, []);
     assert_eq!(ledger.cooldown_end(), Some(t0() + secs(90.0)));
 }
 
@@ -385,7 +385,7 @@ fn merging_puts_the_newest_first_and_keeps_four() {
         merge_trusted_certs(&[digest('c')], &existing),
         [digest('c'), digest('a'), digest('b'), digest('d')]
     );
-    assert!(merge_trusted_certs(&[], &[]).is_empty());
+    assert_eq!(merge_trusted_certs(&[], &[]), Vec::<String>::new());
 }
 
 #[test]

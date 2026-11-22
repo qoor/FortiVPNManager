@@ -259,7 +259,7 @@ fn a_quit_during_a_stop_in_flight_does_not_stop_twice() {
     h.run_milestones(&id, Milestone::OtpPrompted);
     h.fire(TimerKind::OtpDeadline);
     let quit = h.send(Input::QuitRequested);
-    assert!(stop_reasons(&quit).is_empty());
+    assert_eq!(stop_reasons(&quit), []);
     assert_eq!(
         timer_set(&quit, TimerKind::QuitDeadline),
         Some(h.now + secs(12.0))
@@ -278,7 +278,7 @@ fn a_quit_during_a_user_disconnect_waits_for_the_same_exit() {
     h.launch_connected();
     h.send(Input::Disconnect);
     let quit = h.send(Input::QuitRequested);
-    assert!(stop_reasons(&quit).is_empty());
+    assert_eq!(stop_reasons(&quit), []);
     assert_eq!(after(&h), Some(AfterStop::Quit));
     // A disconnect click during the quit cannot cancel it.
     h.send(Input::Disconnect);
