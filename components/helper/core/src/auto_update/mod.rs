@@ -194,7 +194,7 @@ impl Installer {
         let started = Started {
             installer: prepared.installer,
             runner: runner.id(),
-            installer_process: runner.installer_process(),
+            installer_process: os::RUNNER_IS_INSTALLER.then(|| runner.id()),
         };
         self.runner = Some(runner);
         Ok(started)

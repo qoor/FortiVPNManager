@@ -938,7 +938,7 @@ fn saving_the_account_writes_the_changed_field_and_the_password_under_the_saved_
     assert!(text.contains("  method: \"gmail_api\"\n"), "{text}");
     let account = &app.config_section().account;
     assert_eq!(account.username, "bob");
-    assert!(!account.vpn_password_entered);
+    assert!(!account.entered.vpn);
     assert_eq!(account.save_error, None);
 }
 
@@ -1096,13 +1096,13 @@ fn a_typed_password_survives_a_file_change_but_not_closing_settings() {
     });
     let merged = app.config_section().account.clone();
     assert!(merged.revision > account.revision);
-    assert!(merged.vpn_password_entered);
+    assert!(merged.entered.vpn);
 
     app.command(Command::SettingsClosed {});
     app.settle();
     let closed = &app.config_section().account;
     assert!(closed.revision > merged.revision);
-    assert!(!closed.vpn_password_entered);
+    assert!(!closed.entered.vpn);
 }
 
 #[test]

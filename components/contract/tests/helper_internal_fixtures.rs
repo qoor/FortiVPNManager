@@ -123,131 +123,139 @@ fn full_tunnel() -> NetworkSettings {
 const DNS_SERVICE: &str = "6B29FC40-CA47-1067-B31D-00DD010662DA";
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn messages_to_the_entry() {
+    let messages: Vec<ToEntry> =
+        serde_json::from_str(include_str!("fixtures/helper-internal/to_entry.json")).unwrap();
+    assert_eq!(
+        messages,
+        [requests_to_the_entry(), events_to_the_entry()].concat()
+    );
+}
+
+fn requests_to_the_entry() -> Vec<ToEntry> {
     let request = |id, request| ToEntry::Request {
         id,
         app: 1,
         request,
     };
+    vec![
+        ToEntry::AppConnected { app: 1, uid: 501 },
+        request(
+            1,
+            AppRequest::Connect {
+                json: format!(r#"{{"attemptID":"{ATTEMPT}","host":"vpn.example.com"}}"#),
+            },
+        ),
+        request(
+            2,
+            AppRequest::SubmitOtp {
+                attempt: ATTEMPT.into(),
+                code: "123456".into(),
+            },
+        ),
+        request(
+            3,
+            AppRequest::Disconnect {
+                attempt: ATTEMPT.into(),
+                reason: "userDisconnect".into(),
+            },
+        ),
+        request(4, AppRequest::Status {}),
+        request(5, AppRequest::ExitWhenIdle {}),
+        request(6, AppRequest::ReadBypassRoutes {}),
+        request(
+            7,
+            AppRequest::WriteBypassRoutes {
+                json: r#"{"remove":{}}"#.into(),
+            },
+        ),
+        request(
+            8,
+            AppRequest::PrepareUpdate {
+                json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
+            },
+        ),
+        request(
+            9,
+            AppRequest::InstallUpdate {
+                json: r#"{"installID":13835058055282163713}"#.into(),
+            },
+        ),
+        request(10, AppRequest::ReadPreparedUpdate {}),
+        request(11, AppRequest::DiscardPreparedUpdate {}),
+    ]
+}
+
+fn events_to_the_entry() -> Vec<ToEntry> {
     let host_and_network = routes();
-    let messages: Vec<ToEntry> =
-        serde_json::from_str(include_str!("fixtures/helper-internal/to_entry.json")).unwrap();
-    assert_eq!(
-        messages,
-        [
-            ToEntry::AppConnected { app: 1, uid: 501 },
-            request(
-                1,
-                AppRequest::Connect {
-                    json: format!(r#"{{"attemptID":"{ATTEMPT}","host":"vpn.example.com"}}"#),
-                },
-            ),
-            request(
-                2,
-                AppRequest::SubmitOtp {
-                    attempt: ATTEMPT.into(),
-                    code: "123456".into(),
-                },
-            ),
-            request(
-                3,
-                AppRequest::Disconnect {
-                    attempt: ATTEMPT.into(),
-                    reason: "userDisconnect".into(),
-                },
-            ),
-            request(4, AppRequest::Status {}),
-            request(5, AppRequest::ExitWhenIdle {}),
-            request(6, AppRequest::ReadBypassRoutes {}),
-            request(
-                7,
-                AppRequest::WriteBypassRoutes {
-                    json: r#"{"remove":{}}"#.into(),
-                },
-            ),
-            request(
-                8,
-                AppRequest::PrepareUpdate {
-                    json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
-                },
-            ),
-            request(
-                9,
-                AppRequest::InstallUpdate {
-                    json: r#"{"installID":13835058055282163713}"#.into(),
-                },
-            ),
-            request(10, AppRequest::ReadPreparedUpdate {}),
-            request(11, AppRequest::DiscardPreparedUpdate {}),
-            ToEntry::AppDisconnected { app: 1 },
-            ToEntry::ExecutableReplaced {},
-            ToEntry::TerminationRequested {},
-            ToEntry::BypassRoutesChanged {
-                outcome: BypassRoutesOutcome::Changed {
-                    network: Some(ethernet()),
-                    added: vec![host_and_network[1].clone()],
-                    found: host_and_network.to_vec(),
-                    left: Vec::new(),
+    vec![
+        ToEntry::AppDisconnected { app: 1 },
+        ToEntry::ExecutableReplaced {},
+        ToEntry::TerminationRequested {},
+        ToEntry::BypassRoutesChanged {
+            outcome: BypassRoutesOutcome::Changed {
+                network: Some(ethernet()),
+                added: vec![host_and_network[1].clone()],
+                found: host_and_network.to_vec(),
+                left: Vec::new(),
+            },
+        },
+        ToEntry::BypassRoutesChanged {
+            outcome: BypassRoutesOutcome::Changed {
+                network: None,
+                added: Vec::new(),
+                found: Vec::new(),
+                left: vec![stale()],
+            },
+        },
+        ToEntry::BypassRoutesChanged {
+            outcome: BypassRoutesOutcome::Refused {
+                error: HelperError {
+                    code: HelperErrorCode::WrongPhase,
+                    message: "no active network service".into(),
                 },
             },
-            ToEntry::BypassRoutesChanged {
-                outcome: BypassRoutesOutcome::Changed {
-                    network: None,
-                    added: Vec::new(),
-                    found: Vec::new(),
-                    left: vec![stale()],
-                },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::LookedUp {
+                dns_service_id: DNS_SERVICE.into(),
+                missing: vec![gateway_route(), excluded_route()],
             },
-            ToEntry::BypassRoutesChanged {
-                outcome: BypassRoutesOutcome::Refused {
-                    error: HelperError {
-                        code: HelperErrorCode::WrongPhase,
-                        message: "no active network service".into(),
-                    },
-                },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Applied {
+                added: vec![gateway_route(), excluded_route()],
+                left: Vec::new(),
             },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::LookedUp {
-                    dns_service_id: DNS_SERVICE.into(),
-                    missing: vec![gateway_route(), excluded_route()],
-                },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Reverted {
+                left: vec![excluded_route()],
             },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Applied {
-                    added: vec![gateway_route(), excluded_route()],
-                    left: Vec::new(),
-                },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Checked { complete: true },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Checked { complete: false },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Failed {
+                step: NetworkStep::Dns,
+                error: "the DNS settings could not be written".into(),
+                added: vec![gateway_route()],
+                left: Vec::new(),
             },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Reverted {
-                    left: vec![excluded_route()],
-                },
+        },
+        ToEntry::NetworkChanged {
+            outcome: NetworkOutcome::Failed {
+                step: NetworkStep::Network,
+                error: "no active network service".into(),
+                added: Vec::new(),
+                left: Vec::new(),
             },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Checked { complete: true },
-            },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Checked { complete: false },
-            },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Failed {
-                    step: NetworkStep::Dns,
-                    error: "the DNS settings could not be written".into(),
-                    added: vec![gateway_route()],
-                    left: Vec::new(),
-                },
-            },
-            ToEntry::NetworkChanged {
-                outcome: NetworkOutcome::Failed {
-                    step: NetworkStep::Network,
-                    error: "no active network service".into(),
-                    added: Vec::new(),
-                    left: Vec::new(),
-                },
-            },
-        ]
-    );
+        },
+    ]
 }
 
 #[test]

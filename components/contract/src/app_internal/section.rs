@@ -718,13 +718,27 @@ pub struct OpenAtLogin {
     pub error: Option<RegistrationError>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize)]
+pub struct PasswordsEntered {
+    #[serde(rename = "vpnPasswordEntered")]
+    pub vpn: bool,
+    #[serde(rename = "appPasswordEntered")]
+    pub app: bool,
+}
+
+/// Which passwords the secret storage holds: the VPN password for the typed username and server,
+/// the app password for the typed Gmail address.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize)]
+pub struct PasswordsStored {
+    #[serde(rename = "vpnPasswordStored")]
+    pub vpn: bool,
+    #[serde(rename = "appPasswordStored")]
+    pub app: bool,
+}
+
 /// The Account pane's draft. Passwords never come back; only whether one is typed.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "mirrors the account form JSON the Swift and C# apps read"
-)]
 pub struct AccountFormState {
     /// Changes only when the runtime replaces what was typed: on load, a save that changes how a
     /// field reads, import, closing Settings, or a settings file change merged into untouched
@@ -734,12 +748,10 @@ pub struct AccountFormState {
     pub username: String,
     pub realm: String,
     pub gmail_address: String,
-    pub vpn_password_entered: bool,
-    pub app_password_entered: bool,
-    /// The secret storage holds a VPN password for the typed username and server.
-    pub vpn_password_stored: bool,
-    /// The secret storage holds an app password for the typed Gmail address.
-    pub app_password_stored: bool,
+    #[serde(flatten)]
+    pub entered: PasswordsEntered,
+    #[serde(flatten)]
+    pub stored: PasswordsStored,
     /// Why the VPN client would refuse the saved account.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub saved_account_problem: Option<AccountValueProblem>,

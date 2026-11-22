@@ -26,10 +26,10 @@ use crate::recovery::logout::SessionSecret;
 use crate::recovery::run_directory::{self, RunFiles, RunRecord};
 use crate::secrets::SecretStore;
 use crate::session::backend::{
-    Backend, FormKind, LineLevel, Link, SessionEnd, SessionEvent, SessionRequest,
+    FormKind, LineLevel, Link, SessionEnd, SessionEvent, SessionRequest,
 };
-use crate::session::{Report, Timing};
-use crate::watchdog::{Beat, Watchdog};
+use crate::session::{Report, SessionManager, Timing};
+use crate::watchdog::Beat;
 
 pub use network::{NotReplaceable, Replaced};
 
@@ -50,18 +50,18 @@ impl Run {
     /// the `Exited` event. The run's first line names the client and its version. `on_report` must
     /// never wait for anything that may be held while `submit_otp` runs, since `submit_otp` waits
     /// for that thread; calling `submit_otp` or `stop` on it panics.
-    #[expect(clippy::too_many_arguments)]
     pub(crate) fn start(
-        backend: Arc<dyn Backend>,
-        secrets: Arc<dyn SecretStore>,
+        manager: &SessionManager,
         request: &mut RunRequest,
         files: RunFiles,
         replaced: Option<Replaced>,
         start_after: Option<Receiver<()>>,
-        watchdog: &Watchdog,
-        timing: Timing,
         on_report: impl FnMut(Report) + Send + 'static,
     ) -> Self {
+        let backend = Arc::clone(&manager.backend);
+        let secrets = Arc::clone(&manager.secrets);
+        let watchdog = &manager.watchdog;
+        let timing = manager.timing;
         let name = format!("{} run {}", request.session_id, request.attempt_id);
         let client_name = backend.name();
         let client_line = OutputLine {

@@ -257,12 +257,10 @@ fn stand_in() {
 }
 
 #[cfg(unix)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the runner takes over the child process"
-)]
 fn runner(child: Child) -> os::Runner {
-    os::Runner(rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap())
+    let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+    drop(child);
+    os::Runner(pid)
 }
 
 #[cfg(windows)]

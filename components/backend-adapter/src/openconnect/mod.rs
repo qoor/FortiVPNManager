@@ -37,6 +37,6 @@ impl Backend for OpenConnect {
     }
 
     fn run(&self, request: SessionRequest, link: &Link) -> SessionEnd {
-        session::run(request, link)
+        session::run(&request, link)
     }
 }

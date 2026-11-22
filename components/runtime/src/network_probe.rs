@@ -34,7 +34,7 @@ impl Runtime {
 
     fn probe_route(&mut self, probe: NetworkProbe, gateway_ip: Option<Ipv4Addr>) {
         let Some(destination) = gateway_ip else {
-            self.probe_addresses(probe, None, None);
+            self.probe_addresses(&probe, None, None);
             return;
         };
         self.request(
@@ -43,21 +43,18 @@ impl Runtime {
                 let PortResponse::RouteInterface { interface } = response else {
                     panic!("a route answer")
                 };
-                runtime.probe_addresses(probe, gateway_ip, interface);
+                runtime.probe_addresses(&probe, gateway_ip, interface);
             },
         );
     }
 
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "the probe moves into the response callback"
-    )]
     fn probe_addresses(
         &mut self,
-        probe: NetworkProbe,
+        probe: &NetworkProbe,
         gateway_ip: Option<Ipv4Addr>,
         route_interface: Option<String>,
     ) {
+        let (id, session_running) = (probe.id, probe.session_running);
         self.request(
             PortRequest::InterfaceAddresses {},
             move |runtime, response| {
@@ -65,14 +62,14 @@ impl Runtime {
                     panic!("an addresses answer")
                 };
                 let mut result = ProbeResult {
-                    id: probe.id,
+                    id,
                     gateway_ip,
                     route_interface,
                     addresses,
                     session_running: None,
                     routing_complete: None,
                 };
-                if !probe.session_running {
+                if !session_running {
                     runtime.feed(connection::Input::NetworkProbed(result));
                     return;
                 }

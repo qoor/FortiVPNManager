@@ -79,10 +79,6 @@ impl Process {
 ///
 /// Returns the Windows error code when the handles cannot be passed on or the process cannot be
 /// started.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the parent's copies of the handles close when spawning returns"
-)]
 pub fn spawn(
     program: &str,
     args: &[&str],
@@ -116,6 +112,7 @@ pub fn spawn(
     let started = unsafe { start(program, args, environment, &handles, attributes) };
     // SAFETY: The list was initialized above, and no call uses it after this.
     unsafe { DeleteProcThreadAttributeList(attributes) };
+    drop(stdio);
     started
 }
 

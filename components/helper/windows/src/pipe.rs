@@ -123,7 +123,7 @@ impl Helper {
         let accept_side = Arc::clone(&relay);
         thread::Builder::new()
             .name("fvm-helper-accept".into())
-            .spawn(move || accept_side.accept(listener))
+            .spawn(move || accept_side.accept(&listener))
             .expect("starting the accept thread");
         Ok(Self {
             relay,
@@ -382,11 +382,7 @@ impl Relay {
 
     /// Accepting is retried until it works again. Only the first failure and the recovery are
     /// logged, so a failure that lasts does not flood the event log.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a thread entry that owns the listener until the thread ends"
-    )]
-    fn accept(self: Arc<Self>, listener: PipeListener<pipe_mode::Bytes, pipe_mode::Bytes>) {
+    fn accept(self: Arc<Self>, listener: &PipeListener<pipe_mode::Bytes, pipe_mode::Bytes>) {
         let mut failing = false;
         loop {
             match listener.accept() {
@@ -456,24 +452,20 @@ impl Relay {
         );
         thread::Builder::new()
             .name(format!("fvm-helper-write-{app}"))
-            .spawn(move || write_messages(sender, outgoing))
+            .spawn(move || write_messages(&sender, outgoing))
             .expect("starting a connection's writer");
         let relay = Arc::clone(self);
         thread::Builder::new()
             .name(format!("fvm-helper-read-{app}"))
-            .spawn(move || relay.read_requests(app, receiver))
+            .spawn(move || relay.read_requests(app, &receiver))
             .expect("starting a connection's reader");
     }
 
     /// Handles the connection's requests until it ends, sends something unreadable or was dropped
     /// for not reading, then forgets it.
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "a thread entry that owns the receiving stream until the thread ends"
-    )]
-    fn read_requests(self: Arc<Self>, app: u64, receiver: RecvPipeStream<pipe_mode::Bytes>) {
+    fn read_requests(self: Arc<Self>, app: u64, receiver: &RecvPipeStream<pipe_mode::Bytes>) {
         loop {
-            match receive(&receiver) {
+            match receive(receiver) {
                 Ok(_) if !self.lock().connections.contains_key(&app) => break,
                 Ok(request) => self.request(app, request),
                 Err(error) => {
@@ -689,17 +681,13 @@ fn receive(receiver: &RecvPipeStream<pipe_mode::Bytes>) -> io::Result<PipeReques
 
 /// Writes the queued messages until the connection is forgotten. After a failed write the rest is
 /// dropped, but drain requests are still answered.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "a thread entry that owns the sending stream until the thread ends"
-)]
-fn write_messages(sender: SendPipeStream<pipe_mode::Bytes>, outgoing: Receiver<Outgoing>) {
+fn write_messages(sender: &SendPipeStream<pipe_mode::Bytes>, outgoing: Receiver<Outgoing>) {
     let mut broken = false;
     for item in outgoing {
         match item {
             Outgoing::Message(message) => {
                 // `send` flushes, which waits until the app has read the message.
-                broken = broken || stream::send(&mut &sender, &message).is_err();
+                broken = broken || stream::send(&mut &*sender, &message).is_err();
             }
             Outgoing::Drained(done) => {
                 let _ = done.send(());

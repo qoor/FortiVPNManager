@@ -16,14 +16,10 @@ use super::network::{self, IpInfo};
 
 const DTLS_ATTEMPT_PERIOD: c_int = 60;
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "the request and its secrets are dropped when the session ends"
-)]
-pub(super) fn run(request: SessionRequest, link: &Link) -> SessionEnd {
+pub(super) fn run(request: &SessionRequest, link: &Link) -> SessionEnd {
     let context = Context {
         link,
-        request: &request,
+        request,
         forms: Mutex::default(),
         gateway_reached: Once::new(),
     };
@@ -200,9 +196,12 @@ impl Context<'_> {
                 return;
             }
         };
-        let settings = interface_index(&name)
-            .and_then(|index| network::settings(ip, name, index))
-            .map(Box::new);
+        #[cfg(windows)]
+        let settings =
+            interface_index(&name).and_then(|index| network::settings(ip, name, Some(index)));
+        #[cfg(not(windows))]
+        let settings = network::settings(ip, name, None);
+        let settings = settings.map(Box::new);
         self.link.report(SessionEvent::TunnelReady(settings));
     }
 
@@ -212,22 +211,12 @@ impl Context<'_> {
 }
 
 #[cfg(windows)]
-fn interface_index(name: &str) -> Result<Option<u32>, String> {
+fn interface_index(name: &str) -> Result<u32, String> {
     use fvm_os_api_windows::network::Luid;
 
     Luid::from_alias(name)
         .and_then(Luid::index)
-        .map(Some)
         .map_err(|error| format!("the tunnel device {name:?} has no interface index: {error}"))
-}
-
-#[cfg(not(windows))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "matches the Windows version, which can fail"
-)]
-fn interface_index(_: &str) -> Result<Option<u32>, String> {
-    Ok(None)
 }
 
 fn form_kind(auth_id: Option<&str>) -> Option<FormKind> {

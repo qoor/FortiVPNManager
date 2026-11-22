@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use fvm_contract::app_helper::HelperErrorCode;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::auto_update::Version;
 use crate::connection::{Failure, FailureLedger};
@@ -62,15 +62,15 @@ struct Wire {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        with = "optional_version"
+        deserialize_with = "optional_version"
     )]
-    last_notified_update_version: Option<Version>,
+    last_notified_update_version: Option<WireVersion>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        with = "optional_version"
+        deserialize_with = "optional_version"
     )]
-    update_target_version: Option<Version>,
+    update_target_version: Option<WireVersion>,
     #[serde(
         default,
         skip_serializing_if = "std::ops::Not::not",
@@ -88,9 +88,9 @@ struct WireLedger {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        with = "optional_time"
+        deserialize_with = "optional_time"
     )]
-    last_auth_failure_at: Option<SystemTime>,
+    last_auth_failure_at: Option<WireTime>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -128,15 +128,15 @@ impl Wire {
             ledger: self.ledger.map(|ledger| FailureLedger {
                 account_key: ledger.profile_key,
                 consecutive_auth_failures: ledger.consecutive_auth_failures,
-                last_auth_failure_at: ledger.last_auth_failure_at,
+                last_auth_failure_at: ledger.last_auth_failure_at.map(|time| time.0),
                 last_auth_failure: ledger
                     .last_auth_failure_reason
                     .map(WireFailure::into_failure),
                 recent_auth_attempts: ledger.recent_auth_attempts,
             }),
             login_item_registered: self.login_item_registered,
-            last_notified_update: self.last_notified_update_version,
-            update_target: self.update_target_version,
+            last_notified_update: self.last_notified_update_version.map(|version| version.0),
+            update_target: self.update_target_version.map(|version| version.0),
             connected_before_update: self.connected_before_update,
         }
     }
@@ -146,13 +146,13 @@ impl Wire {
             ledger: state.ledger.as_ref().map(|ledger| WireLedger {
                 profile_key: ledger.account_key.clone(),
                 consecutive_auth_failures: ledger.consecutive_auth_failures,
-                last_auth_failure_at: ledger.last_auth_failure_at,
+                last_auth_failure_at: ledger.last_auth_failure_at.map(WireTime),
                 last_auth_failure_reason: ledger.last_auth_failure.map(WireFailure::from_failure),
                 recent_auth_attempts: ledger.recent_auth_attempts.clone(),
             }),
             login_item_registered: state.login_item_registered,
-            last_notified_update_version: state.last_notified_update,
-            update_target_version: state.update_target,
+            last_notified_update_version: state.last_notified_update.map(WireVersion),
+            update_target_version: state.update_target.map(WireVersion),
             connected_before_update: state.connected_before_update,
         }
     }
@@ -213,53 +213,32 @@ fn parse_time(text: &str) -> Option<SystemTime> {
     Some(UNIX_EPOCH + Duration::from_secs(seconds))
 }
 
-mod optional_time {
-    use std::time::SystemTime;
+struct WireTime(SystemTime);
 
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    #[expect(
-        clippy::ref_option,
-        reason = "serde's serialize_with passes a reference"
-    )]
-    pub(super) fn serialize<S: Serializer>(
-        time: &Option<SystemTime>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        let time = time.expect("skipped when absent");
-        serializer.serialize_str(&super::format_time(time))
-    }
-
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<SystemTime>, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        Ok(value.as_str().and_then(super::parse_time))
+impl Serialize for WireTime {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format_time(self.0))
     }
 }
 
-mod optional_version {
-    use crate::auto_update::Version;
-    use serde::{Deserialize, Deserializer, Serializer};
+struct WireVersion(Version);
 
-    #[expect(
-        clippy::ref_option,
-        reason = "serde's serialize_with passes a reference"
-    )]
-    pub(super) fn serialize<S: Serializer>(
-        version: &Option<Version>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        let version = version.expect("skipped when absent");
-        serializer.collect_str(&version)
+impl Serialize for WireVersion {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(&self.0)
     }
+}
 
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<Option<Version>, D::Error> {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        Ok(value.as_str().and_then(Version::parse))
-    }
+fn optional_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<WireTime>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_str().and_then(parse_time).map(WireTime))
+}
+
+fn optional_version<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<WireVersion>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_str().and_then(Version::parse).map(WireVersion))
 }
 
 mod times {

@@ -25,19 +25,13 @@ shift 3
 /bin/rm -f "$@"
 "#;
 
+pub(super) const RUNNER_IS_INSTALLER: bool = false;
+
 pub(super) struct Runner(pub(super) Pid);
 
 impl Runner {
     pub(super) fn id(&self) -> u32 {
         self.0.as_raw_nonzero().get().unsigned_abs()
-    }
-
-    #[expect(
-        clippy::unused_self,
-        reason = "matches the Windows version, which reads the runner"
-    )]
-    pub(super) fn installer_process(&self) -> Option<u32> {
-        None
     }
 
     pub(super) fn running(&mut self) -> bool {

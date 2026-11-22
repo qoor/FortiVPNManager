@@ -126,6 +126,7 @@ impl LogFile {
                 .custom_flags(rustix::fs::OFlags::NOFOLLOW.bits().cast_signed());
         }
         let file = options.open(&self.path)?;
+        #[cfg(unix)]
         files::set_private(&file)?;
         self.size = file.metadata()?.len();
         self.file = Some(file);

@@ -76,6 +76,7 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
         std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
         match options.open(&temporary) {
             Ok(file) => {
+                #[cfg(unix)]
                 set_private(&file)?;
                 return Ok((temporary, file));
             }
@@ -87,22 +88,10 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
 }
 
 /// 0600, whatever the umask made of the creation mode.
-#[cfg_attr(
-    not(unix),
-    expect(
-        clippy::unnecessary_wraps,
-        reason = "matches the Unix version, which can fail"
-    )
-)]
+#[cfg(unix)]
 pub(crate) fn set_private(file: &File) -> io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        file.set_permissions(fs::Permissions::from_mode(0o600))?;
-    }
-    #[cfg(not(unix))]
-    let _ = file;
-    Ok(())
+    use std::os::unix::fs::PermissionsExt;
+    file.set_permissions(fs::Permissions::from_mode(0o600))
 }
 
 /// Makes the rename durable; a failure leaves the file written, so it is not reported.

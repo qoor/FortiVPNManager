@@ -16,7 +16,7 @@ use fvm_contract::app_internal::port::{
 use fvm_contract::app_internal::problem::FileProblem;
 use fvm_contract::app_internal::section::{
     AccountFormState, AccountSaveError, ClientSettingsImport, ImportError, ImportReport,
-    ImportedPassword,
+    ImportedPassword, PasswordsEntered, PasswordsStored,
 };
 use fvm_contract::validation;
 use fvm_core::config::{DEFAULT_PORT, PORTS, Settings};
@@ -187,10 +187,14 @@ impl Forms {
             username: self.typed.username.clone(),
             realm: self.typed.realm.clone(),
             gmail_address: self.typed.gmail_address.clone(),
-            vpn_password_entered: !self.vpn_password.0.is_empty(),
-            app_password_entered: !self.app_password.0.is_empty(),
-            vpn_password_stored: self.vpn_password_stored,
-            app_password_stored: self.app_password_stored,
+            entered: PasswordsEntered {
+                vpn: !self.vpn_password.0.is_empty(),
+                app: !self.app_password.0.is_empty(),
+            },
+            stored: PasswordsStored {
+                vpn: self.vpn_password_stored,
+                app: self.app_password_stored,
+            },
             saved_account_problem: validation::check_account(&vpn.host, &vpn.username, &vpn.realm)
                 .err(),
             save_error: self.save_error.clone(),

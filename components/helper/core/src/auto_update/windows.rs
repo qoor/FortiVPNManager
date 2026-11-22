@@ -25,6 +25,8 @@ const MSIEXEC_LOG: &str = "update.log";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DETACHED_PROCESS: u32 = 0x0000_0008;
 
+pub(super) const RUNNER_IS_INSTALLER: bool = true;
+
 pub(super) struct Runner {
     pub(super) pid: u32,
     pub(super) waiter: JoinHandle<()>,
@@ -33,14 +35,6 @@ pub(super) struct Runner {
 impl Runner {
     pub(super) fn id(&self) -> u32 {
         self.pid
-    }
-
-    #[expect(
-        clippy::unnecessary_wraps,
-        reason = "matches the Unix version, which has no installer process"
-    )]
-    pub(super) fn installer_process(&self) -> Option<u32> {
-        Some(self.pid)
     }
 
     pub(super) fn running(&mut self) -> bool {

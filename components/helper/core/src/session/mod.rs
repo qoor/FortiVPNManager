@@ -89,14 +89,11 @@ impl SessionManager {
             .map_err(StartFailure::InvalidRequest)?;
         run_directory::prepare(&self.run_directory).map_err(StartFailure::RunDirectory)?;
         Ok(Run::start(
-            Arc::clone(&self.backend),
-            Arc::clone(&self.secrets),
+            self,
             request,
             RunFiles::new(&self.run_directory, slot),
             replaced,
             start_after,
-            &self.watchdog,
-            self.timing,
             on_report,
         ))
     }

@@ -206,17 +206,16 @@ fn apply(
 ) -> NetworkOutcome {
     let mut added = Vec::new();
     let mut unchanged = None;
-    match apply_steps(
+    let applying = Applying {
         settings,
         previous,
         remove,
         add,
         routes_and_dns,
         outside,
-        &mut added,
-        &mut unchanged,
         log,
-    ) {
+    };
+    match applying.steps(&mut added, &mut unchanged) {
         Ok(left) => {
             let message = format!(
                 "applied the VPN network settings to {} ({} route(s) outside the tunnel added)",
@@ -248,109 +247,122 @@ fn apply(
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-fn apply_steps(
-    settings: &NetworkSettings,
-    previous: Option<&NetworkSettings>,
-    remove: &[OutsideRoute],
-    add: &[OutsideRoute],
+struct Applying<'a> {
+    settings: &'a NetworkSettings,
+    previous: Option<&'a NetworkSettings>,
+    remove: &'a [OutsideRoute],
+    add: &'a [OutsideRoute],
     routes_and_dns: bool,
-    outside: Option<&[IpNetwork]>,
-    added: &mut Vec<OutsideRoute>,
-    unchanged: &mut Option<Vec<Route>>,
-    log: &Log,
-) -> Result<Vec<OutsideRoute>, Failure> {
-    let tunnel = tunnel_interface(&settings.tunnel)?;
-    let physical = Physical::read(log)?;
-    if add
-        .iter()
-        .any(|route| physical.route_to(route.destination).as_ref() != Some(route))
-    {
-        return Err(failure(
-            NetworkStep::Network,
-            "the network changed since it was looked up",
-        ));
-    }
-    if let Some(previous) = previous {
-        remove_previous(tunnel, previous, settings)?;
-    }
-    let before = table(remove.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
-    let rows: Vec<Route> = remove
-        .iter()
-        .filter_map(|route| found(&before, route))
-        .collect();
-    *unchanged = Some(before);
-    for row in rows {
-        network::delete_route(&row).map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
-        *unchanged = None;
-    }
-    if let Some(mtu) = settings.mtu {
-        let families: &[Family] = if settings.ipv6.is_some() {
-            &[Family::Ipv4, Family::Ipv6]
-        } else {
-            &[Family::Ipv4]
-        };
-        for &family in families {
-            network::set_mtu(tunnel, family, mtu)
-                .map_err(|error| failure(NetworkStep::Mtu, &error))?;
+    outside: Option<&'a [IpNetwork]>,
+    log: &'a Log,
+}
+
+impl Applying<'_> {
+    fn steps(
+        &self,
+        added: &mut Vec<OutsideRoute>,
+        unchanged: &mut Option<Vec<Route>>,
+    ) -> Result<Vec<OutsideRoute>, Failure> {
+        let tunnel = tunnel_interface(&self.settings.tunnel)?;
+        let physical = Physical::read(self.log)?;
+        if self
+            .add
+            .iter()
+            .any(|route| physical.route_to(route.destination).as_ref() != Some(route))
+        {
+            return Err(failure(
+                NetworkStep::Network,
+                "the network changed since it was looked up",
+            ));
         }
-    }
-    for address in addresses(settings) {
-        match network::add_address(tunnel, address.address, address.prefix_length) {
-            Ok(()) => {}
-            Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::Addresses, &error)),
+        if let Some(previous) = self.previous {
+            remove_previous(tunnel, previous, self.settings)?;
         }
-    }
-    for route in add {
-        match network::add_route(&physical.os_route(route)) {
-            Ok(()) => added.push(route.clone()),
-            Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::OutsideRoutes, &error)),
+        let before = table(self.remove.iter().map(|route| route.destination.address))
+            .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
+        let rows: Vec<Route> = self
+            .remove
+            .iter()
+            .filter_map(|route| found(&before, route))
+            .collect();
+        *unchanged = Some(before);
+        for row in rows {
+            network::delete_route(&row)
+                .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
+            *unchanged = None;
         }
-    }
-    if !routes_and_dns {
-        confirm(tunnel, settings, &physical, add, false)?;
-        return Ok(Vec::new());
-    }
-    if matches!(settings.ipv4.routes, TunnelRoutes::Full {}) {
-        network::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
-            .map_err(|error| failure(NetworkStep::Routes, &error))?;
-    }
-    for route in tunnel_routes(tunnel, settings) {
-        match network::add_route(&route) {
-            Ok(()) => {}
-            Err(error) if error.already_exists() => {}
-            Err(error) => return Err(failure(NetworkStep::Routes, &error)),
+        if let Some(mtu) = self.settings.mtu {
+            let families: &[Family] = if self.settings.ipv6.is_some() {
+                &[Family::Ipv4, Family::Ipv6]
+            } else {
+                &[Family::Ipv4]
+            };
+            for &family in families {
+                network::set_mtu(tunnel, family, mtu)
+                    .map_err(|error| failure(NetworkStep::Mtu, &error))?;
+            }
         }
-    }
-    let guid = network::interface(tunnel)
-        .map_err(|error| failure(NetworkStep::Dns, &error))?
-        .guid;
-    for family in [Family::Ipv4, Family::Ipv6] {
-        let servers = dns_servers(settings, family);
-        let had = previous.is_some_and(|previous| !dns_servers(previous, family).is_empty());
-        if !servers.is_empty() || had {
-            network::set_dns_servers(&guid, family, &servers)
-                .map_err(|error| failure(NetworkStep::Dns, &error))?;
+        for address in addresses(self.settings) {
+            match network::add_address(tunnel, address.address, address.prefix_length) {
+                Ok(()) => {}
+                Err(error) if error.already_exists() => {}
+                Err(error) => return Err(failure(NetworkStep::Addresses, &error)),
+            }
         }
+        for route in self.add {
+            match network::add_route(&physical.os_route(route)) {
+                Ok(()) => added.push(route.clone()),
+                Err(error) if error.already_exists() => {}
+                Err(error) => return Err(failure(NetworkStep::OutsideRoutes, &error)),
+            }
+        }
+        if !self.routes_and_dns {
+            confirm(tunnel, self.settings, &physical, self.add, false)?;
+            return Ok(Vec::new());
+        }
+        if matches!(self.settings.ipv4.routes, TunnelRoutes::Full {}) {
+            network::set_metric(tunnel, Family::Ipv4, Some(FULL_TUNNEL_INTERFACE_METRIC))
+                .map_err(|error| failure(NetworkStep::Routes, &error))?;
+        }
+        for route in tunnel_routes(tunnel, self.settings) {
+            match network::add_route(&route) {
+                Ok(()) => {}
+                Err(error) if error.already_exists() => {}
+                Err(error) => return Err(failure(NetworkStep::Routes, &error)),
+            }
+        }
+        let guid = network::interface(tunnel)
+            .map_err(|error| failure(NetworkStep::Dns, &error))?
+            .guid;
+        for family in [Family::Ipv4, Family::Ipv6] {
+            let servers = dns_servers(self.settings, family);
+            let had = self
+                .previous
+                .is_some_and(|previous| !dns_servers(previous, family).is_empty());
+            if !servers.is_empty() || had {
+                network::set_dns_servers(&guid, family, &servers)
+                    .map_err(|error| failure(NetworkStep::Dns, &error))?;
+            }
+        }
+        let previous_wins = self
+            .previous
+            .map_or(&[][..], |previous| &previous.wins_servers[..]);
+        if self.settings.wins_servers != previous_wins {
+            set_wins_servers(tunnel, previous_wins, &self.settings.wins_servers)?;
+        }
+        confirm(tunnel, self.settings, &physical, self.add, true)?;
+        if let Some(outside) = self.outside {
+            routing(self.settings, tunnel, outside)?;
+        }
+        let after = table(self.remove.iter().map(|route| route.destination.address))
+            .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
+        Ok(self
+            .remove
+            .iter()
+            .filter(|route| found(&after, route).is_some())
+            .cloned()
+            .collect())
     }
-    let previous_wins = previous.map_or(&[][..], |previous| &previous.wins_servers[..]);
-    if settings.wins_servers != previous_wins {
-        set_wins_servers(tunnel, previous_wins, &settings.wins_servers)?;
-    }
-    confirm(tunnel, settings, &physical, add, true)?;
-    if let Some(outside) = outside {
-        routing(settings, tunnel, outside)?;
-    }
-    let after = table(remove.iter().map(|route| route.destination.address))
-        .map_err(|error| failure(NetworkStep::OutsideRoutes, &error))?;
-    Ok(remove
-        .iter()
-        .filter(|route| found(&after, route).is_some())
-        .cloned()
-        .collect())
 }
 
 fn addresses(settings: &NetworkSettings) -> Vec<IpNetwork> {
