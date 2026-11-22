@@ -48,8 +48,14 @@ fn case(
 }
 
 /// Connected at t0+12; the planned reconnect is 175 minutes later.
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn wake_cases() -> Vec<WakeCase> {
+    tunnel_and_network_cases()
+        .into_iter()
+        .chain(sleep_length_and_keep_cases())
+        .collect()
+}
+
+fn tunnel_and_network_cases() -> Vec<WakeCase> {
     use AttemptReason::*;
     vec![
         case(
@@ -112,6 +118,12 @@ fn wake_cases() -> Vec<WakeCase> {
             observe().via(Some(other_wifi())),
             Some(NetworkChanged),
         ),
+    ]
+}
+
+fn sleep_length_and_keep_cases() -> Vec<WakeCase> {
+    use AttemptReason::*;
+    vec![
         WakeCase {
             settings: after_sleep_on(),
             ..case(

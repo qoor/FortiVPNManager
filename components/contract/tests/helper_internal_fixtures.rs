@@ -277,15 +277,21 @@ fn network_steps() {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn messages_from_the_entry() {
-    let [host, network] = routes();
-    let log = |level, category, message: &str| FromEntry::Log {
-        level,
-        category,
-        message: message.into(),
-    };
     let messages = [
+        app_messages_from_the_entry(),
+        bypass_route_changes_from_the_entry(),
+        network_changes_from_the_entry(),
+        exits_and_logs_from_the_entry(),
+    ]
+    .concat();
+    let fixture: Value =
+        serde_json::from_str(include_str!("fixtures/helper-internal/from_entry.json")).unwrap();
+    assert_eq!(serde_json::to_value(messages).unwrap(), fixture);
+}
+
+fn app_messages_from_the_entry() -> Vec<FromEntry> {
+    vec![
         FromEntry::Ready {},
         FromEntry::Admitted {
             app: 1,
@@ -311,6 +317,12 @@ fn messages_from_the_entry() {
                 r#"[{"date":1762412345.25,"source":"info","text":"INFO:   Connected to gateway."}]"#
                     .into(),
         },
+    ]
+}
+
+fn bypass_route_changes_from_the_entry() -> Vec<FromEntry> {
+    let [host, network] = routes();
+    vec![
         FromEntry::ChangeBypassRoutes {
             change: BypassRoutesChange {
                 network: NetworkCheck::Expect {
@@ -337,6 +349,11 @@ fn messages_from_the_entry() {
                 look_up: Vec::new(),
             },
         },
+    ]
+}
+
+fn network_changes_from_the_entry() -> Vec<FromEntry> {
+    vec![
         FromEntry::ChangeNetwork {
             change: NetworkChange::LookUp {
                 tunnel: utun(),
@@ -398,6 +415,16 @@ fn messages_from_the_entry() {
                 ],
             },
         },
+    ]
+}
+
+fn exits_and_logs_from_the_entry() -> Vec<FromEntry> {
+    let log = |level, category, message: &str| FromEntry::Log {
+        level,
+        category,
+        message: message.into(),
+    };
+    vec![
         FromEntry::ExitAfterDraining {},
         FromEntry::ExitNow {},
         FromEntry::AbortAfterDraining {},
@@ -416,10 +443,7 @@ fn messages_from_the_entry() {
             LogCategory::Helper,
             "cannot write the pidfile: ‹denied›",
         ),
-    ];
-    let fixture: Value =
-        serde_json::from_str(include_str!("fixtures/helper-internal/from_entry.json")).unwrap();
-    assert_eq!(serde_json::to_value(messages).unwrap(), fixture);
+    ]
 }
 
 #[test]

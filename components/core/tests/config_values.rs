@@ -314,10 +314,8 @@ fn yaml_1_1_booleans_and_numbers_are_not_booleans() {
     }
 }
 
-#[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
-fn range_limits() {
-    for (yaml, path, valid) in [
+fn range_cases() -> Vec<(&'static str, &'static str, bool)> {
+    vec![
         ("vpn:\n  port: 0\n", "vpn.port", false),
         ("vpn:\n  port: 1\n", "vpn.port", true),
         ("vpn:\n  port: 65535\n", "vpn.port", true),
@@ -403,7 +401,12 @@ fn range_limits() {
             "connection.schedule.away_minutes",
             false,
         ),
-    ] {
+    ]
+}
+
+#[test]
+fn range_limits() {
+    for (yaml, path, valid) in range_cases() {
         let error = load_error(yaml);
         if valid {
             assert_eq!(error, None, "{yaml:?}");

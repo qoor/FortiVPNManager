@@ -24,7 +24,6 @@ fn failed_login() -> Script {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a scenario test read top to bottom")]
 fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     let received = Arc::new(Mutex::new(None));
     let script = {
@@ -41,6 +40,13 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
         })
     };
     let mut os_side = OsSide::start(Setup::with([script]));
+    bring_up_through_the_otp(&mut os_side);
+    assert_eq!(received.lock().unwrap().as_deref(), Some(PASSWORD));
+    check_the_run_record_and_the_status(&mut os_side);
+    disconnect_and_check_the_exit(&mut os_side);
+}
+
+fn bring_up_through_the_otp(os_side: &mut OsSide) {
     assert!(os_side.connect_app(1, 501));
     assert_eq!(os_side.connect(1, ATTEMPT), None);
     os_side.wait_for_milestone(1, OTP_PROMPTED);
@@ -52,8 +58,9 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
             "notice helper: 0277070470 run {ATTEMPT}: tunnel up"
         ))
     });
-    assert_eq!(received.lock().unwrap().as_deref(), Some(PASSWORD));
+}
 
+fn check_the_run_record_and_the_status(os_side: &mut OsSide) {
     // The run record lives in the run directory for the run, readable only by its owner.
     assert_eq!(os_side.scratch.run_directory_names(), ["run.json"]);
     let file = os_side.scratch.run_directory().join("run.json");
@@ -74,7 +81,9 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
             "routingComplete": true,
         })
     );
+}
 
+fn disconnect_and_check_the_exit(os_side: &mut OsSide) {
     let id = os_side.request(1, &disconnect(ATTEMPT, "userDisconnect"));
     assert_eq!(os_side.reply(id), None);
     os_side.answer_network("revert", &reverted());

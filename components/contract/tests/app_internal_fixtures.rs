@@ -738,139 +738,151 @@ fn bypass_section(status: BypassStatus, notice: Option<BypassNotice>) -> BypassR
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn bypass_rules_sections() {
+    pin(
+        "bypass_rules_sections.json",
+        [
+            bypass_sections_with_notices(),
+            bypass_sections_without_notices(),
+        ]
+        .concat(),
+    );
+}
+
+fn bypass_sections_with_notices() -> Vec<BypassRulesSection> {
+    vec![
+        BypassRulesSection {
+            current_network: Some(CurrentNetwork {
+                service_name: "Ethernet".into(),
+                address: "10.20.161.20".into(),
+                prefix_length: Some(24),
+                within: Some("10.20.161.0/24".into()),
+            }),
+            networks: RuleList {
+                rows: vec!["10.20.161.0/24".into()],
+                problem_rows: vec![],
+                add_row: ButtonState::Enabled,
+            },
+            targets: RuleList {
+                rows: vec![
+                    "10.30.161.16".into(),
+                    "10.30.161".into(),
+                    "10.30.161.16/32".into(),
+                ],
+                problem_rows: vec![1, 2],
+                add_row: ButtonState::Disabled,
+            },
+            notice: Some(BypassNotice::RowProblem {
+                row: "10.30.161".into(),
+                problem: RowProblem::Invalid {
+                    problem: AddressProblem::Malformed {},
+                },
+            }),
+            status: BypassStatus::Applied {
+                service_name: "Ethernet".into(),
+                router: "10.20.161.1".into(),
+                on_link_targets: 1,
+            },
+            add_current_network: ButtonState::Disabled,
+        },
+        BypassRulesSection {
+            current_network: Some(CurrentNetwork {
+                service_name: "Wi-Fi".into(),
+                address: "192.168.0.12".into(),
+                prefix_length: None,
+                within: None,
+            }),
+            ..bypass_section(
+                BypassStatus::OutsideNetworks {},
+                Some(BypassNotice::RowProblem {
+                    row: "10.30.161.16/32".into(),
+                    problem: RowProblem::Duplicate {
+                        entry: "10.30.161.16".into(),
+                    },
+                }),
+            )
+        },
+        bypass_section(
+            BypassStatus::NoNetworksListed {},
+            Some(BypassNotice::RowProblem {
+                row: "10.30.170.9".into(),
+                problem: RowProblem::Overlap {
+                    other: "10.30.170.0/24".into(),
+                },
+            }),
+        ),
+        bypass_section(
+            BypassStatus::VpnOff {},
+            Some(BypassNotice::RowProblem {
+                row: "203.0.113.10".into(),
+                problem: RowProblem::VpnServer {},
+            }),
+        ),
+        bypass_section(
+            BypassStatus::NoConfigFile {},
+            Some(BypassNotice::ApplyFailed {
+                error: unreadable_file(),
+            }),
+        ),
+    ]
+}
+
+fn bypass_sections_without_notices() -> Vec<BypassRulesSection> {
     let failed = |failure, retry_in_seconds, stopped_after_retries| BypassStatus::Failed {
         failure,
         retry_in_seconds,
         stopped_after_retries,
     };
-    pin(
-        "bypass_rules_sections.json",
-        [
-            BypassRulesSection {
-                current_network: Some(CurrentNetwork {
-                    service_name: "Ethernet".into(),
-                    address: "10.20.161.20".into(),
-                    prefix_length: Some(24),
-                    within: Some("10.20.161.0/24".into()),
-                }),
-                networks: RuleList {
-                    rows: vec!["10.20.161.0/24".into()],
-                    problem_rows: vec![],
-                    add_row: ButtonState::Enabled,
+    vec![
+        bypass_section(BypassStatus::ConfigInvalid {}, None),
+        bypass_section(BypassStatus::NoNetwork {}, None),
+        bypass_section(failed(BypassFailure::RoutesNotKept {}, Some(10), None), None),
+        bypass_section(
+            failed(BypassFailure::NetworkChanged {}, None, Some(3)),
+            None,
+        ),
+        bypass_section(
+            failed(
+                BypassFailure::HelperRefused {
+                    message: "the route list has repeats, too many routes, or routes this helper does not write".into(),
                 },
-                targets: RuleList {
-                    rows: vec![
-                        "10.30.161.16".into(),
-                        "10.30.161".into(),
-                        "10.30.161.16/32".into(),
-                    ],
-                    problem_rows: vec![1, 2],
-                    add_row: ButtonState::Disabled,
+                None,
+                None,
+            ),
+            None,
+        ),
+        bypass_section(
+            failed(
+                BypassFailure::SettingsNotChanged {
+                    message: "** Error: The parameters were not valid.".into(),
                 },
-                notice: Some(BypassNotice::RowProblem {
-                    row: "10.30.161".into(),
-                    problem: RowProblem::Invalid {
-                        problem: AddressProblem::Malformed {},
-                    },
-                }),
-                status: BypassStatus::Applied {
-                    service_name: "Ethernet".into(),
-                    router: "10.20.161.1".into(),
-                    on_link_targets: 1,
+                None,
+                None,
+            ),
+            None,
+        ),
+        bypass_section(
+            failed(
+                BypassFailure::HelperUnreachable {
+                    failure: HelperChannelFailure::ConnectionLost {},
                 },
-                add_current_network: ButtonState::Disabled,
-            },
-            BypassRulesSection {
-                current_network: Some(CurrentNetwork {
-                    service_name: "Wi-Fi".into(),
-                    address: "192.168.0.12".into(),
-                    prefix_length: None,
-                    within: None,
-                }),
-                ..bypass_section(
-                    BypassStatus::OutsideNetworks {},
-                    Some(BypassNotice::RowProblem {
-                        row: "10.30.161.16/32".into(),
-                        problem: RowProblem::Duplicate {
-                            entry: "10.30.161.16".into(),
-                        },
-                    }),
-                )
-            },
-            bypass_section(
-                BypassStatus::NoNetworksListed {},
-                Some(BypassNotice::RowProblem {
-                    row: "10.30.170.9".into(),
-                    problem: RowProblem::Overlap {
-                        other: "10.30.170.0/24".into(),
-                    },
-                }),
-            ),
-            bypass_section(
-                BypassStatus::VpnOff {},
-                Some(BypassNotice::RowProblem {
-                    row: "203.0.113.10".into(),
-                    problem: RowProblem::VpnServer {},
-                }),
-            ),
-            bypass_section(
-                BypassStatus::NoConfigFile {},
-                Some(BypassNotice::ApplyFailed {
-                    error: unreadable_file(),
-                }),
-            ),
-            bypass_section(BypassStatus::ConfigInvalid {}, None),
-            bypass_section(BypassStatus::NoNetwork {}, None),
-            bypass_section(failed(BypassFailure::RoutesNotKept {}, Some(10), None), None),
-            bypass_section(
-                failed(BypassFailure::NetworkChanged {}, None, Some(3)),
+                None,
                 None,
             ),
-            bypass_section(
-                failed(
-                    BypassFailure::HelperRefused {
-                        message: "the route list has repeats, too many routes, or routes this helper does not write".into(),
-                    },
-                    None,
-                    None,
-                ),
+            None,
+        ),
+        bypass_section(
+            failed(
+                BypassFailure::HelperBuildMismatch {
+                    helper_build: "20261108090000".into(),
+                    app_build: "20261109120000".into(),
+                },
+                None,
                 None,
             ),
-            bypass_section(
-                failed(
-                    BypassFailure::SettingsNotChanged {
-                        message: "** Error: The parameters were not valid.".into(),
-                    },
-                    None,
-                    None,
-                ),
-                None,
-            ),
-            bypass_section(
-                failed(
-                    BypassFailure::HelperUnreachable {
-                        failure: HelperChannelFailure::ConnectionLost {},
-                    },
-                    None,
-                    None,
-                ),
-                None,
-            ),
-            bypass_section(
-                failed(
-                    BypassFailure::HelperBuildMismatch {
-                        helper_build: "20261108090000".into(),
-                        app_build: "20261109120000".into(),
-                    },
-                    None,
-                    None,
-                ),
-                None,
-            ),
-        ],
-    );
+            None,
+        ),
+    ]
 }
 
 fn account_form(revision: u64) -> AccountFormState {
@@ -942,204 +954,221 @@ fn import_report(password: Option<ImportedPassword>) -> ImportReport {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn config_sections() {
+    pin(
+        "config_sections.json",
+        [
+            config_sections_with_files(),
+            config_sections_with_save_errors(),
+            config_sections_with_imports(),
+        ]
+        .concat(),
+    );
+}
+
+fn config_sections_with_files() -> Vec<ConfigSection> {
+    let file = |path: &str| path.to_owned();
+    vec![ConfigSection {
+        file: ConfigFileState {
+            path: file("/Users/alice/.config/FortiVPNManager/config.yaml"),
+            exists: true,
+            load_error: Some(unreadable_file()),
+            warnings: vec![
+                ConfigWarning {
+                    kind: ConfigWarningKind::UnknownKey {
+                        path: "vpn.colour".into(),
+                    },
+                    location: Some(LineColumn { line: 3, column: 3 }),
+                },
+                ConfigWarning {
+                    kind: ConfigWarningKind::InsecurePermissions { mode: 0o644 },
+                    location: None,
+                },
+            ],
+        },
+        account: AccountFormState {
+            revision: 2,
+            server: "https://vpn.example.com:4433".into(),
+            username: "alice".into(),
+            realm: "staff".into(),
+            gmail_address: "alice@example.com".into(),
+            entered: PasswordsEntered {
+                vpn: true,
+                app: true,
+            },
+            stored: PasswordsStored {
+                vpn: false,
+                app: true,
+            },
+            saved_account_problem: Some(AccountValueProblem::InvalidHost {}),
+            save_error: None,
+            import_report: None,
+            default_import_file: Some(file("/Users/alice/.config/openfortivpn/config")),
+        },
+        options: ConnectionOptions {
+            auto_connect_on_launch: false,
+            session_max_minutes: minutes(180, 10, 1440),
+            proactive_reconnect: false,
+            margin_minutes: minutes(5, 1, 60),
+            reconnect_after_sleep: true,
+            min_sleep_minutes: minutes(30, 1, 1440),
+        },
+        options_error: None,
+        open_at_login: OpenAtLogin {
+            available: false,
+            enabled: false,
+            requires_approval: true,
+            error: Some(RegistrationError::NotInstalledCopy {}),
+        },
+        log_file: file("/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log"),
+    }]
+}
+
+fn config_sections_with_save_errors() -> Vec<ConfigSection> {
     let feedback = |error| AccountFormState {
         save_error: Some(error),
         ..account_form(3)
     };
+    vec![
+        config_section(
+            feedback(AccountSaveError::InvalidPort {}),
+            Some(ConfigFileError::InvalidSettings {
+                problem: ConfigProblem {
+                    kind: ConfigProblemKind::MarginNotLessThanSession {
+                        margin: 60,
+                        session: 60,
+                    },
+                    location: None,
+                },
+            }),
+        ),
+        config_section(feedback(AccountSaveError::PasswordNeedsAccount {}), None),
+        config_section(feedback(AccountSaveError::AppPasswordNeedsAddress {}), None),
+        config_section(
+            feedback(AccountSaveError::AccountValue {
+                problem: AccountValueProblem::TooLong {
+                    field: AccountField::Username,
+                    max_bytes: 64,
+                },
+            }),
+            None,
+        ),
+        config_section(
+            feedback(AccountSaveError::AccountValue {
+                problem: AccountValueProblem::LeadingOrTrailingSpace {
+                    field: AccountField::Host,
+                },
+            }),
+            None,
+        ),
+        config_section(
+            feedback(AccountSaveError::AccountValue {
+                problem: AccountValueProblem::DisallowedCharacters {
+                    field: AccountField::Realm,
+                },
+            }),
+            None,
+        ),
+        config_section(
+            feedback(AccountSaveError::InvalidVpnPassword { max_bytes: 255 }),
+            None,
+        ),
+        config_section(
+            feedback(AccountSaveError::Config {
+                error: unreadable_file(),
+            }),
+            None,
+        ),
+        config_section(
+            feedback(AccountSaveError::SecretStore {
+                failure: store_failure(),
+            }),
+            None,
+        ),
+    ]
+}
+
+fn config_sections_with_imports() -> Vec<ConfigSection> {
     let imported = |report| AccountFormState {
         import_report: Some(report),
         ..account_form(4)
     };
     let file = |path: &str| path.to_owned();
-    pin(
-        "config_sections.json",
-        vec![
-            ConfigSection {
-                file: ConfigFileState {
-                    path: file("/Users/alice/.config/FortiVPNManager/config.yaml"),
-                    exists: true,
-                    load_error: Some(unreadable_file()),
-                    warnings: vec![
-                        ConfigWarning {
-                            kind: ConfigWarningKind::UnknownKey {
-                                path: "vpn.colour".into(),
-                            },
-                            location: Some(LineColumn { line: 3, column: 3 }),
-                        },
-                        ConfigWarning {
-                            kind: ConfigWarningKind::InsecurePermissions { mode: 0o644 },
-                            location: None,
-                        },
-                    ],
-                },
-                account: AccountFormState {
-                    revision: 2,
-                    server: "https://vpn.example.com:4433".into(),
-                    username: "alice".into(),
-                    realm: "staff".into(),
-                    gmail_address: "alice@example.com".into(),
-                    entered: PasswordsEntered {
-                        vpn: true,
-                        app: true,
-                    },
-                    stored: PasswordsStored {
-                        vpn: false,
-                        app: true,
-                    },
-                    saved_account_problem: Some(AccountValueProblem::InvalidHost {}),
-                    save_error: None,
-                    import_report: None,
-                    default_import_file: Some(file("/Users/alice/.config/openfortivpn/config")),
-                },
-                options: ConnectionOptions {
-                    auto_connect_on_launch: false,
-                    session_max_minutes: minutes(180, 10, 1440),
-                    proactive_reconnect: false,
-                    margin_minutes: minutes(5, 1, 60),
-                    reconnect_after_sleep: true,
-                    min_sleep_minutes: minutes(30, 1, 1440),
-                },
-                options_error: None,
-                open_at_login: OpenAtLogin {
-                    available: false,
-                    enabled: false,
-                    requires_approval: true,
-                    error: Some(RegistrationError::NotInstalledCopy {}),
-                },
-                log_file: file("/Users/alice/Library/Logs/FortiVPNManager/openfortivpn.log"),
-            },
-            config_section(
-                feedback(AccountSaveError::InvalidPort {}),
-                Some(ConfigFileError::InvalidSettings {
-                    problem: ConfigProblem {
-                        kind: ConfigProblemKind::MarginNotLessThanSession {
-                            margin: 60,
-                            session: 60,
-                        },
-                        location: None,
-                    },
-                }),
-            ),
-            config_section(feedback(AccountSaveError::PasswordNeedsAccount {}), None),
-            config_section(feedback(AccountSaveError::AppPasswordNeedsAddress {}), None),
-            config_section(
-                feedback(AccountSaveError::AccountValue {
-                    problem: AccountValueProblem::TooLong {
-                        field: AccountField::Username,
-                        max_bytes: 64,
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                feedback(AccountSaveError::AccountValue {
-                    problem: AccountValueProblem::LeadingOrTrailingSpace {
-                        field: AccountField::Host,
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                feedback(AccountSaveError::AccountValue {
-                    problem: AccountValueProblem::DisallowedCharacters {
-                        field: AccountField::Realm,
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                feedback(AccountSaveError::InvalidVpnPassword { max_bytes: 255 }),
-                None,
-            ),
-            config_section(
-                feedback(AccountSaveError::Config {
-                    error: unreadable_file(),
-                }),
-                None,
-            ),
-            config_section(
-                feedback(AccountSaveError::SecretStore {
+    vec![
+        config_section(
+            imported(ClientSettingsImport::Imported {
+                report: import_report(Some(ImportedPassword::Saved {})),
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Imported {
+                report: import_report(Some(ImportedPassword::NotSavedWithoutUsername {})),
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Imported {
+                report: import_report(Some(ImportedPassword::NotSaved {
                     failure: store_failure(),
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Imported {
-                    report: import_report(Some(ImportedPassword::Saved {})),
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Imported {
-                    report: import_report(Some(ImportedPassword::NotSavedWithoutUsername {})),
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Imported {
-                    report: import_report(Some(ImportedPassword::NotSaved {
-                        failure: store_failure(),
-                    })),
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Imported {
-                    report: import_report(None),
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::SourceNotFound {
-                        path: file("/Users/alice/.config/openfortivpn/config"),
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::Unreadable {
-                        path: file("/Users/alice/vpn.conf"),
-                        problem: FileProblem::NotRegularFile {},
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::MissingHost {
-                        path: file("/Users/alice/vpn.conf"),
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::Config {
-                        error: unreadable_file(),
-                    },
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::NoFortiClientConnection {},
-                }),
-                None,
-            ),
-            config_section(
-                imported(ClientSettingsImport::Failed {
-                    error: ImportError::InvalidFortiClientServer {
-                        connection: "Office".into(),
-                    },
-                }),
-                None,
-            ),
-        ],
-    );
+                })),
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Imported {
+                report: import_report(None),
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::SourceNotFound {
+                    path: file("/Users/alice/.config/openfortivpn/config"),
+                },
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::Unreadable {
+                    path: file("/Users/alice/vpn.conf"),
+                    problem: FileProblem::NotRegularFile {},
+                },
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::MissingHost {
+                    path: file("/Users/alice/vpn.conf"),
+                },
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::Config {
+                    error: unreadable_file(),
+                },
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::NoFortiClientConnection {},
+            }),
+            None,
+        ),
+        config_section(
+            imported(ClientSettingsImport::Failed {
+                error: ImportError::InvalidFortiClientServer {
+                    connection: "Office".into(),
+                },
+            }),
+            None,
+        ),
+    ]
 }
 
 fn auto_update_section(status: UpdateStatus, progress: UpdateProgress) -> AutoUpdateSection {
@@ -1198,7 +1227,6 @@ fn busy_update(progress: UpdateProgress, cancel: ButtonState, card_dot: bool) ->
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn auto_update_sections() {
     pin(
         "auto_update_sections.json",
@@ -1297,6 +1325,10 @@ fn auto_update_sections() {
             },
         ],
     );
+}
+
+#[test]
+fn update_check_failures() {
     pin(
         "update_check_failures.json",
         [
@@ -1308,6 +1340,10 @@ fn auto_update_sections() {
             UpdateCheckFailure::InstallerMissing {},
         ],
     );
+}
+
+#[test]
+fn install_failures() {
     let refused = |reason, message: &str| InstallFailure::HelperRefused {
         reason,
         message: message.into(),
@@ -1357,9 +1393,7 @@ fn auto_update_sections() {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
-fn settings_file_problems() {
-    use ConfigProblemKind::*;
+fn config_file_errors() {
     let config = "/Users/alice/.config/FortiVPNManager/config.yaml";
     pin(
         "config_file_errors.json",
@@ -1390,127 +1424,150 @@ fn settings_file_problems() {
             },
         ],
     );
+}
+
+#[test]
+fn config_problems() {
+    pin(
+        "config_problems.json",
+        [document_problems(), value_problems()].concat(),
+    );
+}
+
+fn document_problems() -> Vec<ConfigProblem> {
+    use ConfigProblemKind::*;
+    let problem = |kind| ConfigProblem {
+        kind,
+        location: Some(LineColumn { line: 2, column: 9 }),
+    };
+    vec![
+        ConfigProblem {
+            kind: FileTooLarge {
+                byte_count: 70_000,
+                limit: 65_536,
+            },
+            location: None,
+        },
+        problem(InvalidUtf8 {}),
+        problem(DisallowedCharacter { scalar: 0x85 }),
+        problem(Syntax {
+            problem: "did not find expected key".into(),
+        }),
+        problem(MultipleDocuments {}),
+        problem(NestingTooDeep {}),
+        problem(DuplicateKey { key: "port".into() }),
+        problem(RootNotMapping {}),
+        problem(AnchorOrAlias {}),
+        problem(MergeKey {}),
+        problem(ExplicitTag {
+            tag: "!!str".into(),
+        }),
+        problem(ComplexKey {}),
+    ]
+}
+
+fn value_problems() -> Vec<ConfigProblem> {
+    use ConfigProblemKind::*;
     let problem = |kind| ConfigProblem {
         kind,
         location: Some(LineColumn { line: 2, column: 9 }),
     };
     let path = |text: &str| text.to_owned();
-    pin(
-        "config_problems.json",
-        vec![
-            ConfigProblem {
-                kind: FileTooLarge {
-                    byte_count: 70_000,
-                    limit: 65_536,
-                },
-                location: None,
+    vec![
+        problem(TypeMismatch {
+            path: path("vpn"),
+            expected: ValueKind::Mapping,
+        }),
+        problem(TypeMismatch {
+            path: path("routes.networks"),
+            expected: ValueKind::Sequence,
+        }),
+        problem(TypeMismatch {
+            path: path("vpn.host"),
+            expected: ValueKind::String,
+        }),
+        problem(TypeMismatch {
+            path: path("vpn.port"),
+            expected: ValueKind::Integer,
+        }),
+        problem(TypeMismatch {
+            path: path("connection.auto_connect_on_launch"),
+            expected: ValueKind::Boolean,
+        }),
+        problem(InvalidInteger {
+            path: path("vpn.port"),
+            raw: "0443".into(),
+        }),
+        problem(InvalidBoolean {
+            path: path("connection.auto_connect_on_launch"),
+            raw: "yes".into(),
+        }),
+        problem(QuotedNumber {
+            path: path("vpn.port"),
+            raw: "443".into(),
+        }),
+        problem(QuotedBoolean {
+            path: path("connection.proactive_reconnect.enabled"),
+            raw: "true".into(),
+        }),
+        problem(InvalidChoice {
+            path: path("otp.method"),
+            raw: "pop3".into(),
+            allowed: vec!["imap".into(), "gmail_api".into()],
+        }),
+        problem(OutOfRange {
+            path: path("vpn.port"),
+            raw: "70000".into(),
+            minimum: 1,
+            maximum: 65535,
+        }),
+        problem(MarginNotLessThanSession {
+            margin: 30,
+            session: 20,
+        }),
+        problem(InvalidTime {
+            path: path("connection.schedule.start"),
+            raw: "9am".into(),
+        }),
+        problem(ScheduleEndNotAfterStart {
+            start: time(18, 0),
+            end: time(9, 0),
+        }),
+        problem(InvalidCharacter {
+            path: path("vpn.username"),
+            scalar: 0x2028,
+        }),
+        problem(NewerSchemaVersion { version: 2 }),
+        problem(InvalidRouteEntry {
+            path: path("routes.bypass_vpn"),
+            index: 1,
+            raw: "10.30.170.5/24".into(),
+            problem: AddressProblem::HostBitsSet {
+                network: "10.30.170.0/24".into(),
             },
-            problem(InvalidUtf8 {}),
-            problem(DisallowedCharacter { scalar: 0x85 }),
-            problem(Syntax {
-                problem: "did not find expected key".into(),
-            }),
-            problem(MultipleDocuments {}),
-            problem(NestingTooDeep {}),
-            problem(DuplicateKey { key: "port".into() }),
-            problem(RootNotMapping {}),
-            problem(AnchorOrAlias {}),
-            problem(MergeKey {}),
-            problem(ExplicitTag {
-                tag: "!!str".into(),
-            }),
-            problem(ComplexKey {}),
-            problem(TypeMismatch {
-                path: path("vpn"),
-                expected: ValueKind::Mapping,
-            }),
-            problem(TypeMismatch {
-                path: path("routes.networks"),
-                expected: ValueKind::Sequence,
-            }),
-            problem(TypeMismatch {
-                path: path("vpn.host"),
-                expected: ValueKind::String,
-            }),
-            problem(TypeMismatch {
-                path: path("vpn.port"),
-                expected: ValueKind::Integer,
-            }),
-            problem(TypeMismatch {
-                path: path("connection.auto_connect_on_launch"),
-                expected: ValueKind::Boolean,
-            }),
-            problem(InvalidInteger {
-                path: path("vpn.port"),
-                raw: "0443".into(),
-            }),
-            problem(InvalidBoolean {
-                path: path("connection.auto_connect_on_launch"),
-                raw: "yes".into(),
-            }),
-            problem(QuotedNumber {
-                path: path("vpn.port"),
-                raw: "443".into(),
-            }),
-            problem(QuotedBoolean {
-                path: path("connection.proactive_reconnect.enabled"),
-                raw: "true".into(),
-            }),
-            problem(InvalidChoice {
-                path: path("otp.method"),
-                raw: "pop3".into(),
-                allowed: vec!["imap".into(), "gmail_api".into()],
-            }),
-            problem(OutOfRange {
-                path: path("vpn.port"),
-                raw: "70000".into(),
-                minimum: 1,
-                maximum: 65535,
-            }),
-            problem(MarginNotLessThanSession {
-                margin: 30,
-                session: 20,
-            }),
-            problem(InvalidTime {
-                path: path("connection.schedule.start"),
-                raw: "9am".into(),
-            }),
-            problem(ScheduleEndNotAfterStart {
-                start: time(18, 0),
-                end: time(9, 0),
-            }),
-            problem(InvalidCharacter {
-                path: path("vpn.username"),
-                scalar: 0x2028,
-            }),
-            problem(NewerSchemaVersion { version: 2 }),
-            problem(InvalidRouteEntry {
-                path: path("routes.bypass_vpn"),
-                index: 1,
-                raw: "10.30.170.5/24".into(),
-                problem: AddressProblem::HostBitsSet {
-                    network: "10.30.170.0/24".into(),
-                },
-            }),
-            problem(TooManyRouteEntries {
-                path: path("routes.networks"),
-                count: 101,
-                limit: 100,
-            }),
-            problem(DuplicateRouteEntry {
-                path: path("routes.bypass_vpn"),
-                index: 2,
-            }),
-            problem(OverlappingRouteEntry {
-                path: path("routes.networks"),
-                index: 1,
-                other: "10.20.0.0/16".into(),
-            }),
-            problem(VpnServerAsRouteTarget {
-                path: path("routes.bypass_vpn"),
-            }),
-        ],
-    );
+        }),
+        problem(TooManyRouteEntries {
+            path: path("routes.networks"),
+            count: 101,
+            limit: 100,
+        }),
+        problem(DuplicateRouteEntry {
+            path: path("routes.bypass_vpn"),
+            index: 2,
+        }),
+        problem(OverlappingRouteEntry {
+            path: path("routes.networks"),
+            index: 1,
+            other: "10.20.0.0/16".into(),
+        }),
+        problem(VpnServerAsRouteTarget {
+            path: path("routes.bypass_vpn"),
+        }),
+    ]
+}
+
+#[test]
+fn config_warnings() {
     let warning = |kind| ConfigWarning {
         kind,
         location: Some(LineColumn { line: 4, column: 5 }),
@@ -1544,6 +1601,10 @@ fn settings_file_problems() {
             },
         ],
     );
+}
+
+#[test]
+fn address_problems() {
     pin(
         "address_problems.json",
         [
@@ -1560,6 +1621,10 @@ fn settings_file_problems() {
             },
         ],
     );
+}
+
+#[test]
+fn file_problems() {
     pin(
         "file_problems.json",
         [
@@ -1576,128 +1641,149 @@ fn settings_file_problems() {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn port_requests() {
-    let request = |id, request| FromRuntime::PortRequest { id, request };
-    let call = |id, call| request(id, PortRequest::CallHelper { call });
     pin(
         "port_requests.json",
         [
-            request(
-                1,
-                PortRequest::ReadSecret {
-                    item: SecretItem::VpnPassword {
-                        username: "alice".into(),
-                        host: "vpn.example.com".into(),
-                    },
-                },
-            ),
-            request(
-                2,
-                PortRequest::HasSecret {
-                    item: SecretItem::GmailAppPassword {
-                        address: "alice@example.com".into(),
-                    },
-                },
-            ),
-            request(
-                3,
-                PortRequest::WriteSecret {
-                    item: SecretItem::GoogleRefreshToken {
-                        address: "Alice@Example.com".into(),
-                    },
-                    value: secret("1//0g-refresh"),
-                },
-            ),
-            request(
-                4,
-                PortRequest::DeleteSecret {
-                    item: SecretItem::GoogleClientSecret {
-                        client_id: "987-xyz.apps.googleusercontent.com".into(),
-                    },
-                },
-            ),
-            request(5, PortRequest::HelperRegistration {}),
-            request(6, PortRequest::RegisterHelper {}),
-            request(7, PortRequest::HelperBuild {}),
-            call(
-                8,
-                HelperCall::Connect {
-                    json: secret(&format!(
-                        r#"{{"attemptID":"{ATTEMPT}","host":"vpn.example.com","password":"p"}}"#
-                    )),
-                },
-            ),
-            call(
-                9,
-                HelperCall::SubmitOtp {
-                    attempt: attempt(),
-                    code: secret("123456"),
-                },
-            ),
-            call(
-                10,
-                HelperCall::Disconnect {
-                    attempt: attempt(),
-                    reason: StopReason::UserDisconnect,
-                },
-            ),
-            call(
-                11,
-                HelperCall::Disconnect {
-                    attempt: attempt(),
-                    reason: StopReason::AppDisconnected,
-                },
-            ),
-            call(12, HelperCall::Status {}),
-            call(13, HelperCall::ExitWhenIdle {}),
-            call(14, HelperCall::ReadBypassRoutes {}),
-            call(
-                15,
-                HelperCall::WriteBypassRoutes {
-                    json: r#"{"expected":{},"routes":[]}"#.into(),
-                },
-            ),
-            call(
-                16,
-                HelperCall::PrepareUpdate {
-                    json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
-                },
-            ),
-            request(
-                17,
-                PortRequest::RouteInterface {
-                    destination: Ipv4Addr::new(203, 0, 113, 10),
-                },
-            ),
-            request(18, PortRequest::InterfaceAddresses {}),
-            request(19, PortRequest::PrimaryRouter {}),
-            request(20, PortRequest::ScreenState {}),
-            request(
-                21,
-                PortRequest::OpenBrowser {
-                    url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y".into(),
-                },
-            ),
-            request(22, PortRequest::LoginItemRegistration {}),
-            request(23, PortRequest::SetLoginItem { enabled: false }),
-            request(24, PortRequest::FortiClientConnections {}),
-            request(
-                25,
-                PortRequest::StartUpdateWaiter {
-                    install_id: 13_835_058_055_282_163_713,
-                },
-            ),
-            call(
-                26,
-                HelperCall::InstallUpdate {
-                    json: r#"{"installID":13835058055282163713}"#.into(),
-                },
-            ),
-            call(27, HelperCall::ReadPreparedUpdate {}),
-            call(28, HelperCall::DiscardPreparedUpdate {}),
-        ],
+            secret_and_registration_requests(),
+            helper_calls(),
+            system_and_update_requests(),
+        ]
+        .concat(),
     );
+}
+
+fn secret_and_registration_requests() -> Vec<FromRuntime> {
+    let request = |id, request| FromRuntime::PortRequest { id, request };
+    vec![
+        request(
+            1,
+            PortRequest::ReadSecret {
+                item: SecretItem::VpnPassword {
+                    username: "alice".into(),
+                    host: "vpn.example.com".into(),
+                },
+            },
+        ),
+        request(
+            2,
+            PortRequest::HasSecret {
+                item: SecretItem::GmailAppPassword {
+                    address: "alice@example.com".into(),
+                },
+            },
+        ),
+        request(
+            3,
+            PortRequest::WriteSecret {
+                item: SecretItem::GoogleRefreshToken {
+                    address: "Alice@Example.com".into(),
+                },
+                value: secret("1//0g-refresh"),
+            },
+        ),
+        request(
+            4,
+            PortRequest::DeleteSecret {
+                item: SecretItem::GoogleClientSecret {
+                    client_id: "987-xyz.apps.googleusercontent.com".into(),
+                },
+            },
+        ),
+        request(5, PortRequest::HelperRegistration {}),
+        request(6, PortRequest::RegisterHelper {}),
+        request(7, PortRequest::HelperBuild {}),
+    ]
+}
+
+fn helper_calls() -> Vec<FromRuntime> {
+    let request = |id, request| FromRuntime::PortRequest { id, request };
+    let call = |id, call| request(id, PortRequest::CallHelper { call });
+    vec![
+        call(
+            8,
+            HelperCall::Connect {
+                json: secret(&format!(
+                    r#"{{"attemptID":"{ATTEMPT}","host":"vpn.example.com","password":"p"}}"#
+                )),
+            },
+        ),
+        call(
+            9,
+            HelperCall::SubmitOtp {
+                attempt: attempt(),
+                code: secret("123456"),
+            },
+        ),
+        call(
+            10,
+            HelperCall::Disconnect {
+                attempt: attempt(),
+                reason: StopReason::UserDisconnect,
+            },
+        ),
+        call(
+            11,
+            HelperCall::Disconnect {
+                attempt: attempt(),
+                reason: StopReason::AppDisconnected,
+            },
+        ),
+        call(12, HelperCall::Status {}),
+        call(13, HelperCall::ExitWhenIdle {}),
+        call(14, HelperCall::ReadBypassRoutes {}),
+        call(
+            15,
+            HelperCall::WriteBypassRoutes {
+                json: r#"{"expected":{},"routes":[]}"#.into(),
+            },
+        ),
+        call(
+            16,
+            HelperCall::PrepareUpdate {
+                json: r#"{"installerPath":"/tmp/FortiVPNManager-26.2.0.pkg"}"#.into(),
+            },
+        ),
+    ]
+}
+
+fn system_and_update_requests() -> Vec<FromRuntime> {
+    let request = |id, request| FromRuntime::PortRequest { id, request };
+    let call = |id, call| request(id, PortRequest::CallHelper { call });
+    vec![
+        request(
+            17,
+            PortRequest::RouteInterface {
+                destination: Ipv4Addr::new(203, 0, 113, 10),
+            },
+        ),
+        request(18, PortRequest::InterfaceAddresses {}),
+        request(19, PortRequest::PrimaryRouter {}),
+        request(20, PortRequest::ScreenState {}),
+        request(
+            21,
+            PortRequest::OpenBrowser {
+                url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y".into(),
+            },
+        ),
+        request(22, PortRequest::LoginItemRegistration {}),
+        request(23, PortRequest::SetLoginItem { enabled: false }),
+        request(24, PortRequest::FortiClientConnections {}),
+        request(
+            25,
+            PortRequest::StartUpdateWaiter {
+                install_id: 13_835_058_055_282_163_713,
+            },
+        ),
+        call(
+            26,
+            HelperCall::InstallUpdate {
+                json: r#"{"installID":13835058055282163713}"#.into(),
+            },
+        ),
+        call(27, HelperCall::ReadPreparedUpdate {}),
+        call(28, HelperCall::DiscardPreparedUpdate {}),
+    ]
 }
 
 #[test]
@@ -1862,147 +1948,167 @@ fn commands() {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn port_responses() {
-    use RegistrationStatus::*;
-    let response = |id, response| ToRuntime::PortResponse { id, response };
-    let unreachable = |id, failure| response(id, PortResponse::HelperUnreachable { failure });
-    let registration = |id, status| response(id, PortResponse::Registration { status });
     decodes(
         "port_responses.json",
         &[
-            response(
-                1,
-                PortResponse::Secret {
-                    value: Some(secret("p@ss")),
-                },
-            ),
-            response(1, PortResponse::Secret { value: None }),
-            response(2, PortResponse::HasSecret { exists: true }),
-            response(3, PortResponse::SecretChanged {}),
-            response(
-                4,
-                PortResponse::SecretStoreFailed {
-                    failure: store_failure(),
-                },
-            ),
-            registration(5, NotRegistered),
-            registration(5, Enabled),
-            registration(5, RequiresApproval),
-            registration(5, NotFound),
-            response(6, PortResponse::Registered {}),
-            response(
-                6,
-                PortResponse::RegistrationFailed {
-                    error: RegistrationError::NotInstalledCopy {},
-                },
-            ),
-            response(
-                6,
-                PortResponse::RegistrationFailed {
-                    error: RegistrationError::Failed {
-                        description: "Operation not permitted".into(),
-                    },
-                },
-            ),
-            response(
-                7,
-                PortResponse::HelperBuild {
-                    build: "20261109120000".into(),
-                },
-            ),
-            response(8, PortResponse::HelperReply { json: None }),
-            response(
-                12,
-                PortResponse::HelperReply {
-                    json: Some(r#"{"sessionRunning":false}"#.into()),
-                },
-            ),
-            response(13, PortResponse::HelperReplyFlag { value: true }),
-            unreachable(8, HelperChannelFailure::AppNotSigned {}),
-            unreachable(
-                8,
-                HelperChannelFailure::Connection {
-                    description: "Couldn’t communicate with a helper application.".into(),
-                },
-            ),
-            unreachable(8, HelperChannelFailure::ConnectionLost {}),
-            unreachable(8, HelperChannelFailure::NoReply {}),
-            unreachable(
-                7,
-                HelperChannelFailure::UnreadableReply {
-                    description: "The data couldn’t be read because it is missing.".into(),
-                },
-            ),
-            response(
-                8,
-                PortResponse::HelperBuildMismatch {
-                    helper_build: "20261108090000".into(),
-                },
-            ),
-            response(
-                17,
-                PortResponse::RouteInterface {
-                    interface: Some("en0".into()),
-                },
-            ),
-            response(17, PortResponse::RouteInterface { interface: None }),
-            response(
-                18,
-                PortResponse::InterfaceAddresses {
-                    addresses: vec![
-                        InterfaceAddress {
-                            name: "en0".into(),
-                            up: true,
-                            ipv4: Some(Ipv4Addr::new(10, 20, 161, 20)),
-                        },
-                        InterfaceAddress {
-                            name: "ppp0".into(),
-                            up: true,
-                            ipv4: None,
-                        },
-                    ],
-                },
-            ),
-            response(
-                19,
-                PortResponse::PrimaryRouter {
-                    router: Some(Ipv4Addr::new(10, 20, 161, 1)),
-                },
-            ),
-            response(19, PortResponse::PrimaryRouter { router: None }),
-            response(
-                20,
-                PortResponse::ScreenState {
-                    locked: true,
-                    displays_asleep: false,
-                },
-            ),
-            response(21, PortResponse::BrowserOpened { opened: false }),
-            response(
-                22,
-                PortResponse::FortiClientConnections {
-                    connections: vec![FortiClientConnection {
-                        name: "Office".into(),
-                        server: "vpn.example.com:10443".into(),
-                    }],
-                },
-            ),
-            response(
-                22,
-                PortResponse::FortiClientConnections {
-                    connections: vec![],
-                },
-            ),
-            response(25, PortResponse::UpdateWaiterStarted {}),
-            response(
-                25,
-                PortResponse::UpdateWaiterFailed {
-                    description: "The application “FortiVPNManager” could not be launched.".into(),
-                },
-            ),
-        ],
+            secret_and_registration_responses(),
+            helper_responses(),
+            system_and_update_responses(),
+        ]
+        .concat(),
     );
+}
+
+fn secret_and_registration_responses() -> Vec<ToRuntime> {
+    use RegistrationStatus::*;
+    let response = |id, response| ToRuntime::PortResponse { id, response };
+    let registration = |id, status| response(id, PortResponse::Registration { status });
+    vec![
+        response(
+            1,
+            PortResponse::Secret {
+                value: Some(secret("p@ss")),
+            },
+        ),
+        response(1, PortResponse::Secret { value: None }),
+        response(2, PortResponse::HasSecret { exists: true }),
+        response(3, PortResponse::SecretChanged {}),
+        response(
+            4,
+            PortResponse::SecretStoreFailed {
+                failure: store_failure(),
+            },
+        ),
+        registration(5, NotRegistered),
+        registration(5, Enabled),
+        registration(5, RequiresApproval),
+        registration(5, NotFound),
+        response(6, PortResponse::Registered {}),
+        response(
+            6,
+            PortResponse::RegistrationFailed {
+                error: RegistrationError::NotInstalledCopy {},
+            },
+        ),
+        response(
+            6,
+            PortResponse::RegistrationFailed {
+                error: RegistrationError::Failed {
+                    description: "Operation not permitted".into(),
+                },
+            },
+        ),
+        response(
+            7,
+            PortResponse::HelperBuild {
+                build: "20261109120000".into(),
+            },
+        ),
+    ]
+}
+
+fn helper_responses() -> Vec<ToRuntime> {
+    let response = |id, response| ToRuntime::PortResponse { id, response };
+    let unreachable = |id, failure| response(id, PortResponse::HelperUnreachable { failure });
+    vec![
+        response(8, PortResponse::HelperReply { json: None }),
+        response(
+            12,
+            PortResponse::HelperReply {
+                json: Some(r#"{"sessionRunning":false}"#.into()),
+            },
+        ),
+        response(13, PortResponse::HelperReplyFlag { value: true }),
+        unreachable(8, HelperChannelFailure::AppNotSigned {}),
+        unreachable(
+            8,
+            HelperChannelFailure::Connection {
+                description: "Couldn’t communicate with a helper application.".into(),
+            },
+        ),
+        unreachable(8, HelperChannelFailure::ConnectionLost {}),
+        unreachable(8, HelperChannelFailure::NoReply {}),
+        unreachable(
+            7,
+            HelperChannelFailure::UnreadableReply {
+                description: "The data couldn’t be read because it is missing.".into(),
+            },
+        ),
+        response(
+            8,
+            PortResponse::HelperBuildMismatch {
+                helper_build: "20261108090000".into(),
+            },
+        ),
+    ]
+}
+
+fn system_and_update_responses() -> Vec<ToRuntime> {
+    let response = |id, response| ToRuntime::PortResponse { id, response };
+    vec![
+        response(
+            17,
+            PortResponse::RouteInterface {
+                interface: Some("en0".into()),
+            },
+        ),
+        response(17, PortResponse::RouteInterface { interface: None }),
+        response(
+            18,
+            PortResponse::InterfaceAddresses {
+                addresses: vec![
+                    InterfaceAddress {
+                        name: "en0".into(),
+                        up: true,
+                        ipv4: Some(Ipv4Addr::new(10, 20, 161, 20)),
+                    },
+                    InterfaceAddress {
+                        name: "ppp0".into(),
+                        up: true,
+                        ipv4: None,
+                    },
+                ],
+            },
+        ),
+        response(
+            19,
+            PortResponse::PrimaryRouter {
+                router: Some(Ipv4Addr::new(10, 20, 161, 1)),
+            },
+        ),
+        response(19, PortResponse::PrimaryRouter { router: None }),
+        response(
+            20,
+            PortResponse::ScreenState {
+                locked: true,
+                displays_asleep: false,
+            },
+        ),
+        response(21, PortResponse::BrowserOpened { opened: false }),
+        response(
+            22,
+            PortResponse::FortiClientConnections {
+                connections: vec![FortiClientConnection {
+                    name: "Office".into(),
+                    server: "vpn.example.com:10443".into(),
+                }],
+            },
+        ),
+        response(
+            22,
+            PortResponse::FortiClientConnections {
+                connections: vec![],
+            },
+        ),
+        response(25, PortResponse::UpdateWaiterStarted {}),
+        response(
+            25,
+            PortResponse::UpdateWaiterFailed {
+                description: "The application “FortiVPNManager” could not be launched.".into(),
+            },
+        ),
+    ]
 }
 
 #[test]

@@ -2541,7 +2541,6 @@ fn updating_needs_the_helper_running() {
 }
 
 #[test]
-#[expect(clippy::too_many_lines, reason = "a scenario test read top to bottom")]
 fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
     let server = update_server();
     server.route(
@@ -2549,6 +2548,12 @@ fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
         Route::held_after(INSTALLER_BYTES / 2, installer()),
     );
     let mut app = app_with_a_served_update(&server);
+    check_the_offered_update(&app);
+    download_half_the_installer(&mut app);
+    prepare_the_downloaded_update(&mut app, &server);
+}
+
+fn check_the_offered_update(app: &App) {
     let section = app.update_section();
     assert_eq!(
         (
@@ -2565,8 +2570,10 @@ fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
         )
     );
     assert!(section.card_dot && section.menu_badge);
-    let before = app.update_sections.len();
+}
 
+fn download_half_the_installer(app: &mut App) {
+    let before = app.update_sections.len();
     app.command(Command::UpdateNow {});
     app.settle_until_progress("half the installer", |progress| {
         matches!(progress, UpdateProgress::Downloading { received_bytes, .. } if *received_bytes == INSTALLER_BYTES as u64 / 2)
@@ -2618,7 +2625,9 @@ fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
             "{downloads:?}"
         );
     }
+}
 
+fn prepare_the_downloaded_update(app: &mut App, server: &Server) {
     let before = app.update_sections.len();
     app.holds_update_calls = true;
     server.release();
