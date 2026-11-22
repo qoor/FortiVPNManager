@@ -1,6 +1,6 @@
 ---
 name: root-cause
-description: 장애·버그 원인 확정과 대응
+description: 장애·버그 원인 확정과 대응 절차. VPN 끊김·크래시·오동작 등 장애·버그 분석과 수정 방향 결정에 사용
 ---
 
 # 1. 복구

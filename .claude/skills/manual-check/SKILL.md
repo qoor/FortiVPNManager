@@ -1,6 +1,6 @@
 ---
 name: manual-check
-description: 실설치 점검 절차
+description: 실설치 점검 절차. 설치본(pkg·MSI)의 설치·첫 실행·정상 동작·장애 복구·보안·제거 점검과 릴리즈 전 점검에 사용
 ---
 
 # 1. 준비
