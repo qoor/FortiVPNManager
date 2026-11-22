@@ -83,7 +83,8 @@ if [ "${2-}" != build ]; then
     if [ "$system" = Darwin ]; then
         set -- env -i HOME="$HOME" TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin DEVELOPER_DIR="$(xcode-select -p)"
     else
-        set -- env -i HOME="$HOME" TMPDIR="${TMPDIR:-/tmp}" MSYSTEM=UCRT64 PATH=/ucrt64/bin:/usr/bin
+        set -- env -i HOME="$HOME" TMPDIR=/tmp TMP=/tmp TEMP=/tmp MSYSTEM=UCRT64 PATH=/ucrt64/bin:/usr/bin \
+            ACLOCAL_PATH=/ucrt64/share/aclocal:/usr/share/aclocal
     fi
     if ! "$@" "$0" "$os" build "$work" > "$work/build.log" 2>&1; then
         echo "error: OpenConnect build failed, log: $work/build.log" >&2
