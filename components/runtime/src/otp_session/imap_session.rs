@@ -62,12 +62,12 @@ pub(super) async fn imap_log_in(
     password: &SecretText,
 ) -> Result<(Imap, SpecialMailboxes), ImapError> {
     let by = Instant::now() + IMAP_LOGIN_TIMEOUT;
-    let mut connection = Imap::connect(by).await?;
+    let mut connection = Box::pin(Imap::connect(by)).await?;
     let login = Command::AuthenticatePlain {
         username: address.to_owned(),
         password: password.clone(),
     };
-    match connection.execute(&login, by).await {
+    match Box::pin(connection.execute(&login, by)).await {
         Ok(_) => {}
         Err(Rejection::Refused { code, text, .. })
             if is_credential_rejection(code.as_ref(), &text) =>
@@ -79,7 +79,7 @@ pub(super) async fn imap_log_in(
         }
         Err(rejection) => return Err(rejection.into()),
     }
-    let listed = connection.execute(&Command::List, deadline()).await?;
+    let listed = Box::pin(connection.execute(&Command::List, deadline())).await?;
     Ok((connection, SpecialMailboxes::from_responses(&listed)))
 }
 
@@ -97,9 +97,19 @@ pub(super) async fn imap_session(
         searches: 0,
         notifications: 0,
     };
-    match imap_watch(&address, &password, &mut controls, &report, &mut state).await {
+    match Box::pin(imap_watch(
+        &address,
+        &password,
+        &mut controls,
+        &report,
+        &mut state,
+    ))
+    .await
+    {
         Ok((connection, mailboxes)) => {
-            if let Err(error) = imap_wrap_up(connection, &mailboxes, &state, &report).await {
+            if let Err(error) =
+                Box::pin(imap_wrap_up(connection, &mailboxes, &state, &report)).await
+            {
                 report(Report::SpamCheckFailed {
                     reason: error.describe(),
                 });
@@ -137,16 +147,15 @@ async fn imap_watch(
     report: &(impl Fn(Report) + Send),
     state: &mut ImapState,
 ) -> Result<(Imap, SpecialMailboxes), ImapError> {
-    let (mut connection, mailboxes) = imap_log_in(address, password).await?;
+    let (mut connection, mailboxes) = Box::pin(imap_log_in(address, password)).await?;
     let all = mailboxes.all.clone().ok_or(ImapError::AllMailMissing)?;
-    let selected = connection
-        .execute(
-            &Command::Select {
-                mailbox: all.name.clone(),
-            },
-            deadline(),
-        )
-        .await?;
+    let selected = Box::pin(connection.execute(
+        &Command::Select {
+            mailbox: all.name.clone(),
+        },
+        deadline(),
+    ))
+    .await?;
     let snapshot =
         MailboxSnapshot::from_select_responses(&selected).ok_or(ImapError::SnapshotMissing)?;
     report(Report::Ready);
@@ -170,7 +179,14 @@ async fn imap_watch(
         let searching = state.prompted_at.is_some() && state.selection.is_none();
         if searching {
             state.searches += 1;
-            imap_search(&mut connection, &snapshot, state, trigger, report).await?;
+            Box::pin(imap_search(
+                &mut connection,
+                &snapshot,
+                state,
+                trigger,
+                report,
+            ))
+            .await?;
         }
         if state.trashing_stale && state.selection.is_some() {
             state.ending = Some(Control::Finish);
@@ -182,7 +198,7 @@ async fn imap_watch(
         } else {
             IMAP_IDLE_REFRESH
         };
-        let (updates, interrupted) = connection.idle(period, controls.recv()).await?;
+        let (updates, interrupted) = Box::pin(connection.idle(period, controls.recv())).await?;
         match interrupted {
             Some(Some(Control::Search(at))) => {
                 state.prompted_at.get_or_insert(at);
@@ -226,21 +242,18 @@ async fn imap_search(
     report: &(impl Fn(Report) + Send),
 ) -> Result<(), ImapError> {
     let prompted_at = state.prompted_at.expect("searching");
-    let search = connection
-        .execute(
-            &Command::UidSearch(UidSet::starting_at(snapshot.uid_next)),
-            deadline(),
-        )
-        .await?;
+    let search = Box::pin(connection.execute(
+        &Command::UidSearch(UidSet::starting_at(snapshot.uid_next)),
+        deadline(),
+    ))
+    .await?;
     if !snapshot.uid_validity_kept(&search) {
         return Err(ImapError::UidValidityChanged);
     }
     let Some(uids) = snapshot.new_uids(&search) else {
         return Ok(());
     };
-    let fetched = connection
-        .execute(&Command::UidFetchHeaders(uids), deadline())
-        .await?;
+    let fetched = Box::pin(connection.execute(&Command::UidFetchHeaders(uids), deadline())).await?;
     if !snapshot.uid_validity_kept(&fetched) {
         return Err(ImapError::UidValidityChanged);
     }
@@ -283,16 +296,15 @@ async fn imap_wrap_up(
                 .and_then(|selection| UidSet::new(selection.all_candidate_uids.clone()));
             let moved = match (uids, &mailboxes.trash) {
                 (None, _) => Ok(Vec::new()),
-                (Some(uids), Some(trash)) => connection
-                    .execute(
-                        &Command::UidMove {
-                            uids,
-                            mailbox: trash.name.clone(),
-                        },
-                        deadline(),
-                    )
-                    .await
-                    .map_err(|rejection| ImapError::from(rejection).describe()),
+                (Some(uids), Some(trash)) => Box::pin(connection.execute(
+                    &Command::UidMove {
+                        uids,
+                        mailbox: trash.name.clone(),
+                    },
+                    deadline(),
+                ))
+                .await
+                .map_err(|rejection| ImapError::from(rejection).describe()),
                 (Some(_), None) => Err("Gmail listed no Trash mailbox".to_owned()),
             };
             if state.trashing_stale {
@@ -304,21 +316,19 @@ async fn imap_wrap_up(
         }
         Some(Control::Close { check_spam: true }) => {
             if let (Some(prompted_at), Some(junk)) = (state.prompted_at, &mailboxes.junk) {
-                connection
-                    .execute(
-                        &Command::Examine {
-                            mailbox: junk.name.clone(),
-                        },
-                        deadline(),
-                    )
-                    .await?;
-                let found = connection
-                    .execute(&otp_mail::imap_spam_search(), deadline())
-                    .await?;
+                Box::pin(connection.execute(
+                    &Command::Examine {
+                        mailbox: junk.name.clone(),
+                    },
+                    deadline(),
+                ))
+                .await?;
+                let found =
+                    Box::pin(connection.execute(&otp_mail::imap_spam_search(), deadline())).await?;
                 if let Some(uids) = otp_mail::imap_spam_check_uids(&found) {
-                    let fetched = connection
-                        .execute(&Command::UidFetchHeaders(uids), deadline())
-                        .await?;
+                    let fetched =
+                        Box::pin(connection.execute(&Command::UidFetchHeaders(uids), deadline()))
+                            .await?;
                     if otp_mail::imap_has_fresh_code(
                         prompted_at,
                         &otp_mail::imap_messages(&fetched),
@@ -330,6 +340,6 @@ async fn imap_wrap_up(
         }
         _ => {}
     }
-    connection.logout().await;
+    Box::pin(connection.logout()).await;
     Ok(())
 }

@@ -194,10 +194,7 @@ impl Imap {
             backlog: Vec::new(),
         };
         loop {
-            match imap
-                .next_response(deadline, ImapStep::Connecting {})
-                .await?
-            {
+            match Box::pin(imap.next_response(deadline, ImapStep::Connecting {})).await? {
                 Response::UntaggedStatus {
                     status: Status::Ok, ..
                 } => return Ok(imap),
@@ -230,8 +227,7 @@ impl Imap {
             .map_err(Rejection::Failed)?;
         let mut responses = Vec::new();
         loop {
-            match self
-                .next_response(deadline, step.clone())
+            match Box::pin(self.next_response(deadline, step.clone()))
                 .await
                 .map_err(Rejection::Failed)?
             {
@@ -277,7 +273,7 @@ impl Imap {
         self.write(&line, entered_by, &step).await?;
         let mut updates = Vec::new();
         loop {
-            match self.next_response(entered_by, step.clone()).await? {
+            match Box::pin(self.next_response(entered_by, step.clone())).await? {
                 Response::Continuation(_) => break,
                 Response::Tagged { status, text, .. } if status != Status::Ok => {
                     return Err(ImapFailure::Rejected {
@@ -315,7 +311,7 @@ impl Imap {
         let done_by = Instant::now() + IMAP_COMMAND_TIMEOUT;
         self.write(IDLE_DONE, done_by, &step).await?;
         loop {
-            match self.next_response(done_by, step.clone()).await? {
+            match Box::pin(self.next_response(done_by, step.clone())).await? {
                 Response::Tagged { tag: done, .. } if done == tag => {
                     return Ok((updates, interrupted));
                 }
@@ -325,9 +321,8 @@ impl Imap {
     }
 
     pub(crate) async fn logout(mut self) {
-        let _ = self
-            .execute(&Command::Logout, Instant::now() + IMAP_COMMAND_TIMEOUT)
-            .await;
+        let _ =
+            Box::pin(self.execute(&Command::Logout, Instant::now() + IMAP_COMMAND_TIMEOUT)).await;
     }
 
     async fn write(

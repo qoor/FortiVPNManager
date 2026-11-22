@@ -54,7 +54,7 @@ impl Runtime {
                     runtime.gmail.test = Some(GmailTest::Running {});
                     let queue = runtime.queue();
                     runtime.tasks.spawn(async move {
-                        let test = imap_test(&address, &SecretText(password)).await;
+                        let test = Box::pin(imap_test(&address, &SecretText(password))).await;
                         queue.run(move |runtime| finish(runtime, test));
                     });
                 };
@@ -167,9 +167,9 @@ impl Runtime {
 
 async fn imap_test(address: &str, password: &SecretText) -> GmailTest {
     let failed = |failure| GmailTest::Failed { failure };
-    match imap_log_in(address, password).await {
+    match Box::pin(imap_log_in(address, password)).await {
         Ok((connection, mailboxes)) => {
-            connection.logout().await;
+            Box::pin(connection.logout()).await;
             match (&mailboxes.all, &mailboxes.trash) {
                 (Some(all), Some(trash)) => GmailTest::ImapSucceeded {
                     archive: all.display_name(),
