@@ -81,6 +81,7 @@ struct App {
     held_route_calls: Vec<(u64, HelperCall)>,
     held_update_calls: Vec<(u64, HelperCall)>,
     held_gmail_reads: usize,
+    held_secret_writes: Option<Vec<(u64, OsRequest)>>,
     /// The app's exception routes when the quit was approved, once it was.
     routes_at_quit: Option<Vec<BypassRoute>>,
     requests: Vec<PortRequest>,
@@ -159,6 +160,7 @@ impl App {
             held_route_calls: Vec::new(),
             held_update_calls: Vec::new(),
             held_gmail_reads: 0,
+            held_secret_writes: None,
             routes_at_quit: None,
             requests: Vec::new(),
             actions: Vec::new(),
@@ -375,6 +377,12 @@ impl App {
                     && self.holds.gmail_reads
                 {
                     self.held_gmail_reads += 1;
+                    return;
+                }
+                if matches!(request, OsRequest::WriteSecret { .. })
+                    && let Some(held) = &mut self.held_secret_writes
+                {
+                    held.push((id, request));
                     return;
                 }
                 let response = self.answer_os(request);
@@ -1376,6 +1384,36 @@ fn routes_the_routing_table_did_not_keep_are_reported_and_retried() {
 }
 
 #[test]
+fn a_quit_is_approved_only_after_a_password_write_under_way() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    app.held_secret_writes = Some(Vec::new());
+    let (revision, form) = edited_form(&app, |form| {
+        form.vpn_password = SecretText("new secret".into());
+    });
+    app.command(Command::EditAccount { revision, form });
+    app.command(Command::SaveAccount {});
+    app.settle_until("the password write", |app| {
+        app.held_secret_writes
+            .as_ref()
+            .is_some_and(|held| !held.is_empty())
+    });
+    app.send(ToRuntime::Event {
+        event: SystemEvent::QuitRequested {},
+    });
+    app.settle();
+    assert!(!app.quit_approved());
+    app.answer_held_secret_writes();
+    app.settle_until("the approved quit", App::quit_approved);
+    assert_eq!(
+        app.secret(&vpn_password_item()),
+        Some(SecretText("new secret".into()))
+    );
+}
+
+#[test]
 fn quitting_removes_the_routes_before_the_quit_is_approved() {
     let mut app = app_with_the_rule_applied();
     app.send(ToRuntime::Event {
@@ -2261,6 +2299,13 @@ impl App {
             matches!(app.helper_state(), Some(HelperState::Running { .. }))
         });
         self.settle();
+    }
+
+    fn answer_held_secret_writes(&mut self) {
+        for (id, request) in self.held_secret_writes.take().unwrap_or_default() {
+            let response = self.answer_os(request);
+            self.inputs.send(Input::Os { id, response }).unwrap();
+        }
     }
 
     fn answer_held_update_calls(&mut self) {

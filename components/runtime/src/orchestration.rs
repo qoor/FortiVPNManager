@@ -2,7 +2,7 @@
 //! and its effects are carried out before the next input. Work that waits on the outside, such as a
 //! port answer or a network reply, comes back as another input.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
@@ -49,6 +49,13 @@ pub(crate) enum Outgoing {
     App(FromRuntime),
     Os { id: u64, request: OsRequest },
     WatchNetworkSettings,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum QuitApproval {
+    NotGiven,
+    AwaitingOs,
+    Sent,
 }
 
 type PortReply = Box<dyn FnOnce(&mut Runtime, PortResponse)>;
@@ -124,9 +131,10 @@ pub(crate) struct Runtime {
     next_port_id: u64,
     port_replies: HashMap<u64, PortReply>,
     os_replies: HashMap<u64, OsReply>,
+    secret_changes: HashSet<u64>,
     /// Tunnel calls go one at a time; the next waits for the previous answer.
     helper_busy: bool,
-    quit_approved: bool,
+    quit: QuitApproval,
     helper_queue: VecDeque<(HelperCall, PortReply)>,
     pending_lines: Vec<LogLine>,
     /// An attempt the core began whose first log line is still to come. That line starts the
@@ -210,8 +218,9 @@ impl Runtime {
             next_port_id: 0,
             port_replies: HashMap::new(),
             os_replies: HashMap::new(),
+            secret_changes: HashSet::new(),
             helper_busy: false,
-            quit_approved: false,
+            quit: QuitApproval::NotGiven,
             helper_queue: VecDeque::new(),
             pending_lines: Vec::new(),
             unmarked_attempt: None,
@@ -277,7 +286,9 @@ impl Runtime {
                     .os_replies
                     .remove(&id)
                     .expect("an answer to a request the runtime sent");
+                self.secret_changes.remove(&id);
                 reply(self, response);
+                self.approve_quit_once_os_answered();
             }
             Input::NetworkSettingsChanged => self.sync_bypass_routes_soon(),
         }
@@ -309,6 +320,12 @@ impl Runtime {
         self.next_port_id += 1;
         let id = self.next_port_id;
         self.os_replies.insert(id, Box::new(reply));
+        if matches!(
+            request,
+            OsRequest::WriteSecret { .. } | OsRequest::DeleteSecret { .. }
+        ) {
+            self.secret_changes.insert(id);
+        }
         let _ = self.out.send(Outgoing::Os { id, request });
     }
 
@@ -375,7 +392,7 @@ impl Runtime {
             self.request(
                 PortRequest::CallHelper { call },
                 move |runtime, response| {
-                    if !runtime.quit_approved {
+                    if runtime.quit == QuitApproval::NotGiven {
                         reply(runtime, response);
                     }
                 },
@@ -515,9 +532,18 @@ impl Runtime {
 
     /// Finishes the log file and lets the app quit, once.
     pub(crate) fn approve_quit(&mut self) {
-        if std::mem::replace(&mut self.quit_approved, true) {
+        if self.quit != QuitApproval::NotGiven {
             return;
         }
+        self.quit = QuitApproval::AwaitingOs;
+        self.approve_quit_once_os_answered();
+    }
+
+    fn approve_quit_once_os_answered(&mut self) {
+        if self.quit != QuitApproval::AwaitingOs || !self.secret_changes.is_empty() {
+            return;
+        }
+        self.quit = QuitApproval::Sent;
         self.flush_log_lines();
         self.log.flush();
         self.action(PortAction::ApproveQuit {});
