@@ -17,7 +17,7 @@ use fvm_contract::app_internal::port::{
 };
 use fvm_contract::app_internal::section::Section;
 use fvm_contract::app_internal::{
-    AppFacts, FromRuntime, LogLine, LogSource, SecretText, ToRuntime,
+    AppFacts, EpochMillis, FromRuntime, LogLine, LogSource, SecretText, ToRuntime,
 };
 use fvm_core::config;
 use fvm_core::connection::{self, ConnectionManager, Effect, Launch, Note, Startup};
@@ -639,7 +639,7 @@ impl Runtime {
                             false
                         };
                     self.pending_lines.push(LogLine {
-                        time: line.date,
+                        time: EpochMillis(line.date.0),
                         source,
                         text: format!("{session} {}", line.text),
                         starts_attempt,

@@ -249,7 +249,7 @@ fn output_sources() {
 #[test]
 fn output_lines() {
     let line = |date, source, text: &str| OutputLine {
-        date,
+        date: EpochSeconds(date),
         source,
         text: text.into(),
     };
@@ -287,12 +287,12 @@ fn output_batch() {
         attempt_id: attempt(),
         lines: vec![
             OutputLine {
-                date: at(1_762_412_345.25),
+                date: EpochSeconds(at(1_762_412_345.25)),
                 source: OutputSource::Info,
                 text: "INFO:   Connected to gateway.".into(),
             },
             OutputLine {
-                date: at(1_762_412_346.125),
+                date: EpochSeconds(at(1_762_412_346.125)),
                 source: OutputSource::Helper,
                 text: "‹exited: code 0›".into(),
             },

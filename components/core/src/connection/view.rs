@@ -3,12 +3,12 @@
 //! with a timer input.
 
 use fvm_contract::app_helper::Milestone;
-use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{
     AfterDisconnect, ConnectProgress, ConnectionIcon, ConnectionSection, ConnectionStatus,
     FailureReason, HelperState, ProactiveReconnect, ReadinessSection, ScheduleOutlook, SetupItem,
     VpnBackendInfo, WaitReason,
 };
+use fvm_contract::app_internal::{ButtonState, EpochMillis};
 
 use super::ledger::Failure;
 use super::machine::{AfterStop, AttemptReason, ConnectionManager, Phase, RetryReason, Stage};
@@ -54,25 +54,26 @@ impl ConnectionManager {
         let schedule = self.settings.connection.schedule.as_ref()?;
         let wants_connection = self.wants_connection && !matches!(self.phase, Phase::Failed(_));
         if !wants_connection {
-            return Some(
-                schedule
-                    .next_start(self.now, &self.time_zone)
-                    .map_or(ScheduleOutlook::NoDays {}, |at| ScheduleOutlook::Connects {
-                        at,
-                    }),
-            );
+            return Some(schedule.next_start(self.now, &self.time_zone).map_or(
+                ScheduleOutlook::NoDays {},
+                |at| ScheduleOutlook::Connects {
+                    at: EpochMillis(at),
+                },
+            ));
         }
         if schedule.is_active(self.now, &self.time_zone)
             && let Some(next) = schedule.next_boundary(self.now, &self.time_zone)
             && next.edge == super::schedule::Edge::End
         {
-            return Some(ScheduleOutlook::WithinHours { end: next.at });
+            return Some(ScheduleOutlook::WithinHours {
+                end: EpochMillis(next.at),
+            });
         }
         Some(if self.reconnect_suspended {
             ScheduleOutlook::Suspended {}
         } else if let Some(away_since) = self.away_since {
             ScheduleOutlook::HoldingWhileAway {
-                until: away_since + schedule.away_limit(),
+                until: EpochMillis(away_since + schedule.away_limit()),
             }
         } else {
             ScheduleOutlook::OutsideHoursPresent {}
@@ -166,21 +167,25 @@ impl ConnectionManager {
                 },
             },
             Phase::Connected(session) => ConnectionStatus::Connected {
-                since: session.since,
+                since: EpochMillis(session.since),
                 tunnel_ip: session.tunnel_ip,
                 proactive_reconnect: match session.planned_reconnect {
                     None => ProactiveReconnect::Off {},
-                    Some(at) if self.automatic_reconnect_allowed() => ProactiveReconnect::At { at },
+                    Some(at) if self.automatic_reconnect_allowed() => ProactiveReconnect::At {
+                        at: EpochMillis(at),
+                    },
                     Some(_) => ProactiveReconnect::PausedBySchedule {},
                 },
             },
             Phase::WaitingRetry {
                 until,
                 reason: RetryReason::UserAway,
-            } => ConnectionStatus::ReconnectOnHold { until: *until },
-            Phase::WaitingRetry { until, .. } => {
-                ConnectionStatus::WaitingToReconnect { until: *until }
-            }
+            } => ConnectionStatus::ReconnectOnHold {
+                until: EpochMillis(*until),
+            },
+            Phase::WaitingRetry { until, .. } => ConnectionStatus::WaitingToReconnect {
+                until: EpochMillis(*until),
+            },
             Phase::WaitingNetwork { .. } => ConnectionStatus::WaitingForNetwork {},
             Phase::Disconnecting(stop) => ConnectionStatus::Disconnecting {
                 then: match stop.after {

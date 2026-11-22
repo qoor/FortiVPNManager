@@ -1,10 +1,10 @@
 use std::net::Ipv4Addr;
 
 use fvm_contract::app_helper::{AttemptId, HelperErrorCode, Milestone, StopReason};
-use fvm_contract::app_internal::ButtonState;
 use fvm_contract::app_internal::section::{
     ConnectProgress, ConnectionIcon, ConnectionStatus, ProactiveReconnect,
 };
+use fvm_contract::app_internal::{ButtonState, EpochMillis};
 
 use super::super::machine::{
     AfterStop, AttemptReason, Phase, Renewal, RetryReason, Session, Stage,
@@ -59,10 +59,10 @@ fn shows_connected_on(h: &Harness, session: &Session) {
     assert_eq!(
         section.status,
         ConnectionStatus::Connected {
-            since: session.since,
+            since: EpochMillis(session.since),
             tunnel_ip: session.tunnel_ip,
             proactive_reconnect: ProactiveReconnect::At {
-                at: session.planned_reconnect.unwrap()
+                at: EpochMillis(session.planned_reconnect.unwrap())
             },
         }
     );

@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fvm_contract::app_internal::{LogLine, LogSource};
+use fvm_contract::app_internal::{EpochMillis, LogLine, LogSource};
 use jiff::tz::TimeZone;
 
 use crate::files;
@@ -18,7 +18,7 @@ const KEPT_FILES: u32 = 5;
 /// `2026-11-09T09:00:38.543+09:00 [info] text`, in the local time zone with milliseconds. The first
 /// line of an attempt comes after two empty lines, unless no line comes before it.
 pub(crate) fn line(line: &LogLine, time_zone: &TimeZone, after_another: bool) -> String {
-    let since_1970 = line.time.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let since_1970 = line.time.0.duration_since(UNIX_EPOCH).unwrap_or_default();
     let timestamp = jiff::Timestamp::from_millisecond(
         i64::try_from(since_1970.as_millis()).expect("a time within the calendar"),
     )
@@ -152,7 +152,7 @@ impl LogFile {
 /// The current time, for an explanatory line written now.
 pub(crate) fn note(text: impl Into<String>) -> LogLine {
     LogLine {
-        time: SystemTime::now(),
+        time: EpochMillis(SystemTime::now()),
         source: LogSource::Note,
         text: text.into(),
         starts_attempt: false,
@@ -218,7 +218,7 @@ mod tests {
                     _ => LogSource::Note,
                 };
                 let entry = LogLine {
-                    time: UNIX_EPOCH + Duration::from_millis(entry.time),
+                    time: EpochMillis(UNIX_EPOCH + Duration::from_millis(entry.time)),
                     source,
                     text: entry.text.clone(),
                     starts_attempt: entry.starts_attempt,
@@ -240,7 +240,7 @@ mod tests {
         let directory = std::env::temp_dir().join(format!("fvm-runtime-log-{name}"));
         let path = directory.join("vpn_backend.log");
         let note = |text: String, starts_attempt: bool| LogLine {
-            time: UNIX_EPOCH,
+            time: EpochMillis(UNIX_EPOCH),
             source: LogSource::Note,
             text,
             starts_attempt,
@@ -277,7 +277,7 @@ mod tests {
         let path = directory.join("vpn_backend.log");
         let mut log = LogFile::new(path.clone());
         let big = LogLine {
-            time: UNIX_EPOCH,
+            time: EpochMillis(UNIX_EPOCH),
             source: LogSource::Info,
             text: "x".repeat(1024 * 1024),
             starts_attempt: false,

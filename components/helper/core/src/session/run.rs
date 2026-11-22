@@ -15,8 +15,8 @@ use std::thread::{self, JoinHandle, ThreadId};
 use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
-    EndFacts, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine, OutputSource,
-    RunRequest, StopInitiator, StopReason,
+    EndFacts, EpochSeconds, HelperError, HelperErrorCode, HelperEventKind, Milestone, OutputLine,
+    OutputSource, RunRequest, StopInitiator, StopReason,
 };
 use fvm_contract::helper_internal::{LogCategory, LogLevel, NetworkChange, NetworkOutcome};
 use fvm_contract::validation;
@@ -67,7 +67,7 @@ impl Run {
         let name = format!("{} run {}", request.session_id, request.attempt_id);
         let client_name = backend.name();
         let client_line = OutputLine {
-            date: SystemTime::now(),
+            date: EpochSeconds(SystemTime::now()),
             source: OutputSource::Helper,
             text: format!("‹VPN client: {client_name} {}›", backend.version()),
         };
@@ -525,7 +525,7 @@ impl<R: FnMut(Report)> Watch<R> {
 
     fn output(&mut self, source: OutputSource, text: String) {
         self.batch.push(OutputLine {
-            date: SystemTime::now(),
+            date: EpochSeconds(SystemTime::now()),
             source,
             text,
         });

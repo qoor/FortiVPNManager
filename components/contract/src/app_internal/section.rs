@@ -4,7 +4,6 @@
 
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
-use std::time::SystemTime;
 
 use serde::Serialize;
 
@@ -12,7 +11,7 @@ use super::port::{HelperChannelFailure, RegistrationError, SecretStoreFailure};
 use super::problem::{
     AccountValueProblem, AddressProblem, ConfigFileError, ConfigWarning, FileProblem,
 };
-use super::{ButtonState, MinutesSetting, OtpMethod, TimeOfDay, Weekday, millis};
+use super::{ButtonState, EpochMillis, MinutesSetting, OtpMethod, TimeOfDay, Weekday};
 use crate::app_helper::{HelperErrorCode, UpdateRefusal};
 
 /// Boxed, as the sections differ much in size.
@@ -98,21 +97,18 @@ pub enum ConnectionStatus {
     /// The status line ends with the planned proactive reconnect when there is one; otherwise with
     /// the schedule's outlook when it is `Suspended` or `HoldingWhileAway`. The two never coincide.
     Connected {
-        #[serde(serialize_with = "millis::time")]
-        since: SystemTime,
+        since: EpochMillis,
         #[serde(skip_serializing_if = "Option::is_none")]
         tunnel_ip: Option<Ipv4Addr>,
         proactive_reconnect: ProactiveReconnect,
     },
     /// Waiting for an away user outside the scheduled hours, until the time the wait ends.
     ReconnectOnHold {
-        #[serde(serialize_with = "millis::time")]
-        until: SystemTime,
+        until: EpochMillis,
     },
     /// `until` is also the next attempt's time.
     WaitingToReconnect {
-        #[serde(serialize_with = "millis::time")]
-        until: SystemTime,
+        until: EpochMillis,
     },
     WaitingForNetwork {},
     Disconnecting {
@@ -140,10 +136,7 @@ pub enum ConnectProgress {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ProactiveReconnect {
-    At {
-        #[serde(serialize_with = "millis::time")]
-        at: SystemTime,
-    },
+    At { at: EpochMillis },
     PausedBySchedule {},
     Off {},
 }
@@ -247,21 +240,18 @@ pub struct ScheduleSection {
 pub enum ScheduleOutlook {
     /// Not connecting now; the next scheduled start connects.
     Connects {
-        #[serde(serialize_with = "millis::time")]
-        at: SystemTime,
+        at: EpochMillis,
     },
     /// Not connecting now, and no day is selected.
     NoDays {},
     /// Inside the scheduled hours; after `end`, reconnects wait while the user is away.
     WithinHours {
-        #[serde(serialize_with = "millis::time")]
-        end: SystemTime,
+        end: EpochMillis,
     },
     OutsideHoursPresent {},
     /// Reconnects wait for the away user and stop at `until`.
     HoldingWhileAway {
-        #[serde(serialize_with = "millis::time")]
-        until: SystemTime,
+        until: EpochMillis,
     },
     /// Reconnects stopped; the current connection is kept until it ends.
     Suspended {},

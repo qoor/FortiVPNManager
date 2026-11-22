@@ -10,10 +10,10 @@
 use std::fmt;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::de::IntoDeserializer;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser};
 
 use crate::app_internal::problem::AddressProblem;
 
@@ -273,11 +273,7 @@ pub enum OutputSource {
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct OutputLine {
-    #[serde(
-        serialize_with = "seconds::time",
-        deserialize_with = "seconds::read_time"
-    )]
-    pub date: SystemTime,
+    pub date: EpochSeconds,
     pub source: OutputSource,
     pub text: String,
 }
@@ -747,35 +743,24 @@ pub struct UpdateResult {
 }
 
 /// Seconds since 1970, as numbers.
-mod seconds {
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct EpochSeconds(pub SystemTime);
 
-    use serde::{Deserialize, Deserializer, Serializer, de, ser};
-
-    fn write<S: Serializer>(duration: Duration, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_f64(duration.as_secs_f64())
-    }
-
-    #[cfg_attr(
-        windows,
-        expect(
-            clippy::trivially_copy_pass_by_ref,
-            reason = "serde's serialize_with passes a reference"
-        )
-    )]
-    pub fn time<S: Serializer>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {
-        let since_1970 = time
+impl Serialize for EpochSeconds {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let since_1970 = self
+            .0
             .duration_since(UNIX_EPOCH)
             .map_err(ser::Error::custom)?;
-        write(since_1970, serializer)
+        serializer.serialize_f64(since_1970.as_secs_f64())
     }
+}
 
-    fn read<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
-        Duration::try_from_secs_f64(f64::deserialize(deserializer)?).map_err(de::Error::custom)
-    }
-
-    pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
-        Ok(UNIX_EPOCH + read(deserializer)?)
+impl<'de> Deserialize<'de> for EpochSeconds {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let since_1970 = Duration::try_from_secs_f64(f64::deserialize(deserializer)?)
+            .map_err(de::Error::custom)?;
+        Ok(Self(UNIX_EPOCH + since_1970))
     }
 }
 

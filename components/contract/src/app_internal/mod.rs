@@ -113,8 +113,7 @@ pub struct SignInPages {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogLine {
-    #[serde(serialize_with = "millis::time")]
-    pub time: SystemTime,
+    pub time: EpochMillis,
     pub source: LogSource,
     pub text: String,
     /// The first line of a connection attempt the core began. The log file, Copy All and the Log
@@ -191,25 +190,24 @@ impl fmt::Debug for SecretText {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct EpochMillis(pub SystemTime);
+
+impl Serialize for EpochMillis {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let since_1970 = self
+            .0
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(serde::ser::Error::custom)?;
+        let millis = u64::try_from(since_1970.as_millis()).map_err(serde::ser::Error::custom)?;
+        serializer.serialize_u64(millis)
+    }
+}
+
 mod millis {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use serde::{Deserialize, Deserializer, Serializer, de, ser};
-
-    #[cfg_attr(
-        windows,
-        expect(
-            clippy::trivially_copy_pass_by_ref,
-            reason = "serde's serialize_with passes a reference"
-        )
-    )]
-    pub fn time<S: Serializer>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {
-        let since_1970 = time
-            .duration_since(UNIX_EPOCH)
-            .map_err(ser::Error::custom)?;
-        let millis = u64::try_from(since_1970.as_millis()).map_err(ser::Error::custom)?;
-        serializer.serialize_u64(millis)
-    }
+    use serde::{Deserialize, Deserializer, de};
 
     pub fn read_time<'de, D: Deserializer<'de>>(deserializer: D) -> Result<SystemTime, D::Error> {
         let millis = f64::deserialize(deserializer)?;

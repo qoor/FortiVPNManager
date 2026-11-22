@@ -153,25 +153,25 @@ fn messages_from_the_runtime() {
             FromRuntime::LogLines {
                 lines: vec![
                     LogLine {
-                        time: at(T0),
+                        time: EpochMillis(at(T0)),
                         source: LogSource::Info,
                         text: "INFO:   Connected to gateway.".into(),
                         starts_attempt: false,
                     },
                     LogLine {
-                        time: at(T0 + 750),
+                        time: EpochMillis(at(T0 + 750)),
                         source: LogSource::Error,
                         text: "Using interface ppp0".into(),
                         starts_attempt: false,
                     },
                     LogLine {
-                        time: at(T0 + 1_000),
+                        time: EpochMillis(at(T0 + 1_000)),
                         source: LogSource::Note,
                         text: "‹schedule: scheduled hours started, connecting›".into(),
                         starts_attempt: true,
                     },
                     LogLine {
-                        time: at(T0 + 1_250),
+                        time: EpochMillis(at(T0 + 1_250)),
                         source: LogSource::Note,
                         text: "‹VPN client: openfortivpn 1.24.1›".into(),
                         starts_attempt: false,
@@ -198,10 +198,10 @@ fn connection_sections() {
             ConnectionSection {
                 icon: ConnectionIcon::Connected,
                 status: ConnectionStatus::Connected {
-                    since: at(T0),
+                    since: EpochMillis(at(T0)),
                     tunnel_ip: Some(Ipv4Addr::new(10, 211, 0, 7)),
                     proactive_reconnect: ProactiveReconnect::At {
-                        at: at(T0 + 10_500_000),
+                        at: EpochMillis(at(T0 + 10_500_000)),
                     },
                 },
                 wait_reason: None,
@@ -211,19 +211,19 @@ fn connection_sections() {
                 account_applies_next_connection: true,
             },
             connection_section(ConnectionStatus::Connected {
-                since: at(T0),
+                since: EpochMillis(at(T0)),
                 tunnel_ip: None,
                 proactive_reconnect: ProactiveReconnect::PausedBySchedule {},
             }),
             connection_section(ConnectionStatus::Connected {
-                since: at(T0),
+                since: EpochMillis(at(T0)),
                 tunnel_ip: None,
                 proactive_reconnect: ProactiveReconnect::Off {},
             }),
             ConnectionSection {
                 icon: ConnectionIcon::InProgress,
                 status: ConnectionStatus::WaitingToReconnect {
-                    until: at(T0 + 90_000),
+                    until: EpochMillis(at(T0 + 90_000)),
                 },
                 wait_reason: Some(WaitReason::AuthCooldown { delay_seconds: 90 }),
                 connect: ButtonState::Hidden,
@@ -265,7 +265,7 @@ fn connection_sections() {
             ConnectionSection {
                 wait_reason: Some(WaitReason::UserAway {}),
                 ..connection_section(ConnectionStatus::ReconnectOnHold {
-                    until: at(T0 + 1_800_000),
+                    until: EpochMillis(at(T0 + 1_800_000)),
                 })
             },
             connection_section(ConnectionStatus::WaitingForNetwork {}),
@@ -389,7 +389,7 @@ fn schedule_sections() {
             schedule_section(
                 true,
                 Some(ScheduleOutlook::Connects {
-                    at: at(T0 + 3_600_000),
+                    at: EpochMillis(at(T0 + 3_600_000)),
                 }),
                 None,
             ),
@@ -401,7 +401,7 @@ fn schedule_sections() {
             schedule_section(
                 true,
                 Some(ScheduleOutlook::WithinHours {
-                    end: at(T0 + 7_200_000),
+                    end: EpochMillis(at(T0 + 7_200_000)),
                 }),
                 Some(ScheduleHoursError::NotSaved {
                     error: unreadable_file(),
@@ -411,7 +411,7 @@ fn schedule_sections() {
             schedule_section(
                 true,
                 Some(ScheduleOutlook::HoldingWhileAway {
-                    until: at(T0 + 1_800_000),
+                    until: EpochMillis(at(T0 + 1_800_000)),
                 }),
                 None,
             ),

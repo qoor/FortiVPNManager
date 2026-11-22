@@ -14,10 +14,11 @@ use std::time::{Duration, Instant, SystemTime};
 
 use fvm_contract::app_helper::{
     AttemptId, BackendStatus, BypassRoute, BypassRoutesReply, BypassRoutesRequest,
-    BypassRoutesSnapshot, EndFacts, HelperError, HelperErrorCode, HelperEvent, HelperEventKind,
-    HelperStatus, Milestone, OutputBatch, OutputLine, OutputSource, PreparedUpdateReply,
-    RunRequest, StopInitiator, StopReason, UpdateDiscardReply, UpdateInstallReply,
-    UpdateInstallRequest, UpdatePrepareReply, UpdatePrepareRequest, UpdateRefusal,
+    BypassRoutesSnapshot, EndFacts, EpochSeconds, HelperError, HelperErrorCode, HelperEvent,
+    HelperEventKind, HelperStatus, Milestone, OutputBatch, OutputLine, OutputSource,
+    PreparedUpdateReply, RunRequest, StopInitiator, StopReason, UpdateDiscardReply,
+    UpdateInstallReply, UpdateInstallRequest, UpdatePrepareReply, UpdatePrepareRequest,
+    UpdateRefusal,
 };
 use fvm_contract::app_internal::command::{AccountForm, BypassList, Command};
 use fvm_contract::app_internal::event::SystemEvent;
@@ -245,7 +246,7 @@ impl App {
         let batch = OutputBatch {
             attempt_id: attempt.clone(),
             lines: vec![OutputLine {
-                date: SystemTime::now(),
+                date: EpochSeconds(SystemTime::now()),
                 source: OutputSource::Helper,
                 text: text.into(),
             }],
@@ -1655,12 +1656,12 @@ fn the_helpers_output_reaches_the_log_file_as_it_came() {
         attempt_id: attempt,
         lines: vec![
             fvm_contract::app_helper::OutputLine {
-                date: std::time::SystemTime::now(),
+                date: fvm_contract::app_helper::EpochSeconds(std::time::SystemTime::now()),
                 source: fvm_contract::app_helper::OutputSource::Helper,
                 text: "‹password sent›".into(),
             },
             fvm_contract::app_helper::OutputLine {
-                date: std::time::SystemTime::now(),
+                date: fvm_contract::app_helper::EpochSeconds(std::time::SystemTime::now()),
                 source: fvm_contract::app_helper::OutputSource::Info,
                 text: marker.into(),
             },

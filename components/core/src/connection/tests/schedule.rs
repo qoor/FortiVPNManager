@@ -2,7 +2,7 @@
 
 use fvm_contract::app_helper::{HelperErrorCode, Milestone, SessionId, StopReason};
 use fvm_contract::app_internal::section::{ConnectionIcon, ScheduleOutlook};
-use fvm_contract::app_internal::{TimeOfDay, Weekday};
+use fvm_contract::app_internal::{EpochMillis, TimeOfDay, Weekday};
 use jiff::tz::TimeZone;
 
 use super::super::machine::{AttemptReason, Phase, RetryReason};
@@ -336,7 +336,7 @@ fn away_outside_the_hours_holds_the_reconnect_until_the_user_returns() {
     assert_eq!(
         h.cm.schedule_outlook(),
         Some(ScheduleOutlook::HoldingWhileAway {
-            until: at(18, 20, 10, 0)
+            until: EpochMillis(at(18, 20, 10, 0))
         })
     );
     assert!(!opens_otp_session(&h.effects) && !checks_readiness(&h.effects));
@@ -382,7 +382,7 @@ fn the_away_limit_stops_reconnects_but_keeps_the_tunnel() {
     assert_eq!(
         h.cm.schedule_outlook(),
         Some(ScheduleOutlook::Connects {
-            at: at(19, 9, 0, 0)
+            at: EpochMillis(at(19, 9, 0, 0))
         })
     );
 }
@@ -629,7 +629,7 @@ fn the_outlook_follows_the_day() {
     assert_eq!(
         h.cm.schedule_outlook(),
         Some(ScheduleOutlook::Connects {
-            at: at(18, 9, 0, 0)
+            at: EpochMillis(at(18, 9, 0, 0))
         })
     );
     h.fire(TimerKind::Schedule);
@@ -637,7 +637,7 @@ fn the_outlook_follows_the_day() {
     assert_eq!(
         h.cm.schedule_outlook(),
         Some(ScheduleOutlook::WithinHours {
-            end: at(18, 18, 0, 0)
+            end: EpochMillis(at(18, 18, 0, 0))
         })
     );
     h.fire(TimerKind::Schedule);
