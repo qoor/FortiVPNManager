@@ -85,7 +85,7 @@ pub(crate) enum ClientSettings {
         expect(dead_code, reason = "only the macOS entry and the tests choose it")
     )]
     OpenFortiVpn { home: PathBuf },
-    /// The official FortiClient's SSL VPN connection, which the OS integration reads (Windows):
+    /// The official `FortiClient`'s SSL VPN connection, which the OS integration reads (Windows):
     /// openconnect has no settings file of its own.
     #[cfg_attr(
         not(any(windows, test)),
@@ -249,7 +249,7 @@ impl Runtime {
             }
             Input::App(ToRuntime::Event { event }) => self.system_event(event),
             Input::Timer(Timer::Connection(timer)) => {
-                self.feed(connection::Input::TimerFired(timer))
+                self.feed(connection::Input::TimerFired(timer));
             }
             Input::Timer(Timer::UpdateCheck) => self.check_for_updates(),
             Input::Done(work) => work(self),
@@ -444,7 +444,7 @@ impl Runtime {
                     runtime.feed(connection::Input::RouterRead {
                         present: router.is_some(),
                     });
-                })
+                });
             }
             Effect::ProbeNetwork(probe) => self.probe_network(probe),
             Effect::ReadScreenState => {
@@ -460,7 +460,7 @@ impl Runtime {
                         locked,
                         displays_asleep,
                     });
-                })
+                });
             }
             Effect::Note { attempt, note } => {
                 let text = match note {
@@ -529,18 +529,18 @@ impl Runtime {
                     ));
                     return;
                 }
-                let password = match response {
-                    PortResponse::Secret {
-                        value: Some(SecretText(password)),
-                    } => password,
-                    _ => {
-                        // The readiness check found it moments ago; treat it like a Helper refusal.
-                        runtime.feed(connection::Input::RunRejected(
-                            attempt,
-                            fvm_contract::app_helper::HelperErrorCode::InternalError,
-                        ));
-                        return;
-                    }
+                let password = if let PortResponse::Secret {
+                    value: Some(SecretText(password)),
+                } = response
+                {
+                    password
+                } else {
+                    // The readiness check found it moments ago; treat it like a Helper refusal.
+                    runtime.feed(connection::Input::RunRejected(
+                        attempt,
+                        fvm_contract::app_helper::HelperErrorCode::InternalError,
+                    ));
+                    return;
                 };
                 let request: RunRequest =
                     account.run_request(attempt.clone(), session, replacing, password);

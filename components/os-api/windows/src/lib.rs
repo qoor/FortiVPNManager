@@ -22,10 +22,12 @@ pub struct Error {
 
 impl Error {
     /// The address or route to add is there already, which the caller checks rather than fails on.
+    #[must_use]
     pub fn already_exists(self) -> bool {
         self.code == ERROR_OBJECT_ALREADY_EXISTS
     }
 
+    #[must_use]
     pub fn not_found(self) -> bool {
         self.code == ERROR_NOT_FOUND || self.code == ERROR_FILE_NOT_FOUND
     }

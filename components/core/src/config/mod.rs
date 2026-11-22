@@ -237,6 +237,7 @@ pub fn update(
 }
 
 /// Without repeats, Monday first.
+#[must_use]
 pub fn normalized_days(days: &[Weekday]) -> Vec<Weekday> {
     WEEKDAYS
         .iter()

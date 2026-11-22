@@ -103,7 +103,7 @@ fn the_settings_are_recorded_and_applied_before_the_tunnel_is_up_and_reverted_at
     assert_eq!(settings.tunnel.name, "utun9");
     assert_eq!(settings.default_domains, ["corp.example.com"]);
     assert_eq!(previous, None);
-    assert!(remove.is_empty());
+    assert_eq!(remove, []);
     assert_eq!(add, [gateway_route("192.0.2.1"), excluded_route()]);
     let record = recorded(&session, "run.json");
     assert_eq!(record["outsideChanges"]["dnsServiceID"], "svc");
@@ -126,7 +126,7 @@ fn the_settings_are_recorded_and_applied_before_the_tunnel_is_up_and_reverted_at
     let facts = session.wait_for_exit();
     assert_eq!(facts.furthest_milestone, Milestone::TunnelUp);
     assert_eq!(session.count_text("‹network settings reverted›"), 1);
-    assert!(session.directory.names().is_empty());
+    assert_eq!(session.directory.names(), Vec::<String>::new());
 }
 
 #[test]
@@ -978,7 +978,7 @@ fn the_network_settings_a_revert_left_are_reverted_again_before_ready() {
         LogLevel::Notice,
         "reverted again the network settings a revert left (1 route(s))"
     ));
-    assert!(os.directory.names().is_empty());
+    assert_eq!(os.directory.names(), Vec::<String>::new());
 }
 
 #[test]

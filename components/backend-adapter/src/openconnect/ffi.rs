@@ -325,7 +325,7 @@ fn send_command(pipe: CmdSocket, command: Command) {
     let byte = command_byte(command);
     // SAFETY: The link writes only while armed, and the session disarms it before
     // openconnect_vpninfo_free closes the socket; the byte is live for the call.
-    unsafe { windows_sys::Win32::Networking::WinSock::send(pipe, &byte, 1, 0) };
+    unsafe { windows_sys::Win32::Networking::WinSock::send(pipe, &raw const byte, 1, 0) };
 }
 
 fn command_byte(command: Command) -> u8 {
@@ -412,7 +412,7 @@ impl Tunnel<'_> {
         unsafe {
             openconnect_get_ip_info(
                 self.raw.as_ptr(),
-                &mut info,
+                &raw mut info,
                 ptr::null_mut(),
                 ptr::null_mut(),
             )

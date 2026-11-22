@@ -53,6 +53,7 @@ impl UidSet {
 
     /// `uid:*`; a `uid` of 0 counts as 1. The server answers `n:*` with the newest message even
     /// when its UID is below `n`, so the caller filters what comes back.
+    #[must_use]
     pub fn starting_at(uid: u32) -> Self {
         Self(Kind::From(uid.max(1)))
     }
@@ -133,6 +134,7 @@ impl Command {
     }
 
     /// The command's name, as the session's failures and logs name it.
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Command::AuthenticatePlain { .. } => "AUTHENTICATE",

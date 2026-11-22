@@ -513,7 +513,7 @@ impl Runtime {
             PortRequest::StartUpdateWaiter { install_id },
             move |runtime, response| match response {
                 PortResponse::UpdateWaiterStarted {} => {
-                    runtime.call_update_install(version, reconnect, install_id)
+                    runtime.call_update_install(version, reconnect, install_id);
                 }
                 PortResponse::UpdateWaiterFailed { description } => {
                     runtime.system_log(

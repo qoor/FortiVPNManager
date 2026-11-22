@@ -1,6 +1,6 @@
 //! Recognizing the OTP email and its code.
 //!
-//! FortiGate's OTP email has the subject `AuthCode: NNNNNN` and no fixed sender, so only the
+//! `FortiGate`'s OTP email has the subject `AuthCode: NNNNNN` and no fixed sender, so only the
 //! subject counts. A message is the attempt's OTP when it arrived after the session opened (the
 //! IMAP snapshot, or the Gmail history point) and no earlier than the OTP prompt, less a small
 //! tolerance; of several, the latest wins. Every message whose subject carries a code is trashed
@@ -69,6 +69,7 @@ pub struct ImapMessage {
 
 impl ImapMessage {
     /// `None` unless the reply carries the UID, INTERNALDATE and the header block.
+    #[must_use]
     pub fn from_fetch(fetch: &FetchResponse) -> Option<Self> {
         Some(Self {
             uid: fetch.uid?,
@@ -78,12 +79,14 @@ impl ImapMessage {
     }
 
     /// The Subject field, unfolded and decoded.
+    #[must_use]
     pub fn subject(&self) -> Option<String> {
         header::field("Subject", &self.header_block)
     }
 }
 
 /// The FETCH replies among `responses` that carry what `ImapMessage` needs.
+#[must_use]
 pub fn imap_messages(responses: &[Response]) -> Vec<ImapMessage> {
     responses
         .iter()
@@ -107,6 +110,7 @@ pub struct ImapSelection {
 
 /// Picks the OTP once the client asked for it at `prompted_at`: the highest UID among messages
 /// whose subject carries a code and that arrived in time.
+#[must_use]
 pub fn select_imap(prompted_at: SystemTime, messages: &[ImapMessage]) -> Option<ImapSelection> {
     let earliest = earliest_arrival(prompted_at);
     let mut candidates: Vec<u32> = Vec::new();
@@ -137,11 +141,13 @@ pub fn select_imap(prompted_at: SystemTime, messages: &[ImapMessage]) -> Option<
 }
 
 /// The subject search of the spam check, which runs in the junk mailbox after the OTP time limit.
+#[must_use]
 pub fn imap_spam_search() -> Command {
     Command::UidSearchSubject("AuthCode".to_owned())
 }
 
 /// The newest of the UIDs the spam search found, to fetch.
+#[must_use]
 pub fn imap_spam_check_uids(search: &[Response]) -> Option<UidSet> {
     let mut uids = imap::searched_uids(search);
     uids.sort_unstable();
@@ -151,6 +157,7 @@ pub fn imap_spam_check_uids(search: &[Response]) -> Option<UidSet> {
 
 /// Whether a message whose subject carries a code arrived in time; for the spam check, to explain
 /// why the OTP did not come.
+#[must_use]
 pub fn imap_has_fresh_code(prompted_at: SystemTime, messages: &[ImapMessage]) -> bool {
     let earliest = earliest_arrival(prompted_at);
     messages.iter().any(|message| {
@@ -164,16 +171,19 @@ pub fn imap_has_fresh_code(prompted_at: SystemTime, messages: &[ImapMessage]) ->
 // MARK: Gmail API
 
 /// The search when the history point is unusable.
+#[must_use]
 pub fn gmail_search() -> Request {
     gmail_api::list_messages("subject:AuthCode newer_than:1d", false, 10)
 }
 
 /// The search of the spam check after the OTP time limit.
+#[must_use]
 pub fn gmail_spam_search() -> Request {
     gmail_api::list_messages("in:spam subject:AuthCode newer_than:1h", true, 5)
 }
 
 /// Whether a message with these labels never counts, so it need not be fetched.
+#[must_use]
 pub fn is_excluded_gmail_message(label_ids: &[String]) -> bool {
     label_ids
         .iter()
@@ -201,6 +211,7 @@ pub struct GmailSelection {
 /// When the session searched instead of following the history, `candidates_not_before` is when it
 /// opened, less `ARRIVAL_TOLERANCE`: older messages are neither picked nor trashed, since nothing
 /// shows they arrived after the session opened.
+#[must_use]
 pub fn select_gmail(
     prompted_at: SystemTime,
     messages: &[MessageMetadata],
@@ -259,6 +270,7 @@ fn id_order(id: &str) -> (usize, &str) {
 
 /// Whether a message whose subject carries a code arrived in time, whatever its labels; for the
 /// spam check, to explain why the OTP did not come.
+#[must_use]
 pub fn gmail_has_fresh_code(prompted_at: SystemTime, messages: &[MessageMetadata]) -> bool {
     let earliest = earliest_arrival(prompted_at);
     messages.iter().any(|message| {

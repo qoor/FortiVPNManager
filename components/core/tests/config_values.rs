@@ -80,7 +80,7 @@ routes:
     );
     let loaded = decode(&yaml);
     assert_eq!(loaded.settings, non_default());
-    assert!(loaded.warnings.is_empty());
+    assert_eq!(loaded.warnings, []);
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn missing_keys_are_merged_with_defaults() {
     expected.vpn.host = "gw.example.com".into();
     expected.connection.proactive_reconnect.margin_minutes = 10;
     assert_eq!(loaded.settings, expected);
-    assert!(loaded.warnings.is_empty());
+    assert_eq!(loaded.warnings, []);
 }
 
 #[test]

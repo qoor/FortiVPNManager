@@ -1,6 +1,6 @@
 //! The routing table, through the IP Helper API in `fvm_os_api_windows::network`. The exception
 //! routes go through the gateway of the primary interface: the hardware Ethernet or Wi-Fi adapter
-//! whose default route has the lowest metric. Virtual adapters, such as FortiClient's or Hyper-V's,
+//! whose default route has the lowest metric. Virtual adapters, such as `FortiClient`'s or Hyper-V's,
 //! report Ethernet too, so the hardware flag tells them apart. The app sees its GUID as the service
 //! ID and its name as the service name, as a network service on macOS. The routes live in the
 //! active routing table only, so Windows forgets them at a restart.
@@ -433,7 +433,7 @@ mod tests {
             &change(expect(), &[], routes, routes),
             &log,
         ));
-        assert!(again.added.is_empty());
+        assert_eq!(again.added, []);
         assert_eq!(again.found, routes);
 
         // As if added through another network service: not the route this one has, so it stays.
@@ -450,7 +450,7 @@ mod tests {
             ),
             &log,
         ));
-        assert!(kept.left.is_empty());
+        assert_eq!(kept.left, []);
         assert!(on_primary(&route));
 
         let added = AddedRoute {
@@ -466,7 +466,7 @@ mod tests {
             ),
             &log,
         ));
-        assert!(removed.left.is_empty());
+        assert_eq!(removed.left, []);
         assert!(!on_primary(&route));
     }
 

@@ -57,7 +57,7 @@ pub(crate) fn owners(address: Ipv4Addr) -> Option<Vec<String>> {
             .address
             .as_ref()
             .and_then(|socket| socket.as_sockaddr_in())
-            .map(|socket| socket.ip())
+            .map(nix::sys::socket::SockaddrIn::ip)
         else {
             continue;
         };
@@ -244,12 +244,11 @@ pub(crate) fn ipv4_address(settings: &NetworkSettings) -> Ipv4Addr {
 
 fn ipv6_network(settings: &NetworkSettings) -> Option<IpNetwork> {
     settings.ipv6.as_ref().map(|family| {
-        if family.address.address.is_ipv4() {
-            panic!(
-                "the Helper entry sent {} as the tunnel's IPv6 address",
-                family.address.address
-            );
-        }
+        assert!(
+            !family.address.address.is_ipv4(),
+            "the Helper entry sent {} as the tunnel's IPv6 address",
+            family.address.address
+        );
         family.address
     })
 }

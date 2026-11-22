@@ -14,13 +14,13 @@ pub fn protect(data: &[u8]) -> Result<Vec<u8>, Error> {
     // other pointers may be null.
     let done = unsafe {
         CryptProtectData(
-            &input,
+            &raw const input,
             ptr::null(),
             ptr::null(),
             ptr::null(),
             ptr::null(),
             CRYPTPROTECT_UI_FORBIDDEN,
-            &mut output,
+            &raw mut output,
         )
     };
     if done == 0 {
@@ -35,13 +35,13 @@ pub fn unprotect(data: &[u8]) -> Result<Vec<u8>, Error> {
     // SAFETY: As in `protect`; the description pointer may be null too.
     let done = unsafe {
         CryptUnprotectData(
-            &input,
+            &raw const input,
             ptr::null_mut(),
             ptr::null(),
             ptr::null(),
             ptr::null(),
             CRYPTPROTECT_UI_FORBIDDEN,
-            &mut output,
+            &raw mut output,
         )
     };
     if done == 0 {

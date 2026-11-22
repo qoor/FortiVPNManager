@@ -62,7 +62,7 @@ fn on_a_listed_network_every_target_goes_through_the_router_in_list_order() {
     let outcome = plan(&[network(), host()], &at_the_desk());
     assert_eq!(matched(&outcome), Some(office()));
     assert_eq!(outcome.routes, vec![via(network()), via(host())]);
-    assert!(outcome.on_link.is_empty());
+    assert_eq!(outcome.on_link, []);
     assert_eq!(
         outcome.status(&at_the_desk()),
         BypassStatus::Applied {
@@ -78,7 +78,7 @@ fn outside_the_networks_no_route_is_planned() {
     let home = snapshot_at("192.168.0.1", "192.168.0.12", "255.255.255.0");
     let outcome = plan(&[host(), network()], &home);
     assert_eq!(outcome.applicability, Applicability::OutsideNetworks);
-    assert!(outcome.routes.is_empty());
+    assert_eq!(outcome.routes, []);
     assert_eq!(outcome.status(&home), BypassStatus::OutsideNetworks {});
 }
 
@@ -86,7 +86,7 @@ fn outside_the_networks_no_route_is_planned() {
 fn without_networks_the_rules_apply_nowhere() {
     let outcome = plan_routes(&[], &[host()], &at_the_desk(), true);
     assert_eq!(outcome.applicability, Applicability::NoNetworksListed);
-    assert!(outcome.routes.is_empty());
+    assert_eq!(outcome.routes, []);
     assert_eq!(
         outcome.status(&at_the_desk()),
         BypassStatus::NoNetworksListed {}
@@ -142,7 +142,7 @@ fn a_new_router_takes_every_route() {
 fn without_the_vpn_wanted_no_route_is_planned() {
     let outcome = plan_routes(&[office()], &[host(), network()], &at_the_desk(), false);
     assert_eq!(outcome.applicability, Applicability::VpnOff);
-    assert!(outcome.routes.is_empty());
+    assert_eq!(outcome.routes, []);
     assert_eq!(outcome.status(&at_the_desk()), BypassStatus::VpnOff {});
     // Outside the networks the networks still tell.
     let home = snapshot_at("192.168.0.1", "192.168.0.12", "255.255.255.0");

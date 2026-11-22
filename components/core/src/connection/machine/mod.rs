@@ -315,6 +315,7 @@ struct NoteMarks {
 }
 
 impl ConnectionManager {
+    #[must_use]
     pub fn new(startup: Startup) -> Self {
         let ledger = FailureLedger::new(startup.settings.account.ledger_key());
         Self {

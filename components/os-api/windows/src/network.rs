@@ -36,6 +36,7 @@ pub enum Family {
 }
 
 impl Family {
+    #[must_use]
     pub fn of(address: IpAddr) -> Self {
         match address {
             IpAddr::V4(_) => Self::Ipv4,
@@ -67,7 +68,7 @@ impl Luid {
     pub fn from_index(index: u32) -> Result<Self, Error> {
         let mut luid = NET_LUID_LH { Value: 0 };
         // SAFETY: `luid` is live for the call, which writes it.
-        let code = unsafe { ConvertInterfaceIndexToLuid(index, &mut luid) };
+        let code = unsafe { ConvertInterfaceIndexToLuid(index, &raw mut luid) };
         check("ConvertInterfaceIndexToLuid", code)?;
         Ok(Self::from_raw(luid))
     }
@@ -77,7 +78,7 @@ impl Luid {
         let mut luid = NET_LUID_LH { Value: 0 };
         // SAFETY: `alias` is NUL-terminated and `luid` is live for the call, which reads the first
         // and writes the second.
-        let code = unsafe { ConvertInterfaceAliasToLuid(alias.as_ptr(), &mut luid) };
+        let code = unsafe { ConvertInterfaceAliasToLuid(alias.as_ptr(), &raw mut luid) };
         check("ConvertInterfaceAliasToLuid", code)?;
         Ok(Self::from_raw(luid))
     }
@@ -85,7 +86,7 @@ impl Luid {
     pub fn index(self) -> Result<u32, Error> {
         let mut index = 0;
         // SAFETY: Both values are live for the call, which reads the first and writes the second.
-        let code = unsafe { ConvertInterfaceLuidToIndex(&self.raw(), &mut index) };
+        let code = unsafe { ConvertInterfaceLuidToIndex(&self.raw(), &raw mut index) };
         check("ConvertInterfaceLuidToIndex", code)?;
         Ok(index)
     }
@@ -94,7 +95,7 @@ impl Luid {
     fn guid(self) -> Result<GUID, Error> {
         let mut guid = GUID::default();
         // SAFETY: Both values are live for the call, which reads the first and writes the second.
-        let code = unsafe { ConvertInterfaceLuidToGuid(&self.raw(), &mut guid) };
+        let code = unsafe { ConvertInterfaceLuidToGuid(&self.raw(), &raw mut guid) };
         check("ConvertInterfaceLuidToGuid", code)?;
         Ok(guid)
     }
@@ -140,7 +141,7 @@ pub fn interface(luid: Luid) -> Result<Interface, Error> {
     };
     // SAFETY: `row` is live for the call, which reads its LUID and writes the rest. Every member
     // is a plain integer, array of them or GUID, so any bytes the system writes are valid.
-    let code = unsafe { GetIfEntry2(&mut row) };
+    let code = unsafe { GetIfEntry2(&raw mut row) };
     check("GetIfEntry2", code)?;
     Ok(Interface {
         alias: U16CStr::from_slice_truncate(&row.Alias)
@@ -235,7 +236,7 @@ fn write_ip_interface(mut row: MIB_IPINTERFACE_ROW, family: Family) -> Result<()
         row.SitePrefixLength = 0;
     }
     // SAFETY: `row` is live for the call, which reads it and writes the LUID back.
-    let code = unsafe { SetIpInterfaceEntry(&mut row) };
+    let code = unsafe { SetIpInterfaceEntry(&raw mut row) };
     check("SetIpInterfaceEntry", code)
 }
 
@@ -243,12 +244,12 @@ fn ip_interface(luid: Luid, family: Family) -> Result<MIB_IPINTERFACE_ROW, Error
     let mut row = MIB_IPINTERFACE_ROW::default();
     // SAFETY: `row` is live for the call, which writes it. The system writes BOOLEAN members as 0
     // or 1, the only bytes a bool may hold.
-    unsafe { InitializeIpInterfaceEntry(&mut row) };
+    unsafe { InitializeIpInterfaceEntry(&raw mut row) };
     row.Family = family.raw();
     row.InterfaceLuid = luid.raw();
     // SAFETY: `row` is live for the call, which reads its family and LUID and writes the rest,
     // BOOLEAN members as 0 or 1.
-    let code = unsafe { GetIpInterfaceEntry(&mut row) };
+    let code = unsafe { GetIpInterfaceEntry(&raw mut row) };
     check("GetIpInterfaceEntry", code)?;
     Ok(row)
 }
@@ -299,21 +300,21 @@ pub fn add_address(luid: Luid, address: IpAddr, prefix_length: u8) -> Result<(),
     // than holding it back for the second or more that the check takes.
     row.DadState = IpDadStatePreferred;
     // SAFETY: `row` is live for the call, which only reads it.
-    let code = unsafe { CreateUnicastIpAddressEntry(&row) };
+    let code = unsafe { CreateUnicastIpAddressEntry(&raw const row) };
     check("CreateUnicastIpAddressEntry", code)
 }
 
 pub fn delete_address(luid: Luid, address: IpAddr) -> Result<(), Error> {
     let row = unicast_row(luid, address);
     // SAFETY: `row` is live for the call, which only reads it.
-    let code = unsafe { DeleteUnicastIpAddressEntry(&row) };
+    let code = unsafe { DeleteUnicastIpAddressEntry(&raw const row) };
     check("DeleteUnicastIpAddressEntry", code)
 }
 
 fn unicast_row(luid: Luid, address: IpAddr) -> MIB_UNICASTIPADDRESS_ROW {
     let mut row = MIB_UNICASTIPADDRESS_ROW::default();
     // SAFETY: `row` is live for the call, which writes it, BOOLEAN members as 0 or 1.
-    unsafe { InitializeUnicastIpAddressEntry(&mut row) };
+    unsafe { InitializeUnicastIpAddressEntry(&raw mut row) };
     row.InterfaceLuid = luid.raw();
     row.Address = sockaddr(address);
     row
@@ -323,7 +324,7 @@ fn unicast_row(luid: Luid, address: IpAddr) -> MIB_UNICASTIPADDRESS_ROW {
 pub fn addresses(family: Family) -> Result<Vec<UnicastAddress>, Error> {
     let mut table: *mut MIB_UNICASTIPADDRESS_TABLE = ptr::null_mut();
     // SAFETY: `table` is live for the call, which points it to a table it allocates.
-    let code = unsafe { GetUnicastIpAddressTable(family.raw(), &mut table) };
+    let code = unsafe { GetUnicastIpAddressTable(family.raw(), &raw mut table) };
     check("GetUnicastIpAddressTable", code)?;
     // SAFETY: After a success, `table` points to a count and that many rows, with BOOLEAN members of
     // 0 or 1, and stays valid until it is freed once, after the rows were read.
@@ -362,7 +363,7 @@ pub struct Route {
 pub fn add_route(route: &Route) -> Result<(), Error> {
     let row = forward_row(route);
     // SAFETY: `row` is live for the call, which only reads it.
-    let code = unsafe { CreateIpForwardEntry2(&row) };
+    let code = unsafe { CreateIpForwardEntry2(&raw const row) };
     check("CreateIpForwardEntry2", code)
 }
 
@@ -371,14 +372,14 @@ pub fn add_route(route: &Route) -> Result<(), Error> {
 pub fn delete_route(route: &Route) -> Result<(), Error> {
     let row = forward_row(route);
     // SAFETY: `row` is live for the call, which only reads it.
-    let code = unsafe { DeleteIpForwardEntry2(&row) };
+    let code = unsafe { DeleteIpForwardEntry2(&raw const row) };
     check("DeleteIpForwardEntry2", code)
 }
 
 fn forward_row(route: &Route) -> MIB_IPFORWARD_ROW2 {
     let mut row = MIB_IPFORWARD_ROW2::default();
     // SAFETY: `row` is live for the call, which writes it, BOOLEAN members as 0 or 1.
-    unsafe { InitializeIpForwardEntry(&mut row) };
+    unsafe { InitializeIpForwardEntry(&raw mut row) };
     row.InterfaceLuid = route.interface.raw();
     row.DestinationPrefix.Prefix = sockaddr(route.destination);
     row.DestinationPrefix.PrefixLength = route.prefix_length;
@@ -391,7 +392,7 @@ fn forward_row(route: &Route) -> MIB_IPFORWARD_ROW2 {
 pub fn routes(family: Family) -> Result<Vec<Route>, Error> {
     let mut table: *mut MIB_IPFORWARD_TABLE2 = ptr::null_mut();
     // SAFETY: `table` is live for the call, which points it to a table it allocates.
-    let code = unsafe { GetIpForwardTable2(family.raw(), &mut table) };
+    let code = unsafe { GetIpForwardTable2(family.raw(), &raw mut table) };
     check("GetIpForwardTable2", code)?;
     // SAFETY: After a success, `table` points to a count and that many rows, with BOOLEAN members of
     // 0 or 1, and stays valid until it is freed once, after the rows were read.
@@ -422,8 +423,8 @@ pub fn best_route(destination: IpAddr) -> Result<(Route, IpAddr), Error> {
             ptr::null(),
             &sockaddr(destination),
             0,
-            &mut row,
-            &mut source,
+            &raw mut row,
+            &raw mut source,
         )
     };
     check("GetBestRoute2", code)?;
@@ -454,7 +455,7 @@ pub fn set_dns_servers(interface: &str, family: Family, servers: &[IpAddr]) -> R
         ..Default::default()
     };
     // SAFETY: `settings` and the list it points to are live for the call, which only reads them.
-    let code = unsafe { SetInterfaceDnsSettings(guid, &settings) };
+    let code = unsafe { SetInterfaceDnsSettings(guid, &raw const settings) };
     check("SetInterfaceDnsSettings", code)
 }
 
@@ -469,7 +470,7 @@ pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
         ..Default::default()
     };
     // SAFETY: `settings` is live for the call, which writes it and the strings it allocates.
-    let code = unsafe { GetInterfaceDnsSettings(guid, &mut settings) };
+    let code = unsafe { GetInterfaceDnsSettings(guid, &raw mut settings) };
     // The family's registry key, which the call reads, comes with the first write; until then the
     // interface has no servers of its own, as the loopback interface for IPv6.
     if code == ERROR_FILE_NOT_FOUND {
@@ -484,7 +485,7 @@ pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
         } else {
             U16CStr::from_ptr_str(settings.NameServer).to_string_lossy()
         };
-        FreeInterfaceDnsSettings(&mut settings);
+        FreeInterfaceDnsSettings(&raw mut settings);
         list
     };
     Ok(list
@@ -506,7 +507,7 @@ pub fn clear_wins_servers(interface: &str) -> Result<(), Error> {
             path.as_ptr(),
             0,
             KEY_QUERY_VALUE | KEY_SET_VALUE,
-            &mut key,
+            &raw mut key,
         )
     };
     check("RegOpenKeyExW", code)?;
@@ -589,7 +590,7 @@ fn ip(raw: &SOCKADDR_INET, family: Family) -> IpAddr {
 #[cfg(test)]
 mod tests {
     //! The tests that write change only the loopback interface, which no connection to the PC goes
-    //! through, and routes to TEST-NET addresses (192.0.2.0/24, 2001:db8::/32), which nothing uses,
+    //! through, and routes to TEST-NET addresses (192.0.2.0/24, `2001:db8::/32`), which nothing uses,
     //! through the primary interface. Each puts back what it changed, also when it fails.
 
     use std::process::Command;

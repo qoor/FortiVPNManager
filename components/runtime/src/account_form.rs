@@ -383,7 +383,7 @@ impl Runtime {
         self.forms.import_report = None;
     }
 
-    /// The first openfortivpn config file found where openfortivpn looks by default. FortiClient's
+    /// The first openfortivpn config file found where openfortivpn looks by default. `FortiClient`'s
     /// connection has no file; it is read when imported.
     pub(crate) fn find_default_import_file(&mut self) {
         self.forms.default_import_file = match &self.client_settings {
@@ -395,7 +395,7 @@ impl Runtime {
         };
     }
 
-    /// "Import": openfortivpn's settings from the chosen file or the default one, or FortiClient's
+    /// "Import": openfortivpn's settings from the chosen file or the default one, or `FortiClient`'s
     /// first connection (choosing among several is not offered yet).
     pub(crate) fn import_client_settings(&mut self, file: Option<String>) {
         let done: Box<dyn FnOnce(&mut Runtime)> = Box::new(|runtime: &mut Runtime| {
@@ -435,7 +435,7 @@ impl Runtime {
     }
 
     /// The first launch: imports when there is no config.yaml yet and an openfortivpn config
-    /// exists, or FortiClient keeps a connection, then calls `then` with whether a report is shown.
+    /// exists, or `FortiClient` keeps a connection, then calls `then` with whether a report is shown.
     pub(crate) fn import_on_first_launch(
         &mut self,
         then: impl FnOnce(&mut Runtime, bool) + 'static,
@@ -469,10 +469,10 @@ impl Runtime {
         }
     }
 
-    /// Takes the server of FortiClient's `connection` as `vpn.host` and `vpn.port`. The username
-    /// FortiClient shows is kept encrypted by FortiClient, so the account's username, realm and
+    /// Takes the server of `FortiClient`'s `connection` as `vpn.host` and `vpn.port`. The username
+    /// `FortiClient` shows is kept encrypted by `FortiClient`, so the account's username, realm and
     /// password stay as they are. Certificate values belong to the gateway they were seen on, so a
-    /// new gateway starts without them. FortiClient's settings are only read.
+    /// new gateway starts without them. `FortiClient`'s settings are only read.
     fn import_forticlient(
         &mut self,
         connection: &FortiClientConnection,
@@ -672,7 +672,7 @@ fn forticlient_connections(response: PortResponse) -> Vec<FortiClientConnection>
     }
 }
 
-/// FortiClient's `Server` value: `host:port`, or a bare host on port 443, FortiClient's default.
+/// `FortiClient`'s `Server` value: `host:port`, or a bare host on port 443, `FortiClient`'s default.
 /// Anything else, such as an address with a scheme or a path, is not taken.
 fn forticlient_server(server: &str) -> Option<(String, u16)> {
     let server = server.trim();

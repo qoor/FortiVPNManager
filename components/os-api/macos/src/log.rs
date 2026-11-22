@@ -22,6 +22,7 @@ unsafe impl Send for Log {}
 unsafe impl Sync for Log {}
 
 impl Log {
+    #[must_use]
     pub fn new(subsystem: &str, category: &str) -> Self {
         let subsystem = CString::new(subsystem).expect("a subsystem without NUL");
         let category = CString::new(category).expect("a category without NUL");

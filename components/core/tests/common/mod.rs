@@ -28,7 +28,7 @@ pub fn render(settings: &Settings) -> String {
 /// Why `settings` cannot be written.
 pub fn validation_error(settings: &Settings) -> Option<ConfigProblemKind> {
     match config::update(Some(b"vpn: { port: 2 }\n"), |current| {
-        *current = settings.clone()
+        *current = settings.clone();
     }) {
         Err(UpdateError::Settings(problem)) => {
             assert_eq!(problem.location, None);

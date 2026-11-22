@@ -28,7 +28,7 @@ impl Runtime {
                     runtime.gather_readiness(HelperFacts::NotRegistered);
                 }
                 RegistrationStatus::RequiresApproval => {
-                    runtime.gather_readiness(HelperFacts::RequiresApproval)
+                    runtime.gather_readiness(HelperFacts::RequiresApproval);
                 }
                 RegistrationStatus::Enabled => runtime.ask_helper_build(true),
             }

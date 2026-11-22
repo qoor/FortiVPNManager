@@ -23,17 +23,19 @@ unsafe extern "C" {
 
 /// The Team ID (certificate OU) this process is signed with; `None` when it is unsigned or ad-hoc
 /// signed.
+#[must_use]
 pub fn team_id() -> Option<String> {
     let mut code: SecCodeRef = std::ptr::null_mut();
     // SAFETY: `code` receives a +1 reference on success.
-    if unsafe { SecCodeCopySelf(0, &mut code) } != errSecSuccess || code.is_null() {
+    if unsafe { SecCodeCopySelf(0, &raw mut code) } != errSecSuccess || code.is_null() {
         return None;
     }
     // SAFETY: a +1 reference from SecCodeCopySelf.
     let code = unsafe { CFType::wrap_under_create_rule(code.cast()) };
     let mut static_code: SecStaticCodeRef = std::ptr::null_mut();
     // SAFETY: `code` is a valid SecCode; `static_code` receives a +1 reference on success.
-    let status = unsafe { SecCodeCopyStaticCode(code.as_CFTypeRef() as _, 0, &mut static_code) };
+    let status =
+        unsafe { SecCodeCopyStaticCode(code.as_CFTypeRef() as _, 0, &raw mut static_code) };
     if status != errSecSuccess || static_code.is_null() {
         return None;
     }
@@ -45,7 +47,7 @@ pub fn team_id() -> Option<String> {
         SecCodeCopySigningInformation(
             static_code.as_CFTypeRef() as _,
             SIGNING_INFORMATION,
-            &mut information,
+            &raw mut information,
         )
     };
     if status != errSecSuccess || information.is_null() {

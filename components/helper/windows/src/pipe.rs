@@ -536,7 +536,7 @@ impl Relay {
                 self.send(app, reply(id, &failure));
             }
             PipeRequest::Connect { json, .. } => {
-                self.forward(app, id, AppRequest::Connect { json })
+                self.forward(app, id, AppRequest::Connect { json });
             }
             PipeRequest::SubmitOtp { attempt, code, .. } => {
                 self.forward(app, id, AppRequest::SubmitOtp { attempt, code });
@@ -576,7 +576,7 @@ impl Relay {
 
     /// Passes a request to the entry under a number of the relay's own, since the apps' numbers
     /// may repeat across connections.
-    /// Delivered under the lock, so it never follows the connection's AppDisconnected.
+    /// Delivered under the lock, so it never follows the connection's `AppDisconnected`.
     fn forward(&self, app: u64, id: u64, request: AppRequest) {
         let mut state = self.lock();
         if !state.connections.contains_key(&app) {
@@ -647,7 +647,7 @@ fn reply(id: u64, payload: &impl serde::Serialize) -> PipeMessage {
 
 /// Reads one framed request; a length over the limit ends the connection before anything is
 /// allocated for it. Only a pipe that ends is a hang-up: JSON that ends early is bad input like
-/// any other, though serde_json reports it as an early end. The frame may hold the password or
+/// any other, though `serde_json` reports it as an early end. The frame may hold the password or
 /// the OTP, so it is wiped once read.
 fn receive(receiver: &RecvPipeStream<pipe_mode::Bytes>) -> io::Result<PipeRequest> {
     let mut reader = receiver;

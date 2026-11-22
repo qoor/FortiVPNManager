@@ -47,6 +47,7 @@ pub struct FailureLedger {
 }
 
 impl FailureLedger {
+    #[must_use]
     pub fn new(account_key: String) -> Self {
         Self {
             account_key,

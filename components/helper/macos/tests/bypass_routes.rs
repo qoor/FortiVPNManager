@@ -423,7 +423,7 @@ fn a_closed_connection_changes_no_route() {
         os_side.route_reply(id),
         json!({"failure": {"_0": {"code": "notAuthorized", "message": "the app connection is closed"}}})
     );
-    assert!(os_side.changes().is_empty());
+    assert_eq!(os_side.changes(), Vec::<Value>::new());
 }
 
 #[test]
@@ -481,6 +481,6 @@ fn an_unreadable_record_is_dropped() {
     fs::write(directory.join("exception-routes.json"), "not JSON").unwrap();
     let mut os_side = OsSide::launch(scratch, Setup::default());
     os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
-    assert!(os_side.changes().is_empty());
+    assert_eq!(os_side.changes(), Vec::<Value>::new());
     assert_eq!(os_side.recorded(), None);
 }

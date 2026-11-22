@@ -58,7 +58,7 @@ fn an_empty_history_list() {
     let page = HistoryPage::from_response(200, br#"{"historyId": "555"}"#).unwrap();
     assert_eq!(page.history_id.as_deref(), Some("555"));
     assert_eq!(page.next_page_token, None);
-    assert!(page.added_messages.is_empty());
+    assert_eq!(page.added_messages, []);
     assert_eq!(
         HistoryPage::from_response(200, b"{}").unwrap().history_id,
         None
@@ -73,10 +73,9 @@ fn message_list() {
         messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
         ["m2", "m1"]
     );
-    assert!(
-        messages_from_response(200, br#"{"resultSizeEstimate": 0}"#)
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        messages_from_response(200, br#"{"resultSizeEstimate": 0}"#).unwrap(),
+        [] as [fvm_core::gmail_api::MessageRef; 0]
     );
 }
 
@@ -125,8 +124,8 @@ fn sparse_metadata() {
         message.internal_date,
         Some(UNIX_EPOCH + Duration::from_secs(1_791_940_743))
     );
-    assert!(message.label_ids.is_empty());
-    assert!(message.headers.is_empty());
+    assert_eq!(message.label_ids, Vec::<String>::new());
+    assert_eq!(message.headers, []);
     assert_eq!(gmail_subject(&message), None);
     for body in [
         &br#"{"id": "m", "internalDate": "-5"}"#[..],
@@ -139,11 +138,11 @@ fn sparse_metadata() {
             None
         );
     }
-    assert!(
+    assert_eq!(
         MessageMetadata::from_response(200, br#"{"id": "m", "payload": {}}"#)
             .unwrap()
-            .headers
-            .is_empty()
+            .headers,
+        [] as [fvm_core::gmail_api::Header; 0]
     );
     assert!(MessageMetadata::from_response(200, br#"{"labelIds": []}"#).is_err());
 }

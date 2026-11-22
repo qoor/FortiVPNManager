@@ -152,7 +152,7 @@ fn the_new_run_takes_over_the_traffic_and_the_old_one_ends_as_replaced() {
             .iter()
             .any(|line| line.contains(&format!("run {NEW} exited")))
     });
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
 }
 
 #[test]

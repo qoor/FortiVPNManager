@@ -5,6 +5,7 @@ use super::VpnAccount;
 use crate::config::MAX_TRUSTED_CERTS;
 
 /// `learned` in front of `existing`, without repeats, the newest [`MAX_TRUSTED_CERTS`].
+#[must_use]
 pub fn merge_trusted_certs(learned: &[String], existing: &[String]) -> Vec<String> {
     let mut merged: Vec<String> = Vec::with_capacity(MAX_TRUSTED_CERTS);
     for value in learned.iter().chain(existing) {

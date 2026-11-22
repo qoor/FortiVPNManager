@@ -13,7 +13,7 @@ use fvm_core::otp_mail::{
 
 /// 14-Oct-2026 10:19:00 +0900.
 fn prompted_at() -> SystemTime {
-    UNIX_EPOCH + Duration::from_secs(1_791_940_740)
+    UNIX_EPOCH + Duration::from_mins(29865679)
 }
 
 fn offset(seconds: f64) -> SystemTime {
@@ -274,7 +274,7 @@ fn an_imap_message_needs_all_parts() {
         },
     ] {
         assert_eq!(ImapMessage::from_fetch(&partial), None);
-        assert!(imap_messages(&[Response::Fetch(partial)]).is_empty());
+        assert_eq!(imap_messages(&[Response::Fetch(partial)]), []);
     }
 }
 

@@ -16,6 +16,7 @@ pub fn set_exported_object(connection: &NSXPCConnection, object: &AnyObject) {
     unsafe { connection.setExportedObject(Some(object)) }
 }
 
+#[must_use]
 pub fn init<T>(this: PartialInit<T>) -> Retained<T>
 where
     T: DefinedClass + ClassType<Super = NSObject>,
@@ -88,6 +89,7 @@ pub struct DataReply(RcBlock<dyn Fn(NonNull<NSData>)>);
 unsafe impl Send for DataReply {}
 
 impl DataReply {
+    #[must_use]
     pub fn new(reply: &Block<dyn Fn(NonNull<NSData>)>) -> Self {
         Self(reply.copy())
     }
@@ -104,6 +106,7 @@ pub struct OptionalDataReply(RcBlock<dyn Fn(*mut NSData)>);
 unsafe impl Send for OptionalDataReply {}
 
 impl OptionalDataReply {
+    #[must_use]
     pub fn new(reply: &Block<dyn Fn(*mut NSData)>) -> Self {
         Self(reply.copy())
     }
@@ -125,6 +128,7 @@ pub struct FlagReply(RcBlock<dyn Fn(Bool)>);
 unsafe impl Send for FlagReply {}
 
 impl FlagReply {
+    #[must_use]
     pub fn new(reply: &Block<dyn Fn(Bool)>) -> Self {
         Self(reply.copy())
     }

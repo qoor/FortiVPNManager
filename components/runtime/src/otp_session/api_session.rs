@@ -74,7 +74,7 @@ pub(super) async fn api_call<T>(
         let address_for_token = address.to_owned();
         let token = queue
             .ask(move |runtime, reply| {
-                runtime.access_token(&address_for_token, move |_, token| reply(token))
+                runtime.access_token(&address_for_token, move |_, token| reply(token));
             })
             .await
             .map_err(ApiFailure::Token)?;
@@ -171,7 +171,7 @@ pub(super) async fn api_session(
                     failure.describe()
                 );
                 queue.run(move |runtime| {
-                    runtime.system_log(LogLevel::Notice, LogCategory::Otp, detail)
+                    runtime.system_log(LogLevel::Notice, LogCategory::Otp, detail);
                 });
                 if failures >= MAX_POLL_FAILURES {
                     return report(failed(&failure));

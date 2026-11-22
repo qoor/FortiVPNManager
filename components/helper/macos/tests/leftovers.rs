@@ -141,7 +141,7 @@ fn the_sessions_an_earlier_helper_left_are_logged_out_and_deleted_before_ready()
         first,
         Some(json!({"changeNetwork": {"change": {"revert": {"changes": changes}}}}))
     );
-    assert!(gateway.connections().is_empty());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
     os_side.send(json!({"networkChanged": {"outcome": {"reverted": {"left": []}}}}));
     os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
     assert_eq!(gateway.connections(), [TLS_HANDSHAKE.to_vec()]);
@@ -185,7 +185,7 @@ fn a_session_left_with_a_bad_pin_or_host_is_deleted_without_a_logout_before_read
     };
     let mut os_side = OsSide::launch(Scratch::new(), setup);
     os_side.wait_until("ready", |os_side| os_side.position(is("ready")).is_some());
-    assert!(gateway.connections().is_empty());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
     assert!(secrets.stored().is_empty());
     let mut deleted = secrets.deletes();
     deleted.sort();
@@ -249,5 +249,5 @@ fn a_run_directory_that_cannot_be_used_is_logged_and_left_alone() {
     assert!(os_side.logs().iter().any(|line| {
         line == &format!("error helper: cannot prepare the run directory: {unusable}")
     }));
-    assert!(os_side.events(1).is_empty());
+    assert_eq!(os_side.events(1), Vec::<Value>::new());
 }

@@ -221,6 +221,7 @@ impl Run {
         answer.recv().unwrap_or(Err(NotReplaceable::NotUp))
     }
 
+    #[must_use]
     pub fn routing_check(&self) -> Option<NetworkChange> {
         assert_ne!(
             thread::current().id(),
@@ -243,14 +244,17 @@ impl Run {
     }
 
     /// The client's name as the Helper's English errors and log lines show it.
+    #[must_use]
     pub fn client_name(&self) -> &'static str {
         self.client_name
     }
 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    #[must_use]
     pub fn session_running(&self) -> bool {
         !self.returned.load(Ordering::Relaxed)
     }

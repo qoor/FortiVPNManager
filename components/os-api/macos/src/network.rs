@@ -43,6 +43,7 @@ unsafe extern "C" {
     ) -> CFStringRef;
 }
 
+#[must_use]
 pub fn service_state_key(service_id: &str, entity: Entity) -> String {
     let service_id = CFString::new(service_id);
     // SAFETY: constants of the SystemConfiguration framework.
@@ -71,6 +72,7 @@ pub fn service_state_key(service_id: &str, entity: Entity) -> String {
     unsafe { CFString::wrap_under_create_rule(key) }.to_string()
 }
 
+#[must_use]
 pub fn dictionary(store: &SCDynamicStore, key: &str) -> Option<CFDictionary<CFString, CFType>> {
     let value = store.get(key)?.downcast_into::<CFDictionary>()?;
     // SAFETY: the same dictionary; only `find` with a string key reads it, which compares keys
@@ -78,6 +80,7 @@ pub fn dictionary(store: &SCDynamicStore, key: &str) -> Option<CFDictionary<CFSt
     Some(unsafe { CFDictionary::wrap_under_get_rule(value.as_concrete_TypeRef()) })
 }
 
+#[must_use]
 pub fn strings(value: &CFType) -> Option<Vec<String>> {
     let array = value.downcast::<CFArray>()?;
     array
@@ -90,6 +93,7 @@ pub fn strings(value: &CFType) -> Option<Vec<String>> {
         .collect()
 }
 
+#[must_use]
 pub fn service_name(process_name: &str, service_id: &str) -> Option<String> {
     let process_name = CFString::new(process_name);
     // SAFETY: a valid name; the result is a +1 reference or NULL.
@@ -105,7 +109,7 @@ pub fn service_name(process_name: &str, service_id: &str) -> Option<String> {
     // SAFETY: valid preferences and string; the result is a +1 reference or NULL.
     let service = unsafe {
         SCNetworkServiceCopy(
-            preferences.as_CFTypeRef() as _,
+            preferences.as_CFTypeRef().cast(),
             service_id.as_concrete_TypeRef(),
         )
     };
@@ -115,7 +119,7 @@ pub fn service_name(process_name: &str, service_id: &str) -> Option<String> {
     // SAFETY: a +1 reference from SCNetworkServiceCopy.
     let service = unsafe { CFType::wrap_under_create_rule(service.cast()) };
     // SAFETY: a valid service; the name, if any, belongs to it.
-    let name = unsafe { SCNetworkServiceGetName(service.as_CFTypeRef() as _) };
+    let name = unsafe { SCNetworkServiceGetName(service.as_CFTypeRef().cast()) };
     if name.is_null() {
         return None;
     }

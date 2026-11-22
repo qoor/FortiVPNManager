@@ -46,7 +46,7 @@ impl Process {
         }
         let mut code = 0;
         // SAFETY: As in `kill`; `code` is live for the call.
-        if unsafe { GetExitCodeProcess(self.0.as_raw_handle(), &mut code) } == 0 {
+        if unsafe { GetExitCodeProcess(self.0.as_raw_handle(), &raw mut code) } == 0 {
             return Err(last_error("GetExitCodeProcess"));
         }
         Ok(code)
@@ -75,11 +75,11 @@ pub fn spawn(
     let handles = stdio.each_ref().map(AsRawHandle::as_raw_handle);
     let mut size = 0;
     // SAFETY: Without a list the call only writes the size a list for one attribute needs.
-    unsafe { InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &mut size) };
+    unsafe { InitializeProcThreadAttributeList(ptr::null_mut(), 1, 0, &raw mut size) };
     let mut list = vec![0_usize; size.div_ceil(mem::size_of::<usize>())];
     let attributes: LPPROC_THREAD_ATTRIBUTE_LIST = list.as_mut_ptr().cast();
     // SAFETY: `list` holds `size` bytes, aligned for the pointers it keeps.
-    if unsafe { InitializeProcThreadAttributeList(attributes, 1, 0, &mut size) } == 0 {
+    if unsafe { InitializeProcThreadAttributeList(attributes, 1, 0, &raw mut size) } == 0 {
         return Err(last_error("InitializeProcThreadAttributeList"));
     }
     // SAFETY: The list was initialized above for one attribute and is deleted only after this.
@@ -91,7 +91,7 @@ pub fn spawn(
 
 /// # Safety
 ///
-/// `attributes` points to a list that InitializeProcThreadAttributeList initialized for one
+/// `attributes` points to a list that `InitializeProcThreadAttributeList` initialized for one
 /// attribute, and the list is not deleted before this returns.
 unsafe fn start(
     program: &str,
@@ -143,7 +143,7 @@ unsafe fn start(
             environment.as_ptr().cast(),
             ptr::null(),
             ptr::from_ref(&startup).cast(),
-            &mut information,
+            &raw mut information,
         )
     };
     if created == 0 {

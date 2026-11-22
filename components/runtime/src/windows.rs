@@ -36,6 +36,7 @@ pub extern "C" fn fvm_runtime_start() -> AppPipes {
 
 /// Starts the runtime and returns the app's ends of its pipes: the one it reads and the one it
 /// writes.
+#[must_use]
 pub fn start() -> (PipeReader, PipeWriter) {
     let (runtime_reader, app_writer) = pipe();
     let (app_reader, runtime_writer) = pipe();
@@ -48,7 +49,7 @@ pub fn start() -> (PipeReader, PipeWriter) {
     thread::Builder::new()
         .name("fvm-runtime".into())
         .spawn(move || {
-            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out)
+            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out);
         })
         .expect("starting the runtime thread");
     (app_reader, app_writer)
@@ -93,7 +94,7 @@ mod tests {
         let (app_reader, runtime_writer) = pipe();
         let (delivered, received) = mpsc::channel();
         let outgoing = link::connect(runtime_reader, runtime_writer, move |message| {
-            delivered.send(message).unwrap()
+            delivered.send(message).unwrap();
         });
 
         stream::send(

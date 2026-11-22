@@ -145,7 +145,7 @@ struct Fields<'t, 'a> {
     target_locations: Vec<LineColumn>,
 }
 
-impl<'t, 'a> Fields<'t, 'a> {
+impl<'t> Fields<'t, '_> {
     fn root(&mut self, pairs: &Pairs) -> Result<Settings, ConfigProblem> {
         let mut settings = Settings::default();
         for &(key, value) in pairs {

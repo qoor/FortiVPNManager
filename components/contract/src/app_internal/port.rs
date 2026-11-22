@@ -51,7 +51,7 @@ pub enum PortRequest {
     /// Answered by `Registered`, or `RegistrationFailed`.
     SetLoginItem { enabled: bool },
 
-    /// The SSL VPN connections the official FortiClient keeps, read only; Windows imports its
+    /// The SSL VPN connections the official `FortiClient` keeps, read only; Windows imports its
     /// settings from them. Answered by `FortiClientConnections`.
     FortiClientConnections {},
 
@@ -117,7 +117,7 @@ pub enum PortResponse {
         opened: bool,
     },
 
-    /// Empty where FortiClient keeps none, or on an OS whose FortiClient the app doesn't read.
+    /// Empty where `FortiClient` keeps none, or on an OS whose `FortiClient` the app doesn't read.
     FortiClientConnections {
         connections: Vec<FortiClientConnection>,
     },
@@ -128,7 +128,7 @@ pub enum PortResponse {
     },
 }
 
-/// An SSL VPN connection of FortiClient: its name and its `Server` value as FortiClient keeps it,
+/// An SSL VPN connection of `FortiClient`: its name and its `Server` value as `FortiClient` keeps it,
 /// usually `host:port`.
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

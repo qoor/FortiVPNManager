@@ -25,6 +25,7 @@ pub fn read(bytes: &[u8]) -> Result<State, serde_json::Error> {
     serde_json::from_slice::<Wire>(bytes).map(Wire::into_state)
 }
 
+#[must_use]
 pub fn to_bytes(state: &State) -> Vec<u8> {
     let mut bytes =
         serde_json::to_vec_pretty(&Wire::from_state(state)).expect("state.json encodes");

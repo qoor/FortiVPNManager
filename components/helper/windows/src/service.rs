@@ -29,8 +29,8 @@ const LOG_SOURCE: &str = "FortiVPNManager Helper";
 const RUN_DIRECTORY: &str =
     r"C:\Windows\System32\config\systemprofile\AppData\Local\FortiVPNManager";
 /// Who may do what with the pipe, in SDDL. The system account may do anything; every account of this
-/// PC (Authenticated Users) may read and write it, but not create instances of it (FILE_GENERIC_READ
-/// | FILE_GENERIC_WRITE without FILE_CREATE_PIPE_INSTANCE), so no program can open a pipe of the
+/// PC (Authenticated Users) may read and write it, but not create instances of it (`FILE_GENERIC_READ`
+/// | `FILE_GENERIC_WRITE` without `FILE_CREATE_PIPE_INSTANCE`), so no program can open a pipe of the
 /// same name next to this one. No single user is singled out (user decision, 2026-11-13); a run
 /// belongs to the Windows session that started it.
 const PIPE_ACCESS: &str = "D:P(A;;GA;;;SY)(A;;0x12019b;;;AU)";

@@ -43,11 +43,13 @@ fn request(method: Method, path: &str, query: &[(&str, &str)]) -> Request {
 }
 
 /// `users.getProfile`: the signed-in address and the mailbox's current history ID.
+#[must_use]
 pub fn profile() -> Request {
     request(Method::Get, "profile", &[])
 }
 
 /// `users.history.list`: messages added after `start_history_id`, one page.
+#[must_use]
 pub fn history(start_history_id: &str, page_token: Option<&str>) -> Request {
     let mut query = vec![
         ("startHistoryId", start_history_id),
@@ -60,6 +62,7 @@ pub fn history(start_history_id: &str, page_token: Option<&str>) -> Request {
 
 /// `users.messages.get` with only the labels, the arrival time and the Subject and Date headers.
 /// `None` for an ID that cannot be a Gmail message ID; treat it as a message that is gone.
+#[must_use]
 pub fn message_metadata(id: &str) -> Option<Request> {
     is_safe_identifier(id).then(|| {
         request(
@@ -76,11 +79,13 @@ pub fn message_metadata(id: &str) -> Option<Request> {
 
 /// `users.messages.trash`: moves the message to the trash, which Gmail empties after 30 days.
 /// `None` for an ID that cannot be a Gmail message ID.
+#[must_use]
 pub fn trash(id: &str) -> Option<Request> {
     is_safe_identifier(id).then(|| request(Method::Post, &format!("messages/{id}/trash"), &[]))
 }
 
 /// `users.messages.list` for a Gmail search, newest first.
+#[must_use]
 pub fn list_messages(search: &str, include_spam_trash: bool, max_results: u32) -> Request {
     let max_results = max_results.to_string();
     let include_spam_trash = if include_spam_trash { "true" } else { "false" };
@@ -104,6 +109,7 @@ fn is_safe_identifier(value: &str) -> bool {
 }
 
 /// History IDs are unsigned 64-bit integers written in decimal.
+#[must_use]
 pub fn is_valid_history_id(value: &str) -> bool {
     value.len() <= 20 && value.parse::<u64>().is_ok()
 }
@@ -127,6 +133,7 @@ pub enum ApiError {
 
 impl ApiError {
     /// `None` for a success.
+    #[must_use]
     pub fn classify(status: u16, body: &[u8]) -> Option<Self> {
         Some(match status {
             200..=299 => return None,
@@ -146,6 +153,7 @@ impl ApiError {
     }
 
     /// Worth another try before giving up.
+    #[must_use]
     pub fn is_transient(&self) -> bool {
         matches!(self, ApiError::RateLimited | ApiError::Server { .. })
     }
@@ -211,11 +219,13 @@ impl Profile {
     }
 
     /// The history ID to list from; `None` when it is not one, and the session searches instead.
+    #[must_use]
     pub fn usable_history_id(&self) -> Option<&str> {
         is_valid_history_id(&self.history_id).then_some(self.history_id.as_str())
     }
 
     /// Whether this is the Gmail address `address`, without regard to case.
+    #[must_use]
     pub fn belongs_to(&self, address: &str) -> bool {
         self.email_address.to_lowercase() == address.to_lowercase()
     }
@@ -359,6 +369,7 @@ impl MessageMetadata {
     }
 
     /// The raw value of the first header named `name`, without regard to case.
+    #[must_use]
     pub fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()

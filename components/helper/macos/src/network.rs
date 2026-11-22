@@ -1015,7 +1015,7 @@ fn has_dns(settings: &NetworkSettings, store: &SCDynamicStore) -> bool {
     dns_keys(settings).into_iter().all(|(key, value)| {
         let stored = store
             .get(key.as_str())
-            .and_then(|stored| stored.downcast_into::<CFDictionary>());
+            .and_then(core_foundation::propertylist::CFPropertyList::downcast_into::<CFDictionary>);
         match (stored, value) {
             (None, None) => true,
             (Some(stored), Some(value)) => stored.as_CFType() == value.as_CFType(),

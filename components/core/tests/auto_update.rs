@@ -626,7 +626,7 @@ fn only_exact_marker_lines_switch_the_language() {
     assert_eq!(titles["en"].len(), 13);
 }
 
-const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+const DAY: Duration = Duration::from_hours(24);
 
 fn last_check() -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1_900_000_000)
@@ -639,7 +639,7 @@ fn a_check_is_due_once_a_day_has_passed() {
         (Duration::ZERO, false),
         (Duration::from_secs(1), false),
         (DAY / 2, false),
-        (DAY - Duration::from_secs(1), false),
+        (DAY.checked_sub(Duration::from_secs(1)).unwrap(), false),
         (DAY, true),
         (DAY + Duration::from_secs(1), true),
     ] {
@@ -660,7 +660,7 @@ fn a_check_is_due_when_the_clock_was_set_back_before_the_last_check() {
     let last = last_check();
     for set_back in [
         Duration::from_secs(1),
-        Duration::from_secs(60 * 60),
+        Duration::from_hours(1),
         DAY,
         DAY * 365,
     ] {
@@ -720,7 +720,10 @@ fn opening_the_page_checks_once_five_minutes_have_passed() {
     for (elapsed, due) in [
         (Duration::ZERO, false),
         (Duration::from_secs(1), false),
-        (MINUTE * 5 - Duration::from_millis(1), false),
+        (
+            (MINUTE * 5).checked_sub(Duration::from_millis(1)).unwrap(),
+            false,
+        ),
         (MINUTE * 5, true),
         (MINUTE * 6, true),
         (DAY, true),

@@ -129,8 +129,8 @@ fn without_sessions_left_nothing_is_logged_out() {
     let directory = RunDirectory::new();
     let cleaned = clean_up(&directory, &secrets);
     assert!(cleaned.logs.is_empty(), "{:?}", cleaned.logs);
-    assert!(secrets.deletes().is_empty());
-    assert!(gateway.connections().is_empty());
+    assert_eq!(secrets.deletes(), Vec::<String>::new());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn both_run_records_are_reverted_and_removed() {
     let cleaned = clean_up(&directory, &secrets);
     assert_eq!(cleaned.reverted, [changes("first"), changes("second")]);
     assert!(cleaned.logs.is_empty(), "{:?}", cleaned.logs);
-    assert!(cleaned.left.is_empty());
+    assert_eq!(cleaned.left, []);
     assert_eq!(directory.names(), ["config.7", "run.json.tmp"]);
 }
 
@@ -159,7 +159,7 @@ fn an_unreadable_run_record_is_logged_and_removed() {
     fs::create_dir(&directory.path).unwrap();
     fs::write(directory.file("run.json"), "not JSON").unwrap();
     let cleaned = clean_up(&directory, &secrets);
-    assert!(cleaned.reverted.is_empty());
+    assert_eq!(cleaned.reverted, []);
     assert_eq!(
         cleaned.logs,
         [(
@@ -170,7 +170,7 @@ fn an_unreadable_run_record_is_logged_and_removed() {
             )
         )]
     );
-    assert!(directory.names().is_empty());
+    assert_eq!(directory.names(), Vec::<String>::new());
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn the_sessions_left_are_logged_out_even_when_the_run_directory_cannot_be_used()
     assert_eq!(gateway.wait_for_connections(1), [TLS_HANDSHAKE.to_vec()]);
     assert_eq!(secrets.deletes(), [ATTEMPT]);
     assert!(secrets.stored().is_empty());
-    assert!(cleaned.left.is_empty());
+    assert_eq!(cleaned.left, []);
     assert_eq!(cleaned.logs.len(), 2, "{:?}", cleaned.logs);
     assert_eq!(cleaned.logs[0].0, LogLevel::Error);
     assert!(
@@ -286,14 +286,14 @@ fn the_network_settings_a_revert_left_are_reverted_again_and_their_record_remove
     )
     .unwrap();
     let cleaned = clean_up(&directory, &secrets);
-    assert!(cleaned.reverted.is_empty());
+    assert_eq!(cleaned.reverted, []);
     assert_eq!(
         cleaned.reverted_again,
         [changes("first"), changes("second")]
     );
-    assert!(cleaned.unreverted.is_empty());
+    assert_eq!(cleaned.unreverted, []);
     assert!(cleaned.logs.is_empty(), "{:?}", cleaned.logs);
-    assert!(directory.names().is_empty());
+    assert_eq!(directory.names(), Vec::<String>::new());
 }
 
 #[test]
@@ -335,8 +335,8 @@ fn an_unreadable_unreverted_change_record_is_logged_and_removed() {
     fs::create_dir(&directory.path).unwrap();
     fs::write(directory.file("unreverted-changes.json"), "not JSON").unwrap();
     let cleaned = clean_up(&directory, &secrets);
-    assert!(cleaned.reverted_again.is_empty());
-    assert!(cleaned.unreverted.is_empty());
+    assert_eq!(cleaned.reverted_again, []);
+    assert_eq!(cleaned.unreverted, []);
     assert_eq!(
         cleaned.logs,
         [(
@@ -347,5 +347,5 @@ fn an_unreadable_unreverted_change_record_is_logged_and_removed() {
             )
         )]
     );
-    assert!(directory.names().is_empty());
+    assert_eq!(directory.names(), Vec::<String>::new());
 }

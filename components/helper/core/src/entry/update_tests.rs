@@ -27,7 +27,7 @@ impl Backend for NoBackend {
         "none"
     }
 
-    fn version(&self) -> &str {
+    fn version(&self) -> &'static str {
         "0"
     }
 
@@ -185,21 +185,16 @@ fn unreadable_update_requests_and_relative_paths_are_invalid() {
         assert_eq!(answer.id, id);
         assert!(answer.log.is_empty(), "{:?}", answer.log);
         let json = answer.json.unwrap();
-        let code = match id {
-            1 => {
-                let UpdatePrepareReply::Failure { error } = serde_json::from_str(&json).unwrap()
-                else {
-                    panic!("{json}");
-                };
-                error.code
-            }
-            _ => {
-                let UpdateInstallReply::Failure { error } = serde_json::from_str(&json).unwrap()
-                else {
-                    panic!("{json}");
-                };
-                error.code
-            }
+        let code = if id == 1 {
+            let UpdatePrepareReply::Failure { error } = serde_json::from_str(&json).unwrap() else {
+                panic!("{json}");
+            };
+            error.code
+        } else {
+            let UpdateInstallReply::Failure { error } = serde_json::from_str(&json).unwrap() else {
+                panic!("{json}");
+            };
+            error.code
         };
         assert_eq!(code, HelperErrorCode::InvalidRequest);
     }

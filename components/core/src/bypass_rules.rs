@@ -17,6 +17,7 @@ use fvm_contract::app_internal::section::{
 
 /// The network this Mac is on, such as `10.20.161.0/24`; `None` when its address or mask is not
 /// usable.
+#[must_use]
 pub fn local_network(snapshot: &BypassRoutesSnapshot) -> Option<Ipv4Network> {
     Ipv4Network::enclosing(&snapshot.address, &snapshot.subnet_mask).ok()
 }
@@ -46,6 +47,7 @@ pub fn current_network(
 /// The position of the target that is the VPN server's address, when `host` is an address: the
 /// server always goes out directly, so it can't be an exception target (user decision,
 /// 2026-11-16). A network that holds it is fine.
+#[must_use]
 pub fn vpn_server_target(targets: &[Ipv4Network], host: &str) -> Option<usize> {
     let server = Ipv4Network::host(host.parse().ok()?)?;
     targets.iter().position(|target| *target == server)
@@ -77,6 +79,7 @@ pub struct RoutePlan {
     pub routes: Vec<BypassRoute>,
 }
 
+#[must_use]
 pub fn plan_routes(
     networks: &[Ipv4Network],
     targets: &[Ipv4Network],
@@ -119,6 +122,7 @@ pub fn plan_routes(
 
 impl RoutePlan {
     /// The status line once the routes are in place.
+    #[must_use]
     pub fn status(&self, snapshot: &BypassRoutesSnapshot) -> BypassStatus {
         match self.applicability {
             Applicability::Applies { .. } => BypassStatus::Applied {
@@ -156,10 +160,12 @@ impl ListDraft {
         }
     }
 
+    #[must_use]
     pub fn rows(&self) -> &[String] {
         &self.rows
     }
 
+    #[must_use]
     pub fn saved(&self) -> &[Ipv4Network] {
         &self.saved
     }
@@ -182,6 +188,7 @@ impl ListDraft {
     }
 
     /// Whether a row names or overlaps `entry`, so adding it would make a problem row.
+    #[must_use]
     pub fn has_row_overlapping(&self, entry: &Ipv4Network) -> bool {
         self.rows.iter().any(|row| {
             row.parse::<Ipv4Network>()
@@ -191,6 +198,7 @@ impl ListDraft {
 
     /// The rows with a problem, in row order. A row is compared with the earlier rows without a
     /// problem.
+    #[must_use]
     pub fn problems(&self) -> Vec<(usize, RowProblem)> {
         let mut problems = Vec::new();
         let mut seen: Vec<Ipv4Network> = Vec::new();
@@ -221,6 +229,7 @@ impl ListDraft {
     }
 
     /// The rows as entries; `None` while a row has a problem.
+    #[must_use]
     pub fn entries(&self) -> Option<Vec<Ipv4Network>> {
         let mut entries: Vec<Ipv4Network> = Vec::new();
         for row in &self.rows {
@@ -237,6 +246,7 @@ impl ListDraft {
 
     /// Whether saving would change the list. Rows with a problem count as a change; another
     /// spelling of the same entry, such as `/32` on a host, does not.
+    #[must_use]
     pub fn has_changes(&self) -> bool {
         self.entries().as_deref() != Some(self.saved.as_slice())
     }
@@ -274,6 +284,7 @@ impl ListDraft {
     }
 
     /// The list as the section shows it.
+    #[must_use]
     pub fn rule_list(&self) -> RuleList {
         RuleList {
             rows: self.rows.clone(),
@@ -308,6 +319,7 @@ pub struct RuleDrafts {
 impl RuleDrafts {
     /// Drafts without changes, on load and after a save of `networks` and `targets`.
     /// `vpn_server` is the VPN server's address, when `vpn.host` is one.
+    #[must_use]
     pub fn new(
         networks: Vec<Ipv4Network>,
         targets: Vec<Ipv4Network>,
@@ -345,17 +357,20 @@ impl RuleDrafts {
         local_network(snapshot?).filter(|network| !self.networks.has_row_overlapping(network))
     }
 
+    #[must_use]
     pub fn has_changes(&self) -> bool {
         self.networks.has_changes() || self.targets.has_changes()
     }
 
     /// The networks and targets a save writes; `None` while a row of either list has a problem.
+    #[must_use]
     pub fn entries(&self) -> Option<(Vec<Ipv4Network>, Vec<Ipv4Network>)> {
         Some((self.networks.entries()?, self.targets.entries()?))
     }
 
     /// The section, with the primary network as last read, the status of the routes and why the
     /// last save failed, if it did.
+    #[must_use]
     pub fn section(
         &self,
         current: Option<&BypassRoutesSnapshot>,

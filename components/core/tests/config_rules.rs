@@ -30,14 +30,14 @@ fn changed(change: impl FnOnce(&mut Settings)) -> Settings {
 
 #[test]
 fn the_default_lists_are_empty() {
-    assert!(Settings::default().routes.bypass_vpn.is_empty());
-    assert!(decode("routes:\n").settings.routes.bypass_vpn.is_empty());
-    assert!(
+    assert_eq!(Settings::default().routes.bypass_vpn, []);
+    assert_eq!(decode("routes:\n").settings.routes.bypass_vpn, []);
+    assert_eq!(
         decode("routes: { bypass_vpn: ~ }\n")
             .settings
             .routes
-            .bypass_vpn
-            .is_empty()
+            .bypass_vpn,
+        [] as [fvm_contract::app_helper::Ipv4Network; 0]
     );
 }
 
@@ -372,7 +372,7 @@ fn days_are_normalized() {
         days("connection:\n  schedule: { days: [sun, fri, mon, \"fri\"] }\n"),
         [Weekday::Mon, Weekday::Fri, Weekday::Sun]
     );
-    assert!(days("connection:\n  schedule: { days: [] }\n").is_empty());
+    assert_eq!(days("connection:\n  schedule: { days: [] }\n"), []);
     assert_eq!(
         days("connection:\n  schedule: { days: ~ }\n"),
         Settings::default().connection.schedule.days

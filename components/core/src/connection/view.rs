@@ -49,6 +49,7 @@ impl ConnectionManager {
     }
 
     /// What the schedule does next; `None` while it is off.
+    #[must_use]
     pub fn schedule_outlook(&self) -> Option<ScheduleOutlook> {
         let schedule = self.settings.connection.schedule.as_ref()?;
         let wants_connection = self.wants_connection && !matches!(self.phase, Phase::Failed(_));
@@ -78,6 +79,7 @@ impl ConnectionManager {
         })
     }
 
+    #[must_use]
     pub fn readiness_section(&self) -> ReadinessSection {
         let helper = match &self.helper {
             None => HelperState::Checking {},

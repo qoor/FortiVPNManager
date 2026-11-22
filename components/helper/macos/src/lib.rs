@@ -1,4 +1,4 @@
-//! The macOS Helper: a root LaunchDaemon, demand-launched through its mach service. It runs the
+//! The macOS Helper: a root `LaunchDaemon`, demand-launched through its mach service. It runs the
 //! shared Helper entry with a session manager for openconnect, keeping the session secrets in the
 //! System keychain, takes the app's connections over NSXPC, answers the build check, and changes
 //! the network settings and the exception routes as the entry asks.

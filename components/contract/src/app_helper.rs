@@ -157,7 +157,9 @@ impl TryFrom<u8> for Milestone {
     type Error = UnknownMilestone;
 
     fn try_from(position: u8) -> Result<Self, Self::Error> {
-        use Milestone::*;
+        use Milestone::{
+            Authenticated, ConnectedToGateway, OtpPrompted, OtpSubmitted, Started, TunnelUp,
+        };
         [
             Started,
             ConnectedToGateway,
@@ -366,6 +368,7 @@ impl Ipv4Network {
     }
 
     /// The single host `address`, if it can be an exception target.
+    #[must_use]
     pub fn host(address: Ipv4Addr) -> Option<Self> {
         Self::new(u32::from(address), MAX_PREFIX_LENGTH).ok()
     }
@@ -399,30 +402,36 @@ impl Ipv4Network {
         })
     }
 
+    #[must_use]
     pub fn address(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.address)
     }
 
+    #[must_use]
     pub fn prefix_length(&self) -> u8 {
         u8::try_from(self.prefix_length).expect("prefix lengths are at most 32")
     }
 
+    #[must_use]
     pub fn contains_address(&self, address: Ipv4Addr) -> bool {
         u32::from(address) & mask(self.prefix_length) == self.address
     }
 
     /// Whether all of `other` is inside this network.
+    #[must_use]
     pub fn contains(&self, other: &Self) -> bool {
         other.prefix_length >= self.prefix_length
             && other.address & mask(self.prefix_length) == self.address
     }
 
     /// Whether the two share an address, which means one contains the other.
+    #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
         self.contains(other) || other.contains(self)
     }
 
     /// The exception route that sends this network through `gateway`.
+    #[must_use]
     pub fn route_through(&self, gateway: &str) -> BypassRoute {
         BypassRoute {
             destination: self.address().to_string(),
@@ -558,6 +567,7 @@ pub struct Version {
 }
 
 impl Version {
+    #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         let number = |part: &str| {
             let plain = !part.is_empty()
@@ -576,6 +586,7 @@ impl Version {
         })
     }
 
+    #[must_use]
     pub fn from_tag(tag: &str) -> Option<Self> {
         Self::parse(tag.strip_prefix('v')?)
     }
@@ -612,6 +623,7 @@ impl From<Version> for String {
     }
 }
 
+#[must_use]
 pub fn installer_version(file_name: &str, extension: &str) -> Option<Version> {
     let version = file_name
         .strip_prefix("FortiVPNManager-")?

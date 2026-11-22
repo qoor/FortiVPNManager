@@ -20,6 +20,7 @@ pub extern "C" fn fvm_runtime_start() -> i32 {
 }
 
 /// Starts the runtime and returns Swift's end of the stream.
+#[must_use]
 pub fn start() -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");
     let (inputs, received) = mpsc::channel();
@@ -32,7 +33,7 @@ pub fn start() -> UnixStream {
     thread::Builder::new()
         .name("fvm-runtime".into())
         .spawn(move || {
-            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out)
+            orchestration::run(paths(), LATEST_RELEASE_URL.into(), inputs, received, out);
         })
         .expect("starting the runtime thread");
     theirs
@@ -88,7 +89,7 @@ mod tests {
         let (delivered, received) = mpsc::channel();
         let reader = ours.try_clone().unwrap();
         let outgoing = link::connect(reader, ours, move |message| {
-            delivered.send(message).unwrap()
+            delivered.send(message).unwrap();
         });
 
         stream::send(

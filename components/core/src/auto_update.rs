@@ -9,8 +9,8 @@ use serde::Deserialize;
 const RELEASES_URL: &str = "https://github.com/qoor/FortiVPNManager/releases";
 pub const LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/qoor/FortiVPNManager/releases/latest";
-const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
-const PAGE_CHECK_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const CHECK_INTERVAL: Duration = Duration::from_hours(24);
+const PAGE_CHECK_INTERVAL: Duration = Duration::from_mins(5);
 pub const DOWNLOADED_PERCENT: u8 = 60;
 pub const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
 const RATE_WINDOW: Duration = Duration::from_secs(5);
@@ -75,18 +75,22 @@ pub struct Update {
     pub release_note_titles: BTreeMap<String, Vec<String>>,
 }
 
+#[must_use]
 pub fn check_due(last_check: SystemTime, now: SystemTime) -> bool {
     now < last_check || now >= next_check_at(last_check)
 }
 
+#[must_use]
 pub fn next_check_at(last_check: SystemTime) -> SystemTime {
     last_check + CHECK_INTERVAL
 }
 
+#[must_use]
 pub fn page_check_due(last_check: SystemTime, now: SystemTime) -> bool {
     now < last_check || now >= last_check + PAGE_CHECK_INTERVAL
 }
 
+#[must_use]
 pub fn check(current: Version, release: &Release, platform: Platform) -> Check {
     let version = release.version;
     if version <= current {
@@ -153,6 +157,7 @@ fn language_marker(line: &str) -> Option<&str> {
     (!code.is_empty() && code.bytes().all(|byte| byte.is_ascii_lowercase())).then_some(code)
 }
 
+#[must_use]
 pub fn failed_install_version(target: Version, running: Version) -> Option<Version> {
     (target > running).then_some(target)
 }
@@ -164,6 +169,7 @@ pub struct DownloadProgress {
 }
 
 impl DownloadProgress {
+    #[must_use]
     pub fn new(total: u64) -> Self {
         Self {
             total,
@@ -182,14 +188,17 @@ impl DownloadProgress {
         }
     }
 
+    #[must_use]
     pub fn total(&self) -> u64 {
         self.total
     }
 
+    #[must_use]
     pub fn received(&self) -> u64 {
         self.newest().1
     }
 
+    #[must_use]
     pub fn percent(&self) -> u8 {
         let done = u128::from(self.received().min(self.total)) * u128::from(DOWNLOADED_PERCENT);
         done.checked_div(u128::from(self.total))
@@ -198,6 +207,7 @@ impl DownloadProgress {
             })
     }
 
+    #[must_use]
     pub fn remaining(&self) -> RemainingTime {
         let (start, start_bytes) = self.samples[0];
         let (now, now_bytes) = self.newest();
@@ -206,7 +216,7 @@ impl DownloadProgress {
             return RemainingTime::Calculating {};
         }
         let left = u128::from(self.total.saturating_sub(now_bytes));
-        let nanos = (left * (now - start).as_nanos()).div_ceil(u128::from(bytes));
+        let nanos = (left * now.checked_sub(start).unwrap().as_nanos()).div_ceil(u128::from(bytes));
         rounded(nanos)
     }
 

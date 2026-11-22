@@ -180,7 +180,7 @@ impl ConnectionManager {
                     (Some(OtpFailure::Authentication), _) => self.fail(Failure::GmailRejected),
                     (Some(OtpFailure::Network), _) => self.network_failure(RetryReason::Network),
                     (None, HelperErrorCode::InvalidRequest | HelperErrorCode::NotAuthorized) => {
-                        self.fail(Failure::Helper { code })
+                        self.fail(Failure::Helper { code });
                     }
                     (
                         None,
@@ -238,6 +238,7 @@ impl ConnectionManager {
     /// Whether the run of attempt `id` is still to be started: no stop was decided since it was
     /// asked for. A stop decided before the run's Connect left would reach the Helper first and
     /// find nothing to stop, so such a run is dropped instead.
+    #[must_use]
     pub fn wants_run(&self, id: &AttemptId) -> bool {
         matches!(&self.phase, Phase::Connecting(attempt)
             if attempt.id == *id && attempt.stage == Stage::Run && attempt.stop_requested.is_none())
@@ -245,6 +246,7 @@ impl ConnectionManager {
 
     /// The attempt the connection is about now: the one connecting, connected or being stopped.
     /// Each attempt begun has a new one.
+    #[must_use]
     pub fn current_attempt(&self) -> Option<&AttemptId> {
         match &self.phase {
             Phase::Connecting(attempt) => Some(&attempt.id),
@@ -258,6 +260,7 @@ impl ConnectionManager {
     /// waiting to try again. Not while it waits for an away user outside the scheduled hours, nor
     /// once it stopped for good: disconnected, paused after failures, or quitting. The exception
     /// routes are in place exactly then (user decision, 2026-11-16).
+    #[must_use]
     pub fn wants_vpn(&self) -> bool {
         if self.terminated {
             return false;
@@ -275,6 +278,7 @@ impl ConnectionManager {
 
     /// Whether attempt `id`'s OTP session is still to be opened: it was not closed while the
     /// session's secrets were read.
+    #[must_use]
     pub fn wants_otp_session(&self, id: &AttemptId) -> bool {
         matches!(&self.phase, Phase::Connecting(attempt)
             if attempt.id == *id && attempt.otp_session_open)
@@ -283,6 +287,7 @@ impl ConnectionManager {
     /// Whether a readiness check that found the Helper at `helper_build` should have it exit when
     /// idle, so the system starts this build's Helper: only another build, and only while no run
     /// is going on.
+    #[must_use]
     pub fn should_restart_helper(&self, helper_build: &str) -> bool {
         helper_build != self.app_build && !self.run_active()
     }

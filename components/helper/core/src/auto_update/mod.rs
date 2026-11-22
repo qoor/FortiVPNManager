@@ -83,6 +83,7 @@ impl Staged {
 }
 
 impl Installer {
+    #[must_use]
     pub fn new(records: PathBuf, public_key: [u8; 32]) -> Self {
         Self {
             staging: records.join(PREPARED),

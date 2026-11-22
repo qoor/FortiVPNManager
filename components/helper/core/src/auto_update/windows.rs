@@ -192,32 +192,29 @@ pub(super) fn recover_runs(installer: &Installer, image: &Path, log: &Log) -> Op
                     .and_then(|process| identity(recorded.pid, process));
                 (identity.as_ref() == Some(recorded)).then_some((recorded.pid, system))
             });
-        match live {
-            Some((pid, system)) => {
-                log(
-                    LogLevel::Notice,
-                    format!(
-                        "update install {install_id}: waiting for msiexec {pid}, started before the Helper restarted"
-                    ),
-                );
-                let waiter = wait(installer, staged, install_id, log, move || {
-                    system
-                        .process(Pid::from_u32(pid))
-                        .and_then(Process::wait)
-                        .and_then(|status| status.code())
-                });
-                runner = Some(Runner { pid, waiter });
-            }
-            None => {
-                log(
-                    LogLevel::Notice,
-                    format!(
-                        "update install {install_id}: msiexec ended while no Helper waited for it; the Helper is {}, the update {}",
-                        installer.current, record.version
-                    ),
-                );
-                finish(&installer.records, &staged, install_id, None, log);
-            }
+        if let Some((pid, system)) = live {
+            log(
+                LogLevel::Notice,
+                format!(
+                    "update install {install_id}: waiting for msiexec {pid}, started before the Helper restarted"
+                ),
+            );
+            let waiter = wait(installer, staged, install_id, log, move || {
+                system
+                    .process(Pid::from_u32(pid))
+                    .and_then(Process::wait)
+                    .and_then(|status| status.code())
+            });
+            runner = Some(Runner { pid, waiter });
+        } else {
+            log(
+                LogLevel::Notice,
+                format!(
+                    "update install {install_id}: msiexec ended while no Helper waited for it; the Helper is {}, the update {}",
+                    installer.current, record.version
+                ),
+            );
+            finish(&installer.records, &staged, install_id, None, log);
         }
     }
     runner

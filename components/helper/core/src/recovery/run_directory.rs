@@ -371,7 +371,7 @@ mod tests {
             [pair(&directory, "run.json", "later")]
         );
         second.remove().unwrap();
-        assert!(recorded(&directory).is_empty());
+        assert_eq!(recorded(&directory), []);
 
         let mut unrecorded = RunFiles::new(&directory, RecordSlot::Second);
         assert_eq!(unrecorded.take_first_slot(), None);

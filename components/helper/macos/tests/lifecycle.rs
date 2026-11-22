@@ -231,7 +231,7 @@ fn sigterm_during_a_run_stops_it_and_exits_once_its_exit_is_reported() {
     assert!(later.is_empty(), "{later:#?}");
     assert_eq!(os_side.count(is("exitAfterDraining")), 1);
     assert_eq!(os_side.count(is("exitNow")), 0);
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
 }
 
 #[test]

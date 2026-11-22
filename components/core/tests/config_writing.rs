@@ -10,7 +10,7 @@ use fvm_core::config::{self, Ipv4Network, Settings, Update};
 fn the_default_template_reads_back_as_the_defaults() {
     let loaded = decode(&render(&Settings::default()));
     assert_eq!(loaded.settings, Settings::default());
-    assert!(loaded.warnings.is_empty());
+    assert_eq!(loaded.warnings, []);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn certificate_values_are_a_block_list() {
     )));
     let loaded = decode(&text);
     assert_eq!(loaded.settings, non_default());
-    assert!(loaded.warnings.is_empty());
+    assert_eq!(loaded.warnings, []);
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn tricky_strings() -> Vec<String> {
         "DOMAIN\\user",
     ]
     .iter()
-    .map(|text| text.to_string())
+    .map(std::string::ToString::to_string)
     .collect();
     strings.push("x".repeat(5000));
     strings
@@ -169,7 +169,7 @@ fn string_fields_round_trip_exactly() {
         settings.otp.google_client_id = value.clone();
         let loaded = decode(&render(&settings));
         assert_eq!(loaded.settings, settings, "{value:?}");
-        assert!(loaded.warnings.is_empty());
+        assert_eq!(loaded.warnings, []);
     }
 }
 
@@ -218,7 +218,7 @@ fn a_file_that_does_not_pass_is_never_written_over() {
     ));
 }
 
-/// SplitMix64: a tiny deterministic generator for reproducible "random" tests.
+/// `SplitMix64`: a tiny deterministic generator for reproducible "random" tests.
 struct Seeded(u64);
 
 impl Seeded {
@@ -328,7 +328,7 @@ fn random_valid_configs_round_trip() {
         settings.routes.bypass_vpn = random_networks(&mut rng);
         let loaded = decode(&render(&settings));
         assert_eq!(loaded.settings, settings);
-        assert!(loaded.warnings.is_empty());
+        assert_eq!(loaded.warnings, []);
     }
 }
 

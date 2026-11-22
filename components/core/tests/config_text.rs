@@ -398,19 +398,19 @@ fn pins_past_the_limit_are_dropped() {
 
 #[test]
 fn empty_certificate_lists() {
-    assert!(
+    assert_eq!(
         decode("vpn:\n  trusted_cert_pins: []\n")
             .settings
             .vpn
-            .trusted_cert_pins
-            .is_empty()
+            .trusted_cert_pins,
+        [] as [std::string::String; 0]
     );
-    assert!(
+    assert_eq!(
         decode("vpn:\n  trusted_cert_pins:\n")
             .settings
             .vpn
-            .trusted_cert_pins
-            .is_empty()
+            .trusted_cert_pins,
+        [] as [std::string::String; 0]
     );
 }
 
@@ -536,7 +536,7 @@ fn accepted_otp_methods() {
     ] {
         let loaded = decode(&format!("otp:\n  method: {raw}\n"));
         assert_eq!(loaded.settings.otp.method, expected, "{raw}");
-        assert!(loaded.warnings.is_empty());
+        assert_eq!(loaded.warnings, []);
     }
 }
 

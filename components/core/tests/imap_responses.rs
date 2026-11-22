@@ -61,7 +61,10 @@ fn fetch(uid: Option<u32>, internal_date: Option<u64>, header: Option<&[u8]>) ->
 
 fn list(attributes: &[&str], name: &str) -> ListEntry {
     ListEntry {
-        attributes: attributes.iter().map(|a| a.to_string()).collect(),
+        attributes: attributes
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
         name: name.into(),
     }
 }
@@ -720,7 +723,7 @@ fn eight_bit_bytes_in_a_literal_are_kept() {
 #[test]
 fn partial_input_stays_buffered() {
     let mut parser = Parser::default();
-    assert!(parser.feed(b"* 5 EXI").unwrap().is_empty());
+    assert_eq!(parser.feed(b"* 5 EXI").unwrap(), []);
     assert_eq!(
         parser.feed(b"STS\r\n* 6").unwrap(),
         vec![Response::Exists(5)]
@@ -729,7 +732,7 @@ fn partial_input_stays_buffered() {
         parser.feed(b" EXISTS\r\n").unwrap(),
         vec![Response::Exists(6)]
     );
-    assert!(parser.feed(b"").unwrap().is_empty());
+    assert_eq!(parser.feed(b"").unwrap(), []);
 }
 
 #[test]

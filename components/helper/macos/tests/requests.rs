@@ -98,7 +98,7 @@ fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     os_side.wait_until("the exit log", |os_side| {
         os_side.logs().iter().any(|line| line.contains(" exited: "))
     });
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
     assert_eq!(os_side.secrets.deletes(), [ATTEMPT]);
     for line in [
         format!(
@@ -152,8 +152,8 @@ fn a_failed_login_is_reported_as_the_session_ending_the_run() {
              ConnectedToGateway"
         ))
     });
-    assert!(os_side.scratch.run_directory_names().is_empty());
-    assert!(os_side.secrets.saves().is_empty());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
+    assert_eq!(os_side.secrets.saves(), []);
     os_side.assert_no_secret();
 }
 
@@ -170,7 +170,7 @@ fn every_output_batch_names_its_attempt() {
         .map(|output| serde_json::from_str::<Value>(output["json"].as_str().unwrap()).unwrap())
         .map(|batch| batch["attemptID"].clone())
         .collect();
-    assert!(!attempts.is_empty());
+    assert_ne!(attempts, Vec::<Value>::new());
     assert!(
         attempts.iter().all(|attempt| attempt == ATTEMPT),
         "{attempts:?}"
@@ -272,7 +272,7 @@ fn a_second_run_is_refused_and_only_the_owner_controls_the_run() {
         facts["stopInitiator"],
         json!({"helper": {"_0": "userDisconnect"}})
     );
-    assert!(os_side.events(2).is_empty());
+    assert_eq!(os_side.events(2), Vec::<Value>::new());
 
     // With no run, every attempt is unknown.
     let id = os_side.request(1, disconnect(ATTEMPT, "userDisconnect"));
@@ -314,8 +314,8 @@ fn a_bad_connect_request_starts_nothing() {
         error("invalidRequest", "port 0 is refused")
     );
     assert_eq!(os_side.status(1)["sessionRunning"], false);
-    assert!(os_side.events(1).is_empty());
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.events(1), Vec::<Value>::new());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
     os_side.assert_no_secret();
 }
 
@@ -384,7 +384,7 @@ fn the_status_of_a_run_that_is_not_up_needs_no_routing_check() {
     let reply = os_side.status(1);
     assert_eq!(reply["sessionRunning"], true);
     assert!(reply.get("routingComplete").is_none(), "{reply}");
-    assert!(os_side.network_changes().is_empty());
+    assert_eq!(os_side.network_changes(), Vec::<Value>::new());
 }
 
 #[test]
@@ -408,7 +408,7 @@ fn the_owner_going_away_stops_its_run_and_its_queued_requests_are_answered() {
     os_side.wait_until("the exit log", |os_side| {
         os_side.logs().iter().any(|line| line.contains(" exited: "))
     });
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
 }
 
 #[test]
@@ -431,8 +431,8 @@ fn every_request_of_a_gone_app_gets_exactly_one_reply_and_starts_no_run() {
     for id in [connect, otp, stop, status] {
         assert_eq!(os_side.replies(id).len(), 1, "request {id}");
     }
-    assert!(os_side.events(1).is_empty());
-    assert!(os_side.scratch.run_directory_names().is_empty());
+    assert_eq!(os_side.events(1), Vec::<Value>::new());
+    assert_eq!(os_side.scratch.run_directory_names(), Vec::<String>::new());
 }
 
 #[test]

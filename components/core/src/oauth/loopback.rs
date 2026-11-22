@@ -19,6 +19,7 @@ pub struct LoopbackRequest {
 
 impl LoopbackRequest {
     /// The first value of `name`.
+    #[must_use]
     pub fn value(&self, name: &str) -> Option<&str> {
         self.query
             .iter()
@@ -144,6 +145,7 @@ pub enum CallbackDecision {
 }
 
 impl CallbackDecision {
+    #[must_use]
     pub fn decide(request: &LoopbackRequest, expected_state: &str) -> Self {
         if request.path != "/" {
             return CallbackDecision::NotFound;
@@ -174,6 +176,7 @@ impl CallbackDecision {
     }
 
     /// The complete HTTP answer, with the UI's page text; the connection is closed after it.
+    #[must_use]
     pub fn response(&self, pages: &SignInPages) -> Vec<u8> {
         match self {
             CallbackDecision::Authorized { .. } => html(200, "OK", &pages.completed),

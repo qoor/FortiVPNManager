@@ -1,4 +1,4 @@
-//! The NSXPC side: accepts connections from the FortiVPNManager app (the listener pins its signing
+//! The NSXPC side: accepts connections from the `FortiVPNManager` app (the listener pins its signing
 //! identity) and exports a service bound to each one, which answers the version check itself and
 //! passes every other request, unread, to the Helper entry.
 

@@ -96,6 +96,7 @@ fn text_problem(
 
 /// A line break would end the value where a client reads it line by line. The other controls (NEL
 /// included), the Unicode line and paragraph separators and the BOM are never part of a real value.
+#[must_use]
 pub fn is_forbidden(c: char) -> bool {
     c.is_control() || matches!(c, '\u{2028}' | '\u{2029}' | '\u{FEFF}')
 }
@@ -169,6 +170,7 @@ pub fn check_password(password: &str) -> Result<(), String> {
 
 /// openconnect for Windows reads its arguments and stdin in the system's legacy code page, so
 /// anything outside printable ASCII may reach the gateway changed.
+#[must_use]
 pub fn is_username_character(c: char) -> bool {
     c.is_ascii() && !c.is_ascii_control()
 }
@@ -179,6 +181,7 @@ fn is_password_character(c: char) -> bool {
 }
 
 /// Characters that stay as they are in a URL's path.
+#[must_use]
 pub fn is_realm_character(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '~')
 }
@@ -219,6 +222,7 @@ pub fn check_vpn_password(password: &str) -> Result<(), AccountSaveError> {
 
 /// `text` as openconnect compares it: `pin-sha256:` and the standard base64 of a SHA-256 hash of
 /// the gateway's public key, as openconnect prints it when it rejects the gateway.
+#[must_use]
 pub fn certificate_value(text: &str) -> Option<String> {
     let encoded = text.strip_prefix(PIN_PREFIX)?.as_bytes();
     // 32 bytes: 43 characters, the last of which carries 2 unused zero bits, and one '='.

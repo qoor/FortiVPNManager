@@ -830,7 +830,7 @@ pub enum ImportError {
     Config {
         error: ConfigFileError,
     },
-    /// FortiClient keeps no SSL VPN connection.
+    /// `FortiClient` keeps no SSL VPN connection.
     NoFortiClientConnection {},
     /// The connection's server is not `host` or `host:port`.
     InvalidFortiClientServer {

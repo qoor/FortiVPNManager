@@ -65,6 +65,7 @@ pub struct Settings {
 impl Settings {
     /// The settings file's values, which its reader checked against these types' ranges, with the
     /// certificate values it trusts.
+    #[must_use]
     pub fn new(settings: &crate::config::Settings) -> Self {
         let connection = &settings.connection;
         let minutes =
@@ -112,11 +113,13 @@ pub struct VpnAccount {
 
 impl VpnAccount {
     /// The key the failure ledger is kept under.
+    #[must_use]
     pub fn ledger_key(&self) -> String {
         format!("{}@{}", self.username, self.host)
     }
 
     /// The Helper's run request for `attempt`, with the password from the secret storage.
+    #[must_use]
     pub fn run_request(
         &self,
         attempt: AttemptId,

@@ -64,20 +64,17 @@ fn lines(text: &str) -> impl Iterator<Item = &str> {
     let mut rest = Some(text);
     std::iter::from_fn(move || {
         let current = rest?;
-        match current.find(['\r', '\n']) {
-            Some(end) => {
-                let skip = if current[end..].starts_with("\r\n") {
-                    2
-                } else {
-                    1
-                };
-                rest = Some(&current[end + skip..]);
-                Some(&current[..end])
-            }
-            None => {
-                rest = None;
-                Some(current)
-            }
+        if let Some(end) = current.find(['\r', '\n']) {
+            let skip = if current[end..].starts_with("\r\n") {
+                2
+            } else {
+                1
+            };
+            rest = Some(&current[end + skip..]);
+            Some(&current[..end])
+        } else {
+            rest = None;
+            Some(current)
         }
     })
 }

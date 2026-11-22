@@ -92,7 +92,7 @@ struct App {
     sections: Vec<Section>,
     log: Vec<LogLine>,
     open_settings: u32,
-    /// FortiClient's SSL VPN connections, which make the runtime import from FortiClient as on
+    /// `FortiClient`'s SSL VPN connections, which make the runtime import from `FortiClient` as on
     /// Windows; `None` imports openfortivpn's settings file as on macOS.
     forticlient: Option<Vec<FortiClientConnection>>,
     waiter_failure: Option<String>,
@@ -1001,7 +1001,7 @@ fn the_server_field_holds_the_port_unless_it_is_the_default() {
     assert_eq!(app.config_section().account.server, "vpn.example.com");
 
     commit_account(&mut app, |form| {
-        form.server = " vpn.example.com:8443 ".into()
+        form.server = " vpn.example.com:8443 ".into();
     });
     let text = app.config_text();
     assert!(text.contains("  host: \"vpn.example.com\"\n"), "{text}");
@@ -1302,7 +1302,7 @@ fn the_routes_follow_the_network() {
     app.settle_until("the route removed away from the office", |app| {
         app.bypass_status() == Some(&BypassStatus::OutsideNetworks {})
     });
-    assert!(app.exception_routes.is_empty());
+    assert_eq!(app.exception_routes, []);
     // Back at the office, it comes back.
     app.service = Some(office_wifi());
     network_changed(&app);
@@ -1356,7 +1356,7 @@ fn quitting_removes_the_routes_before_the_quit_is_approved() {
     // Nothing writes them again afterwards.
     network_changed(&app);
     app.settle();
-    assert!(app.exception_routes.is_empty());
+    assert_eq!(app.exception_routes, []);
 }
 
 /// A quit approved while a sync's read is under way, here with no Helper to remove the routes:
@@ -1404,7 +1404,7 @@ fn the_routes_are_in_place_only_while_the_vpn_is_wanted() {
     app.settle_until("the rules not applied", |app| {
         app.bypass_status() == Some(&BypassStatus::VpnOff {})
     });
-    assert!(app.exception_routes.is_empty());
+    assert_eq!(app.exception_routes, []);
     want_the_vpn(&mut app);
     app.settle_until("the route written", |app| {
         app.exception_routes == vec![rule_route()]
@@ -1413,7 +1413,7 @@ fn the_routes_are_in_place_only_while_the_vpn_is_wanted() {
     app.settle_until("the route removed", |app| {
         app.bypass_status() == Some(&BypassStatus::VpnOff {})
     });
-    assert!(app.exception_routes.is_empty());
+    assert_eq!(app.exception_routes, []);
 }
 
 /// The VPN server always goes out directly: a file naming its address as a target is refused.
@@ -2485,7 +2485,7 @@ fn each_check_outcome_shows_in_the_section_and_failures_are_logged() {
             },
         }
     );
-    assert!(app.update_notifications().is_empty());
+    assert_eq!(app.update_notifications(), Vec::<&UserNotification>::new());
 }
 
 #[test]
@@ -2497,7 +2497,7 @@ fn a_version_is_announced_once_even_across_launches() {
     app.settle();
     app.checked(200, full_release("26.2.0"));
     assert_eq!(app.update_section().status, update_available("26.2.0"));
-    assert!(app.update_notifications().is_empty());
+    assert_eq!(app.update_notifications(), Vec::<&UserNotification>::new());
 
     for _ in 0..2 {
         app.checked(200, full_release("26.3.0"));
@@ -2738,7 +2738,7 @@ fn cancelling_the_download_deletes_it_and_shows_the_update_again() {
         )
     );
     assert!(section.card_dot && section.menu_badge);
-    assert!(app.prepare_requests().is_empty());
+    assert_eq!(app.prepare_requests(), []);
     assert!(app.logged_update("downloading update 26.2.0 cancelled"));
 
     server.route("/installer", Route::ok(installer()));
@@ -2791,7 +2791,7 @@ fn a_failed_download_shows_why_and_offers_to_try_again() {
     );
     assert!(section.card_dot && section.menu_badge);
     assert_eq!(app.update_logs(), logs + 1);
-    assert!(app.prepare_requests().is_empty());
+    assert_eq!(app.prepare_requests(), []);
     assert!(!app.downloads().exists());
 
     server.route("/sums", Route::ok(b"checksums".to_vec()));
@@ -3379,7 +3379,7 @@ fn restarting_while_disconnected_installs_at_once_without_a_reconnect() {
     let mut app = app_on_the_office_wifi_with_a_served_update(&server);
     app.command(Command::RestartToUpdate {});
     app.settle_until("the approved quit", App::quit_approved);
-    assert!(app.update_stops().is_empty());
+    assert_eq!(app.update_stops(), []);
     assert_quit_after_cleanup(&app);
     let waiter = app
         .requests
@@ -3564,7 +3564,7 @@ fn a_failed_restart_without_a_vpn_leaves_it_off() {
         assert_eq!(app.update_section().update_now, ButtonState::Enabled);
         assert_eq!(app.state().get("updateTargetVersion"), None, "{expected:?}");
     }
-    assert!(app.run_requests().is_empty());
+    assert_eq!(app.run_requests(), []);
 }
 
 #[test]

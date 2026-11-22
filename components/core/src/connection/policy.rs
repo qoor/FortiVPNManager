@@ -12,7 +12,7 @@ pub(super) const OTP_DEADLINE: Duration = Duration::from_secs(50);
 /// next login waits for its code email to be trashed.
 pub const STALE_OTP_WAIT: Duration = Duration::from_secs(20);
 /// The wait after the first counted authentication failure, and the least gap after any before a
-/// new attempt: FortiGate blocks the IP for a while after two failures.
+/// new attempt: `FortiGate` blocks the IP for a while after two failures.
 pub(super) const AUTH_FAILURE_RETRY_DELAY: Duration = Duration::from_secs(90);
 /// Counted authentication failures in a row that stop the retries.
 pub(super) const MAX_CONSECUTIVE_AUTH_FAILURES: u32 = 2;
@@ -29,7 +29,7 @@ pub(super) const LATE_SETTLE_POLL: Duration = Duration::from_secs(2);
 pub(super) const PATH_SETTLE: Duration = Duration::from_secs(3);
 pub(super) const LOCK_POLL: Duration = Duration::from_secs(15);
 /// The window in which automatic sign-in attempts are limited, and the limit.
-pub(super) const AUTH_ATTEMPT_WINDOW: Duration = Duration::from_secs(60 * 60);
+pub(super) const AUTH_ATTEMPT_WINDOW: Duration = Duration::from_hours(1);
 pub(super) const MAX_AUTH_ATTEMPTS_PER_WINDOW: usize = 12;
 /// A planned proactive reconnect is never closer than this when it is computed.
 pub(super) const MINIMUM_PLANNED_LEAD: Duration = Duration::from_secs(60);

@@ -24,6 +24,7 @@ pub enum Status {
 
 impl Status {
     /// As the server writes it.
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Status::Ok => "OK",
@@ -93,17 +94,20 @@ pub struct ListEntry {
 impl ListEntry {
     /// The name for people, decoded from modified UTF-7, such as Gmail's Korean trash folder
     /// `[Gmail]/&1zTJwNG1-`; the name as sent when it does not decode.
+    #[must_use]
     pub fn display_name(&self) -> String {
         mailbox_name::decode(&self.name).unwrap_or_else(|| self.name.clone())
     }
 
     /// Compares without regard to ASCII case.
+    #[must_use]
     pub fn has_attribute(&self, attribute: &str) -> bool {
         self.attributes
             .iter()
             .any(|own| own.eq_ignore_ascii_case(attribute))
     }
 
+    #[must_use]
     pub fn is_selectable(&self) -> bool {
         !self.has_attribute("\\Noselect") && !self.has_attribute("\\NonExistent")
     }
@@ -123,6 +127,7 @@ pub struct SpecialMailboxes {
 
 impl SpecialMailboxes {
     /// From the replies to LIST; other responses are ignored.
+    #[must_use]
     pub fn from_responses(responses: &[Response]) -> Self {
         let first = |attribute: &str| {
             responses.iter().find_map(|response| match response {
@@ -162,6 +167,7 @@ pub struct MailboxSnapshot {
 
 impl MailboxSnapshot {
     /// From the replies to SELECT or EXAMINE; `None` unless both codes are among them.
+    #[must_use]
     pub fn from_select_responses(responses: &[Response]) -> Option<Self> {
         let mut uid_validity = None;
         let mut uid_next = None;
@@ -185,6 +191,7 @@ impl MailboxSnapshot {
     /// The UIDs to fetch from the replies to `UID SEARCH UID <uid_next>:*`: only those at or after
     /// the snapshot, since the server also returns the newest older message for `n:*`
     /// (RFC 3501 §6.4.8). `None` when there are none.
+    #[must_use]
     pub fn new_uids(&self, responses: &[Response]) -> Option<UidSet> {
         UidSet::new(
             searched_uids(responses)
@@ -195,6 +202,7 @@ impl MailboxSnapshot {
 
     /// Whether every untagged UIDVALIDITY among `responses` is the snapshot's. After a change the
     /// UIDs mean nothing, so the session fails at once instead of waiting for the OTP time limit.
+    #[must_use]
     pub fn uid_validity_kept(&self, responses: &[Response]) -> bool {
         responses.iter().all(|response| match response {
             Response::UntaggedStatus {
@@ -207,6 +215,7 @@ impl MailboxSnapshot {
 }
 
 /// The UIDs of every `* SEARCH` reply among `responses`.
+#[must_use]
 pub fn searched_uids(responses: &[Response]) -> Vec<u32> {
     responses
         .iter()
@@ -224,6 +233,7 @@ pub fn searched_uids(responses: &[Response]) -> Vec<u32> {
 /// account or domain, or any other refusal. Only refusals that clearly mean "later" are not:
 /// `[UNAVAILABLE]`, `[LIMIT]`, `[INUSE]`, `[SERVERBUG]`, or an `[ALERT]` about simultaneous
 /// connections, bandwidth limits or a temporary problem.
+#[must_use]
 pub fn is_credential_rejection(code: Option<&ResponseCode>, text: &str) -> bool {
     match code {
         Some(ResponseCode::Unavailable | ResponseCode::Limit) => false,

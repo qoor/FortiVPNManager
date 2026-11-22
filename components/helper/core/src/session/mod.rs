@@ -59,6 +59,7 @@ impl SessionManager {
         }
     }
 
+    #[must_use]
     pub fn version(&self) -> &str {
         self.backend.version()
     }
@@ -194,6 +195,7 @@ impl NetworkJob {
         }
     }
 
+    #[must_use]
     pub fn session_running(&self) -> bool {
         !self.returned.load(Ordering::Relaxed)
     }
@@ -209,9 +211,10 @@ impl NetworkJob {
 
 impl Drop for NetworkJob {
     fn drop(&mut self) {
-        if self.answer.is_some() && !thread::panicking() {
-            panic!("a network change was dropped unanswered; the run would wait for it forever");
-        }
+        assert!(
+            !(self.answer.is_some() && !thread::panicking()),
+            "a network change was dropped unanswered; the run would wait for it forever"
+        );
     }
 }
 

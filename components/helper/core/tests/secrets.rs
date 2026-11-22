@@ -43,7 +43,7 @@ fn an_opened_session_is_saved_off_the_session_thread_and_deleted_at_its_end() {
         blob,
         json!({"host": GATEWAY, "port": 443, "pins": [PIN], "cookie": COOKIE})
     );
-    assert!(secrets.deletes().is_empty());
+    assert_eq!(secrets.deletes(), Vec::<String>::new());
 
     session.stop_and_revert(StopReason::UserDisconnect);
     assert_eq!(secrets.deletes(), [ATTEMPT]);
@@ -59,7 +59,7 @@ fn a_stopped_session_is_not_logged_out_by_the_helper() {
     let mut session = Session::start(up_without_otp(settings("utun9", "10.10.0.5")), setup);
     session.bring_up(vec![gateway_route("192.0.2.1")]);
     session.stop_and_revert(StopReason::UserDisconnect);
-    assert!(gateway.connections().is_empty());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
     assert!(
         !session
             .texts()
@@ -78,7 +78,7 @@ fn a_session_that_ends_by_itself_is_not_logged_out_by_the_helper() {
     let facts = session.wait_for_exit();
     assert_eq!(facts.furthest_milestone, Milestone::Authenticated);
     session.settle(Duration::from_millis(200));
-    assert!(gateway.connections().is_empty());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
     let texts = session.texts();
     assert!(texts.contains(&"‹session ended: code -5›"), "{texts:?}");
     assert!(
@@ -101,9 +101,9 @@ fn a_session_that_never_opened_has_nothing_to_save_or_log_out() {
     });
     let mut session = Session::start(script, setup);
     session.wait_for_exit();
-    assert!(secrets.saves().is_empty());
-    assert!(secrets.deletes().is_empty());
-    assert!(gateway.connections().is_empty());
+    assert_eq!(secrets.saves(), Vec::<(String, Option<String>)>::new());
+    assert_eq!(secrets.deletes(), Vec::<String>::new());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
 }
 
 #[test]
@@ -116,8 +116,8 @@ fn a_secret_that_could_not_be_saved_is_logged_and_not_deleted() {
     let secrets = Arc::clone(&setup.secrets);
     let mut session = Session::start(opened_then_returned(), setup);
     session.wait_for_exit();
-    assert!(gateway.connections().is_empty());
-    assert!(secrets.deletes().is_empty());
+    assert_eq!(gateway.connections(), Vec::<Vec<u8>>::new());
+    assert_eq!(secrets.deletes(), Vec::<String>::new());
     assert!(
         session.logs().contains(
             &format!(

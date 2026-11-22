@@ -19,7 +19,7 @@ fn other() -> Ipv4Network {
 }
 
 fn rows(texts: &[&str]) -> Vec<String> {
-    texts.iter().map(|text| text.to_string()).collect()
+    texts.iter().map(std::string::ToString::to_string).collect()
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn starts_from_the_saved_list_without_changes() {
     let draft = ListDraft::new(vec![host(), network()]);
     assert_eq!(draft.rows(), rows(&["10.30.161.16", "10.30.170.0/24"]));
     assert!(!draft.has_changes());
-    assert!(draft.problems().is_empty());
+    assert_eq!(draft.problems(), []);
     assert_eq!(draft.entries(), Some(vec![host(), network()]));
 }
 
@@ -158,8 +158,8 @@ fn the_vpn_servers_address_is_a_problem_target_row() {
     assert_eq!(drafts.entries(), None);
     drafts.targets.set_rows(rows(&["10.30.161.0/24"]));
     drafts.networks.set_rows(rows(&["10.30.161.16"]));
-    assert!(drafts.targets.problems().is_empty());
-    assert!(drafts.networks.problems().is_empty());
+    assert_eq!(drafts.targets.problems(), []);
+    assert_eq!(drafts.networks.problems(), []);
     // The settings name another server now.
     drafts.set_vpn_server(None);
     drafts.targets.set_rows(rows(&["10.30.161.16"]));

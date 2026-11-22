@@ -22,7 +22,7 @@ use crate::files;
 use crate::net;
 use crate::orchestration::{Queue, Runtime};
 
-const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const SIGN_IN_TIMEOUT: Duration = Duration::from_mins(5);
 /// A browser connection that sends nothing in this time is dropped.
 const LOOPBACK_CONNECTION_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CLIENT_FILE_BYTES: u64 = 64 * 1024;
@@ -132,7 +132,7 @@ impl Runtime {
             runtime.google.imported_secret_stored = stored;
             let address = normalized(&runtime.config.settings().otp.gmail_address);
             runtime.gmail_api_authorized(&address, |runtime, authorized| {
-                runtime.google.authorized = authorized
+                runtime.google.authorized = authorized;
             });
         });
     }
@@ -246,7 +246,7 @@ impl Runtime {
                     runtime.tasks.spawn(async move {
                         let reply = net::post_form(oauth::TOKEN_ENDPOINT, &body).await;
                         queue.run(move |runtime| {
-                            runtime.token_refreshed(key, refresh_token, reply, then)
+                            runtime.token_refreshed(key, refresh_token, reply, then);
                         });
                     });
                 },
@@ -663,7 +663,7 @@ async fn sign_in(
     }
     let code = tokio::select! {
         code = wait_for_callback(&listener, &state, &pages) => code?,
-        _ = tokio::time::sleep(SIGN_IN_TIMEOUT) => {
+        () = tokio::time::sleep(SIGN_IN_TIMEOUT) => {
             return Err(Some(GoogleError::TimedOut { after_seconds: SIGN_IN_TIMEOUT.as_secs() }));
         }
         _ = cancelled => return Err(None),
@@ -738,7 +738,7 @@ async fn sign_in(
                         reply(Ok(()));
                     }
                     PortResponse::SecretStoreFailed { failure } => {
-                        reply(Err(Some(GoogleError::SecretStore { failure })))
+                        reply(Err(Some(GoogleError::SecretStore { failure })));
                     }
                     other => panic!("a secret write answered with {other:?}"),
                 },

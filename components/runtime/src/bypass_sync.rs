@@ -106,12 +106,11 @@ impl Runtime {
 
     pub(crate) fn bypass_section(&self) -> BypassRulesSection {
         let fresh;
-        let drafts = match &self.bypass.drafts {
-            Some(drafts) => drafts,
-            None => {
-                fresh = self.saved_drafts();
-                &fresh
-            }
+        let drafts = if let Some(drafts) = &self.bypass.drafts {
+            drafts
+        } else {
+            fresh = self.saved_drafts();
+            &fresh
         };
         drafts.section(
             self.bypass.current.as_ref(),

@@ -210,13 +210,11 @@ impl Entry {
                 return self.send_network_job(Job::Network(job), change);
             }
             if let Job::Status { id } = job {
-                match self.runs.values().find_map(|held| held.run.routing_check()) {
-                    Some(change) => return self.send_network_job(job, change),
-                    None => {
-                        self.reply_status(id, None);
-                        continue;
-                    }
+                if let Some(change) = self.runs.values().find_map(|held| held.run.routing_check()) {
+                    return self.send_network_job(job, change);
                 }
+                self.reply_status(id, None);
+                continue;
             }
             if let Job::RevertAgain {
                 kept,

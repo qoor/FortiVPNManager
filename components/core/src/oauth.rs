@@ -31,6 +31,7 @@ pub const STATE_RANDOM_BYTES: usize = 24;
 
 /// `http://127.0.0.1:<port>`, which Google accepts for Desktop app clients on any port. The token
 /// request repeats it exactly.
+#[must_use]
 pub fn loopback_redirect_uri(port: u16) -> String {
     format!("http://127.0.0.1:{port}")
 }
@@ -43,6 +44,7 @@ pub struct Pkce {
 }
 
 impl Pkce {
+    #[must_use]
     pub fn from_random(bytes: &[u8; VERIFIER_RANDOM_BYTES]) -> Self {
         Self::with_verifier(URL_SAFE_NO_PAD.encode(bytes))
     }
@@ -55,23 +57,27 @@ impl Pkce {
         }
     }
 
+    #[must_use]
     pub fn verifier(&self) -> &str {
         &self.verifier.0
     }
 
     /// BASE64URL(SHA256(verifier)), sent with the authorization request.
+    #[must_use]
     pub fn challenge(&self) -> &str {
         &self.challenge
     }
 }
 
 /// The unguessable value that ties Google's answer to this sign-in.
+#[must_use]
 pub fn state_from_random(bytes: &[u8; STATE_RANDOM_BYTES]) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// The browser URL that starts the consent. Offline access with forced consent makes Google return
 /// a refresh token every time; `login_hint` preselects the expected account.
+#[must_use]
 pub fn authorization_url(
     client_id: &str,
     redirect_uri: &str,
@@ -99,6 +105,7 @@ pub fn authorization_url(
 }
 
 /// The token request body that exchanges the authorization code.
+#[must_use]
 pub fn authorization_code_body(
     code: &str,
     client_id: &str,
@@ -117,6 +124,7 @@ pub fn authorization_code_body(
 }
 
 /// The token request body that gets a fresh access token.
+#[must_use]
 pub fn refresh_body(refresh_token: &str, client_id: &str, client_secret: &str) -> SecretText {
     SecretText(form_encoded(&[
         ("grant_type", "refresh_token"),
@@ -127,12 +135,14 @@ pub fn refresh_body(refresh_token: &str, client_id: &str, client_secret: &str) -
 }
 
 /// The revocation request body; revoking a refresh token revokes its access tokens too.
+#[must_use]
 pub fn revocation_body(token: &str) -> SecretText {
     SecretText(form_encoded(&[("token", token)]))
 }
 
 /// `application/x-www-form-urlencoded`, with every byte outside the RFC 3986 unreserved set
 /// escaped; Google reads an unescaped `+` as a space.
+#[must_use]
 pub fn form_encoded(pairs: &[(&str, &str)]) -> String {
     let mut encoded = String::new();
     for (index, (name, value)) in pairs.iter().enumerate() {
@@ -176,6 +186,7 @@ pub struct TokenGrant {
 }
 
 impl TokenGrant {
+    #[must_use]
     pub fn grants(&self, scope: &str) -> bool {
         self.scopes.contains(scope)
     }
@@ -202,6 +213,7 @@ pub enum TokenError {
 impl TokenError {
     /// How Google describes the refusal, such as `invalid_request: Missing code verifier.`;
     /// never holds a secret.
+    #[must_use]
     pub fn detail(&self) -> String {
         let with = |code: &str, description: &Option<String>| match description {
             Some(description) => format!("{code}: {description}"),

@@ -73,7 +73,7 @@ impl Runtime {
                         other => panic!("a registration answered with {other:?}"),
                     };
                     runtime.feed(connection::Input::HelperRegistered(result));
-                })
+                });
             }
             Command::OpenHelperApprovalSettings {} => {
                 self.action(PortAction::OpenHelperApprovalSettings {});
@@ -103,7 +103,7 @@ impl Runtime {
             let connection = &mut settings.connection;
             match option {
                 ConnectionOption::ScheduleEnabled { enabled } => {
-                    connection.schedule.enabled = enabled
+                    connection.schedule.enabled = enabled;
                 }
                 ConnectionOption::ScheduleDay { day, selected } => {
                     let days = &mut connection.schedule.days;
@@ -114,25 +114,25 @@ impl Runtime {
                     }
                 }
                 ConnectionOption::AwayMinutes { minutes } => {
-                    connection.schedule.away_minutes = minutes
+                    connection.schedule.away_minutes = minutes;
                 }
                 ConnectionOption::AutoConnectOnLaunch { enabled } => {
-                    connection.auto_connect_on_launch = enabled
+                    connection.auto_connect_on_launch = enabled;
                 }
                 ConnectionOption::SessionMaxMinutes { minutes } => {
-                    connection.session_max_minutes = minutes
+                    connection.session_max_minutes = minutes;
                 }
                 ConnectionOption::ProactiveReconnect { enabled } => {
-                    connection.proactive_reconnect.enabled = enabled
+                    connection.proactive_reconnect.enabled = enabled;
                 }
                 ConnectionOption::ProactiveMarginMinutes { minutes } => {
-                    connection.proactive_reconnect.margin_minutes = minutes
+                    connection.proactive_reconnect.margin_minutes = minutes;
                 }
                 ConnectionOption::ReconnectAfterSleep { enabled } => {
-                    connection.reconnect_after_sleep.enabled = enabled
+                    connection.reconnect_after_sleep.enabled = enabled;
                 }
                 ConnectionOption::MinSleepMinutes { minutes } => {
-                    connection.reconnect_after_sleep.min_sleep_minutes = minutes
+                    connection.reconnect_after_sleep.min_sleep_minutes = minutes;
                 }
             }
         });

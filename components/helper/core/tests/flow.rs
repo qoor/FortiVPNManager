@@ -249,7 +249,7 @@ fn output_goes_out_in_batches_before_each_event() {
     for delivered in &session.delivered {
         match delivered {
             Delivered::Output(lines) => {
-                assert!(!lines.is_empty());
+                assert_ne!(lines.as_slice(), []);
                 output_since_event = true;
             }
             Delivered::Log(..) | Delivered::Stuck => {}

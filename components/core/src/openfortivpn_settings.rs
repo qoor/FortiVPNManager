@@ -1,16 +1,16 @@
 //! Reading an existing openfortivpn config file, to import its account and certificate values. The
 //! file is only read.
 //!
-//! The reader follows openfortivpn 1.24.1's load_config() (src/config.c) byte for byte:
-//! - Lines come from getline(): split at LF only, so a CR before the LF stays in the line and is
+//! The reader follows openfortivpn 1.24.1's `load_config()` (src/config.c) byte for byte:
+//! - Lines come from `getline()`: split at LF only, so a CR before the LF stays in the line and is
 //!   then trimmed as whitespace.
 //! - A line is split at its first `=`, so values may hold `=` and `#`; there are no inline
 //!   comments.
-//! - Key and value are trimmed of the C locale's isspace() (SP, HT, LF, VT, FF, CR); openfortivpn
+//! - Key and value are trimmed of the C locale's `isspace()` (SP, HT, LF, VT, FF, CR); openfortivpn
 //!   never calls setlocale.
 //! - Everything is a C string, so a NUL byte would end the line early.
 //!
-//! Unlike load_config(), it reads every known key to the end of the file instead of stopping at
+//! Unlike `load_config()`, it reads every known key to the end of the file instead of stopping at
 //! the first unknown one, and it also takes indented `#` lines as comments.
 
 use fvm_contract::app_internal::SecretText;
@@ -28,7 +28,7 @@ const IMPORTED_KEYS: [&str; 6] = [
     "trusted-cert",
 ];
 
-/// Every other key load_config() accepts in the macOS build of 1.24.1. It is built with
+/// Every other key `load_config()` accepts in the macOS build of 1.24.1. It is built with
 /// /usr/sbin/pppd, so the `pppd` key of the build without it is unknown there.
 const OTHER_KNOWN_KEYS: [&str; 34] = [
     "otp",
@@ -171,7 +171,7 @@ fn push_once(list: &mut Vec<String>, item: String) {
     }
 }
 
-/// The lines getline() returns, without their LF; a final LF starts no new line.
+/// The lines `getline()` returns, without their LF; a final LF starts no new line.
 fn lines(bytes: &[u8]) -> Vec<&[u8]> {
     let mut lines: Vec<&[u8]> = bytes.split(|byte| *byte == b'\n').collect();
     if lines.last().is_some_and(|line| line.is_empty()) {
@@ -203,7 +203,7 @@ fn split(line: &[u8]) -> Option<(&[u8], &[u8])> {
     Some((trimmed(&line[..equals]), trimmed(&line[equals + 1..])))
 }
 
-/// `strtol(value, NULL, 0)` and load_config()'s 1 to 65535 check: decimal, `0x` hex or octal with a
+/// `strtol(value, NULL, 0)` and `load_config()`'s 1 to 65535 check: decimal, `0x` hex or octal with a
 /// leading zero, an optional sign, and reading stops at the first character that is not a digit
 /// (`8443 # x` is 8443). `None` when openfortivpn would print "Bad port" and ignore the line.
 fn strtol_port(value: &[u8]) -> Option<u16> {

@@ -99,7 +99,7 @@ mod tests {
             .delete("E621E1F8-C36C-495A-93FC-0C247A3E6E5F")
             .unwrap();
         files.delete("damaged").unwrap();
-        assert!(files.load_all().unwrap().is_empty());
+        assert_eq!(files.load_all().unwrap(), []);
         assert!(files.delete("damaged").is_err());
         fs::remove_dir_all(&directory).unwrap();
     }

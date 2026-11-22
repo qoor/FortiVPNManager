@@ -64,6 +64,7 @@ pub enum PipeRequest {
 }
 
 impl PipeRequest {
+    #[must_use]
     pub fn id(&self) -> u64 {
         match *self {
             Self::Build { id, .. }
