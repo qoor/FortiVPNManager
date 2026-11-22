@@ -1,7 +1,6 @@
 use std::net::IpAddr;
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
 
 use fvm_contract::app_internal::port::SecretStoreFailure;
 use fvm_core::connection::InterfaceAddress;
@@ -10,22 +9,13 @@ use fvm_os_api_windows::{Error, changes, credentials};
 
 use crate::orchestration::Input;
 
-const ROUTE_CHECK: Duration = Duration::from_mins(5);
-
 pub(super) fn watch_network_settings(inputs: Sender<Input>) {
     let (changed, signals) = mpsc::channel();
-    changes::watch(changed).expect("watching the interfaces' addresses");
+    changes::watch(changed).expect("watching the interfaces' addresses and the routes");
     thread::Builder::new()
         .name("fvm-runtime-network-settings".into())
         .spawn(move || {
-            let mut check_at = Instant::now() + ROUTE_CHECK;
-            while inputs.send(Input::NetworkSettingsChanged).is_ok() {
-                match signals.recv_timeout(check_at.saturating_duration_since(Instant::now())) {
-                    Ok(()) => {}
-                    Err(RecvTimeoutError::Timeout) => check_at += ROUTE_CHECK,
-                    Err(RecvTimeoutError::Disconnected) => return,
-                }
-            }
+            while inputs.send(Input::NetworkSettingsChanged).is_ok() && signals.recv().is_ok() {}
         })
         .expect("starting the network settings thread");
 }
