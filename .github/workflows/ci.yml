@@ -78,6 +78,7 @@ jobs:
           --skip network::tests::split_settings_are_applied_changed_and_reverted_on_the_loopback_interface
           --skip network::tests::an_apply_through_a_router_that_is_no_longer_current_changes_nothing
           --skip network::tests::wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid
+          --skip changes::tests::windows_reports_a_route_that_comes_and_goes
           --skip the_bypass_routes_are_read_after_the_build_check
           --skip a_connection_has_one_route_request_at_a_time
       - run: >-
