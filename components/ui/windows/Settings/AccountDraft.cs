@@ -11,9 +11,7 @@ public sealed class AccountDraft
 {
     private bool loaded;
 
-    public string Host { get; set; } = "";
-
-    public string Port { get; set; } = "";
+    public string Server { get; set; } = "";
 
     public string Username { get; set; } = "";
 
@@ -35,8 +33,7 @@ public sealed class AccountDraft
         }
         loaded = true;
         Revision = state.Revision;
-        Host = state.Host;
-        Port = state.Port;
+        Server = state.Server;
         Username = state.Username;
         Realm = state.Realm;
         GmailAddress = state.GmailAddress;
@@ -52,5 +49,5 @@ public sealed class AccountDraft
     }
 
     /// <summary>The edit to send after any field changed, against the revision it was typed on.</summary>
-    public Command Edit() => new Command.EditAccount(Revision, new AccountForm(Host, Port, Username, Realm, GmailAddress, VpnPassword, AppPassword));
+    public Command Edit() => new Command.EditAccount(Revision, new AccountForm(Server, Username, Realm, GmailAddress, VpnPassword, AppPassword));
 }

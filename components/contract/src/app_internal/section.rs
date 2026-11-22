@@ -726,8 +726,7 @@ pub struct AccountFormState {
     /// field reads, import, closing Settings, or a settings file change merged into untouched
     /// fields. The UI replaces its fields only then, and sends the revision back with every edit.
     pub revision: u64,
-    pub host: String,
-    pub port: String,
+    pub server: String,
     pub username: String,
     pub realm: String,
     pub gmail_address: String,

@@ -223,7 +223,6 @@ enum SettingsSearch {
         case .account:
             [
                 item(pane, "Server address"),
-                item(pane, "Port"),
                 item(pane, "Username"),
                 item(pane, "Password"),
                 item(pane, "Realm", group: .realm),

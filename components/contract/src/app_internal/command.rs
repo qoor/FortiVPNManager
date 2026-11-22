@@ -88,8 +88,7 @@ pub enum Command {
 #[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountForm {
-    pub host: String,
-    pub port: String,
+    pub server: String,
     pub username: String,
     pub realm: String,
     pub gmail_address: String,

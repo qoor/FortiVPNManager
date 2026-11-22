@@ -126,10 +126,9 @@
               "appPasswordEntered": false,
               "appPasswordStored": false,
               "gmailAddress": "alice@example.com",
-              "host": "vpn.example.com",
-              "port": "443",
               "realm": "",
               "revision": 0,
+              "server": "vpn.example.com",
               "username": "alice",
               "vpnPasswordEntered": false,
               "vpnPasswordStored": true

@@ -11,7 +11,7 @@ public static class AccountText
 {
     public static string Message(this AccountValueProblem problem) => problem switch
     {
-        AccountValueProblem.InvalidHost => L("Enter only a host name or IPv4 address (no https://, :port or /)."),
+        AccountValueProblem.InvalidHost => L("Enter only a host name or IPv4 address (no https:// or /)."),
         AccountValueProblem.TooLong tooLong => L("%@ is too long (at most %lld bytes).", tooLong.Field.Name(), tooLong.MaxBytes),
         AccountValueProblem.LeadingOrTrailingSpace space => L("%@ can't start or end with a space.", space.Field.Name()),
         AccountValueProblem.DisallowedCharacters characters => L("%@ contains characters that aren't allowed.", characters.Field.Name()),

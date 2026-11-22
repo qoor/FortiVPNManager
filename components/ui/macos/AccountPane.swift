@@ -38,20 +38,10 @@ struct AccountPane: View {
     private func vpnSection(_ account: AppInternal.AccountFormState) -> some View {
         Section {
             AccountRow("Server address") {
-                TextField("Server address", text: accountField(ui, \.host), prompt: Text(verbatim: "vpn.example.com"))
+                TextField("Server address", text: accountField(ui, \.server), prompt: Text(verbatim: "vpn.example.com"))
                     .savesAccount(ui)
             }
             .searchAnchor("Server address", navigation)
-            AccountRow("Port") {
-                // Sized for a port number, in the column the other fields start at (HIG Text fields).
-                HStack {
-                    TextField("Port", text: accountField(ui, \.port), prompt: Text(verbatim: "443"))
-                        .savesAccount(ui)
-                        .frame(width: 80)
-                    Spacer(minLength: 0)
-                }
-            }
-            .searchAnchor("Port", navigation)
             AccountRow("Username") {
                 TextField("Username", text: accountField(ui, \.username))
                     .savesAccount(ui)

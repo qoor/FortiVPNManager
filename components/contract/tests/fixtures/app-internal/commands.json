@@ -40,8 +40,7 @@
         "editAccount": {
           "revision": 4,
           "form": {
-            "host": "vpn.example.com",
-            "port": "443",
+            "server": "vpn.example.com:8443",
             "username": "alice",
             "realm": "",
             "gmailAddress": "alice@example.com",

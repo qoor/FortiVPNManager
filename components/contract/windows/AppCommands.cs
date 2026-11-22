@@ -67,8 +67,7 @@ public static partial class AppInternal
 
     /// <summary>An empty password field keeps the stored password.</summary>
     public sealed record AccountForm(
-        string Host,
-        string Port,
+        string Server,
         string Username,
         string Realm,
         string GmailAddress,
@@ -77,7 +76,7 @@ public static partial class AppInternal
     {
         /// <summary>Debug output can reach logs and crash reports, so it leaves the passwords out.</summary>
         public override string ToString() =>
-            $"AccountForm {{ Host = {Host}, Port = {Port}, Username = {Username}, Realm = {Realm}, GmailAddress = {GmailAddress}, VpnPassword = <redacted>, AppPassword = <redacted> }}";
+            $"AccountForm {{ Server = {Server}, Username = {Username}, Realm = {Realm}, GmailAddress = {GmailAddress}, VpnPassword = <redacted>, AppPassword = <redacted> }}";
     }
 
     /// <summary>Minutes are the number as typed.</summary>

@@ -5,13 +5,12 @@
       "appPasswordStored": true,
       "defaultImportFile": "/Users/alice/.config/openfortivpn/config",
       "gmailAddress": "alice@example.com",
-      "host": "https://vpn.example.com",
-      "port": "4433",
       "realm": "staff",
       "revision": 2,
       "savedAccountProblem": {
         "invalidHost": {}
       },
+      "server": "https://vpn.example.com:4433",
       "username": "alice",
       "vpnPasswordEntered": true,
       "vpnPasswordStored": false
@@ -91,13 +90,12 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
         "invalidPort": {}
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -151,13 +149,12 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
         "passwordNeedsAccount": {}
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -199,13 +196,12 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
         "appPasswordNeedsAddress": {}
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -247,8 +243,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -261,6 +255,7 @@
           }
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -302,8 +297,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -315,6 +308,7 @@
           }
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -356,8 +350,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -369,6 +361,7 @@
           }
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -410,8 +403,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -419,6 +410,7 @@
           "maxBytes": 255
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -460,8 +452,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -484,6 +474,7 @@
           }
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -525,8 +516,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
-      "port": "443",
       "realm": "",
       "revision": 3,
       "saveError": {
@@ -536,6 +525,7 @@
           }
         }
       },
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -577,7 +567,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "imported": {
           "report": {
@@ -603,9 +592,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -647,7 +636,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "imported": {
           "report": {
@@ -673,9 +661,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -717,7 +705,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "imported": {
           "report": {
@@ -747,9 +734,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -791,7 +778,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "imported": {
           "report": {
@@ -814,9 +800,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -858,7 +844,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -868,9 +853,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -912,7 +897,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -925,9 +909,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -969,7 +953,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -979,9 +962,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1023,7 +1006,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -1048,9 +1030,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1092,7 +1074,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -1100,9 +1081,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true
@@ -1144,7 +1125,6 @@
       "appPasswordEntered": false,
       "appPasswordStored": false,
       "gmailAddress": "alice@example.com",
-      "host": "vpn.example.com",
       "importReport": {
         "failed": {
           "error": {
@@ -1154,9 +1134,9 @@
           }
         }
       },
-      "port": "443",
       "realm": "",
       "revision": 4,
+      "server": "vpn.example.com",
       "username": "alice",
       "vpnPasswordEntered": false,
       "vpnPasswordStored": true

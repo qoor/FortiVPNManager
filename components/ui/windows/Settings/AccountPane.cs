@@ -24,8 +24,7 @@ internal sealed class AccountPane : IPane
     private readonly InfoBar savedAccountProblem = Cards.Notice(InfoBarSeverity.Error);
     private readonly InfoBar saveError = Cards.Notice(InfoBarSeverity.Error);
 
-    private readonly TextBox host = new() { PlaceholderText = "vpn.example.com" };
-    private readonly TextBox port = new() { PlaceholderText = "443" };
+    private readonly TextBox server = new() { PlaceholderText = "vpn.example.com" };
     private readonly TextBox username = new();
     private readonly PasswordBox vpnPassword = new();
     private readonly TextBox realm = new() { PlaceholderText = L("Optional") };
@@ -88,8 +87,7 @@ internal sealed class AccountPane : IPane
     private void AddVpnRows()
     {
         body.Children.Add(Cards.SectionHeader(L("VPN"), first: true));
-        body.Children.Add(rows["Server address"] = Cards.Card(L("Server address"), Field(host, draft => draft.Host, (draft, text) => draft.Host = text)).Fit(host, FieldWidth));
-        body.Children.Add(rows["Port"] = Cards.Card(L("Port"), Field(port, draft => draft.Port, (draft, text) => draft.Port = text)).Fit(port, 96));
+        body.Children.Add(rows["Server address"] = Cards.Card(L("Server address"), Field(server, draft => draft.Server, (draft, text) => draft.Server = text)).Fit(server, FieldWidth));
         body.Children.Add(rows["Username"] = Cards.Card(L("Username"), Field(username, draft => draft.Username, (draft, text) => draft.Username = text)).Fit(username, FieldWidth));
         body.Children.Add(rows["Password"] = Cards.Card(L("Password"), Field(vpnPassword, draft => draft.VpnPassword, (draft, text) => draft.VpnPassword = text)).Fit(vpnPassword, FieldWidth));
         var realmRow = Remembered(new SettingsExpander { Header = L("Realm (advanced)") }, "realm");
@@ -258,8 +256,7 @@ internal sealed class AccountPane : IPane
         saveError.Show(account.SaveError?.Message());
 
         var draft = ui.AccountDraft;
-        Set(host, draft.Host);
-        Set(port, draft.Port);
+        Set(server, draft.Server);
         Set(username, draft.Username);
         Set(realm, draft.Realm);
         Set(gmailAddress, draft.GmailAddress);

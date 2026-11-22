@@ -4,7 +4,7 @@ extension AppInternal.AccountValueProblem {
     var message: String {
         switch self {
         case .invalidHost:
-            String(localized: "Enter only a host name or IPv4 address (no https://, :port or /).")
+            String(localized: "Enter only a host name or IPv4 address (no https:// or /).")
         case let .tooLong(field, maxBytes):
             String(localized: "\(field.name) is too long (at most \(maxBytes) bytes).")
         case let .leadingOrTrailingSpace(field):

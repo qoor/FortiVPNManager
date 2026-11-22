@@ -41,9 +41,9 @@ struct SettingsSearchTests {
 
     @Test func listsTheMatchingSettingsUnderTheirPane() {
         let navigation = SettingsNavigation()
-        navigation.searchText = "port"
+        navigation.searchText = "server"
         #expect(navigation.visiblePanes.contains(.account))
-        #expect(navigation.results(in: .account).map(\.key).contains("Port"))
+        #expect(navigation.results(in: .account).map(\.key).contains("Server address"))
         navigation.searchText = "zzzz"
         #expect(navigation.visiblePanes.isEmpty)
         navigation.searchText = ""

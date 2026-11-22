@@ -71,8 +71,7 @@ final class AppUI {
 @MainActor
 @Observable
 final class AccountDraft {
-    var host = ""
-    var port = ""
+    var server = ""
     var username = ""
     var realm = ""
     var gmailAddress = ""
@@ -85,8 +84,7 @@ final class AccountDraft {
         guard !loaded || state.revision != revision else { return }
         loaded = true
         revision = state.revision
-        host = state.host
-        port = state.port
+        server = state.server
         username = state.username
         realm = state.realm
         gmailAddress = state.gmailAddress
@@ -97,7 +95,7 @@ final class AccountDraft {
 
     var form: AppInternal.AccountForm {
         AppInternal.AccountForm(
-            host: host, port: port, username: username, realm: realm, gmailAddress: gmailAddress,
+            server: server, username: username, realm: realm, gmailAddress: gmailAddress,
             vpnPassword: vpnPassword, appPassword: appPassword
         )
     }

@@ -131,7 +131,7 @@ public class AppInternalTests
             .ToList();
         var edit = Assert.IsType<Command.EditAccount>(commands.Single(command => command is Command.EditAccount));
         Assert.Equal(4UL, edit.Revision);
-        Assert.Equal("vpn.example.com", edit.Form.Host);
+        Assert.Equal("vpn.example.com:8443", edit.Form.Server);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class AppInternalTests
     {
         string[] shown =
         [
-            new AccountForm("vpn.example.com", "443", "alice", "", "alice@example.com", "vpn-secret", "app-secret").ToString(),
+            new AccountForm("vpn.example.com", "alice", "", "alice@example.com", "vpn-secret", "app-secret").ToString(),
             new PortRequest.WriteSecret(new SecretItem.GmailAppPassword("alice@example.com"), "app-secret").ToString(),
             new PortResponse.Secret("vpn-secret").ToString(),
             new HelperCall.Connect("""{"password":"vpn-secret"}""").ToString(),

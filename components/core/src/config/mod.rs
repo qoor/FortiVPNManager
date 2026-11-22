@@ -20,6 +20,7 @@ pub use fvm_contract::app_helper::Ipv4Network;
 /// Largest file the app reads or writes.
 pub const MAX_FILE_BYTES: usize = 64 * 1024;
 pub const PORTS: RangeInclusive<i64> = 1..=65_535;
+pub const DEFAULT_PORT: i64 = 443;
 pub const SESSION_MAX_MINUTES: RangeInclusive<i64> = 10..=1440;
 /// Also less than the session's maximum minutes.
 pub const MARGIN_MINUTES: RangeInclusive<i64> = 1..=60;
@@ -129,7 +130,7 @@ impl Default for Settings {
         Self {
             vpn: Vpn {
                 host: String::new(),
-                port: 443,
+                port: DEFAULT_PORT,
                 username: String::new(),
                 realm: String::new(),
                 dtls: false,

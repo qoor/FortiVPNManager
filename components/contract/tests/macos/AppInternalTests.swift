@@ -226,7 +226,7 @@ private extension AppInternal {
             _ revision: UInt64, saveError: AccountSaveError? = nil, importReport: ClientSettingsImport? = nil
         ) -> AccountFormState {
             AccountFormState(
-                revision: revision, host: "vpn.example.com", port: "443", username: "alice", realm: "",
+                revision: revision, server: "vpn.example.com", username: "alice", realm: "",
                 gmailAddress: "alice@example.com", vpnPasswordEntered: false, appPasswordEntered: false,
                 vpnPasswordStored: true, appPasswordStored: false, savedAccountProblem: nil, saveError: saveError,
                 importReport: importReport, defaultImportFile: nil
@@ -552,7 +552,7 @@ private extension AppInternal {
                     ]
                 ),
                 account: AccountFormState(
-                    revision: 2, host: "https://vpn.example.com", port: "4433", username: "alice", realm: "staff",
+                    revision: 2, server: "https://vpn.example.com:4433", username: "alice", realm: "staff",
                     gmailAddress: "alice@example.com", vpnPasswordEntered: true, appPasswordEntered: true,
                     vpnPasswordStored: false, appPasswordStored: true, savedAccountProblem: .invalidHost,
                     saveError: nil, importReport: nil,
@@ -820,7 +820,7 @@ private extension AppInternal {
             .command(.settingsOpened),
             .command(.settingsClosed),
             .command(.editAccount(revision: 4, form: AccountForm(
-                host: "vpn.example.com", port: "443", username: "alice", realm: "", gmailAddress: "alice@example.com",
+                server: "vpn.example.com:8443", username: "alice", realm: "", gmailAddress: "alice@example.com",
                 vpnPassword: "p@ss", appPassword: ""
             ))),
             .command(.saveAccount),

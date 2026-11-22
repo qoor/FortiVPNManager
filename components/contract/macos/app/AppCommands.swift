@@ -45,8 +45,7 @@ extension AppInternal {
 
     /// An empty password field keeps the stored password.
     struct AccountForm: Encodable, Sendable {
-        var host: String
-        var port: String
+        var server: String
         var username: String
         var realm: String
         var gmailAddress: String

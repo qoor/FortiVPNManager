@@ -1509,12 +1509,12 @@
         }
       }
     },
-    "Enter only a host name or IPv4 address (no https://, :port or /).": {
+    "Enter only a host name or IPv4 address (no https:// or /).": {
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "호스트 이름이나 IPv4 주소만 입력하세요(https://, :포트, / 제외)."
+            "value": "호스트 이름이나 IPv4 주소만 입력하세요(https://, / 제외)."
           }
         }
       }
@@ -2875,16 +2875,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "스케줄로 보류"
-          }
-        }
-      }
-    },
-    "Port": {
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "포트"
           }
         }
       }

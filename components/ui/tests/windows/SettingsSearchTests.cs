@@ -48,7 +48,7 @@ public class SettingsSearchTests
     [Fact]
     public void ListsTheMatchingSettingsWithTheirPane()
     {
-        Assert.Contains("Port", Keys(Search("port"), SettingsPane.Account));
+        Assert.Contains("Server address", Keys(Search("server"), SettingsPane.Account));
         Assert.Empty(Search("zzzz"));
         Assert.Empty(Search("  "));
     }

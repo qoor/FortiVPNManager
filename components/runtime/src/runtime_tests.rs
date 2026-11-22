@@ -24,6 +24,7 @@ use fvm_contract::app_internal::port::{
     FortiClientConnection, HelperCall, HelperChannelFailure, LogCategory, PortAction, PortRequest,
     PortResponse, RegistrationStatus, SecretItem, SecretStoreFailure, UserNotification,
 };
+use fvm_contract::app_internal::problem::AccountValueProblem;
 use fvm_contract::app_internal::section::{
     AccountSaveError, AutoUpdateSection, BypassFailure, BypassRulesSection, BypassStatus,
     ClientSettingsImport, ConfigSection, ConnectProgress, ConnectionStatus, HelperState,
@@ -888,8 +889,7 @@ fn the_first_launch_imports_the_openfortivpn_config_with_its_password() {
 fn edited_form(app: &App, edit: impl FnOnce(&mut AccountForm)) -> (u64, AccountForm) {
     let account = &app.config_section().account;
     let mut form = AccountForm {
-        host: account.host.clone(),
-        port: account.port.clone(),
+        server: account.server.clone(),
         username: account.username.clone(),
         realm: account.realm.clone(),
         gmail_address: account.gmail_address.clone(),
@@ -990,6 +990,69 @@ fn a_failed_password_write_stays_shown_after_a_commit_made_meanwhile() {
         app.config_section().account.save_error,
         Some(AccountSaveError::SecretStore { .. })
     ));
+}
+
+#[test]
+fn the_server_field_holds_the_port_unless_it_is_the_default() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    assert_eq!(app.config_section().account.server, "vpn.example.com");
+
+    commit_account(&mut app, |form| {
+        form.server = " vpn.example.com:8443 ".into()
+    });
+    let text = app.config_text();
+    assert!(text.contains("  host: \"vpn.example.com\"\n"), "{text}");
+    assert!(text.contains("  port: 8443\n"), "{text}");
+    assert_eq!(app.config_section().account.server, "vpn.example.com:8443");
+
+    commit_account(&mut app, |form| form.server = "vpn.example.com".into());
+    assert!(app.config_text().contains("  port: 443\n"));
+
+    commit_account(&mut app, |form| form.server = "vpn.example.com:443".into());
+    assert!(app.config_text().contains("  port: 443\n"));
+    assert_eq!(app.config_section().account.server, "vpn.example.com");
+}
+
+#[test]
+fn a_file_port_shows_in_the_server_field() {
+    let mut app = App::new();
+    app.write_config(&ACCOUNT.replace("port: 443", "port: 10443"));
+    app.launch();
+    app.settle();
+    assert_eq!(app.config_section().account.server, "vpn.example.com:10443");
+    app.write_config(ACCOUNT);
+    app.settle_until("the default port", |app| {
+        app.config_section().account.server == "vpn.example.com"
+    });
+}
+
+#[test]
+fn a_server_field_that_is_no_host_and_port_saves_nothing() {
+    let mut app = App::new();
+    app.write_config(ACCOUNT);
+    app.launch();
+    app.settle();
+    for (server, error) in [
+        ("vpn.example.com:", AccountSaveError::InvalidPort {}),
+        ("vpn.example.com:0", AccountSaveError::InvalidPort {}),
+        ("vpn.example.com:abc", AccountSaveError::InvalidPort {}),
+        ("vpn.example.com:70000", AccountSaveError::InvalidPort {}),
+        (
+            "https://vpn.example.com:443",
+            AccountSaveError::AccountValue {
+                problem: AccountValueProblem::InvalidHost {},
+            },
+        ),
+    ] {
+        commit_account(&mut app, |form| form.server = server.into());
+        let account = &app.config_section().account;
+        assert_eq!(account.save_error, Some(error), "{server}");
+        assert_eq!(account.server, server);
+        assert_eq!(app.config_text(), ACCOUNT, "{server}");
+    }
 }
 
 #[test]

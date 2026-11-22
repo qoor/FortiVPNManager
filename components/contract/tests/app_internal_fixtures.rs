@@ -875,8 +875,7 @@ fn bypass_rules_sections() {
 fn account_form(revision: u64) -> AccountFormState {
     AccountFormState {
         revision,
-        host: "vpn.example.com".into(),
-        port: "443".into(),
+        server: "vpn.example.com".into(),
         username: "alice".into(),
         realm: String::new(),
         gmail_address: "alice@example.com".into(),
@@ -971,8 +970,7 @@ fn config_sections() {
                 },
                 account: AccountFormState {
                     revision: 2,
-                    host: "https://vpn.example.com".into(),
-                    port: "4433".into(),
+                    server: "https://vpn.example.com:4433".into(),
                     username: "alice".into(),
                     realm: "staff".into(),
                     gmail_address: "alice@example.com".into(),
@@ -1780,8 +1778,7 @@ fn commands() {
             command(Command::EditAccount {
                 revision: 4,
                 form: AccountForm {
-                    host: "vpn.example.com".into(),
-                    port: "443".into(),
+                    server: "vpn.example.com:8443".into(),
                     username: "alice".into(),
                     realm: String::new(),
                     gmail_address: "alice@example.com".into(),
@@ -2065,8 +2062,7 @@ fn debug_output_redacts_secrets() {
             Command::EditAccount {
                 revision: 0,
                 form: AccountForm {
-                    host: "vpn.example.com".into(),
-                    port: "443".into(),
+                    server: "vpn.example.com".into(),
                     username: "alice".into(),
                     realm: String::new(),
                     gmail_address: "alice@example.com".into(),

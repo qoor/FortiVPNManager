@@ -472,8 +472,7 @@ public static partial class AppInternal
     /// <summary>The Account pane's draft. Replace the typed fields only when <c>Revision</c> changes.</summary>
     public sealed record AccountFormState(
         ulong Revision,
-        string Host,
-        string Port,
+        string Server,
         string Username,
         string Realm,
         string GmailAddress,

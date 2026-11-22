@@ -370,8 +370,7 @@ extension AppInternal {
     /// The Account pane's draft. Replace the typed fields only when `revision` changes.
     struct AccountFormState: Decodable, Equatable, Sendable {
         var revision: UInt64
-        var host: String
-        var port: String
+        var server: String
         var username: String
         var realm: String
         var gmailAddress: String

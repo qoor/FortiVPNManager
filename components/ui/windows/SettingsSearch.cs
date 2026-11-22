@@ -100,7 +100,6 @@ public static class SettingsSearch
         SettingsPane.Account =>
         [
             Item(pane, "Server address"),
-            Item(pane, "Port"),
             Item(pane, "Username"),
             Item(pane, "Password"),
             Item(pane, "Realm"),

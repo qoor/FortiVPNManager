@@ -19,7 +19,7 @@ use fvm_contract::app_internal::section::{
     ImportedPassword,
 };
 use fvm_contract::validation;
-use fvm_core::config::Settings;
+use fvm_core::config::{DEFAULT_PORT, PORTS, Settings};
 use fvm_core::connection;
 use fvm_core::openfortivpn_settings;
 
@@ -32,8 +32,7 @@ const MAX_IMPORT_BYTES: u64 = 64 * 1024;
 /// The non-secret fields as the file holds them, in the form's spelling.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 struct Fields {
-    host: String,
-    port: String,
+    server: String,
     username: String,
     realm: String,
     gmail_address: String,
@@ -42,8 +41,7 @@ struct Fields {
 impl Fields {
     fn of(settings: &Settings) -> Self {
         Self {
-            host: settings.vpn.host.clone(),
-            port: settings.vpn.port.to_string(),
+            server: server_text(&settings.vpn.host, settings.vpn.port),
             username: settings.vpn.username.clone(),
             realm: settings.vpn.realm.clone(),
             gmail_address: settings.otp.gmail_address.clone(),
@@ -95,6 +93,22 @@ fn trimmed(text: &str) -> String {
     text.trim().to_owned()
 }
 
+fn server_text(host: &str, port: i64) -> String {
+    if port == DEFAULT_PORT {
+        host.to_owned()
+    } else {
+        format!("{host}:{port}")
+    }
+}
+
+fn split_server(text: &str) -> (&str, Option<&str>) {
+    let text = text.trim();
+    match text.rsplit_once(':') {
+        Some((host, port)) if !text.contains('/') => (host, Some(port)),
+        _ => (text, None),
+    }
+}
+
 /// What the app password is stored as: Google shows it in groups of four with spaces.
 pub(crate) fn normalized_app_password(password: &str) -> String {
     password.chars().filter(|c| !c.is_whitespace()).collect()
@@ -128,8 +142,7 @@ impl Forms {
                 typed.clone_from(latest);
             }
         };
-        follow(&mut self.typed.host, &self.base.host, &latest.host);
-        follow(&mut self.typed.port, &self.base.port, &latest.port);
+        follow(&mut self.typed.server, &self.base.server, &latest.server);
         follow(
             &mut self.typed.username,
             &self.base.username,
@@ -170,8 +183,7 @@ impl Forms {
         let vpn = &settings.vpn;
         AccountFormState {
             revision: self.revision,
-            host: self.typed.host.clone(),
-            port: self.typed.port.clone(),
+            server: self.typed.server.clone(),
             username: self.typed.username.clone(),
             realm: self.typed.realm.clone(),
             gmail_address: self.typed.gmail_address.clone(),
@@ -196,8 +208,7 @@ impl Runtime {
         }
         let forms = &mut self.forms;
         forms.typed = Fields {
-            host: form.host,
-            port: form.port,
+            server: form.server,
             username: form.username,
             realm: form.realm,
             gmail_address: form.gmail_address,
@@ -224,7 +235,7 @@ impl Runtime {
         let typed = &self.forms.typed;
         let key = (
             trimmed(&typed.username),
-            trimmed(&typed.host),
+            split_server(&typed.server).0.to_owned(),
             trimmed(&typed.gmail_address),
         );
         if self.forms.looked_up.as_ref() == Some(&key) {
@@ -259,14 +270,15 @@ impl Runtime {
         }
         forms.save_error = None;
         let fail = |forms: &mut Forms, error: AccountSaveError| forms.save_error = Some(error);
-        let Some(port) = trimmed(&forms.typed.port)
-            .parse::<i64>()
-            .ok()
-            .filter(|port| fvm_core::config::PORTS.contains(port))
-        else {
-            return fail(forms, AccountSaveError::InvalidPort {});
+        let (host, port) = split_server(&forms.typed.server);
+        let port = match port {
+            None => DEFAULT_PORT,
+            Some(port) => match port.parse::<i64>().ok().filter(|port| PORTS.contains(port)) {
+                Some(port) => port,
+                None => return fail(forms, AccountSaveError::InvalidPort {}),
+            },
         };
-        let host = trimmed(&forms.typed.host);
+        let host = host.to_owned();
         let username = trimmed(&forms.typed.username);
         let realm = trimmed(&forms.typed.realm);
         let address = trimmed(&forms.typed.gmail_address);
@@ -288,10 +300,8 @@ impl Runtime {
         }
         let (edited, original) = (forms.typed.clone(), forms.base.clone());
         let written = self.config.update(|settings| {
-            if edited.host != original.host {
+            if edited.server != original.server {
                 settings.vpn.host.clone_from(&host);
-            }
-            if edited.port != original.port {
                 settings.vpn.port = port;
             }
             if edited.username != original.username {
