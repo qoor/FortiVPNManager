@@ -84,6 +84,12 @@ impl Staged {
 }
 
 impl Installer {
+    /// An installer that keeps its records and the prepared update under `records` and takes
+    /// updates signed with `public_key`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the app's `VERSION` is not a version.
     #[must_use]
     pub fn new(records: PathBuf, public_key: [u8; 32]) -> Self {
         Self {
@@ -95,6 +101,14 @@ impl Installer {
         }
     }
 
+    /// Copies the update the request names into the staging directory and verifies its checksum and
+    /// signature.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotDone::Refused` when an update is being installed, the files cannot be read, the
+    /// checksum or signature does not match, or the version is not newer; `NotDone::Failed` when
+    /// the staging directory cannot be written.
     pub fn prepare(&mut self, request: &UpdatePrepareRequest) -> Result<Prepared, NotDone> {
         let sources = [
             &request.installer_path,
@@ -151,6 +165,12 @@ impl Installer {
         }
     }
 
+    /// Starts the installer of the prepared update.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotDone::Refused` when an update is being installed or none is prepared;
+    /// `NotDone::Failed` when the installer cannot be started.
     pub fn install(&mut self, install_id: u64, log: &Log) -> Result<Started, NotDone> {
         if self.installing() {
             return Err(NotDone::Refused(
@@ -180,6 +200,13 @@ impl Installer {
         Ok(started)
     }
 
+    /// The update in the staging directory; `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotDone::Refused` with `VersionNotNewer` after removing a prepared update that is
+    /// not newer than this app; `NotDone::Failed` when the staging directory cannot be read or
+    /// cleared.
     pub fn prepared(&self) -> Result<Option<Prepared>, NotDone> {
         let unreadable = |error: io::Error| {
             NotDone::Failed(format!(
@@ -219,6 +246,12 @@ impl Installer {
         }
     }
 
+    /// Removes the prepared update.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotDone::Refused` when an update is being installed; `NotDone::Failed` when the
+    /// files cannot be removed.
     pub fn discard(&mut self) -> Result<(), NotDone> {
         if self.installing() {
             return Err(NotDone::Refused(

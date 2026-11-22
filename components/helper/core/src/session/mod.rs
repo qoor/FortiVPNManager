@@ -71,6 +71,11 @@ impl SessionManager {
     /// Starts a run for `request`, which the backend checks again, since the Helper does not trust
     /// the app. A started run takes the request's password. `on_report` gets what the run tells,
     /// as `Run` describes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StartFailure::InvalidRequest` when the backend refuses a value of `request`, or
+    /// `StartFailure::RunDirectory` when the run directory cannot be prepared.
     pub fn start(
         &self,
         request: &mut RunRequest,
@@ -117,10 +122,20 @@ impl SessionManager {
 
     /// Records in the run directory the exception routes the Helper added, so that a later Helper
     /// removes them if this one cannot; none removes the record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the failure when the record cannot be written or removed.
     pub fn record_bypass_routes(&self, routes: &[AddedRoute]) -> Result<(), Failure> {
         recovery::write_bypass_record(&self.run_directory, routes)
     }
 
+    /// Records in the run directory the network changes the Helper could not revert, so that a
+    /// later Helper reverts them; none removes the record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the failure when the record cannot be written or removed.
     pub fn record_unreverted(&self, changes: &[OutsideChanges]) -> Result<(), Failure> {
         recovery::write_unreverted_record(&self.run_directory, changes)
     }
@@ -200,6 +215,11 @@ impl NetworkJob {
         !self.returned.load(Ordering::Relaxed)
     }
 
+    /// Answers the network change with `outcome`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on a second answer.
     pub fn finish(mut self, outcome: NetworkOutcome) {
         let answer = self
             .answer

@@ -53,6 +53,11 @@ fn log(category: LogCategory, level: Level, message: &str) {
     log.write(level, message);
 }
 
+/// Runs the Helper until the system ends it.
+///
+/// # Panics
+///
+/// Panics if the SIGTERM handler or its thread cannot be set up.
 pub fn run() -> ! {
     let Some(team_id) = code_signing::team_id() else {
         log(

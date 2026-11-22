@@ -14,6 +14,11 @@ const MAX_PASSWORD_BYTES: usize = 255;
 
 pub const PIN_PREFIX: &str = "pin-sha256:";
 
+/// Checks an OTP: 6 to 8 ASCII digits.
+///
+/// # Errors
+///
+/// Returns an English reason for the app when `code` is not 6 to 8 ASCII digits.
 pub fn check_otp(code: &str) -> Result<(), String> {
     if (6..=8).contains(&code.len()) && code.bytes().all(|byte| byte.is_ascii_digit()) {
         Ok(())
@@ -22,6 +27,13 @@ pub fn check_otp(code: &str) -> Result<(), String> {
     }
 }
 
+/// Checks a VPN gateway's host: a DNS hostname or a dotted-quad IPv4 address of at most `max_bytes`
+/// bytes.
+///
+/// # Errors
+///
+/// Returns an English reason for the app when `host` is empty, longer than `max_bytes`, holds a
+/// forbidden character or surrounding whitespace, or is neither a hostname nor an IPv4 address.
 pub fn check_host(host: &str, max_bytes: usize) -> Result<(), String> {
     check_text("host", host, max_bytes, any_character)?;
     if is_host(host) {
@@ -105,6 +117,13 @@ fn any_character(_: char) -> bool {
     true
 }
 
+/// Checks a text field named `field`: not empty, at most `max_bytes` bytes, only characters
+/// `allowed` accepts, and no surrounding whitespace.
+///
+/// # Errors
+///
+/// Returns an English reason for the app, naming `field` but not `value`, for the first rule
+/// `value` breaks.
 pub fn check_text(
     field: &str,
     value: &str,
@@ -150,6 +169,12 @@ fn account_value(
     }
 }
 
+/// Checks a VPN password for the VPN client.
+///
+/// # Errors
+///
+/// Returns an English reason for the app when `password` is empty or holds a character the VPN
+/// client does not take.
 pub fn check_password(password: &str) -> Result<(), String> {
     if password.is_empty() {
         return Err("password must not be empty".to_owned());
@@ -190,6 +215,11 @@ pub fn is_realm_character(c: char) -> bool {
 /// value openconnect would refuse, in the order server address, username, realm. An empty server
 /// address or username is left to the caller, as an account not set up yet; an empty realm means
 /// none.
+///
+/// # Errors
+///
+/// Returns the problem with the first value that breaks a rule: too long, a disallowed character,
+/// surrounding whitespace, or a server address that is neither a hostname nor an IPv4 address.
 pub fn check_account(host: &str, username: &str, realm: &str) -> Result<(), AccountValueProblem> {
     account_value(AccountField::Host, host, MAX_HOST_BYTES, any_character)?;
     if !host.is_empty() && !is_host(host) {
@@ -211,6 +241,15 @@ pub fn check_account(host: &str, username: &str, realm: &str) -> Result<(), Acco
 
 /// The app's check of a typed VPN password before it is saved. An empty one is left to the
 /// caller, for which it keeps the stored password.
+///
+/// # Errors
+///
+/// Returns `AccountSaveError::InvalidVpnPassword` when `password` holds a character the VPN client
+/// does not take or is longer than the limit.
+///
+/// # Panics
+///
+/// Panics if the password limit does not fit in `u32`.
 pub fn check_vpn_password(password: &str) -> Result<(), AccountSaveError> {
     if !password.chars().all(is_password_character) || password.len() > MAX_PASSWORD_BYTES {
         return Err(AccountSaveError::InvalidVpnPassword {

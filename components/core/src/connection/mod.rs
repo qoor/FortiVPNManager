@@ -65,6 +65,10 @@ pub struct Settings {
 impl Settings {
     /// The settings file's values, which its reader checked against these types' ranges, with the
     /// certificate values it trusts.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a minute value of `settings` is out of the range its reader checks.
     #[must_use]
     pub fn new(settings: &crate::config::Settings) -> Self {
         let connection = &settings.connection;

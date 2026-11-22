@@ -21,10 +21,20 @@ pub struct State {
     pub connected_before_update: bool,
 }
 
+/// Reads `state.json`.
+///
+/// # Errors
+///
+/// Returns the error when `bytes` is not a `state.json`.
 pub fn read(bytes: &[u8]) -> Result<State, serde_json::Error> {
     serde_json::from_slice::<Wire>(bytes).map(Wire::into_state)
 }
 
+/// `state` as `state.json`, ending in a newline.
+///
+/// # Panics
+///
+/// Panics if `state` cannot be encoded as JSON.
 #[must_use]
 pub fn to_bytes(state: &State) -> Vec<u8> {
     let mut bytes =

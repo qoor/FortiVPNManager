@@ -39,6 +39,11 @@ pub struct Asset {
 pub struct InvalidRelease;
 
 impl Release {
+    /// Reads a release of the GitHub releases API.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidRelease` when `bytes` is not a release or its tag is not a version.
     pub fn from_json(bytes: &[u8]) -> Result<Self, InvalidRelease> {
         #[derive(Deserialize)]
         struct Wire {
@@ -198,6 +203,11 @@ impl DownloadProgress {
         self.newest().1
     }
 
+    /// The share of the download received, from 0 to `DOWNLOADED_PERCENT`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the share does not fit in `u8`.
     #[must_use]
     pub fn percent(&self) -> u8 {
         let done = u128::from(self.received().min(self.total)) * u128::from(DOWNLOADED_PERCENT);
@@ -207,6 +217,11 @@ impl DownloadProgress {
             })
     }
 
+    /// The download's remaining time, estimated from the rate since the first sample.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the newest sample is older than the first.
     #[must_use]
     pub fn remaining(&self) -> RemainingTime {
         let (start, start_bytes) = self.samples[0];

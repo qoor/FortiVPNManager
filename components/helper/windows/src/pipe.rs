@@ -77,6 +77,15 @@ impl Helper {
     /// with connections accepted; until then an app finds no pipe and waits for it, as on macOS.
     /// Fails when the pipe cannot be created, such as when another program created a pipe of that
     /// name first; the entry then has no run and the Helper exits.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error when the pipe's security descriptor is invalid or the pipe cannot be
+    /// created.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the entry, route or accept thread cannot be started.
     pub fn start(options: Options, log: Log) -> io::Result<Self> {
         let security = U16CString::from_str(&options.security)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "SDDL holds a NUL"))?;
@@ -129,6 +138,10 @@ impl Helper {
     }
 
     /// Blocks until the entry says to exit.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the relay's exit lock is poisoned or the relay has ended.
     pub fn wait_for_exit(&self) -> Exit {
         self.exits
             .lock()

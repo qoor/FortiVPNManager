@@ -43,6 +43,11 @@ unsafe extern "C" {
     ) -> CFStringRef;
 }
 
+/// The dynamic store key of the network service `service_id`'s state for `entity`.
+///
+/// # Panics
+///
+/// Panics if the system returns no key.
 #[must_use]
 pub fn service_state_key(service_id: &str, entity: Entity) -> String {
     let service_id = CFString::new(service_id);

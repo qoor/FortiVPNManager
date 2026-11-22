@@ -41,6 +41,10 @@ pub struct Inbox(Sender<Event>);
 
 impl Inbox {
     /// Passes on a message, in the order the OS side received them.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the entry has ended.
     pub fn deliver(&self, message: ToEntry) {
         self.0
             .send(Event::FromOs(message))
@@ -51,6 +55,10 @@ impl Inbox {
 /// Starts the entry on its own thread with `sessions` for the VPN client. `send` takes the entry's
 /// messages for the OS side, in order, on the entry's thread; the first is "ready", once the
 /// session manager cleaned up after an earlier Helper.
+///
+/// # Panics
+///
+/// Panics if the entry thread cannot be started.
 pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'static) -> Inbox {
     let installer = Installer::new(
         PathBuf::from(auto_update::RECORDS_DIRECTORY),
@@ -67,6 +75,12 @@ pub fn start(sessions: SessionManager, send: impl Fn(&FromEntry) + Send + 'stati
     inbox
 }
 
+/// Passes every panic and every watchdog fault to `fault` as one line, before the default panic
+/// handling.
+///
+/// # Panics
+///
+/// The installed hook panics if a panic has no location.
 pub fn report_faults(fault: impl Fn(&str) + Send + Sync + 'static) {
     let fault: Fault = Arc::new(fault);
     watchdog::report_to(Arc::clone(&fault));

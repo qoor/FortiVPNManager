@@ -8,6 +8,10 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 /// Writes one message with a single `write_all`.
+///
+/// # Errors
+///
+/// Returns the error when `message` cannot be encoded, is 4 GiB or longer, or cannot be written.
 pub fn send(writer: &mut impl Write, message: &impl Serialize) -> io::Result<()> {
     let mut frame = vec![0; 4];
     serde_json::to_writer(&mut frame, message)?;
@@ -19,6 +23,11 @@ pub fn send(writer: &mut impl Write, message: &impl Serialize) -> io::Result<()>
 }
 
 /// Reads the next message. The end of the stream, even between two messages, is `UnexpectedEof`.
+///
+/// # Errors
+///
+/// Returns `UnexpectedEof` at the end of the stream, `InvalidData` when the message cannot be
+/// decoded as `T`, or the read error.
 pub fn receive<T: DeserializeOwned>(reader: &mut impl Read) -> io::Result<T> {
     let mut header = [0; 4];
     reader.read_exact(&mut header)?;

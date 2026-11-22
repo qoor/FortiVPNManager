@@ -39,6 +39,10 @@ pub enum HeadParse {
 }
 
 /// Reads the bytes received so far on one connection.
+///
+/// # Panics
+///
+/// Panics if an ASCII request line is not UTF-8.
 pub fn parse_request_head(bytes: &[u8]) -> HeadParse {
     let bytes = &bytes[..bytes.len().min(MAX_HEAD_BYTES + 4)];
     let Some(end) = head_end(bytes) else {

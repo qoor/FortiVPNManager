@@ -129,6 +129,11 @@ pub enum Command {
 
 impl Command {
     /// The whole line with `tag`, ending in CRLF. It holds the password for `AuthenticatePlain`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `CommandError` when the username, password, mailbox name or search text holds a
+    /// character the command cannot carry.
     pub fn encode(&self, tag: &str) -> Result<Vec<u8>, CommandError> {
         Ok(format!("{tag} {}\r\n", self.body()?).into_bytes())
     }

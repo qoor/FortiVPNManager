@@ -355,6 +355,11 @@ pub struct Ipv4Network {
 
 impl Ipv4Network {
     /// A route's destination: an address and a subnet mask.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `AddressProblem` when the destination or the mask is malformed, the mask is not
+    /// contiguous, the prefix is out of range, the network cannot be routed, or host bits are set.
     pub fn from_route(route: &BypassRoute) -> Result<Self, AddressProblem> {
         let (address, prefix_length) = address_and_mask(&route.destination, &route.subnet_mask)?;
         Self::new(address, prefix_length)
@@ -362,6 +367,11 @@ impl Ipv4Network {
 
     /// The network an interface address belongs to, such as `10.20.161.0/24` for `10.20.161.20`
     /// with `255.255.255.0`: the host bits are cleared instead of refused.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `AddressProblem` when the address or the mask is malformed, the mask is not
+    /// contiguous, the prefix is out of range, or the network cannot be routed.
     pub fn enclosing(address: &str, subnet_mask: &str) -> Result<Self, AddressProblem> {
         let (address, prefix_length) = address_and_mask(address, subnet_mask)?;
         Self::new(address & mask(prefix_length), prefix_length)
@@ -407,6 +417,11 @@ impl Ipv4Network {
         Ipv4Addr::from(self.address)
     }
 
+    /// The prefix length in bits.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the prefix length does not fit in `u8`.
     #[must_use]
     pub fn prefix_length(&self) -> u8 {
         u8::try_from(self.prefix_length).expect("prefix lengths are at most 32")

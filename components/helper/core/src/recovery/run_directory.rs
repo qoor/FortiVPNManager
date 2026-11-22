@@ -264,6 +264,10 @@ pub(crate) fn prepare(directory: &Path) -> Result<(), Failure> {
 }
 
 /// A new file with mode 0600; an existing file or symlink at `path` is an error.
+///
+/// # Errors
+///
+/// Returns the error when a file or symlink exists at `path` or the file cannot be created.
 #[cfg(unix)]
 pub fn create_private_file(path: &Path) -> io::Result<File> {
     OpenOptions::new()
@@ -275,6 +279,10 @@ pub fn create_private_file(path: &Path) -> io::Result<File> {
 
 /// A new file with the run directory's access rights; an existing file or link at `path` is an
 /// error.
+///
+/// # Errors
+///
+/// Returns the error when a file or link exists at `path` or the file cannot be created.
 #[cfg(windows)]
 pub fn create_private_file(path: &Path) -> io::Result<File> {
     OpenOptions::new().write(true).create_new(true).open(path)

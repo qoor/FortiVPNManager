@@ -20,6 +20,10 @@ pub extern "C" fn fvm_runtime_start() -> i32 {
 }
 
 /// Starts the runtime and returns Swift's end of the stream.
+///
+/// # Panics
+///
+/// Panics if the socket pair or the runtime thread cannot be created.
 #[must_use]
 pub fn start() -> UnixStream {
     let (ours, theirs) = socket_pair().expect("creating the socketpair to Swift");

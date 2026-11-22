@@ -230,6 +230,11 @@ impl TokenError {
 }
 
 /// Reads an answer of the token endpoint, for the code exchange and for a refresh.
+///
+/// # Errors
+///
+/// Returns the `TokenError` for an OAuth error or an error status, or for a success whose body is
+/// not a token answer.
 pub fn read_token_response(status: u16, body: &[u8]) -> Result<TokenGrant, TokenError> {
     #[derive(Deserialize)]
     struct Body {
@@ -301,6 +306,11 @@ const CLIENT_ID_SUFFIX: &str = ".apps.googleusercontent.com";
 
 /// Reads the `installed` section of a client JSON downloaded from the Google Cloud console, or
 /// built into the app.
+///
+/// # Errors
+///
+/// Returns the `OAuthClientFileProblem` when `bytes` is not JSON, holds a web client or no desktop
+/// client, or a field is missing or invalid.
 pub fn parse_client_file(bytes: &[u8]) -> Result<OAuthClient, OAuthClientFileProblem> {
     let object = serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(bytes)
         .map_err(|_| OAuthClientFileProblem::NotJson {})?;

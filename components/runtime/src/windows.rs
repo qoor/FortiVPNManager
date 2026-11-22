@@ -36,6 +36,10 @@ pub extern "C" fn fvm_runtime_start() -> AppPipes {
 
 /// Starts the runtime and returns the app's ends of its pipes: the one it reads and the one it
 /// writes.
+///
+/// # Panics
+///
+/// Panics if the pipes or the runtime thread cannot be created.
 #[must_use]
 pub fn start() -> (PipeReader, PipeWriter) {
     let (runtime_reader, app_writer) = pipe();

@@ -28,6 +28,15 @@ pub struct Parser {
 
 impl Parser {
     /// Takes the bytes as they arrive and returns the responses they complete, in order.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ParseError::LiteralTooLarge` when a literal announces more than the literal limit,
+    /// or `ParseError::ResponseTooLarge` when a response grows beyond the response limit.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a literal within the limit does not fit in `usize`.
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<Response>, ParseError> {
         if let Some(failure) = self.failure {
             return Err(failure);

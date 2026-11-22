@@ -15,6 +15,12 @@ pub trait Backend: Send + Sync {
 
     fn version(&self) -> &str;
 
+    /// Checks the values of `request` before a run starts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an English reason for the app when a value of `request` is one the VPN client
+    /// refuses.
     fn check(&self, request: &RunRequest) -> Result<(), String>;
 
     fn run(&self, request: SessionRequest, link: &Link) -> SessionEnd;
@@ -103,16 +109,31 @@ impl Link {
         (self.report)(event);
     }
 
+    /// Waits for the OTP the app submits; `None` when the run is cancelled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned.
     pub fn otp(&self) -> Option<Zeroizing<String>> {
         self.otp.lock().expect(LOCK).recv().ok().flatten()
     }
 
+    /// Hands `code` to the session waiting in `otp`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link no longer holds the OTP receiver.
     pub fn submit_otp(&self, code: Zeroizing<String>) {
         self.otp_sender
             .send(Some(code))
             .expect("the link holds the OTP receiver");
     }
 
+    /// Reports the session's cookie once the tunnel is open.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned. Panics on a second call.
     pub fn opened(&self, cookie: Zeroizing<String>) {
         let opened = self
             .opened
@@ -123,6 +144,12 @@ impl Link {
         opened(cookie);
     }
 
+    /// Sets how a cancel or a detach reaches the running backend; `false` when the run was already
+    /// cancelled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned.
     pub fn arm_cancel(&self, write: impl Fn(Command) + Send + 'static) -> bool {
         let mut cancel = self.cancel.lock().expect(LOCK);
         if cancel.requested {
@@ -132,10 +159,21 @@ impl Link {
         true
     }
 
+    /// Forgets the writer that `arm_cancel` set.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned.
     pub fn disarm_cancel(&self) {
         self.cancel.lock().expect(LOCK).write = None;
     }
 
+    /// Cancels the run: asks the armed backend to cancel and ends a wait for the OTP. Returns
+    /// whether a backend was armed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned. Panics if the link no longer holds the OTP receiver.
     pub fn cancel(&self) -> bool {
         let mut cancel = self.cancel.lock().expect(LOCK);
         cancel.requested = true;
@@ -149,6 +187,11 @@ impl Link {
         armed
     }
 
+    /// Asks the armed backend to detach from the tunnel; `false` when none is armed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the link's lock is poisoned.
     pub fn detach(&self) -> bool {
         let cancel = self.cancel.lock().expect(LOCK);
         let Some(write) = &cancel.write else {

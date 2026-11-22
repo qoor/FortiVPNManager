@@ -214,6 +214,12 @@ pub struct Profile {
 }
 
 impl Profile {
+    /// Reads the answer to `users.getProfile`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `ApiError` for an error status, or `ApiError::Server` when a success's body
+    /// cannot be read.
     pub fn from_response(status: u16, body: &[u8]) -> Result<Self, ApiError> {
         read(status, body)
     }
@@ -265,6 +271,12 @@ pub struct HistoryPage {
 }
 
 impl HistoryPage {
+    /// Reads one page of the answer to `users.history.list`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `ApiError` for an error status, or `ApiError::Server` when a success's body
+    /// cannot be read.
     pub fn from_response(status: u16, body: &[u8]) -> Result<Self, ApiError> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -304,6 +316,11 @@ impl HistoryPage {
 }
 
 /// `users.messages.list`.
+///
+/// # Errors
+///
+/// Returns the `ApiError` for an error status, or `ApiError::Server` when a success's body cannot
+/// be read.
 pub fn messages_from_response(status: u16, body: &[u8]) -> Result<Vec<MessageRef>, ApiError> {
     #[derive(Deserialize)]
     struct Wire {
@@ -320,6 +337,10 @@ pub fn messages_from_response(status: u16, body: &[u8]) -> Result<Vec<MessageRef
 }
 
 /// The answer to `trash`.
+///
+/// # Errors
+///
+/// Returns the `ApiError` for an error status.
 pub fn trash_from_response(status: u16, body: &[u8]) -> Result<(), ApiError> {
     ApiError::classify(status, body).map_or(Ok(()), Err)
 }
@@ -342,6 +363,12 @@ pub struct Header {
 }
 
 impl MessageMetadata {
+    /// Reads the answer to `users.messages.get` with the metadata format.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `ApiError` for an error status, or `ApiError::Server` when a success's body
+    /// cannot be read.
     pub fn from_response(status: u16, body: &[u8]) -> Result<Self, ApiError> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]

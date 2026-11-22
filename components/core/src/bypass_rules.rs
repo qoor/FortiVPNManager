@@ -122,6 +122,10 @@ pub fn plan_routes(
 
 impl RoutePlan {
     /// The status line once the routes are in place.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of on-link targets does not fit in `u32`.
     #[must_use]
     pub fn status(&self, snapshot: &BypassRoutesSnapshot) -> BypassStatus {
         match self.applicability {
@@ -284,6 +288,10 @@ impl ListDraft {
     }
 
     /// The list as the section shows it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a row index does not fit in `u32`.
     #[must_use]
     pub fn rule_list(&self) -> RuleList {
         RuleList {

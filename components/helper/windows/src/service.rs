@@ -44,6 +44,10 @@ const STOP_WAIT: Duration = Duration::from_secs(30);
 
 /// Runs the service until it stops. Fails when the service control manager did not start the
 /// process.
+///
+/// # Errors
+///
+/// Returns the error when the service control manager did not start the process.
 pub fn run() -> windows_service::Result<()> {
     service_dispatcher::start(SERVICE_NAME, service_main)
 }

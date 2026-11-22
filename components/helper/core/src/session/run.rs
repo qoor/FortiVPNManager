@@ -175,6 +175,15 @@ impl Run {
 
     /// Checks `code`, then hands it to the session; accepted once, while the session waits for the
     /// OTP. The error is the Helper's answer to the app.
+    ///
+    /// # Errors
+    ///
+    /// Returns `HelperError` with `InvalidRequest` when `code` is not an OTP, or `WrongPhase` when
+    /// the session does not wait for an OTP or has ended.
+    ///
+    /// # Panics
+    ///
+    /// Panics when called on the run's own thread, such as from `on_report`.
     pub fn submit_otp(&self, code: String) -> Result<(), HelperError> {
         assert_ne!(
             thread::current().id(),
@@ -199,6 +208,10 @@ impl Run {
     }
 
     /// Cancels the session. Only the first reason counts; nothing happens once the session ended.
+    ///
+    /// # Panics
+    ///
+    /// Panics when called on the run's own thread, such as from `on_report`.
     pub fn stop(&self, reason: StopReason) {
         assert_ne!(
             thread::current().id(),
@@ -208,6 +221,15 @@ impl Run {
         let _ = self.inputs.send(Input::Stop(reason));
     }
 
+    /// Prepares the session's tunnel to be handed over to a new run.
+    ///
+    /// # Errors
+    ///
+    /// Returns `NotReplaceable::NotUp` when the tunnel is not up or the session has ended.
+    ///
+    /// # Panics
+    ///
+    /// Panics when called on the run's own thread, such as from `on_report`.
     pub fn replaceable(&self) -> Result<Replaced, NotReplaceable> {
         assert_ne!(
             thread::current().id(),
@@ -221,6 +243,12 @@ impl Run {
         answer.recv().unwrap_or(Err(NotReplaceable::NotUp))
     }
 
+    /// The check of the network settings the tunnel applied; `None` while the tunnel is not up, its
+    /// network settings are being changed, or the session has ended.
+    ///
+    /// # Panics
+    ///
+    /// Panics when called on the run's own thread, such as from `on_report`.
     #[must_use]
     pub fn routing_check(&self) -> Option<NetworkChange> {
         assert_ne!(

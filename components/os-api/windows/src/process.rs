@@ -20,6 +20,11 @@ use crate::{Error, last_error};
 pub struct Process(OwnedHandle);
 
 impl Process {
+    /// Ends the process with exit code 1.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the process cannot be ended.
     pub fn kill(&self) -> Result<(), Error> {
         // SAFETY: The handle is the process's own and open.
         if unsafe { TerminateProcess(self.0.as_raw_handle(), 1) } == 0 {
@@ -28,6 +33,15 @@ impl Process {
         Ok(())
     }
 
+    /// Waits up to `limit` for the process to end; `true` when it ended.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the wait fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `limit` is 49 days or longer.
     pub fn ended_within(&self, limit: Duration) -> Result<bool, Error> {
         let milliseconds =
             u32::try_from(limit.as_millis()).expect("a wait limit is shorter than 49 days");
@@ -39,6 +53,11 @@ impl Process {
         }
     }
 
+    /// Waits for the process to end and returns its exit code.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the wait or the exit code query fails.
     pub fn wait(&self) -> Result<u32, Error> {
         // SAFETY: As in `kill`.
         if unsafe { WaitForSingleObject(self.0.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
@@ -53,6 +72,13 @@ impl Process {
     }
 }
 
+/// Starts `program` with `args`, `environment` added to this process's, and `stdio` as its standard
+/// input, output and error, without a console window.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the handles cannot be passed on or the process cannot be
+/// started.
 pub fn spawn(
     program: &str,
     args: &[&str],

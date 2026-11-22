@@ -7,6 +7,11 @@ use windows_sys::Win32::Security::Cryptography::{
 
 use crate::{Error, last_error};
 
+/// Encrypts `data` for the current user with DPAPI.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the data cannot be encrypted.
 pub fn protect(data: &[u8]) -> Result<Vec<u8>, Error> {
     let input = blob(data);
     let mut output = CRYPT_INTEGER_BLOB::default();
@@ -29,6 +34,12 @@ pub fn protect(data: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(take(output))
 }
 
+/// Decrypts data that `protect` encrypted for the current user.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the data cannot be decrypted, such as data encrypted for
+/// another user.
 pub fn unprotect(data: &[u8]) -> Result<Vec<u8>, Error> {
     let input = blob(data);
     let mut output = CRYPT_INTEGER_BLOB::default();

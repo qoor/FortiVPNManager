@@ -55,6 +55,13 @@ impl Peer {
         Self(Weak::new(connection))
     }
 
+    /// Sends `data` with `selector` to the remote object while the connection lasts; `failed` gets
+    /// the error when the message is not delivered.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the remote interface has no method `selector`, or it does not take one object and
+    /// return nothing.
     pub fn send(&self, selector: Sel, data: &[u8], failed: impl Fn(String) + Send + 'static) {
         let Some(connection) = self.0.load() else {
             return;

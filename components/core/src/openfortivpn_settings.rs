@@ -91,6 +91,11 @@ pub struct ImportedSettings {
     pub unreadable_lines: Vec<u32>,
 }
 
+/// Reads an openfortivpn configuration file for the values the app imports.
+///
+/// # Panics
+///
+/// Panics if a line number does not fit in `u32`.
 pub fn read(bytes: &[u8]) -> ImportedSettings {
     let mut settings = ImportedSettings {
         host: None,

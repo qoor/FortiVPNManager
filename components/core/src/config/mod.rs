@@ -205,6 +205,10 @@ pub enum UpdateError {
 
 /// Reads the file's bytes. An empty file, or one with only comments or a null document, holds
 /// the defaults; a missing file is the caller's to treat the same way.
+///
+/// # Errors
+///
+/// Returns the `ConfigProblem` with its location when the file does not pass.
 pub fn read(bytes: &[u8]) -> Result<Loaded, ConfigProblem> {
     let text = text::check(bytes)?;
     let tree = tree::build(text)?;
@@ -214,6 +218,11 @@ pub fn read(bytes: &[u8]) -> Result<Loaded, ConfigProblem> {
 /// Applies `change` to the settings in `current`, the file's latest bytes (`None` when there is no
 /// file), and decides what to write. A file that does not pass is never written over, so a newer
 /// app's file stays as it is.
+///
+/// # Errors
+///
+/// Returns `UpdateError::File` when the current file does not pass or a newer app wrote it, or
+/// `UpdateError::Settings` when the changed settings break a rule.
 pub fn update(
     current: Option<&[u8]>,
     change: impl FnOnce(&mut Settings),

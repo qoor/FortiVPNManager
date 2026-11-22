@@ -65,6 +65,12 @@ impl Family {
 pub struct Luid(u64);
 
 impl Luid {
+    /// The LUID of the interface with `index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the call to Windows fails, such as when no interface has
+    /// `index`.
     pub fn from_index(index: u32) -> Result<Self, Error> {
         let mut luid = NET_LUID_LH { Value: 0 };
         // SAFETY: `luid` is live for the call, which writes it.
@@ -73,6 +79,16 @@ impl Luid {
         Ok(Self::from_raw(luid))
     }
 
+    /// The LUID of the interface named `alias`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the call to Windows fails, such as when no interface has
+    /// that name.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `alias` holds a NUL character.
     pub fn from_alias(alias: &str) -> Result<Self, Error> {
         let alias = U16CString::from_str(alias).expect("an interface alias has no NUL");
         let mut luid = NET_LUID_LH { Value: 0 };
@@ -83,6 +99,12 @@ impl Luid {
         Ok(Self::from_raw(luid))
     }
 
+    /// The interface's index.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Windows error code when the call to Windows fails, such as when the interface no
+    /// longer exists.
     pub fn index(self) -> Result<u32, Error> {
         let mut index = 0;
         // SAFETY: Both values are live for the call, which reads the first and writes the second.
@@ -134,6 +156,12 @@ pub struct Interface {
     pub up: bool,
 }
 
+/// The interface's alias, GUID, medium and state.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface no
+/// longer exists.
 pub fn interface(luid: Luid) -> Result<Interface, Error> {
     let mut row = MIB_IF_ROW2 {
         InterfaceLuid: luid.raw(),
@@ -203,6 +231,12 @@ pub struct InterfaceSettings {
     pub automatic_metric: bool,
 }
 
+/// The interface's MTU and metric for `family`.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface does
+/// not use `family`.
 pub fn interface_settings(luid: Luid, family: Family) -> Result<InterfaceSettings, Error> {
     let row = ip_interface(luid, family)?;
     Ok(InterfaceSettings {
@@ -212,6 +246,12 @@ pub fn interface_settings(luid: Luid, family: Family) -> Result<InterfaceSetting
     })
 }
 
+/// Sets the interface's MTU for `family`.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface does
+/// not use `family`.
 pub fn set_mtu(luid: Luid, family: Family, mtu: u32) -> Result<(), Error> {
     let mut row = ip_interface(luid, family)?;
     row.NlMtu = mtu;
@@ -219,6 +259,11 @@ pub fn set_mtu(luid: Luid, family: Family, mtu: u32) -> Result<(), Error> {
 }
 
 /// Sets the interface metric and turns the automatic metric off, or with `None` turns it back on.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface does
+/// not use `family`.
 pub fn set_metric(luid: Luid, family: Family, metric: Option<u32>) -> Result<(), Error> {
     let mut row = ip_interface(luid, family)?;
     row.UseAutomaticMetric = metric.is_none();
@@ -293,6 +338,11 @@ pub struct UnicastAddress {
 
 /// Adds `address` with the on-link prefix of `prefix_length` bits. Windows forgets it at a restart,
 /// and when the interface goes away.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface
+/// already has `address`.
 pub fn add_address(luid: Luid, address: IpAddr, prefix_length: u8) -> Result<(), Error> {
     let mut row = unicast_row(luid, address);
     row.OnLinkPrefixLength = prefix_length;
@@ -304,6 +354,12 @@ pub fn add_address(luid: Luid, address: IpAddr, prefix_length: u8) -> Result<(),
     check("CreateUnicastIpAddressEntry", code)
 }
 
+/// Deletes `address` from the interface.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface does
+/// not have `address`.
 pub fn delete_address(luid: Luid, address: IpAddr) -> Result<(), Error> {
     let row = unicast_row(luid, address);
     // SAFETY: `row` is live for the call, which only reads it.
@@ -321,6 +377,10 @@ fn unicast_row(luid: Luid, address: IpAddr) -> MIB_UNICASTIPADDRESS_ROW {
 }
 
 /// The addresses of `family` on every interface.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails.
 pub fn addresses(family: Family) -> Result<Vec<UnicastAddress>, Error> {
     let mut table: *mut MIB_UNICASTIPADDRESS_TABLE = ptr::null_mut();
     // SAFETY: `table` is live for the call, which points it to a table it allocates.
@@ -360,6 +420,12 @@ pub struct Route {
     pub metric: u32,
 }
 
+/// Adds `route`.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the same route
+/// exists.
 pub fn add_route(route: &Route) -> Result<(), Error> {
     let row = forward_row(route);
     // SAFETY: `row` is live for the call, which only reads it.
@@ -369,6 +435,11 @@ pub fn add_route(route: &Route) -> Result<(), Error> {
 
 /// Deletes the route to the same destination through the same next hop and interface, whatever its
 /// metric.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when no such route
+/// exists.
 pub fn delete_route(route: &Route) -> Result<(), Error> {
     let row = forward_row(route);
     // SAFETY: `row` is live for the call, which only reads it.
@@ -389,6 +460,11 @@ fn forward_row(route: &Route) -> MIB_IPFORWARD_ROW2 {
     row
 }
 
+/// The routes of `family` on every interface.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails.
 pub fn routes(family: Family) -> Result<Vec<Route>, Error> {
     let mut table: *mut MIB_IPFORWARD_TABLE2 = ptr::null_mut();
     // SAFETY: `table` is live for the call, which points it to a table it allocates.
@@ -410,6 +486,11 @@ pub fn routes(family: Family) -> Result<Vec<Route>, Error> {
 
 /// The route Windows would send a packet to `destination` by, through any interface, and the source
 /// address it would send it from.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when no route reaches
+/// `destination`.
 pub fn best_route(destination: IpAddr) -> Result<(Route, IpAddr), Error> {
     let mut row = MIB_IPFORWARD_ROW2::default();
     let mut source = SOCKADDR_INET::default();
@@ -444,6 +525,15 @@ fn route(row: &MIB_IPFORWARD_ROW2, family: Family) -> Route {
 
 /// Replaces the interface's DNS servers of `family` with `servers`, which are of that family; none
 /// clears them. Windows keeps them in the registry until they are replaced or cleared.
+///
+/// # Errors
+///
+/// Returns an error when `interface` is not a GUID in braces, or the error code when the call to
+/// Windows fails.
+///
+/// # Panics
+///
+/// Panics if an address's text holds a NUL character.
 pub fn set_dns_servers(interface: &str, family: Family, servers: &[IpAddr]) -> Result<(), Error> {
     let guid = guid_from_text(interface)?;
     let list: Vec<String> = servers.iter().map(ToString::to_string).collect();
@@ -462,6 +552,11 @@ pub fn set_dns_servers(interface: &str, family: Family, servers: &[IpAddr]) -> R
 /// The interface's own DNS servers of `family`, as `set_dns_servers` wrote them. Entries that are
 /// not addresses are left out. Microsoft's documentation asks for no flags here, but the IPv6 one
 /// does select IPv6's servers.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the call to Windows fails, such as when the interface no
+/// longer exists.
 pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
     let guid = luid.guid()?;
     let mut settings = DNS_INTERFACE_SETTINGS {
@@ -494,6 +589,16 @@ pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
         .collect())
 }
 
+/// Clears the WINS servers of the interface whose GUID text, in braces, is `interface`.
+///
+/// # Errors
+///
+/// Returns the Windows error code when the interface's NetBT registry key cannot be opened or
+/// written.
+///
+/// # Panics
+///
+/// Panics if `interface` holds a NUL character.
 pub fn clear_wins_servers(interface: &str) -> Result<(), Error> {
     let path =
         format!(r"SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\Tcpip_{interface}");

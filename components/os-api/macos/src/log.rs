@@ -22,6 +22,11 @@ unsafe impl Send for Log {}
 unsafe impl Sync for Log {}
 
 impl Log {
+    /// A log for `subsystem` and `category` in the unified log.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `subsystem` or `category` holds a NUL character.
     #[must_use]
     pub fn new(subsystem: &str, category: &str) -> Self {
         let subsystem = CString::new(subsystem).expect("a subsystem without NUL");
@@ -30,6 +35,11 @@ impl Log {
         Self(unsafe { fvm_log_create(subsystem.as_ptr(), category.as_ptr()) })
     }
 
+    /// Writes `message` at `level`, up to its first NUL character.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the message cannot become a C string.
     pub fn write(&self, level: Level, message: &str) {
         let kind = match level {
             Level::Debug => 0x02,
