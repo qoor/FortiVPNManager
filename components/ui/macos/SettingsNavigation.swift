@@ -10,9 +10,6 @@ final class SettingsNavigation {
     private(set) var page = SettingsPage.pane(
         UserDefaults.standard.string(forKey: lastPaneKey).flatMap(SettingsPane.init(rawValue:)) ?? .general
     ) {
-        willSet {
-            onPageWillChange?()
-        }
         didSet {
             UserDefaults.standard.set(page.pane.rawValue, forKey: Self.lastPaneKey)
             onPageChange?(page)
@@ -71,6 +68,7 @@ final class SettingsNavigation {
 
     func goBack() {
         guard let previous = backHistory.popLast() else { return }
+        onPageWillChange?()
         chosenResult = nil
         forwardHistory.append(page)
         page = previous
@@ -78,6 +76,7 @@ final class SettingsNavigation {
 
     func goForward() {
         guard let next = forwardHistory.popLast() else { return }
+        onPageWillChange?()
         chosenResult = nil
         backHistory.append(page)
         page = next
@@ -85,6 +84,7 @@ final class SettingsNavigation {
 
     private func go(to page: SettingsPage) {
         guard page != self.page else { return }
+        onPageWillChange?()
         backHistory.append(self.page)
         forwardHistory.removeAll()
         self.page = page
