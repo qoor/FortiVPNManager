@@ -460,7 +460,7 @@ impl Entry {
     }
 
     fn exit(&mut self, message: &FromEntry) {
-        self.os.send(&message);
+        self.os.send(message);
         self.lifecycle = Lifecycle::Exiting;
     }
 

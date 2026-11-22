@@ -267,7 +267,7 @@ impl ConnectionManager {
         {
             self.gateway_ip = Some((host, ip));
         }
-        let underlay = self.underlay(&result);
+        let underlay = self.underlay(result);
         let routing_incomplete = result.routing_complete == Some(false);
         if for_path.is_some() {
             self.path_probe = None;

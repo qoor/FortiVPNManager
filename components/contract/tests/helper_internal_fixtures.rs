@@ -123,6 +123,7 @@ fn full_tunnel() -> NetworkSettings {
 const DNS_SERVICE: &str = "6B29FC40-CA47-1067-B31D-00DD010662DA";
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn messages_to_the_entry() {
     let request = |id, request| ToEntry::Request {
         id,
@@ -268,6 +269,7 @@ fn network_steps() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn messages_from_the_entry() {
     let [host, network] = routes();
     let log = |level, category, message: &str| FromEntry::Log {

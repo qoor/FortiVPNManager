@@ -48,6 +48,10 @@ impl Runtime {
         );
     }
 
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "the probe moves into the response callback"
+    )]
     fn probe_addresses(
         &mut self,
         probe: NetworkProbe,

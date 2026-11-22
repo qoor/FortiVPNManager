@@ -756,6 +756,13 @@ mod seconds {
         serializer.serialize_f64(duration.as_secs_f64())
     }
 
+    #[cfg_attr(
+        windows,
+        expect(
+            clippy::trivially_copy_pass_by_ref,
+            reason = "serde's serialize_with passes a reference"
+        )
+    )]
     pub fn time<S: Serializer>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error> {
         let since_1970 = time
             .duration_since(UNIX_EPOCH)

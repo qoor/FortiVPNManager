@@ -878,7 +878,7 @@ fn a_network_change_during_the_preparation_stops_both_and_reconnects() {
     h.fire(TimerKind::ProactiveReconnect);
     let id = start_replacement(&mut h, &old);
     h.run_milestones(&id, Milestone::OtpPrompted);
-    let effects = h.set_path(online_via(ethernet()));
+    let effects = h.set_path(&online_via(ethernet()));
     assert_eq!(
         stop_reasons(&effects),
         [StopReason::Reconnect, StopReason::Reconnect]

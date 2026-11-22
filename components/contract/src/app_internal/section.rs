@@ -721,6 +721,10 @@ pub struct OpenAtLogin {
 /// The Account pane's draft. Passwords never come back; only whether one is typed.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the account form JSON the Swift and C# apps read"
+)]
 pub struct AccountFormState {
     /// Changes only when the runtime replaces what was typed: on load, a save that changes how a
     /// field reads, import, closing Settings, or a settings file change merged into untouched

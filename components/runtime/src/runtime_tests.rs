@@ -2541,6 +2541,7 @@ fn updating_needs_the_helper_running() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a scenario test read top to bottom")]
 fn an_update_downloads_then_the_helper_prepares_it_for_a_restart() {
     let server = update_server();
     server.route(

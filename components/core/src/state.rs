@@ -218,6 +218,10 @@ mod optional_time {
 
     use serde::{Deserialize, Deserializer, Serializer};
 
+    #[expect(
+        clippy::ref_option,
+        reason = "serde's serialize_with passes a reference"
+    )]
     pub(super) fn serialize<S: Serializer>(
         time: &Option<SystemTime>,
         serializer: S,
@@ -238,6 +242,10 @@ mod optional_version {
     use crate::auto_update::Version;
     use serde::{Deserialize, Deserializer, Serializer};
 
+    #[expect(
+        clippy::ref_option,
+        reason = "serde's serialize_with passes a reference"
+    )]
     pub(super) fn serialize<S: Serializer>(
         version: &Option<Version>,
         serializer: S,

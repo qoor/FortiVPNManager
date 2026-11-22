@@ -35,6 +35,10 @@ impl Runner {
         self.pid
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "matches the Unix version, which has no installer process"
+    )]
     pub(super) fn installer_process(&self) -> Option<u32> {
         Some(self.pid)
     }

@@ -382,6 +382,10 @@ impl Relay {
 
     /// Accepting is retried until it works again. Only the first failure and the recovery are
     /// logged, so a failure that lasts does not flood the event log.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a thread entry that owns the listener until the thread ends"
+    )]
     fn accept(self: Arc<Self>, listener: PipeListener<pipe_mode::Bytes, pipe_mode::Bytes>) {
         let mut failing = false;
         loop {
@@ -463,6 +467,10 @@ impl Relay {
 
     /// Handles the connection's requests until it ends, sends something unreadable or was dropped
     /// for not reading, then forgets it.
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "a thread entry that owns the receiving stream until the thread ends"
+    )]
     fn read_requests(self: Arc<Self>, app: u64, receiver: RecvPipeStream<pipe_mode::Bytes>) {
         loop {
             match receive(&receiver) {
@@ -681,6 +689,10 @@ fn receive(receiver: &RecvPipeStream<pipe_mode::Bytes>) -> io::Result<PipeReques
 
 /// Writes the queued messages until the connection is forgotten. After a failed write the rest is
 /// dropped, but drain requests are still answered.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "a thread entry that owns the sending stream until the thread ends"
+)]
 fn write_messages(sender: SendPipeStream<pipe_mode::Bytes>, outgoing: Receiver<Outgoing>) {
     let mut broken = false;
     for item in outgoing {

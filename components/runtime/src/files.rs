@@ -87,6 +87,13 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
 }
 
 /// 0600, whatever the umask made of the creation mode.
+#[cfg_attr(
+    not(unix),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "matches the Unix version, which can fail"
+    )
+)]
 pub(crate) fn set_private(file: &File) -> io::Result<()> {
     #[cfg(unix)]
     {

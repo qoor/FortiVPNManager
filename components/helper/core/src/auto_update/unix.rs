@@ -32,6 +32,10 @@ impl Runner {
         self.0.as_raw_nonzero().get().unsigned_abs()
     }
 
+    #[expect(
+        clippy::unused_self,
+        reason = "matches the Windows version, which reads the runner"
+    )]
     pub(super) fn installer_process(&self) -> Option<u32> {
         None
     }

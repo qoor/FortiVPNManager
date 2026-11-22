@@ -315,6 +315,7 @@ fn yaml_1_1_booleans_and_numbers_are_not_booleans() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn range_limits() {
     for (yaml, path, valid) in [
         ("vpn:\n  port: 0\n", "vpn.port", false),

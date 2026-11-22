@@ -17,7 +17,7 @@ struct Case {
 
 fn outcome(facts: &EndFacts, case: &Case) -> Outcome {
     classify(&ExitContext {
-        facts: &facts,
+        facts,
         seen_milestone: case.seen,
         cert_retry_used: case.cert_retry_used,
         app_stop: case.app_stop,
@@ -26,8 +26,8 @@ fn outcome(facts: &EndFacts, case: &Case) -> Outcome {
     })
 }
 
-fn plain(facts: EndFacts) -> Outcome {
-    outcome(&facts, &Case::default())
+fn plain(facts: &EndFacts) -> Outcome {
+    outcome(facts, &Case::default())
 }
 
 fn cert(furthest: Milestone, certs: &[&str], at: Option<Milestone>) -> EndFacts {
@@ -52,11 +52,11 @@ fn certificate_rejection_before_the_otp_was_submitted() {
     let a = digest('a');
     let a = a.as_str();
     assert_eq!(
-        plain(cert(Milestone::Started, &[a], Some(Milestone::Started))),
+        plain(&cert(Milestone::Started, &[a], Some(Milestone::Started))),
         Outcome::CertificateRetry
     );
     assert_eq!(
-        plain(cert(Milestone::Started, &[a, a], Some(Milestone::Started))),
+        plain(&cert(Milestone::Started, &[a, a], Some(Milestone::Started))),
         Outcome::CertificateRetry
     );
     assert_eq!(
@@ -71,12 +71,12 @@ fn certificate_rejection_before_the_otp_was_submitted() {
         "the chain already retried"
     );
     assert_eq!(
-        plain(cert(Milestone::ConnectedToGateway, &[a], None)),
+        plain(&cert(Milestone::ConnectedToGateway, &[a], None)),
         Outcome::CertificateRetry,
         "no rejection milestone"
     );
     assert_eq!(
-        plain(cert(
+        plain(&cert(
             Milestone::OtpPrompted,
             &[a],
             Some(Milestone::OtpPrompted)
@@ -89,7 +89,7 @@ fn certificate_rejection_before_the_otp_was_submitted() {
 fn the_server_ending_or_rejecting_the_session_after_the_tunnel() {
     for code in [-EPIPE, -EPERM] {
         assert_eq!(
-            plain(ended(Milestone::TunnelUp).code(code).facts()),
+            plain(&ended(Milestone::TunnelUp).code(code).facts()),
             Outcome::ServerSessionEnded,
             "{code}"
         );
@@ -111,14 +111,14 @@ fn the_server_ending_or_rejecting_the_session_after_the_tunnel() {
 fn any_other_end_after_the_tunnel_is_a_network_error() {
     for code in [-EIO, -EINTR] {
         assert_eq!(
-            plain(ended(Milestone::TunnelUp).code(code).facts()),
+            plain(&ended(Milestone::TunnelUp).code(code).facts()),
             Outcome::NetworkError,
             "{code}"
         );
     }
     assert_eq!(
         plain(
-            ended(Milestone::TunnelUp)
+            &ended(Milestone::TunnelUp)
                 .by_helper(StopReason::HelperShutdown)
                 .code(-EINTR)
                 .facts()
@@ -128,7 +128,7 @@ fn any_other_end_after_the_tunnel_is_a_network_error() {
     );
     assert_eq!(
         plain(
-            ended(Milestone::TunnelUp)
+            &ended(Milestone::TunnelUp)
                 .by_helper(StopReason::StageLimit)
                 .code(-EPIPE)
                 .facts()
@@ -152,7 +152,7 @@ fn any_other_end_after_the_tunnel_is_a_network_error() {
     );
     let a = digest('a');
     assert_eq!(
-        plain(cert(
+        plain(&cert(
             Milestone::TunnelUp,
             &[a.as_str()],
             Some(Milestone::TunnelUp)
@@ -167,7 +167,7 @@ fn any_other_end_after_the_tunnel_is_a_network_error() {
 fn a_repeated_prompt_is_a_rejected_login_or_otp() {
     assert_eq!(
         plain(
-            ended(Milestone::ConnectedToGateway)
+            &ended(Milestone::ConnectedToGateway)
                 .by_helper(StopReason::PromptRepeated)
                 .facts()
         ),
@@ -176,7 +176,7 @@ fn a_repeated_prompt_is_a_rejected_login_or_otp() {
     for furthest in [Milestone::OtpSubmitted, Milestone::Authenticated] {
         assert_eq!(
             plain(
-                ended(furthest)
+                &ended(furthest)
                     .by_helper(StopReason::PromptRepeated)
                     .facts()
             ),
@@ -203,7 +203,7 @@ fn a_repeated_prompt_is_a_rejected_login_or_otp() {
 fn a_certificate_rejected_after_the_login_is_counted() {
     let a = digest('a');
     assert_eq!(
-        plain(cert(
+        plain(&cert(
             Milestone::OtpSubmitted,
             &[a.as_str()],
             Some(Milestone::OtpSubmitted)
@@ -230,7 +230,7 @@ fn a_certificate_rejected_after_the_login_is_counted() {
 fn a_tunnel_device_that_could_not_be_set_up_is_counted() {
     assert_eq!(
         plain(
-            ended(Milestone::Authenticated)
+            &ended(Milestone::Authenticated)
                 .tunnel_setup_failed()
                 .code(-EINTR)
                 .facts()
@@ -278,7 +278,7 @@ fn a_network_setup_the_helper_gave_up_on_is_its_own_uncounted_outcome() {
                 .by_helper(StopReason::NetworkSetupFailed)
                 .code(code)
                 .facts();
-            assert_eq!(plain(facts), Outcome::NetworkSetupFailed, "{furthest:?}");
+            assert_eq!(plain(&facts), Outcome::NetworkSetupFailed, "{furthest:?}");
         }
     }
 }
@@ -288,13 +288,13 @@ fn any_other_end_before_the_tunnel_is_a_network_error() {
     for furthest in BEFORE_THE_TUNNEL {
         for code in [-EIO, -EINTR, -EPERM, -EPIPE] {
             assert_eq!(
-                plain(ended(furthest).code(code).facts()),
+                plain(&ended(furthest).code(code).facts()),
                 Outcome::NetworkError,
                 "{furthest:?} {code}"
             );
         }
         assert_eq!(
-            plain(ended(furthest).by_helper(StopReason::StageLimit).facts()),
+            plain(&ended(furthest).by_helper(StopReason::StageLimit).facts()),
             Outcome::NetworkError,
             "{furthest:?}"
         );

@@ -119,8 +119,8 @@ impl Runtime {
         )
     }
 
-    pub(crate) fn set_bypass_rows(&mut self, list: BypassList, rows: Vec<String>) {
-        self.drafts().list_mut(list).set_rows(&rows);
+    pub(crate) fn set_bypass_rows(&mut self, list: BypassList, rows: &[String]) {
+        self.drafts().list_mut(list).set_rows(rows);
         self.save_bypass_rules();
     }
 
@@ -308,12 +308,12 @@ impl Runtime {
         let plan = plan_routes(
             &routes.networks,
             &routes.bypass_vpn,
-            &snapshot,
+            snapshot,
             self.cm.wants_vpn(),
         );
         if same_routes(in_place, &plan.routes) {
-            let status = plan.status(&snapshot);
-            return self.sync_succeeded(&snapshot, status);
+            let status = plan.status(snapshot);
+            return self.sync_succeeded(snapshot, status);
         }
         let request = BypassRoutesRequest::Write {
             expected: snapshot.clone(),

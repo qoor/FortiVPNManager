@@ -79,6 +79,10 @@ impl Process {
 ///
 /// Returns the Windows error code when the handles cannot be passed on or the process cannot be
 /// started.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the parent's copies of the handles close when spawning returns"
+)]
 pub fn spawn(
     program: &str,
     args: &[&str],

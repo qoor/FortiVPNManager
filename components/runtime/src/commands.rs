@@ -79,7 +79,7 @@ impl Runtime {
                 self.action(PortAction::OpenHelperApprovalSettings {});
                 self.feed(connection::Input::HelperApprovalSettingsOpened);
             }
-            Command::SetBypassRows { list, rows } => self.set_bypass_rows(list, rows),
+            Command::SetBypassRows { list, rows } => self.set_bypass_rows(list, &rows),
             Command::AddCurrentNetwork {} => self.add_current_network(),
             Command::CheckForUpdates {} => self.check_for_updates_now(),
             Command::UpdatePageOpened {} => self.update_page_opened(),

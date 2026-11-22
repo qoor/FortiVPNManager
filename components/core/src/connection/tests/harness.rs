@@ -375,7 +375,7 @@ impl Harness {
         };
         match path {
             Some(path) => {
-                harness.set_path(path);
+                harness.set_path(&path);
             }
             None => harness.now = t0(),
         }
@@ -652,8 +652,8 @@ impl Harness {
 
     /// The OS reports `path`; after it stayed unchanged long enough, the manager looks at it.
     /// Takes 3 seconds.
-    pub(super) fn set_path(&mut self, path: Path) -> Vec<Effect> {
-        self.set_path_with_routing(&path, None)
+    pub(super) fn set_path(&mut self, path: &Path) -> Vec<Effect> {
+        self.set_path_with_routing(path, None)
     }
 
     pub(super) fn set_path_with_routing(

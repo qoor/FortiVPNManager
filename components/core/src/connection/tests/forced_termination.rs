@@ -165,7 +165,7 @@ fn a_lost_helper_while_offline_waits_for_the_path_then_starts_at_once() {
     let mut h = Harness::new();
     h.launch_connected();
     h.advance(300.0);
-    h.set_path(offline());
+    h.set_path(&offline());
     assert!(h.connected().is_some());
     h.lose_helper(600.0);
     assert_eq!(
@@ -178,7 +178,7 @@ fn a_lost_helper_while_offline_waits_for_the_path_then_starts_at_once() {
         h.connection_timers()
     );
     h.advance(120.0);
-    let effects = h.set_path(online());
+    let effects = h.set_path(&online());
     assert!(effects.contains(&Effect::CheckReadiness), "{effects:?}");
     assert_eq!(reason(&h), Some(FORCED));
 }

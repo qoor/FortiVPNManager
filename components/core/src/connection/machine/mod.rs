@@ -387,7 +387,7 @@ impl ConnectionManager {
         };
         let marks = self.note_marks();
         self.dispatch(input);
-        self.finish(marks)
+        self.finish(&marks)
     }
 
     fn dispatch(&mut self, input: Input) {
@@ -456,7 +456,7 @@ impl ConnectionManager {
         }
     }
 
-    fn finish(&mut self, marks: NoteMarks) -> Vec<Effect> {
+    fn finish(&mut self, marks: &NoteMarks) -> Vec<Effect> {
         self.reconcile_timers();
         // A pending stale-code search keeps its polling and its time limit on time.
         let hold = !self.terminated && (self.phase.holds_activity() || self.stale_otp.is_some());
@@ -480,7 +480,7 @@ impl ConnectionManager {
             }
             _ => Vec::new(),
         };
-        effects.append(&mut self.notes(&marks));
+        effects.append(&mut self.notes(marks));
         effects.append(&mut self.effects);
         effects
     }

@@ -48,6 +48,7 @@ fn case(
 }
 
 /// Connected at t0+12; the planned reconnect is 175 minutes later.
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn wake_cases() -> Vec<WakeCase> {
     use AttemptReason::*;
     vec![
@@ -297,7 +298,7 @@ fn a_wake_without_network_keeps_waiting() {
         h.network_wait().map(|(reason, _)| reason),
         Some(RetryReason::Sleep)
     );
-    assert!(h.set_path(online()).contains(&Effect::CheckReadiness));
+    assert!(h.set_path(&online()).contains(&Effect::CheckReadiness));
 }
 
 #[test]
@@ -419,7 +420,7 @@ fn an_underlay_change_reconnects() {
     let mut h = Harness::new();
     h.launch_connected();
     let id = h.connected().unwrap().attempt.clone();
-    let effects = connection_effects(&h.set_path(online_via(ethernet())));
+    let effects = connection_effects(&h.set_path(&online_via(ethernet())));
     assert_eq!(
         effects,
         [
@@ -537,10 +538,10 @@ fn other_path_reports_keep_the_tunnel() {
     ] {
         let mut h = Harness::new();
         h.launch_connected();
-        assert_eq!(connection_effects(&h.set_path(path)), []);
+        assert_eq!(connection_effects(&h.set_path(&path)), []);
         assert!(h.connected().is_some());
         // The underlay is still the one the session started on.
-        assert_eq!(stop_reasons(&h.set_path(online())), []);
+        assert_eq!(stop_reasons(&h.set_path(&online())), []);
     }
 }
 
@@ -548,8 +549,8 @@ fn other_path_reports_keep_the_tunnel() {
 fn a_flap_back_to_the_same_underlay_keeps_the_tunnel() {
     let mut h = Harness::new();
     h.launch_connected();
-    h.set_path(offline());
-    assert_eq!(connection_effects(&h.set_path(online())), []);
+    h.set_path(&offline());
+    assert_eq!(connection_effects(&h.set_path(&online())), []);
     assert!(h.connected().is_some());
 }
 
@@ -557,9 +558,9 @@ fn a_flap_back_to_the_same_underlay_keeps_the_tunnel() {
 fn an_unknown_underlay_is_adopted_then_watched() {
     let mut h = Harness::with(settings(), None);
     h.launch_connected();
-    assert_eq!(connection_effects(&h.set_path(online())), []);
+    assert_eq!(connection_effects(&h.set_path(&online())), []);
     assert_eq!(
-        stop_reasons(&h.set_path(online_via(ethernet()))),
+        stop_reasons(&h.set_path(&online_via(ethernet()))),
         [StopReason::Reconnect]
     );
 }
@@ -569,14 +570,14 @@ fn path_reports_are_ignored_while_connecting_and_disconnecting() {
     let mut h = Harness::new();
     h.launch();
     h.start_tunnel();
-    assert_eq!(connection_effects(&h.set_path(online_via(ethernet()))), []);
-    assert_eq!(connection_effects(&h.set_path(offline())), []);
+    assert_eq!(connection_effects(&h.set_path(&online_via(ethernet()))), []);
+    assert_eq!(connection_effects(&h.set_path(&offline())), []);
     assert!(h.attempt().is_some());
     let mut stopping = Harness::new();
     stopping.launch_connected();
     stopping.send(Input::Disconnect);
     assert_eq!(
-        connection_effects(&stopping.set_path(online_via(ethernet()))),
+        connection_effects(&stopping.set_path(&online_via(ethernet()))),
         []
     );
     assert_eq!(after(&stopping), Some(AfterStop::Idle));

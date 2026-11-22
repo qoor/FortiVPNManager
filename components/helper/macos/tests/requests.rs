@@ -24,6 +24,7 @@ fn failed_login() -> Script {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a scenario test read top to bottom")]
 fn a_run_goes_from_connect_through_the_otp_to_the_tunnel_and_back() {
     let received = Arc::new(Mutex::new(None));
     let script = {

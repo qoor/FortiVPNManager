@@ -70,7 +70,7 @@ impl ConnectionManager {
             Phase::Connected(session) => {
                 if self.last_wake_at.is_none_or(|wake| session.since < wake) {
                     let session = session.clone();
-                    self.evaluate_wake(session, &observation, slept_for);
+                    self.evaluate_wake(session, observation, slept_for);
                 }
             }
             Phase::WaitingNetwork {

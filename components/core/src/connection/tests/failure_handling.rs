@@ -322,7 +322,7 @@ fn a_network_failure_waits_for_the_path_then_backs_off() {
     h.launch();
     let id = h.start_tunnel();
     h.milestone(Milestone::Started);
-    assert_eq!(connection_effects(&h.set_path(offline())), []);
+    assert_eq!(connection_effects(&h.set_path(&offline())), []);
     h.exit(ended(Milestone::Started));
     assert_eq!(
         h.network_wait(),
@@ -335,7 +335,7 @@ fn a_network_failure_waits_for_the_path_then_backs_off() {
     );
     assert_eq!(h.cm.connection_section().icon, ConnectionIcon::InProgress);
     h.advance(300.0);
-    let effects = h.set_path(online());
+    let effects = h.set_path(&online());
     assert_eq!(
         timer_set(&effects, TimerKind::Retry),
         Some(h.now + secs(10.0))
@@ -354,7 +354,7 @@ fn a_retry_due_while_offline_waits_for_the_path_then_starts_at_once() {
     h.launch();
     h.start_tunnel();
     h.exit(ended(Milestone::Started));
-    h.set_path(offline());
+    h.set_path(&offline());
     assert!(
         h.retry_wait().is_some(),
         "a retry wait ignores path changes until it is due"
@@ -364,7 +364,7 @@ fn a_retry_due_while_offline_waits_for_the_path_then_starts_at_once() {
         h.network_wait(),
         Some((RetryReason::Network, Duration::ZERO))
     );
-    let effects = h.set_path(online());
+    let effects = h.set_path(&online());
     assert!(effects.contains(&Effect::CheckReadiness));
     assert_eq!(reason(&h), Some(retry(RetryReason::Network)));
 }
@@ -409,7 +409,7 @@ fn a_gateway_end_after_a_path_change_is_judged_by_its_facts() {
         let id = h.start_tunnel();
         h.run_milestones(&id, Milestone::ConnectedToGateway);
         assert_eq!(
-            connection_effects(&h.set_path(online_via(other_wifi()))),
+            connection_effects(&h.set_path(&online_via(other_wifi()))),
             []
         );
         let exit = ended(Milestone::ConnectedToGateway);
@@ -584,9 +584,9 @@ fn failed_only_clears_on_a_user_action() {
         helper: super::super::HelperFacts::NotRegistered,
         ..ready()
     };
-    h.set_path(offline());
+    h.set_path(&offline());
     assert_eq!(h.cm.phase, failed, "offline");
-    h.set_path(online());
+    h.set_path(&online());
     assert_eq!(h.cm.phase, failed, "online");
     let stale_retry = super::super::TimerId {
         kind: TimerKind::Retry,

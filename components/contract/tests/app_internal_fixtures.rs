@@ -738,6 +738,7 @@ fn bypass_section(status: BypassStatus, notice: Option<BypassNotice>) -> BypassR
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn bypass_rules_sections() {
     let failed = |failure, retry_in_seconds, stopped_after_retries| BypassStatus::Failed {
         failure,
@@ -937,6 +938,7 @@ fn import_report(password: Option<ImportedPassword>) -> ImportReport {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn config_sections() {
     let feedback = |error| AccountFormState {
         save_error: Some(error),
@@ -1188,6 +1190,7 @@ fn busy_update(progress: UpdateProgress, cancel: ButtonState, card_dot: bool) ->
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn auto_update_sections() {
     pin(
         "auto_update_sections.json",
@@ -1346,6 +1349,7 @@ fn auto_update_sections() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn settings_file_problems() {
     use ConfigProblemKind::*;
     let config = "/Users/alice/.config/FortiVPNManager/config.yaml";
@@ -1564,6 +1568,7 @@ fn settings_file_problems() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn port_requests() {
     let request = |id, request| FromRuntime::PortRequest { id, request };
     let call = |id, call| request(id, PortRequest::CallHelper { call });
@@ -1849,6 +1854,7 @@ fn commands() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines, reason = "a fixture table read top to bottom")]
 fn port_responses() {
     use RegistrationStatus::*;
     let response = |id, response| ToRuntime::PortResponse { id, response };

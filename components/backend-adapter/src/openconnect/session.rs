@@ -16,6 +16,10 @@ use super::network::{self, IpInfo};
 
 const DTLS_ATTEMPT_PERIOD: c_int = 60;
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the request and its secrets are dropped when the session ends"
+)]
 pub(super) fn run(request: SessionRequest, link: &Link) -> SessionEnd {
     let context = Context {
         link,
@@ -218,6 +222,10 @@ fn interface_index(name: &str) -> Result<Option<u32>, String> {
 }
 
 #[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "matches the Windows version, which can fail"
+)]
 fn interface_index(_: &str) -> Result<Option<u32>, String> {
     Ok(None)
 }
