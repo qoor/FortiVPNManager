@@ -7,11 +7,6 @@ using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
 
-/// <summary>
-/// The General pane (components/ui/macos/GeneralPane.swift): the connection's status with its
-/// buttons, as in the menu, how the app starts, importing FortiClient's server address, and
-/// software updates.
-/// </summary>
 internal sealed class GeneralPane : IPane
 {
     private readonly AppUi ui;
@@ -47,7 +42,7 @@ internal sealed class GeneralPane : IPane
     private readonly InfoBar openAtLoginError = Cards.Notice(InfoBarSeverity.Error);
     private readonly ToggleSwitch autoConnect = new();
     private readonly SettingsCard autoConnectCard;
-    private readonly SettingsCard update = new() { Header = L("Software Update"), HeaderIcon = new FontIcon { Glyph = "\uE72C" }, IsClickEnabled = true, Margin = new Thickness(0, 30, 0, 0) };
+    private readonly SettingsCard update = new() { Header = L("Software Update"), HeaderIcon = new FontIcon { Glyph = "\uE72C" }, IsClickEnabled = true };
     private readonly InfoBadge updateDot = new() { Style = (Style)Application.Current.Resources["AttentionDotInfoBadgeStyle"] };
     private IReadOnlyList<SetupItem> shownItems = [];
     private FailureReason? shownFailure;
@@ -76,7 +71,7 @@ internal sealed class GeneralPane : IPane
         connect.Click += (_, _) => ui.Send(new Command.Connect());
         disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
         reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
-        status.Children.Add(Cards.SectionHeader(L("Status"), first: true));
+        status.Children.Add(Cards.SectionHeader(L("Status")));
         var buttons = Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow));
         rows["Current status"] = current;
         rows["Connected at"] = connectedAt;
@@ -111,13 +106,13 @@ internal sealed class GeneralPane : IPane
         startup.Children.Add(openAtLoginError);
         startup.Children.Add(autoConnectCard);
 
+        update.Content = updateDot;
+        update.Click += (_, _) => ui.Settings.ShowUpdates();
+        page.BodyPanel.Children.Add(rows["Software Update"] = update);
         page.BodyPanel.Children.Add(status);
         page.BodyPanel.Children.Add(startup);
         AddImportRows();
         page.BodyPanel.Children.Add(import);
-        update.Content = updateDot;
-        update.Click += (_, _) => ui.Settings.ShowUpdates();
-        page.BodyPanel.Children.Add(rows["Software Update"] = update);
     }
 
     /// <summary>
@@ -163,7 +158,6 @@ internal sealed class GeneralPane : IPane
             ShowStartup(config);
             ShowImport(config.Account.ImportReport);
         }
-        update.Visible(ui.AutoUpdate is not null);
         updateDot.Visible(ui.AutoUpdate?.CardDot == true);
         refreshing = false;
     }

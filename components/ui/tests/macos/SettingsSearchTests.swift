@@ -104,6 +104,14 @@ struct SettingsSearchTests {
         #expect(navigation.highlightedRow == "Software Update")
     }
 
+    @Test func theSoftwareUpdateCardLeadsTheGeneralResults() {
+        let navigation = SettingsNavigation()
+        navigation.searchText = "at"
+        let keys = navigation.results(in: .general).map(\.key)
+        #expect(keys.count > 1)
+        #expect(keys.first == "Software Update")
+    }
+
     @Test func returnOpensTheFirstResult() {
         let navigation = SettingsNavigation()
         navigation.select(.general)

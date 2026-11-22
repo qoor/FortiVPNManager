@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The General pane: the connection's status with its buttons (as in the menu), how the app starts,
-/// importing the VPN client's settings, and the way to Software Update.
 struct GeneralPane: View {
     let ui: AppUI
     let navigation: SettingsNavigation
@@ -9,15 +7,13 @@ struct GeneralPane: View {
 
     var body: some View {
         SettingsForm(navigation: navigation) {
+            updateSection(cardDot: ui.autoUpdate?.cardDot == true)
             if let connection = ui.connection {
                 statusSection(connection, time: TimeStyle(now: ui.clock.now, environment: environment))
             }
             if let config = ui.config {
                 startupSection(config)
                 importSection(config.account)
-            }
-            if let update = ui.autoUpdate {
-                updateSection(update)
             }
         }
         .toggleStyle(.switch)
@@ -148,7 +144,7 @@ struct GeneralPane: View {
         }
     }
 
-    private func updateSection(_ update: AppInternal.AutoUpdateSection) -> some View {
+    private func updateSection(cardDot: Bool) -> some View {
         Section {
             Button(action: navigation.showSoftwareUpdate) {
                 HStack(spacing: 8) {
@@ -159,7 +155,7 @@ struct GeneralPane: View {
                         .background(.gray, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     Text("Software Update")
                     Spacer()
-                    if update.cardDot {
+                    if cardDot {
                         Circle()
                             .fill(.blue)
                             .frame(width: 8, height: 8)

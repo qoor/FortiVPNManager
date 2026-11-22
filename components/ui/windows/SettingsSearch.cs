@@ -84,6 +84,7 @@ public static class SettingsSearch
     {
         SettingsPane.General =>
         [
+            Item(pane, "Software Update"),
             Item(pane, "Current status"),
             Item(pane, "Connected at", when: SearchCondition.Connected),
             Item(pane, "Tunnel IP", when: SearchCondition.Connected),
@@ -95,7 +96,6 @@ public static class SettingsSearch
             Item(pane, "Connect automatically at launch"),
             Item(pane, "FortiClient settings"),
             Item(pane, "Import Settings", row: ImportRow),
-            Item(pane, "Software Update"),
         ],
         SettingsPane.Account =>
         [

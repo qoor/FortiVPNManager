@@ -91,6 +91,14 @@ public class SettingsSearchTests
     }
 
     [Fact]
+    public void TheSoftwareUpdateCardLeadsTheGeneralResults()
+    {
+        var keys = Keys(Search("at"), SettingsPane.General);
+        Assert.True(keys.Count > 1);
+        Assert.Equal("Software Update", keys[0]);
+    }
+
+    [Fact]
     public void EverySettingIsInACatalog()
     {
         var missing = Enum.GetValues<SettingsPane>()

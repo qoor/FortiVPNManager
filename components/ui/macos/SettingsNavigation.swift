@@ -211,6 +211,7 @@ enum SettingsSearch {
         switch pane {
         case .general:
             [
+                item(pane, "Software Update"),
                 item(pane, "Current status"),
                 item(pane, "Connected at", when: .connected),
                 item(pane, "Tunnel IP", when: .connected),
@@ -221,7 +222,6 @@ enum SettingsSearch {
                 item(pane, "Open at login"),
                 item(pane, "Connect automatically at launch"),
                 item(pane, "Import openfortivpn Settings…", row: importRow),
-                item(pane, "Software Update"),
             ]
         case .account:
             [
