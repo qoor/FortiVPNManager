@@ -290,7 +290,7 @@ pub(super) fn offline() -> Path {
 #[derive(Clone)]
 pub(super) struct Observe {
     pub(super) alive: bool,
-    pub(super) tunnel: bool,
+    pub(super) tunnel: Option<bool>,
     pub(super) underlay: Option<Underlay>,
     pub(super) settled: bool,
     pub(super) routing: Option<bool>,
@@ -299,7 +299,7 @@ pub(super) struct Observe {
 pub(super) fn observe() -> Observe {
     Observe {
         alive: true,
-        tunnel: true,
+        tunnel: Some(true),
         underlay: Some(wifi()),
         settled: true,
         routing: Some(true),
@@ -310,7 +310,7 @@ impl Observe {
     pub(super) fn dead(self) -> Self {
         Self {
             alive: false,
-            tunnel: false,
+            tunnel: Some(false),
             ..self
         }
     }
@@ -320,7 +320,17 @@ impl Observe {
     }
 
     pub(super) fn tunnel(self, tunnel: bool) -> Self {
-        Self { tunnel, ..self }
+        Self {
+            tunnel: Some(tunnel),
+            ..self
+        }
+    }
+
+    pub(super) fn addresses_unread(self) -> Self {
+        Self {
+            tunnel: None,
+            ..self
+        }
     }
 
     pub(super) fn via(self, underlay: Option<Underlay>) -> Self {
@@ -672,7 +682,23 @@ impl Harness {
             return effects;
         }
         let probe = probe_id(&effects);
-        self.answer_probe(probe, path.underlay.as_ref(), true, None, routing_complete)
+        self.answer_probe(
+            probe,
+            path.underlay.as_ref(),
+            Some(true),
+            None,
+            routing_complete,
+        )
+    }
+
+    pub(super) fn set_path_with_addresses_unread(&mut self, path: &Path) -> Vec<Effect> {
+        self.send(Input::NetworkPathChanged {
+            satisfied: path.satisfied,
+            interfaces: path_interfaces(),
+        });
+        let effects = self.fire(TimerKind::PathSettle);
+        let probe = probe_id(&effects);
+        self.answer_probe(probe, path.underlay.as_ref(), None, None, None)
     }
 
     pub(super) fn sleep(&mut self) -> Vec<Effect> {
@@ -722,7 +748,7 @@ impl Harness {
         &mut self,
         probe: u64,
         underlay: Option<&Underlay>,
-        tunnel_up: bool,
+        tunnel_up: Option<bool>,
         session_running: Option<bool>,
         routing_complete: Option<bool>,
     ) -> Vec<Effect> {
@@ -730,7 +756,7 @@ impl Harness {
             address("lo0", Ipv4Addr::LOCALHOST),
             address("en0", Ipv4Addr::new(192, 168, 0, 10)),
         ];
-        if tunnel_up {
+        if tunnel_up == Some(true) {
             addresses.push(address("ppp0", TUNNEL_IP));
         }
         if let Some(underlay) = underlay {
@@ -743,7 +769,7 @@ impl Harness {
             id: probe,
             gateway_ip: Some(Ipv4Addr::new(203, 0, 113, 7)),
             route_interface: underlay.map(|underlay| underlay.interface.clone()),
-            addresses,
+            addresses: tunnel_up.map(|_| addresses),
             session_running,
             routing_complete,
         }))

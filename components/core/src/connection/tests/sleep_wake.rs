@@ -95,6 +95,18 @@ fn tunnel_and_network_cases() -> Vec<WakeCase> {
             Some(TunnelLost),
         ),
         case(
+            "addresses not read keep",
+            600.0,
+            observe().addresses_unread(),
+            None,
+        ),
+        case(
+            "addresses not read: the underlay is not judged",
+            600.0,
+            observe().addresses_unread().via(Some(ethernet())),
+            None,
+        ),
+        case(
             "5. routing not checked keeps",
             600.0,
             observe().routing(None),
@@ -555,6 +567,19 @@ fn other_path_reports_keep_the_tunnel() {
         // The underlay is still the one the session started on.
         assert_eq!(stop_reasons(&h.set_path(&online())), []);
     }
+}
+
+#[test]
+fn a_path_whose_addresses_were_not_read_keeps_the_tunnel() {
+    let mut h = Harness::new();
+    h.launch_connected();
+    assert_eq!(
+        connection_effects(&h.set_path_with_addresses_unread(&online_via(ethernet()))),
+        []
+    );
+    assert!(h.connected().is_some());
+    // The underlay is still the one the session started on.
+    assert_eq!(stop_reasons(&h.set_path(&online())), []);
 }
 
 #[test]

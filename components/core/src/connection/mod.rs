@@ -448,7 +448,7 @@ pub struct ProbeResult {
     /// As known or resolved; `None` when it could not be resolved.
     pub gateway_ip: Option<Ipv4Addr>,
     pub route_interface: Option<String>,
-    pub addresses: Vec<InterfaceAddress>,
+    pub addresses: Option<Vec<InterfaceAddress>>,
     /// When asked: whether the session runs, `false` when the Helper did not answer.
     pub session_running: Option<bool>,
     pub routing_complete: Option<bool>,

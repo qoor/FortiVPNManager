@@ -54,11 +54,9 @@ pub(super) fn delete_secret(service: &str, account: &str) -> Result<(), SecretSt
     credentials::delete(&target(service, account)).map_err(failure)
 }
 
-pub(super) fn interface_addresses() -> Vec<InterfaceAddress> {
-    let Ok(addresses) = network::addresses(Family::Ipv4) else {
-        return Vec::new();
-    };
-    addresses
+pub(super) fn interface_addresses() -> Result<Vec<InterfaceAddress>, String> {
+    Ok(network::addresses(Family::Ipv4)
+        .map_err(|error| error.to_string())?
         .into_iter()
         .filter_map(|address| {
             let IpAddr::V4(ipv4) = address.address else {
@@ -71,7 +69,7 @@ pub(super) fn interface_addresses() -> Vec<InterfaceAddress> {
                 ipv4,
             })
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -124,6 +122,7 @@ mod tests {
     fn the_loopback_interface_has_its_address_and_is_up() {
         assert!(
             interface_addresses()
+                .unwrap()
                 .iter()
                 .any(|address| address.ipv4 == Ipv4Addr::LOCALHOST && address.up)
         );

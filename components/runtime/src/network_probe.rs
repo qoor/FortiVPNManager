@@ -5,7 +5,9 @@
 use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs};
 
 use fvm_contract::app_helper::HelperStatus;
-use fvm_contract::app_internal::port::{HelperCall, PortRequest, PortResponse};
+use fvm_contract::app_internal::port::{
+    HelperCall, LogCategory, LogLevel, PortRequest, PortResponse,
+};
 use fvm_core::connection::{self, NetworkProbe, ProbeResult};
 
 use crate::orchestration::Runtime;
@@ -60,6 +62,15 @@ impl Runtime {
             let OsResponse::InterfaceAddresses { addresses } = response else {
                 panic!("an addresses answer")
             };
+            let addresses = addresses
+                .inspect_err(|failure| {
+                    runtime.system_log(
+                        LogLevel::Error,
+                        LogCategory::Connection,
+                        format!("reading the interface addresses failed: {failure}"),
+                    );
+                })
+                .ok();
             let mut result = ProbeResult {
                 id,
                 gateway_ip,

@@ -312,7 +312,7 @@ impl ConnectionManager {
             );
         } else {
             self.system.wake_settle = None;
-            let tunnel_up = self.tunnel_interface_up(&result.addresses);
+            let tunnel_up = self.tunnel_interface_up(result.addresses.as_deref());
             self.wake_settled(&WakeObservation::NetworkBack {
                 underlay,
                 session_running: result.session_running.unwrap_or(false),
@@ -327,9 +327,9 @@ impl ConnectionManager {
     /// reported.
     fn underlay(&self, result: &ProbeResult) -> Option<Underlay> {
         let name = result.route_interface.as_ref()?;
+        let addresses = result.addresses.as_ref()?;
         let tunnel_ip = self.tunnel_ip();
-        let carries_tunnel = result
-            .addresses
+        let carries_tunnel = addresses
             .iter()
             .any(|address| address.name == *name && Some(address.ipv4) == tunnel_ip);
         let virtual_interface = self.system.raw_path.as_ref().is_some_and(|path| {
@@ -342,8 +342,7 @@ impl ConnectionManager {
         }
         Some(Underlay {
             interface: name.clone(),
-            address: result
-                .addresses
+            address: addresses
                 .iter()
                 .find(|address| address.name == *name)
                 .map(|address| address.ipv4),
@@ -352,11 +351,13 @@ impl ConnectionManager {
 
     /// Without a reported tunnel IP the interface cannot be told, so it counts as there: a wrong
     /// "gone" would replace a working tunnel after every wake.
-    fn tunnel_interface_up(&self, addresses: &[InterfaceAddress]) -> bool {
+    fn tunnel_interface_up(&self, addresses: Option<&[InterfaceAddress]>) -> bool {
         self.tunnel_ip().is_none_or(|ip| {
-            addresses
-                .iter()
-                .any(|address| address.ipv4 == ip && address.up)
+            addresses.is_none_or(|addresses| {
+                addresses
+                    .iter()
+                    .any(|address| address.ipv4 == ip && address.up)
+            })
         })
     }
 

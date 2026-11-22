@@ -417,7 +417,7 @@ impl App {
                 OsResponse::SecretChanged
             }
             OsRequest::InterfaceAddresses => OsResponse::InterfaceAddresses {
-                addresses: Vec::new(),
+                addresses: Ok(Vec::new()),
             },
         }
     }

@@ -99,11 +99,9 @@ pub(super) fn delete_secret(service: &str, account: &str) -> Result<(), SecretSt
     }
 }
 
-pub(super) fn interface_addresses() -> Vec<InterfaceAddress> {
-    let Ok(entries) = getifaddrs() else {
-        return Vec::new();
-    };
-    entries
+pub(super) fn interface_addresses() -> Result<Vec<InterfaceAddress>, String> {
+    Ok(getifaddrs()
+        .map_err(|error| error.to_string())?
         .filter_map(|entry| {
             let ipv4 = entry.address.as_ref()?.as_sockaddr_in()?.ip();
             Some(InterfaceAddress {
@@ -112,7 +110,7 @@ pub(super) fn interface_addresses() -> Vec<InterfaceAddress> {
                 ipv4,
             })
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -147,7 +145,7 @@ mod tests {
 
     #[test]
     fn the_loopback_interface_has_its_address_and_is_up() {
-        assert!(interface_addresses().iter().any(|address| {
+        assert!(interface_addresses().unwrap().iter().any(|address| {
             address.name == "lo0" && address.ipv4 == Ipv4Addr::LOCALHOST && address.up
         }));
     }

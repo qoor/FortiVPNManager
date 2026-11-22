@@ -83,11 +83,19 @@ pub(crate) enum OsRequest {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum OsResponse {
-    Secret { value: Option<SecretText> },
-    HasSecret { exists: bool },
+    Secret {
+        value: Option<SecretText>,
+    },
+    HasSecret {
+        exists: bool,
+    },
     SecretChanged,
-    SecretStoreFailed { failure: SecretStoreFailure },
-    InterfaceAddresses { addresses: Vec<InterfaceAddress> },
+    SecretStoreFailed {
+        failure: SecretStoreFailure,
+    },
+    InterfaceAddresses {
+        addresses: Result<Vec<InterfaceAddress>, String>,
+    },
 }
 
 pub(crate) fn describe(failure: &SecretStoreFailure) -> String {
