@@ -48,7 +48,7 @@ struct LogPane: View {
   }
 }
 
-/// Read-only, selectable TextKit 1 text view with a find bar. Appends `LogLines` entries
+/// Read-only, selectable TextKit 2 text view with a find bar. Appends `LogLines` entries
 /// incrementally and drops the ones trimmed there, keeping the visible text in place.
 struct LogTextView: NSViewRepresentable {
   let log: LogLines
@@ -67,7 +67,7 @@ struct LogTextView: NSViewRepresentable {
     // The count starts again with the pane.
     context.coordinator.findRequest = findRequest
     if let scrollView = context.coordinator.scrollView { return scrollView }
-    let textView = NSTextView(usingTextLayoutManager: false)
+    let textView = NSTextView(usingTextLayoutManager: true)
     textView.isEditable = false
     textView.isSelectable = true
     textView.usesFindBar = true
@@ -82,9 +82,8 @@ struct LogTextView: NSViewRepresentable {
     textView.isVerticallyResizable = true
     textView.isHorizontallyResizable = false
     textView.autoresizingMask = [.width]
-    unsafe textView.textContainer?.widthTracksTextView = true
 
-    let scrollView = NSScrollView()
+    let scrollView = LogScrollView()
     scrollView.hasVerticalScroller = true
     scrollView.autohidesScrollers = true
     scrollView.borderType = .noBorder
@@ -121,7 +120,7 @@ struct LogTextView: NSViewRepresentable {
     private static let trimChunk = 500
 
     /// Held here, as the view outlives the pane that shows it.
-    var scrollView: NSScrollView?
+    var scrollView: LogScrollView?
     weak var textView: NSTextView?
 
     /// Entries currently shown, oldest first, with their length in UTF-16 units. The gap before an
@@ -137,7 +136,9 @@ struct LogTextView: NSViewRepresentable {
       guard request != findRequest else { return }
       findRequest = request
       DispatchQueue.main.async { [weak self] in
-        guard let textView = self?.textView, let window = unsafe textView.window else { return }
+        guard let textView = self?.textView, let window = self?.scrollView?.hostWindow else {
+          return
+        }
         window.makeFirstResponder(textView)
         let item = NSMenuItem()
         item.tag = NSTextFinder.Action.showFindInterface.rawValue
@@ -152,7 +153,7 @@ struct LogTextView: NSViewRepresentable {
     }
 
     func sync(with log: LogLines, clearCount: Int, autoScroll: Bool) {
-      guard let textView, let storage = unsafe textView.textStorage,
+      guard let textView, let storage = textView.textContentStorage?.textStorage,
         let scrollView = textView.enclosingScrollView
       else {
         return
@@ -206,15 +207,22 @@ struct LogTextView: NSViewRepresentable {
     /// Height of the first `count` shown lines, gaps after them included, measured before they are
     /// deleted.
     private func height(ofFirst count: Int) -> CGFloat {
-      guard let textView, let layoutManager = unsafe textView.layoutManager else { return 0 }
+      guard let textView, let layoutManager = textView.textLayoutManager,
+        let content = textView.textContentStorage
+      else { return 0 }
       let length = shown.prefix(count).reduce(0) { $0 + $1.length }
-      let glyphs = unsafe layoutManager.glyphRange(
-        forCharacterRange: NSRange(location: 0, length: length), actualCharacterRange: nil)
-      guard glyphs.length > 0 else { return 0 }
-      return unsafe layoutManager.lineFragmentRect(
-        forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil
-      )
-      .maxY
+      let start = content.documentRange.location
+      guard let end = content.location(start, offsetBy: length) else { return 0 }
+      var height: CGFloat = 0
+      layoutManager.enumerateTextLayoutFragments(from: start, options: [.ensuresLayout]) {
+        fragment in
+        guard fragment.rangeInElement.location.compare(end) == .orderedAscending else {
+          return false
+        }
+        height = fragment.layoutFragmentFrame.maxY
+        return true
+      }
+      return height
     }
 
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
@@ -249,5 +257,14 @@ struct LogTextView: NSViewRepresentable {
           string: line.text + "\n", attributes: [.font: font, .foregroundColor: textColor]))
       return result
     }
+  }
+}
+
+final class LogScrollView: NSScrollView {
+  private(set) weak var hostWindow: NSWindow?
+
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    super.viewWillMove(toWindow: newWindow)
+    hostWindow = newWindow
   }
 }
