@@ -6,13 +6,13 @@
 //! table has, so that the record a later Helper cleans up after lists only the routes this one is
 //! about to add, before it adds them.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::mpsc::Sender;
 
 use fvm_contract::app_helper::{
     BypassRoute, BypassRoutesReply, BypassRoutesRequest, BypassRoutesSnapshot, HelperError,
-    HelperErrorCode,
+    HelperErrorCode, Ipv4Network, MAX_ENTRIES,
 };
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, FromEntry, IpNetwork, LogCategory,
@@ -22,6 +22,32 @@ use fvm_contract::helper_internal::{
 
 use super::{Entry, error, left_after_revert, reverted_again, to_json};
 use crate::session::NetworkJob;
+
+/// Checks the routes an app asks this Helper to add through the primary network's `gateway`, which
+/// is `None` when there is no primary network. An empty list always passes.
+///
+/// # Errors
+///
+/// `InvalidRequest` when there is no gateway, the list has more than `MAX_ENTRIES` routes or
+/// repeats, or a route goes through another gateway or to a target that is not an exception target.
+pub fn check_writable(routes: &[BypassRoute], gateway: Option<&str>) -> Result<(), HelperError> {
+    let writable = routes.is_empty()
+        || gateway.is_some_and(|gateway| {
+            routes.len() <= MAX_ENTRIES
+                && routes.iter().collect::<HashSet<_>>().len() == routes.len()
+                && routes
+                    .iter()
+                    .all(|route| route.gateway == gateway && Ipv4Network::from_route(route).is_ok())
+        });
+    if writable {
+        Ok(())
+    } else {
+        Err(error(
+            HelperErrorCode::InvalidRequest,
+            "the route list has repeats, too many routes, or routes this helper does not write",
+        ))
+    }
+}
 
 /// Whether `added` and `route` through `service` are the same route in the routing table. On
 /// Windows a route belongs to an interface, so the same route through another one is another
@@ -742,5 +768,63 @@ fn exception_destination(exception: &BypassRoute) -> Option<IpNetwork> {
 fn failure(code: HelperErrorCode, message: impl Into<String>) -> BypassRoutesReply {
     BypassRoutesReply::Failure {
         error: error(code, message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ROUTER: &str = "192.168.1.1";
+
+    fn route(destination: &str, subnet_mask: &str, gateway: &str) -> BypassRoute {
+        BypassRoute {
+            destination: destination.to_owned(),
+            subnet_mask: subnet_mask.to_owned(),
+            gateway: gateway.to_owned(),
+        }
+    }
+
+    fn host(third: usize) -> BypassRoute {
+        route(&format!("10.0.{third}.1"), "255.255.255.255", ROUTER)
+    }
+
+    #[test]
+    fn exception_routes_through_the_primary_router_are_writable() {
+        assert_eq!(check_writable(&[], None), Ok(()));
+        assert_eq!(check_writable(&[], Some(ROUTER)), Ok(()));
+        let full: Vec<_> = (0..MAX_ENTRIES).map(host).collect();
+        assert_eq!(check_writable(&full, Some(ROUTER)), Ok(()));
+        let network = route("10.1.0.0", "255.255.0.0", ROUTER);
+        assert_eq!(check_writable(&[host(0), network], Some(ROUTER)), Ok(()));
+    }
+
+    #[test]
+    fn other_routes_are_refused() {
+        let too_many: Vec<_> = (0..=MAX_ENTRIES).map(host).collect();
+        let refusals = [
+            ("no primary network", vec![host(0)], None),
+            ("repeat", vec![host(0), host(0)], Some(ROUTER)),
+            ("too many", too_many, Some(ROUTER)),
+            (
+                "another router",
+                vec![route("10.0.0.1", "255.255.255.255", "192.0.2.2")],
+                Some(ROUTER),
+            ),
+            (
+                "host bits",
+                vec![route("10.0.0.1", "255.255.255.0", ROUTER)],
+                Some(ROUTER),
+            ),
+            (
+                "loopback",
+                vec![route("127.0.0.2", "255.255.255.255", ROUTER)],
+                Some(ROUTER),
+            ),
+        ];
+        for (case, routes, gateway) in refusals {
+            let refused = check_writable(&routes, gateway).expect_err(case);
+            assert_eq!(refused.code, HelperErrorCode::InvalidRequest, "{case}");
+        }
     }
 }

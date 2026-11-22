@@ -30,6 +30,8 @@ use crate::watchdog::{self, Beat, Fault};
 use bypass_routes::{BypassRoutes, Job};
 use updates::serve_updates;
 
+pub use bypass_routes::check_writable;
+
 /// How long exiting after the OS's termination request waits for the run to report its exit.
 /// Longer than a stopped session's wait before it is detached, so a run whose logout hangs is still
 /// detached and reported first.

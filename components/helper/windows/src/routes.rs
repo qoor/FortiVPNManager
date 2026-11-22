@@ -5,15 +5,13 @@
 //! ID and its name as the service name, as a network service on macOS. The routes live in the
 //! active routing table only, so Windows forgets them at a restart.
 
-use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 
-use fvm_contract::app_helper::{
-    BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode, Ipv4Network, MAX_ENTRIES,
-};
+use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
 use fvm_contract::helper_internal::{
     AddedRoute, BypassRoutesChange, BypassRoutesOutcome, LogCategory, LogLevel, NetworkCheck,
 };
+use fvm_helper_core::entry;
 use fvm_os_api_windows::network::{self, DadState, Family, Luid, Medium, Route};
 
 use crate::Log;
@@ -34,19 +32,19 @@ pub(crate) fn change_bypass_routes(change: &BypassRoutesChange, log: &Log) -> By
 fn apply(change: &BypassRoutesChange, log: &Log) -> Result<BypassRoutesOutcome, HelperError> {
     let before = read_table(log)?;
     let primary = checked_primary(&change.network, &before, log)?;
+    entry::check_writable(
+        &change.add,
+        primary
+            .as_ref()
+            .map(|primary| primary.network.router.as_str()),
+    )?;
     let to_add = match &primary {
-        _ if change.add.is_empty() => Vec::new(),
-        Some(primary) if writable(&change.add, &primary.network.router) => change
+        Some(primary) => change
             .add
             .iter()
             .filter_map(|route| Some((as_route(route, primary.luid)?, route)))
             .collect(),
-        _ => {
-            return Err(error(
-                HelperErrorCode::InvalidRequest,
-                "the route list has repeats, too many routes, or routes this helper does not write",
-            ));
-        }
+        None => Vec::new(),
     };
     let mut changed = false;
     let mut removed = 0;
@@ -153,16 +151,6 @@ fn checked_primary(
             Ok(Some(primary))
         }
     }
-}
-
-/// Whether the Helper writes `routes`: at most a list's worth, no repeats, and each to an exception
-/// target through `gateway`.
-fn writable(routes: &[BypassRoute], gateway: &str) -> bool {
-    routes.len() <= MAX_ENTRIES
-        && routes.iter().collect::<HashSet<_>>().len() == routes.len()
-        && routes
-            .iter()
-            .all(|route| route.gateway == gateway && Ipv4Network::from_route(route).is_ok())
 }
 
 /// Whether the table's `route` is `added` as the Helper added it: same destination, prefix and
@@ -331,6 +319,8 @@ mod tests {
     //! which nothing uses, through the primary interface, and put back what they changed.
 
     use std::sync::{Arc, PoisonError};
+
+    use fvm_contract::app_helper::MAX_ENTRIES;
 
     use super::*;
 

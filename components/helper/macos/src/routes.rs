@@ -3,18 +3,16 @@
 //! routes of the running system, which a restart forgets; only routes such as the Helper adds count
 //! as its own.
 
-use std::collections::HashSet;
 use std::net::Ipv4Addr;
 
 use core_foundation::base::CFType;
 use core_foundation::dictionary::CFDictionary;
 use core_foundation::string::CFString;
-use fvm_contract::app_helper::{
-    BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode, Ipv4Network, MAX_ENTRIES,
-};
+use fvm_contract::app_helper::{BypassRoute, BypassRoutesSnapshot, HelperError, HelperErrorCode};
 use fvm_contract::helper_internal::{
     BypassRoutesChange, BypassRoutesOutcome, LogCategory, NetworkCheck,
 };
+use fvm_helper_core::entry;
 use fvm_os_api_macos::log::Level;
 use fvm_os_api_macos::network;
 use system_configuration::dynamic_store::SCDynamicStore;
@@ -29,17 +27,9 @@ pub(crate) fn change(change: &BypassRoutesChange) -> BypassRoutesOutcome {
         Ok(network) => network,
         Err(error) => return BypassRoutesOutcome::Refused { error },
     };
-    if !change.add.is_empty()
-        && !network
-            .as_ref()
-            .is_some_and(|network| writable(&change.add, &network.router))
-    {
-        return BypassRoutesOutcome::Refused {
-            error: error(
-                HelperErrorCode::InvalidRequest,
-                "the route list has repeats, too many routes, or routes this helper does not write",
-            ),
-        };
+    let gateway = network.as_ref().map(|network| network.router.as_str());
+    if let Err(error) = entry::check_writable(&change.add, gateway) {
+        return BypassRoutesOutcome::Refused { error };
     }
     let Some(before) = route_table::read(Family::Inet) else {
         return BypassRoutesOutcome::Refused {
@@ -140,14 +130,6 @@ fn checked_network(check: &NetworkCheck) -> Result<Option<BypassRoutesSnapshot>,
             Ok(Some(read))
         }
     }
-}
-
-fn writable(routes: &[BypassRoute], gateway: &str) -> bool {
-    routes.len() <= MAX_ENTRIES
-        && routes.iter().collect::<HashSet<_>>().len() == routes.len()
-        && routes
-            .iter()
-            .all(|route| route.gateway == gateway && Ipv4Network::from_route(route).is_ok())
 }
 
 /// The primary service with its IPv4 router, this Mac's first IPv4 address and mask on it, and its
