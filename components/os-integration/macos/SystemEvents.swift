@@ -1,6 +1,5 @@
 import AppKit
 import Network
-import SystemConfiguration
 
 /// Reports the system's events as they happen, facts only: what they mean together, such as the
 /// user being away, is the runtime's call. The callbacks arrive on the main queue. Events that can
@@ -11,8 +10,6 @@ final class SystemEvents {
   private let post: @Sendable (AppInternal.SystemEvent) -> Void
   private let pathMonitor = NWPathMonitor()
   private var observers: [(NotificationCenter, NSObjectProtocol)] = []
-  private var settingsStore: SCDynamicStore?
-  private static weak var settingsWatcher: SystemEvents?
 
   init(post: @escaping @Sendable (AppInternal.SystemEvent) -> Void) {
     self.post = post
@@ -48,7 +45,6 @@ final class SystemEvents {
         ))
     }
     pathMonitor.start(queue: .main)
-    watchNetworkSettings()
   }
 
   private func observe(
@@ -60,29 +56,6 @@ final class SystemEvents {
       MainActor.assumeIsolated { post(event()) }
     }
     observers.append((center, observer))
-  }
-
-  /// The saved IPv4 settings of any network service (System Settings) and the primary IPv4 state,
-  /// from SCDynamicStore on the main run loop: the exception routes follow the primary network, its
-  /// router and this Mac's address on it.
-  private func watchNetworkSettings() {
-    Self.settingsWatcher = self
-    guard
-      let store = unsafe SCDynamicStoreCreate(
-        nil, "FortiVPNManager" as CFString,
-        { _, _, _ in
-          // Delivered on the main run loop, where the source is scheduled.
-          MainActor.assumeIsolated {
-            SystemEvents.settingsWatcher?.post(.networkSettingsChanged)
-          }
-        }, nil),
-      SCDynamicStoreSetNotificationKeys(
-        store, ["State:/Network/Global/IPv4"] as CFArray,
-        ["Setup:/Network/Service/[^/]+/IPv4"] as CFArray),
-      let source = SCDynamicStoreCreateRunLoopSource(nil, store, 0)
-    else { return }
-    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-    settingsStore = store
   }
 
   nonisolated private static func kind(of type: NWInterface.InterfaceType)

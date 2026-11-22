@@ -13,20 +13,12 @@ namespace FortiVPNManager.OsIntegration;
 internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetime)
 {
     /// <summary>
-    /// Windows announces no change of routes, and another program, such as the VPN's route script,
-    /// may remove an exception route, so the runtime is told the network settings may have changed
-    /// this often, and it checks the exception routes again.
-    /// </summary>
-    private static readonly TimeSpan RouteCheck = TimeSpan.FromMinutes(5);
-
-    /// <summary>
     /// How long signing out or shutting down waits for the runtime to end the tunnel and the log.
     /// Windows asks the user about an app that holds it up longer.
     /// </summary>
     private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(5);
 
     private readonly object gate = new();
-    private Timer? routeCheck;
     private string timeZone = "";
     private bool locked;
 
@@ -51,9 +43,8 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         // The first use of them decides that thread, once, so the wait for the Helper at launch, the
         // app's first use, subscribes the same way.
         Task.Run(Subscribe).Wait();
-        NetworkChange.NetworkAddressChanged += (_, _) => NetworkChanged();
-        NetworkChanged();
-        routeCheck = new Timer(_ => post(new SystemEvent.NetworkSettingsChanged()), null, RouteCheck, RouteCheck);
+        NetworkChange.NetworkAddressChanged += (_, _) => PathChanged();
+        PathChanged();
     }
 
     /// <summary>The system time zone's IANA name, which the runtime computes with.</summary>
@@ -116,10 +107,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         };
     }
 
-    /// <summary>On every address change, including the first: the path, and the settings the exception routes depend on.</summary>
-    private void NetworkChanged()
-    {
+    /// <summary>On every address change, including the first.</summary>
+    private void PathChanged() =>
         post(new SystemEvent.NetworkPathChanged(SystemFacts.PathSatisfied(), SystemFacts.PathInterfaces()));
-        post(new SystemEvent.NetworkSettingsChanged());
-    }
 }

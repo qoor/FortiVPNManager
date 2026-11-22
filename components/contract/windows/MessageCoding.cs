@@ -418,7 +418,6 @@ namespace FortiVPNManager.Contract;
 [JsonSerializable(typeof(AppInternal.SystemEvent.DisplaysSlept), TypeInfoPropertyName = "SystemEventDisplaysSlept")]
 [JsonSerializable(typeof(AppInternal.SystemEvent.DisplaysWoke), TypeInfoPropertyName = "SystemEventDisplaysWoke")]
 [JsonSerializable(typeof(AppInternal.SystemEvent.NetworkPathChanged), TypeInfoPropertyName = "SystemEventNetworkPathChanged")]
-[JsonSerializable(typeof(AppInternal.SystemEvent.NetworkSettingsChanged), TypeInfoPropertyName = "SystemEventNetworkSettingsChanged")]
 [JsonSerializable(typeof(AppInternal.SystemEvent.ClockChanged), TypeInfoPropertyName = "SystemEventClockChanged")]
 [JsonSerializable(typeof(AppInternal.SystemEvent.TimeZoneChanged), TypeInfoPropertyName = "SystemEventTimeZoneChanged")]
 [JsonSerializable(typeof(AppInternal.SystemEvent.AppActivated), TypeInfoPropertyName = "SystemEventAppActivated")]

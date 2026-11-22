@@ -26,10 +26,12 @@ tokio-rustls.workspace = true
 rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-foundation.workspace = true
 nix = { workspace = true, features = ["net"] }
 security-framework.workspace = true
 security-framework-sys.workspace = true
 socket2.workspace = true
+system-configuration.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 fvm-os-api-windows.workspace = true

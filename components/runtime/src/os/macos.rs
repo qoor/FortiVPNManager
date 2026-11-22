@@ -1,3 +1,10 @@
+use std::sync::mpsc::Sender;
+use std::thread;
+
+use core_foundation::array::CFArray;
+use core_foundation::base::TCFType;
+use core_foundation::runloop::CFRunLoop;
+use core_foundation::string::CFString;
 use fvm_contract::app_internal::port::SecretStoreFailure;
 use fvm_core::connection::InterfaceAddress;
 use nix::ifaddrs::getifaddrs;
@@ -6,6 +13,43 @@ use security_framework::base::Error;
 use security_framework::item::{ItemClass, ItemSearchOptions, Limit};
 use security_framework::passwords::{self, PasswordOptions};
 use security_framework_sys::base::errSecItemNotFound;
+use system_configuration::dynamic_store::{
+    SCDynamicStore, SCDynamicStoreBuilder, SCDynamicStoreCallBackContext,
+};
+
+use crate::orchestration::Input;
+
+fn settings_changed(_: SCDynamicStore, _: CFArray<CFString>, inputs: &mut Sender<Input>) {
+    let _ = inputs.send(Input::NetworkSettingsChanged);
+}
+
+pub(super) fn watch_network_settings(inputs: Sender<Input>) {
+    thread::Builder::new()
+        .name("fvm-runtime-network-settings".into())
+        .spawn(move || {
+            let store = SCDynamicStoreBuilder::new("FortiVPNManager")
+                .callback_context(SCDynamicStoreCallBackContext {
+                    callout: settings_changed,
+                    info: inputs,
+                })
+                .build()
+                .expect("a dynamic store session");
+            let keys = CFArray::from_CFTypes(&[CFString::new("State:/Network/Global/IPv4")]);
+            let patterns =
+                CFArray::from_CFTypes(&[CFString::new("Setup:/Network/Service/[^/]+/IPv4")]);
+            assert!(
+                store.set_notification_keys(&keys, &patterns),
+                "watching the network settings"
+            );
+            let source = store
+                .create_run_loop_source()
+                .expect("a run loop source for the dynamic store");
+            let mode = CFString::new("kCFRunLoopDefaultMode");
+            CFRunLoop::get_current().add_source(&source, mode.as_concrete_TypeRef());
+            CFRunLoop::run_current();
+        })
+        .expect("starting the network settings thread");
+}
 
 pub(super) fn unknown_error(code: i32) -> String {
     format!("Keychain error {code}")

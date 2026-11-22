@@ -458,6 +458,7 @@ dependencies = [
 name = "fvm-runtime"
 version = "0.0.0"
 dependencies = [
+ "core-foundation 0.10.1",
  "fvm-contract",
  "fvm-core",
  "fvm-os-api-windows",
@@ -473,6 +474,7 @@ dependencies = [
  "serde",
  "serde_json",
  "socket2",
+ "system-configuration 0.8.0",
  "tokio",
  "tokio-rustls",
 ]

@@ -91,13 +91,6 @@
   {
     "event": {
       "_0": {
-        "networkSettingsChanged": {}
-      }
-    }
-  },
-  {
-    "event": {
-      "_0": {
         "clockChanged": {}
       }
     }

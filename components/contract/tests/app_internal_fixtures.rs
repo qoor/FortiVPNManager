@@ -2079,7 +2079,6 @@ fn system_events() {
                 satisfied: false,
                 interfaces: vec![],
             }),
-            event(SystemEvent::NetworkSettingsChanged {}),
             event(SystemEvent::ClockChanged {}),
             event(SystemEvent::TimeZoneChanged {
                 time_zone: "Europe/Berlin".into(),

@@ -14,7 +14,6 @@ extension AppInternal {
     case displaysWoke
     /// On every path update, including the first.
     case networkPathChanged(satisfied: Bool, interfaces: [PathInterface])
-    case networkSettingsChanged
     case clockChanged
     case timeZoneChanged(timeZone: String)
     case appActivated

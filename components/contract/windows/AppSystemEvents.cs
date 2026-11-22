@@ -25,7 +25,6 @@ public static partial class AppInternal
         /// <summary>On every path update, including the first.</summary>
         public sealed record NetworkPathChanged(bool Satisfied, IReadOnlyList<PathInterface> Interfaces) : SystemEvent;
 
-        public sealed record NetworkSettingsChanged : SystemEvent;
         public sealed record ClockChanged : SystemEvent;
 
         /// <param name="TimeZone">The IANA name, such as <c>Asia/Seoul</c>.</param>

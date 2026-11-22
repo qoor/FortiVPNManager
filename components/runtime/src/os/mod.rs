@@ -102,14 +102,15 @@ pub(crate) fn describe(failure: &SecretStoreFailure) -> String {
 
 pub(crate) fn connect(app: Sender<FromRuntime>, inputs: Sender<Input>) -> Sender<Outgoing> {
     let (requests, received) = mpsc::channel();
+    let os_inputs = inputs.clone();
     thread::Builder::new()
         .name("fvm-runtime-os".into())
-        .spawn(move || serve(&received, &inputs))
+        .spawn(move || serve(&received, &os_inputs))
         .expect("starting the runtime's OS thread");
     let (outgoing, messages) = mpsc::channel();
     thread::Builder::new()
         .name("fvm-runtime-out".into())
-        .spawn(move || pass(&messages, &app, &requests))
+        .spawn(move || pass(&messages, &app, &requests, &inputs))
         .expect("starting the runtime's outgoing thread");
     outgoing
 }
@@ -118,6 +119,7 @@ fn pass(
     messages: &Receiver<Outgoing>,
     app: &Sender<FromRuntime>,
     requests: &Sender<(u64, OsRequest)>,
+    inputs: &Sender<Input>,
 ) {
     for message in messages {
         match message {
@@ -127,6 +129,7 @@ fn pass(
             Outgoing::Os { id, request } => {
                 let _ = requests.send((id, request));
             }
+            Outgoing::WatchNetworkSettings => platform::watch_network_settings(inputs.clone()),
         }
     }
 }

@@ -34,9 +34,6 @@ pub enum SystemEvent {
         satisfied: bool,
         interfaces: Vec<PathInterface>,
     },
-    /// The saved IPv4 settings of a network service or the primary IPv4 state changed; one change
-    /// may be reported several times.
-    NetworkSettingsChanged {},
     /// The wall clock was set.
     ClockChanged {},
     TimeZoneChanged {

@@ -40,11 +40,15 @@ pub(crate) enum Input {
         id: u64,
         response: OsResponse,
     },
+    /// The saved IPv4 settings of a network service or the primary IPv4 state changed; one change
+    /// may be reported several times.
+    NetworkSettingsChanged,
 }
 
 pub(crate) enum Outgoing {
     App(FromRuntime),
     Os { id: u64, request: OsRequest },
+    WatchNetworkSettings,
 }
 
 type PortReply = Box<dyn FnOnce(&mut Runtime, PortResponse)>;
@@ -229,6 +233,7 @@ impl Runtime {
         if let Some(problem) = state_problem {
             runtime.system_log(LogLevel::Error, LogCategory::State, problem);
         }
+        let _ = runtime.out.send(Outgoing::WatchNetworkSettings);
         let connected_before_update = runtime.take_update_record();
         runtime.check_for_updates();
         runtime.start_polling_config();
@@ -274,6 +279,7 @@ impl Runtime {
                     .expect("an answer to a request the runtime sent");
                 reply(self, response);
             }
+            Input::NetworkSettingsChanged => self.sync_bypass_routes_soon(),
         }
     }
 
@@ -624,10 +630,6 @@ impl Runtime {
                     satisfied,
                     interfaces,
                 }
-            }
-            SystemEvent::NetworkSettingsChanged {} => {
-                self.sync_bypass_routes_soon();
-                return;
             }
             SystemEvent::ClockChanged {} => {
                 self.timers.nudge();

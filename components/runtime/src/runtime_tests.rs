@@ -367,6 +367,7 @@ impl App {
     fn take(&mut self, message: Outgoing) {
         match message {
             Outgoing::App(message) => self.take_from_runtime(message),
+            Outgoing::WatchNetworkSettings => {}
             Outgoing::Os { id, request } => {
                 if let OsRequest::ReadSecret {
                     item: SecretItem::GmailAppPassword { .. },
@@ -1275,9 +1276,7 @@ fn is_route_call(call: &HelperCall) -> bool {
 }
 
 fn network_changed(app: &App) {
-    app.send(ToRuntime::Event {
-        event: SystemEvent::NetworkSettingsChanged {},
-    });
+    app.inputs.send(Input::NetworkSettingsChanged).unwrap();
 }
 
 #[test]

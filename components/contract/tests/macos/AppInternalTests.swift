@@ -1040,7 +1040,6 @@ extension AppInternal {
             PathInterface(name: "ppp0", kind: .other),
           ])),
       .event(.networkPathChanged(satisfied: false, interfaces: [])),
-      .event(.networkSettingsChanged),
       .event(.clockChanged),
       .event(.timeZoneChanged(timeZone: "Europe/Berlin")),
       .event(.appActivated),

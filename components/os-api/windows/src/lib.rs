@@ -1,6 +1,7 @@
 #![cfg(windows)]
 #![allow(unsafe_code)]
 
+pub mod changes;
 pub mod credentials;
 pub mod crypto;
 pub mod library;
