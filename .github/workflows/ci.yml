@@ -80,6 +80,9 @@ jobs:
           --skip network::tests::wins_servers_set_on_the_loopback_interface_are_cleared_by_its_guid
           --skip the_bypass_routes_are_read_after_the_build_check
           --skip a_connection_has_one_route_request_at_a_time
+      - run: >-
+          cargo test -p fvm-runtime --
+          --ignored --exact os::windows::tests::a_secret_is_written_read_replaced_and_deleted
 
   csharp-windows:
     name: C# (Windows)
