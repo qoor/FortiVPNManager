@@ -108,7 +108,6 @@ git submodule update --init third_party/openconnect
 |---|---|
 | `packaging/openconnect/build.sh windows` | Mac에서 OpenConnect 라이브러리 zip 생성 |
 | `packaging\windows\build.ps1 -Build <빌드 번호> -RustOutput <폴더> -OpenConnect <zip>` | 미리 빌드한 Rust 결과물과 OpenConnect 라이브러리 zip으로 Release 빌드 및 설치 패키지(`.build\windows\FortiVPNManager-<버전>.msi`) 생성 |
-| `scripts/msi-windows.sh <폴더>` | Mac에서 Rust와 OpenConnect 라이브러리를 빌드하고 Windows PC(ssh)에서 설치 패키지 생성 |
 
 - **설치**: GitHub Release 또는 직접 생성한 MSI 실행
 

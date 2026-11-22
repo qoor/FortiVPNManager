@@ -7,21 +7,20 @@
 # as a file too: sent on the ssh command line, a whole-workspace run passed the Windows limit on its
 # length. A run counts only if it reports every program; until then the new ones stay unrecorded, so
 # the next run starts them ahead again.
-# Usage: scripts/test-windows.sh <folder> [cargo test options, such as --package fvm-helper-core]
-# <folder> is the PC's copy of this tree under %USERPROFILE%\src, kept current by sync-windows.sh,
-# which this runs first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm, lld,
-# mingw-w64, autoconf, automake, libtool and pkgconf.
+# Usage: scripts/test-windows.sh [cargo test options, such as --package fvm-helper-core]
+# It runs in this worktree's folder on the PC, kept current by sync-windows.sh, which this runs
+# first. Needs: rustup target x86_64-pc-windows-msvc, cargo-xwin, brew llvm, lld, mingw-w64,
+# autoconf, automake, libtool and pkgconf.
 set -euo pipefail
-folder=${1:?usage: scripts/test-windows.sh <folder> [cargo test options]}
-shift
 host=${FVM_WINDOWS_HOST:-notebook}
 target=x86_64-pc-windows-msvc
 cd "$(git rev-parse --show-toplevel)"
+folder=$(scripts/windows-folder.sh)
 export PATH="$(brew --prefix)/opt/llvm/bin:$(brew --prefix)/opt/lld/bin:$PATH" XWIN_ACCEPT_LICENSE=1
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-scripts/sync-windows.sh "$folder"
+scripts/sync-windows.sh
 cargo xwin test --no-run --target "$target" --message-format=json-render-diagnostics "$@" >"$work/build.json"
 python3 -I - "$PWD" "$work/build.json" >"$work/tests" <<'EOF'
 import json, os, sys
@@ -47,9 +46,9 @@ state="${XDG_CACHE_HOME:-$HOME/.cache}/fvm-windows-sync/$host-$folder.tests.sha1
 touch "$state"
 { cut -d'|' -f1 "$work/tests"; printf '%s\n' "$PWD/$openconnect"/*.dll; } | xargs shasum -a 1 | LC_ALL=C sort >"$work/now"
 LC_ALL=C comm -13 "$state" "$work/now" | cut -c43- >"$work/new"
-ssh "$host" "if not exist %USERPROFILE%\\src\\$folder\\.windows-tests mkdir %USERPROFILE%\\src\\$folder\\.windows-tests"
+ssh "$host" "if not exist %USERPROFILE%\\src\\FortiVPNManager\\$folder\\.windows-tests mkdir %USERPROFILE%\\src\\FortiVPNManager\\$folder\\.windows-tests"
 if [ -s "$work/new" ]; then
-    tr '\n' '\0' <"$work/new" | xargs -0 -I{} scp -q {} "$host:src/$folder/.windows-tests/"
+    tr '\n' '\0' <"$work/new" | xargs -0 -I{} scp -q {} "$host:src/FortiVPNManager/$folder/.windows-tests/"
 fi
 new_names=$(xargs -n1 basename <"$work/new" | paste -sd, -)
 runs=$(while IFS='|' read -r exe package; do printf '%s|%s\n' "$(basename "$exe")" "$package"; done <"$work/tests")
@@ -57,7 +56,7 @@ runs=$(while IFS='|' read -r exe package; do printf '%s|%s\n' "$(basename "$exe"
 cat >"$work/run.ps1" <<EOF
 # Progress records ("Preparing modules for first use") would arrive as CLIXML on the error stream.
 \$ProgressPreference = 'SilentlyContinue'
-\$root = Join-Path \$env:USERPROFILE 'src\\$folder'
+\$root = Join-Path \$env:USERPROFILE 'src\\FortiVPNManager\\$folder'
 \$new = '$new_names' -split ',' | Where-Object { \$_ }
 # @() keeps a single program a list: Windows PowerShell gives one [pscustomobject] no Count.
 \$tests = @(@'
@@ -92,9 +91,9 @@ foreach (\$test in \$tests) {
 "windows tests: \$(\$tests.Count) programs, \$(\$started.Count) new, \$failed failed"
 exit [int](\$failed -gt 0)
 EOF
-scp -q "$work/run.ps1" "$host:src/$folder/.windows-tests/run.ps1"
+scp -q "$work/run.ps1" "$host:src/FortiVPNManager/$folder/.windows-tests/run.ps1"
 code=0
-ssh "$host" "powershell -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\\src\\$folder\\.windows-tests\\run.ps1" |
+ssh "$host" "powershell -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\\src\\FortiVPNManager\\$folder\\.windows-tests\\run.ps1" |
     tee "$work/output" | grep -v '^#< CLIXML\|^<Objs' || code=$?
 programs=$(wc -l <"$work/tests" | tr -d ' ')
 if ! LC_ALL=C tr -d '\r' <"$work/output" | grep -q "^windows tests: $programs programs, "; then

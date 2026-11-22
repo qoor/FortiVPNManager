@@ -108,7 +108,6 @@ git submodule update --init third_party/openconnect
 |---|---|
 | `packaging/openconnect/build.sh windows` | OpenConnect library zip, made on a Mac |
 | `packaging\windows\build.ps1 -Build <build number> -RustOutput <folder> -OpenConnect <zip>` | Release build and installer (`.build\windows\FortiVPNManager-<version>.msi`) from prebuilt Rust output and the OpenConnect library zip |
-| `scripts/msi-windows.sh <folder>` | Rust and the OpenConnect library built on a Mac, installer made on a Windows PC (over ssh) |
 
 - **Install**: run the MSI from a GitHub Release or your own build
 
