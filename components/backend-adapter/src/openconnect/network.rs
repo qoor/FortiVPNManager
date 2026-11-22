@@ -33,8 +33,10 @@ pub(super) fn settings(
         .ok()
         .filter(|mtu| (MIN_MTU..=MAX_MTU).contains(mtu))
         .ok_or_else(|| format!("the MTU {} is outside {MIN_MTU} to {MAX_MTU}", ip.mtu))?;
-    let ipv4_address = required::<Ipv4Addr>("IPv4 address", &ip.addr)?;
-    let ipv4_prefix = text(&ip.netmask).and_then(mask_length).unwrap_or(32);
+    let ipv4_address = required::<Ipv4Addr>("IPv4 address", ip.addr.as_deref())?;
+    let ipv4_prefix = text(ip.netmask.as_deref())
+        .and_then(mask_length)
+        .unwrap_or(32);
     let ipv4_include = ipv4_routes(&ip.split_includes);
     let ipv4_tunnel_routes = if ipv4_include.is_empty()
         || ipv4_include
@@ -78,7 +80,7 @@ pub(super) fn settings(
     };
     Ok(NetworkSettings {
         tunnel: TunnelDevice { name, index },
-        gateway: required("gateway address", &ip.gateway_addr)?,
+        gateway: required("gateway address", ip.gateway_addr.as_deref())?,
         mtu: Some(mtu),
         ipv4: FamilySettings {
             address: IpNetwork {
@@ -90,17 +92,17 @@ pub(super) fn settings(
         ipv6,
         split_exclude,
         dns_servers: unique(dns_servers),
-        default_domains: domains("default domain", text(&ip.domain).into_iter())?,
+        default_domains: domains("default domain", text(ip.domain.as_deref()).into_iter())?,
         split_dns_domains: domains("split DNS domain", ip.split_dns.iter().map(String::as_str))?,
         wins_servers,
     })
 }
 
-fn text(value: &Option<String>) -> Option<&str> {
-    value.as_deref().filter(|text| !text.is_empty())
+fn text(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
 }
 
-fn required<T: FromStr>(what: &str, value: &Option<String>) -> Result<T, String> {
+fn required<T: FromStr>(what: &str, value: Option<&str>) -> Result<T, String> {
     parse(
         what,
         text(value).ok_or_else(|| format!("the {what} is missing"))?,
@@ -227,10 +229,10 @@ fn network(address: IpAddr, prefix_length: u8) -> IpNetwork {
 }
 
 fn ipv6_address(ip: &IpInfo) -> Result<Option<IpNetwork>, String> {
-    let address = text(&ip.addr6)
+    let address = text(ip.addr6.as_deref())
         .map(|address| parse::<Ipv6Addr>("IPv6 address", address))
         .transpose()?;
-    let with_length = text(&ip.netmask6)
+    let with_length = text(ip.netmask6.as_deref())
         .map(|text| {
             let unreadable =
                 || format!("the IPv6 address and prefix length are unreadable: {text:?}");

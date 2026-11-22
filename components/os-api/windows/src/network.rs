@@ -593,7 +593,7 @@ pub fn dns_servers(luid: Luid, family: Family) -> Result<Vec<IpAddr>, Error> {
 ///
 /// # Errors
 ///
-/// Returns the Windows error code when the interface's NetBT registry key cannot be opened or
+/// Returns the Windows error code when the interface's `NetBT` registry key cannot be opened or
 /// written.
 ///
 /// # Panics

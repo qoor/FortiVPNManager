@@ -360,7 +360,7 @@ impl<R: FnMut(Report)> Watch<R> {
             }
         }
         if let Some(changes) = &mut self.record.outside_changes {
-            changes.routes.clone_from(&owned);
+            changes.routes.clone_from(owned);
             self.save_record();
         }
     }

@@ -1,5 +1,7 @@
 //! Parsing what the IMAP server sends, in any chunking.
 
+use std::fmt::Write as _;
+
 use std::time::{Duration, UNIX_EPOCH};
 
 use fvm_core::imap::{
@@ -81,7 +83,8 @@ fn transcript() -> Vec<u8> {
         "A0001 OK [CAPABILITY IMAP4rev1 IDLE MOVE] authenticated (Success)",
         r#"* LIST (\HasNoChildren \All) "/" "[Gmail]/&yATMtLz0rQDVaA-""#,
     ]);
-    text += &format!(
+    let _ = write!(
+        text,
         r#"* LIST (\HasNoChildren \Trash) "/" {}"#,
         literal("[Gmail]/&1zTJwNG1-")
     );
@@ -94,11 +97,13 @@ fn transcript() -> Vec<u8> {
         r"* 498 FETCH (FLAGS (\Seen))",
         "* SEARCH 499 500",
     ]);
-    text += &format!(
+    let _ = write!(
+        text,
         "* 499 FETCH (UID 500 INTERNALDATE \"14-Oct-2026 10:19:00 +0900\" BODY[HEADER.FIELDS (SUBJECT DATE)] {})\r\n",
         literal(header1)
     );
-    text += &format!(
+    let _ = write!(
+        text,
         "* 500 FETCH (UID 501 INTERNALDATE \"14-Oct-2026 10:19:30 +0900\" BODY[HEADER.FIELDS (SUBJECT DATE)] {} X-EMPTY {})\r\n",
         literal(header2),
         literal("")
