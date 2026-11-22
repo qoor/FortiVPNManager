@@ -82,7 +82,7 @@ struct LogTextView: NSViewRepresentable {
     textView.isVerticallyResizable = true
     textView.isHorizontallyResizable = false
     textView.autoresizingMask = [.width]
-    textView.textContainer?.widthTracksTextView = true
+    unsafe textView.textContainer?.widthTracksTextView = true
 
     let scrollView = NSScrollView()
     scrollView.hasVerticalScroller = true
@@ -137,7 +137,7 @@ struct LogTextView: NSViewRepresentable {
       guard request != findRequest else { return }
       findRequest = request
       DispatchQueue.main.async { [weak self] in
-        guard let textView = self?.textView, let window = textView.window else { return }
+        guard let textView = self?.textView, let window = unsafe textView.window else { return }
         window.makeFirstResponder(textView)
         let item = NSMenuItem()
         item.tag = NSTextFinder.Action.showFindInterface.rawValue
@@ -152,7 +152,7 @@ struct LogTextView: NSViewRepresentable {
     }
 
     func sync(with log: LogLines, clearCount: Int, autoScroll: Bool) {
-      guard let textView, let storage = textView.textStorage,
+      guard let textView, let storage = unsafe textView.textStorage,
         let scrollView = textView.enclosingScrollView
       else {
         return
@@ -206,13 +206,15 @@ struct LogTextView: NSViewRepresentable {
     /// Height of the first `count` shown lines, gaps after them included, measured before they are
     /// deleted.
     private func height(ofFirst count: Int) -> CGFloat {
-      guard let textView, let layoutManager = textView.layoutManager else { return 0 }
+      guard let textView, let layoutManager = unsafe textView.layoutManager else { return 0 }
       let length = shown.prefix(count).reduce(0) { $0 + $1.length }
-      let glyphs = layoutManager.glyphRange(
+      let glyphs = unsafe layoutManager.glyphRange(
         forCharacterRange: NSRange(location: 0, length: length), actualCharacterRange: nil)
       guard glyphs.length > 0 else { return 0 }
-      return layoutManager.lineFragmentRect(forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil)
-        .maxY
+      return unsafe layoutManager.lineFragmentRect(
+        forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil
+      )
+      .maxY
     }
 
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {

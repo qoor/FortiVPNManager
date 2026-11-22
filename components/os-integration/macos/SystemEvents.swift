@@ -66,17 +66,17 @@ final class SystemEvents {
   /// router and this Mac's address on it. The store holds `self` unretained; this object lives as
   /// long as the app.
   private func watchNetworkSettings() {
-    var context = SCDynamicStoreContext(
+    var context = unsafe SCDynamicStoreContext(
       version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
       retain: nil, release: nil, copyDescription: nil)
     guard
-      let store = SCDynamicStoreCreate(
+      let store = unsafe SCDynamicStoreCreate(
         nil, "FortiVPNManager" as CFString,
         { _, _, info in
-          guard let info else { return }
+          guard let info = unsafe info else { return }
           // Delivered on the main run loop, where the source is scheduled.
           MainActor.assumeIsolated {
-            Unmanaged<SystemEvents>.fromOpaque(info).takeUnretainedValue().post(
+            unsafe Unmanaged<SystemEvents>.fromOpaque(info).takeUnretainedValue().post(
               .networkSettingsChanged)
           }
         }, &context),

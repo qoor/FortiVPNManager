@@ -151,7 +151,7 @@ private struct SettingsSearchField: NSViewRepresentable {
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
       DispatchQueue.main.async {
-        field.window?.makeFirstResponder(field)
+        unsafe field.window?.makeFirstResponder(field)
         field.selectText(nil)
       }
     }
@@ -185,13 +185,13 @@ private struct SettingsSearchField: NSViewRepresentable {
         onSubmit()
       case #selector(NSResponder.moveDown(_:)):
         onSubmit()
-        var ancestor = control.superview
+        var ancestor = unsafe control.superview
         while let view = ancestor {
           if let list = view.firstDescendant(NSOutlineView.self) {
-            control.window?.makeFirstResponder(list)
+            unsafe control.window?.makeFirstResponder(list)
             break
           }
-          ancestor = view.superview
+          ancestor = unsafe view.superview
         }
       default:
         return false
@@ -241,12 +241,12 @@ private struct SidebarWidthLock: NSViewRepresentable {
     }
 
     func schedule() {
-      guard window != nil, !scheduled else { return }
+      guard unsafe window != nil, !scheduled else { return }
       scheduled = true
       DispatchQueue.main.async { [weak self] in
         guard let self else { return }
         scheduled = false
-        var ancestor = superview
+        var ancestor = unsafe superview
         while let view = ancestor {
           if let split = view as? NSSplitView, split.isVertical, split.subviews.count > 1 {
             if let controller = split.delegate as? NSSplitViewController,
@@ -258,7 +258,7 @@ private struct SidebarWidthLock: NSViewRepresentable {
             split.setPosition(width, ofDividerAt: 0)
             return
           }
-          ancestor = view.superview
+          ancestor = unsafe view.superview
         }
       }
     }

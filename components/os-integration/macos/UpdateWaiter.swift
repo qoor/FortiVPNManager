@@ -23,23 +23,30 @@ final class UpdateWaiter {
 
   func start(installId: UInt64) -> AppInternal.PortResponse {
     var attributes: posix_spawnattr_t?
-    posix_spawnattr_init(&attributes)
-    defer { posix_spawnattr_destroy(&attributes) }
-    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT))
+    unsafe posix_spawnattr_init(&attributes)
+    defer { unsafe posix_spawnattr_destroy(&attributes) }
+    unsafe posix_spawnattr_setflags(
+      &attributes, Int16(POSIX_SPAWN_SETSID | POSIX_SPAWN_CLOEXEC_DEFAULT))
     var files: posix_spawn_file_actions_t?
-    posix_spawn_file_actions_init(&files)
-    defer { posix_spawn_file_actions_destroy(&files) }
-    posix_spawn_file_actions_addopen(&files, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
-    posix_spawn_file_actions_addopen(&files, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
-    posix_spawn_file_actions_addopen(&files, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
+    unsafe posix_spawn_file_actions_init(&files)
+    defer { unsafe posix_spawn_file_actions_destroy(&files) }
+    unsafe posix_spawn_file_actions_addopen(&files, STDIN_FILENO, "/dev/null", O_RDONLY, 0)
+    unsafe posix_spawn_file_actions_addopen(&files, STDOUT_FILENO, "/dev/null", O_WRONLY, 0)
+    unsafe posix_spawn_file_actions_addopen(&files, STDERR_FILENO, "/dev/null", O_WRONLY, 0)
     let arguments =
-      Self.arguments(appPID: getpid(), installId: installId).map { strdup($0) } + [nil]
-    let environment = ProcessInfo.processInfo.environment.map { strdup("\($0)=\($1)") } + [nil]
-    defer { (arguments + environment).forEach { free($0) } }
+      unsafe Self.arguments(appPID: getpid(), installId: installId).map { unsafe strdup($0) }
+      + [nil]
+    let environment =
+      unsafe ProcessInfo.processInfo.environment.map { unsafe strdup("\($0)=\($1)") } + [nil]
+    defer {
+      for unsafe pointer in unsafe arguments + environment {
+        unsafe free(pointer)
+      }
+    }
     var pid: pid_t = 0
-    let status = posix_spawn(&pid, "/bin/sh", &files, &attributes, arguments, environment)
+    let status = unsafe posix_spawn(&pid, "/bin/sh", &files, &attributes, arguments, environment)
     guard status == 0 else {
-      return .updateWaiterFailed(description: String(cString: strerror(status)))
+      return unsafe .updateWaiterFailed(description: String(cString: strerror(status)))
     }
     self.pid = pid
     return .updateWaiterStarted

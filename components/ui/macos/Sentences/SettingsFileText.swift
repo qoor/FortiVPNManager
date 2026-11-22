@@ -271,7 +271,7 @@ private enum SettingsKey {
 
 /// The system's description of `errno`.
 func errorText(_ errno: Int32) -> String {
-  String(cString: strerror(errno))
+  unsafe String(cString: strerror(errno))
 }
 
 /// "U+0007".

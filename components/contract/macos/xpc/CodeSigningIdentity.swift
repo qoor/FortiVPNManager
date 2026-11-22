@@ -6,16 +6,17 @@ enum CodeSigningIdentity {
   /// Team ID (certificate OU) of the running process, or `nil` when unsigned or ad-hoc signed.
   static func currentTeamID() -> String? {
     var code: SecCode?
-    guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+    guard unsafe SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
 
     var staticCode: SecStaticCode?
-    guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
+    guard unsafe SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode
+    else {
       return nil
     }
 
     var info: CFDictionary?
     let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
-    guard SecCodeCopySigningInformation(staticCode, flags, &info) == errSecSuccess,
+    guard unsafe SecCodeCopySigningInformation(staticCode, flags, &info) == errSecSuccess,
       let dict = info as? [String: Any]
     else { return nil }
     return dict[kSecCodeInfoTeamIdentifier as String] as? String

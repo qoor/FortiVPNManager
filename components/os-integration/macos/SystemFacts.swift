@@ -27,20 +27,22 @@ nonisolated enum SystemFacts {
   /// Every address of every interface, from getifaddrs.
   static func interfaceAddresses() -> [AppInternal.InterfaceAddress] {
     var head: UnsafeMutablePointer<ifaddrs>?
-    guard getifaddrs(&head) == 0, let first = head else { return [] }
-    defer { freeifaddrs(first) }
+    guard unsafe getifaddrs(&head) == 0, let first = unsafe head else { return [] }
+    defer { unsafe freeifaddrs(first) }
     var result: [AppInternal.InterfaceAddress] = []
-    var cursor: UnsafeMutablePointer<ifaddrs>? = first
-    while let entry = cursor {
-      cursor = entry.pointee.ifa_next
-      guard let rawName = entry.pointee.ifa_name else { continue }
+    var cursor: UnsafeMutablePointer<ifaddrs>? = unsafe first
+    while let entry = unsafe cursor {
+      unsafe cursor = unsafe entry.pointee.ifa_next
+      guard let rawName = unsafe entry.pointee.ifa_name else { continue }
       var ipv4: String?
-      if let address = entry.pointee.ifa_addr, address.pointee.sa_family == sa_family_t(AF_INET) {
-        ipv4 = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
-          ipv4String($0.pointee.sin_addr)
+      if let address = unsafe entry.pointee.ifa_addr,
+        unsafe address.pointee.sa_family == sa_family_t(AF_INET)
+      {
+        ipv4 = unsafe address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+          unsafe ipv4String($0.pointee.sin_addr)
         }
       }
-      result.append(
+      unsafe result.append(
         AppInternal.InterfaceAddress(
           name: String(cString: rawName),
           up: entry.pointee.ifa_flags & UInt32(IFF_UP) != 0,
@@ -77,7 +79,9 @@ nonisolated enum SystemFacts {
   private static func ipv4String(_ address: in_addr) -> String? {
     var address = address
     var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-    guard inet_ntop(AF_INET, &address, &buffer, socklen_t(buffer.count)) != nil else { return nil }
+    guard unsafe inet_ntop(AF_INET, &address, &buffer, socklen_t(buffer.count)) != nil else {
+      return nil
+    }
     return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
   }
 

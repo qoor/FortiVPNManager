@@ -157,7 +157,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   }
 
   override func viewWillMove(toWindow newWindow: NSWindow?) {
-    if newWindow == nil, editingRow != nil { window?.makeFirstResponder(nil) }
+    if newWindow == nil, editingRow != nil { unsafe window?.makeFirstResponder(nil) }
     super.viewWillMove(toWindow: newWindow)
   }
 
@@ -275,7 +275,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   }
 
   fileprivate func addRow() {
-    if editingRow != nil { window?.makeFirstResponder(tableView) }
+    if editingRow != nil { unsafe window?.makeFirstResponder(tableView) }
     guard canAdd else { return }
     if !hasNewRow {
       hasNewRow = true
@@ -320,7 +320,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     field.isEditable = true
     field.isSelectable = true
     cell.showProblem(false, message: nil)
-    window?.makeFirstResponder(field)
+    unsafe window?.makeFirstResponder(field)
   }
 
   // MARK: - Editing
@@ -330,7 +330,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
   {
     guard commandSelector == #selector(NSResponder.cancelOperation(_:)) else { return false }
     cancelsEdit = true
-    window?.makeFirstResponder(tableView)
+    unsafe window?.makeFirstResponder(tableView)
     return true
   }
 
@@ -378,7 +378,7 @@ final class AddressListEditorView: NSView, NSTableViewDataSource, NSTableViewDel
     }
     reload()
     // Return keeps the keyboard in the list; a click elsewhere keeps its own focus.
-    if movement == .return { window?.makeFirstResponder(tableView) }
+    if movement == .return { unsafe window?.makeFirstResponder(tableView) }
     if let proposed { onChange?(proposed) }
   }
 }
@@ -433,7 +433,7 @@ private final class AddressCellView: NSTableCellView {
     field.cell?.isScrollable = true
     field.cell?.wraps = false
     field.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-    textField = field
+    unsafe textField = field
     mark.contentTintColor = .systemRed
     mark.setContentHuggingPriority(.required, for: .horizontal)
     message.font = .systemFont(ofSize: NSFont.smallSystemFontSize + 1)
