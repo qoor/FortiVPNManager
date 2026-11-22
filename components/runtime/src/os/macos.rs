@@ -51,10 +51,6 @@ pub(super) fn watch_network_settings(inputs: Sender<Input>) {
         .expect("starting the network settings thread");
 }
 
-pub(super) fn unknown_error(code: i32) -> String {
-    format!("Keychain error {code}")
-}
-
 fn failure(error: Error) -> SecretStoreFailure {
     SecretStoreFailure {
         description: error.message(),

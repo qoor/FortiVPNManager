@@ -20,10 +20,6 @@ pub(super) fn watch_network_settings(inputs: Sender<Input>) {
         .expect("starting the network settings thread");
 }
 
-pub(super) fn unknown_error(code: i32) -> String {
-    format!("Unknown error (0x{code:x})")
-}
-
 fn failure(error: Error) -> SecretStoreFailure {
     SecretStoreFailure {
         description: fvm_os_api_windows::message(error.code),

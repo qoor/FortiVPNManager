@@ -93,10 +93,10 @@ pub(crate) enum OsResponse {
 }
 
 pub(crate) fn describe(failure: &SecretStoreFailure) -> String {
-    failure
-        .description
-        .clone()
-        .unwrap_or_else(|| platform::unknown_error(failure.code))
+    match &failure.description {
+        Some(description) => format!("{description} (code {})", failure.code),
+        None => format!("code {}", failure.code),
+    }
 }
 
 pub(crate) fn connect(app: Sender<FromRuntime>, inputs: Sender<Input>) -> Sender<Outgoing> {
