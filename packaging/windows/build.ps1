@@ -10,10 +10,11 @@
 # holds fvm-helper.exe and fvm_runtime.dll from release builds for x86_64-pc-windows-msvc:
 #   cargo build --release --package fvm-helper-windows
 #   cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
+[CmdletBinding(DefaultParameterSetName = 'Build')]
 param(
-    [Parameter(Mandatory)] [string] $Build,
-    [Parameter(Mandatory)] [string] $RustOutput,
-    [Parameter(Mandatory)] [string] $OpenConnect
+    [Parameter(Mandatory, ParameterSetName = 'Prebuilt')] [string] $Build,
+    [Parameter(Mandatory, ParameterSetName = 'Prebuilt')] [string] $RustOutput,
+    [Parameter(Mandatory, ParameterSetName = 'Prebuilt')] [string] $OpenConnect
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,12 @@ function Invoke-Dotnet([string[]] $arguments) {
     $ErrorActionPreference = 'Continue'
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "dotnet $($arguments[0]) failed with exit code $LASTEXITCODE" }
+}
+
+function Invoke-Cargo([string[]] $arguments) {
+    $ErrorActionPreference = 'Continue'
+    & cargo @arguments --message-format=json-render-diagnostics
+    if ($LASTEXITCODE -ne 0) { throw "cargo $($arguments[0]) failed with exit code $LASTEXITCODE" }
 }
 
 # A script the installer runs, as a PowerShell command, which execution policy does not apply to.
@@ -75,6 +82,22 @@ function Add-LanguageTransform([string] $package, [string] $localized, [int] $la
     }
 }
 
+if ($PSCmdlet.ParameterSetName -eq 'Build') {
+    $Build = (Get-Date).ToString('yyyyMMddHHmmss')
+    $env:FVM_BUILD = $Build
+    $messages = Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-windows')
+    Remove-Item Env:FVM_BUILD
+    [void](Invoke-Cargo @('rustc', '--release', '--package', 'fvm-runtime', '--lib', '--crate-type', 'cdylib'))
+    $RustOutput = Join-Path $root 'target\release'
+    $adapter = $messages | Where-Object { $_ -match '"reason":"build-script-executed"' } | ForEach-Object { $_ | ConvertFrom-Json } |
+        Where-Object { $_.package_id -match '#fvm-backend-adapter@' }
+    $libraries = Join-Path $adapter.out_dir 'bin'
+} else {
+    $libraries = Join-Path $root '.build\windows\openconnect'
+    if (Test-Path $libraries) { Remove-Item $libraries -Recurse -Force }
+    Expand-Archive -Path $OpenConnect -DestinationPath $libraries
+}
+
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 # The app takes the build as its informational version, which it reports and checks against the
@@ -84,15 +107,9 @@ $app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.Ap
 Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:Version=$version", "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
 Copy-Item (Join-Path $RustOutput 'fvm-helper.exe') $out
 Copy-Item (Join-Path $RustOutput 'fvm_runtime.dll') $out
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive = [IO.Compression.ZipFile]::OpenRead((Convert-Path -LiteralPath $OpenConnect))
-try {
-    $taken = @($archive.Entries.FullName | Where-Object { Test-Path -LiteralPath (Join-Path $out $_) })
-} finally {
-    $archive.Dispose()
-}
-if ($taken.Count -gt 0) { throw "the OpenConnect zip has files the app folder has already: $($taken -join ', ')" }
-Expand-Archive -Path $OpenConnect -DestinationPath $out
+$taken = @(Get-ChildItem $libraries -Name | Where-Object { Test-Path -LiteralPath (Join-Path $out $_) })
+if ($taken.Count -gt 0) { throw "the OpenConnect libraries have files the app folder has already: $($taken -join ', ')" }
+Copy-Item (Join-Path $libraries '*') $out
 # The app's built-in Google OAuth client, the Desktop-app client JSON that the macOS build uses too,
 # gitignored as it has the client secret. Without it the app still works; users then import a client
 # JSON in Settings.

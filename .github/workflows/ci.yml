@@ -34,29 +34,37 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
-  openconnect-windows:
-    name: OpenConnect (Windows)
-    uses: ./.github/workflows/openconnect-windows.yml
-
   rust-windows:
     name: Rust (Windows)
-    needs: openconnect-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/cache/restore@v6
         with:
-          path: .build/openconnect-windows.zip
-          key: openconnect-${{ needs.openconnect-windows.outputs.key }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
+          submodules: true
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: false
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf autoconf automake libtool make perl
+            curl git zip unzip
+      - id: openconnect
+        shell: pwsh
+        run: |
+          $env:MSYSTEM = 'UCRT64'
+          $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin'
+          $zip = C:\msys64\usr\bin\bash.exe packaging/openconnect/build.sh windows path
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "key=$([IO.Path]::GetFileNameWithoutExtension($zip))" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.openconnect.outputs.zip }}
+          key: openconnect-${{ steps.openconnect.outputs.key }}
       - run: rustup update --no-self-update stable && rustup default stable && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       # The macOS Helper's Rust start is macOS only.
       - run: cargo clippy --workspace --exclude fvm-helper-macos --all-targets -- -D warnings
-      - run: |
-          Expand-Archive .build\openconnect-windows.zip .build\openconnect
-          "$PWD\.build\openconnect" >> $env:GITHUB_PATH
       # The Helper's exception-route and VPN network tests, which read the PC's primary network and
       # change its routing table or WINS servers directly or through the pipe, were not tried on
       # this runner; they run on the Windows PC (scripts/test-windows.sh).

@@ -14,22 +14,33 @@ on:
         required: false
 
 jobs:
-  openconnect:
-    name: OpenConnect
-    uses: ./.github/workflows/openconnect-windows.yml
-
   msi:
     name: Windows
-    needs: openconnect
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/cache/restore@v6
         with:
-          path: .build/openconnect-windows.zip
-          key: openconnect-${{ needs.openconnect.outputs.key }}
-          enableCrossOsArchive: true
-          fail-on-cache-miss: true
+          submodules: true
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          release: false
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf autoconf automake libtool make perl
+            curl git zip unzip
+      - id: openconnect
+        shell: pwsh
+        run: |
+          $env:MSYSTEM = 'UCRT64'
+          $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin'
+          $zip = C:\msys64\usr\bin\bash.exe packaging/openconnect/build.sh windows path
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+          "key=$([IO.Path]::GetFileNameWithoutExtension($zip))" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache@v6
+        with:
+          path: ${{ steps.openconnect.outputs.zip }}
+          key: openconnect-${{ steps.openconnect.outputs.key }}
       - run: rustup update --no-self-update stable && rustup default stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-dotnet@v5
@@ -37,10 +48,7 @@ jobs:
           dotnet-version: 10.0.x
       # Korean time, like local builds: the runner's clock is UTC, and a later build must not get a
       # smaller number.
-      - id: build
-        run: |
-          $now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'Korea Standard Time')
-          "number=$($now.ToString('yyyyMMddHHmmss'))" >> $env:GITHUB_OUTPUT
+      - run: tzutil /s "Korea Standard Time"
       # The client is kept out of the repository (GitHub's push protection refuses it), so release
       # builds take it from the secret; build.ps1 builds it in when the file is there.
       - if: inputs.oauth-client
@@ -49,14 +57,7 @@ jobs:
         run: |
           if (-not $env:CLIENT) { throw 'the repository secret GOOGLE_OAUTH_CLIENT_JSON is not set' }
           [IO.File]::WriteAllText((Join-Path $PWD 'packaging\GoogleOAuthClient.json'), $env:CLIENT)
-      - run: cargo build --release --package fvm-helper-windows
-        env:
-          FVM_BUILD: ${{ steps.build.outputs.number }}
-      - run: cargo rustc --release --package fvm-runtime --lib --crate-type cdylib
-      - run: >-
-          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
-          -Build ${{ steps.build.outputs.number }} -RustOutput target\release
-          -OpenConnect .build\openconnect-windows.zip
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File packaging\windows\build.ps1
       - uses: actions/upload-artifact@v5
         with:
           name: msi

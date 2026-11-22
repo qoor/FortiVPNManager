@@ -27,33 +27,52 @@ brew=/opt/homebrew
 host=x86_64-w64-mingw32
 toolchain=$brew/opt/mingw-w64/toolchain-x86_64/bin
 gitlink=$(git -C "$root" rev-parse :third_party/openconnect)
+system=$(uname -s)
+if [ "$system" = Darwin ]; then
+    cross=$host-
+    sha256() { shasum -a 256 "$@"; }
+else
+    cross=
+    sha256() { sha256sum "$@"; }
+fi
 
 if [ "${2-}" != build ]; then
-    formulas="autoconf automake libtool pkgconf"
-    tools="autoconf automake glibtoolize pkgconf"
-    if [ "$os" = windows ]; then
-        formulas="$formulas mingw-w64"
-        tools="$tools $host-gcc"
+    if [ "$system" = Darwin ]; then
+        formulas="autoconf automake libtool pkgconf"
+        tools="autoconf automake glibtoolize pkgconf"
+        if [ "$os" = windows ]; then
+            formulas="$formulas mingw-w64"
+            tools="$tools $host-gcc"
+        fi
+        for tool in $tools; do
+            [ -x "$brew/bin/$tool" ] || { echo "error: $brew/bin/$tool not found: brew install $formulas" >&2; exit 1; }
+        done
+    else
+        packages="mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf autoconf automake libtool make perl curl git zip unzip"
+        for tool in gcc pkgconf autoconf automake libtoolize make perl curl git zip unzip; do
+            command -v "$tool" >/dev/null || { echo "error: $tool not found: pacman -S --needed $packages" >&2; exit 1; }
+        done
     fi
-    for tool in $tools; do
-        [ -x "$brew/bin/$tool" ] || { echo "error: $brew/bin/$tool not found: brew install $formulas" >&2; exit 1; }
-    done
     hash=$(
         {
             echo "$os"
             echo "$gitlink"
-            shasum -a 256 < "$0"
+            sha256 < "$0"
             if [ "$os" = macos ]; then
                 xcrun clang --version | head -1
                 xcrun --show-sdk-version
-            else
+            elif [ "$system" = Darwin ]; then
                 readlink "$brew/opt/mingw-w64"
+            else
+                gcc --version | head -1
             fi
-        } | shasum -a 256 | cut -c 1-16
+        } | sha256 | cut -c 1-16
     )
     zip=${XDG_CACHE_HOME:-$HOME/.cache}/fvm-openconnect/$name-$hash.zip
+    shown=$zip
+    [ "$system" = Darwin ] || shown=$(cygpath -m "$zip")
     if [ "${2-}" = path ] || [ -f "$zip" ]; then
-        echo "$zip"
+        echo "$shown"
         exit 0
     fi
     git -C "$root/third_party/openconnect" cat-file -e "$gitlink^{commit}" 2>/dev/null || {
@@ -61,8 +80,12 @@ if [ "${2-}" != build ]; then
         exit 1
     }
     work=$(mktemp -d)
-    if ! env -i HOME="$HOME" TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin DEVELOPER_DIR="$(xcode-select -p)" \
-        "$0" "$os" build "$work" > "$work/build.log" 2>&1; then
+    if [ "$system" = Darwin ]; then
+        set -- env -i HOME="$HOME" TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin DEVELOPER_DIR="$(xcode-select -p)"
+    else
+        set -- env -i HOME="$HOME" TMPDIR="${TMPDIR:-/tmp}" MSYSTEM=UCRT64 PATH=/ucrt64/bin:/usr/bin
+    fi
+    if ! "$@" "$0" "$os" build "$work" > "$work/build.log" 2>&1; then
         echo "error: OpenConnect build failed, log: $work/build.log" >&2
         tail -n 40 "$work/build.log" >&2
         exit 1
@@ -71,7 +94,7 @@ if [ "${2-}" != build ]; then
     mv -f "$work/openconnect.zip" "$zip.$$"
     mv -f "$zip.$$" "$zip"
     rm -rf "$work"
-    echo "$zip"
+    echo "$shown"
     exit 0
 fi
 
@@ -79,14 +102,18 @@ work=$3
 prefix=$work/prefix
 openssl=$work/openssl-$openssl_version
 stage=$work/stage
-ncpu=$(sysctl -n hw.ncpu)
+if [ "$system" = Darwin ]; then
+    ncpu=$(sysctl -n hw.ncpu)
+else
+    ncpu=$(nproc)
+fi
 export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
 export CPPFLAGS="-I$prefix/include" CFLAGS=-O2 LDFLAGS="-L$prefix/lib"
 
 fetch() {
     file=$work/${1##*/}
     curl --fail --silent --show-error --location --output "$file" "$1"
-    echo "$2  $file" | shasum -a 256 --check --status || { echo "SHA-256 mismatch: $1" >&2; exit 1; }
+    echo "$2  $file" | sha256 --check --status || { echo "SHA-256 mismatch: $1" >&2; exit 1; }
 }
 
 fail() {
@@ -95,13 +122,13 @@ fail() {
 }
 
 imports() {
-    "$host-objdump" -p "$1" | awk '/DLL Name:/ { print $3 }'
+    "${cross}objdump" -p "$1" | awk '/DLL Name:/ { print $3 }'
 }
 
 copy_libraries() {
     imports "$1" | while read -r name; do
         [ ! -e "$stage/$name" ] || continue
-        for directory in "$prefix/bin" "$openssl" "$toolchain/../$host/lib" "$toolchain/../$host/bin"; do
+        for directory in "$prefix/bin" "$openssl" "$toolchain/../$host/lib" "$toolchain/../$host/bin" /ucrt64/bin; do
             if [ -e "$directory/$name" ]; then
                 cp "$directory/$name" "$stage/$name"
                 copy_libraries "$stage/$name"
@@ -157,7 +184,11 @@ if [ "$os" = macos ]; then
         fail "the files above hold /opt/homebrew or $work"
     fi
 else
-    export PATH="$toolchain:$PATH" PKG_CONFIG="$brew/bin/pkgconf"
+    if [ "$system" = Darwin ]; then
+        export PATH="$toolchain:$PATH" PKG_CONFIG="$brew/bin/pkgconf"
+    else
+        export PKG_CONFIG=pkgconf
+    fi
     fetch "$openssl_url" "$openssl_sha256"
     fetch "$libxml2_url" "$libxml2_sha256"
     fetch "$libiconv_url" "$libiconv_sha256"
@@ -168,12 +199,12 @@ else
     done
 
     cd "$work/zlib-$zlib_version"
-    make -f win32/Makefile.gcc PREFIX="$host-" SHARED_MODE=1 prefix="$prefix" \
+    make -f win32/Makefile.gcc PREFIX="$cross" SHARED_MODE=1 prefix="$prefix" \
         BINARY_PATH="$prefix/bin" INCLUDE_PATH="$prefix/include" LIBRARY_PATH="$prefix/lib" install
     rm "$prefix/lib/libz.a"
 
     cd "$openssl"
-    env -u CFLAGS -u CPPFLAGS -u LDFLAGS ./Configure mingw64 --cross-compile-prefix="$host-" \
+    env -u CFLAGS -u CPPFLAGS -u LDFLAGS ./Configure mingw64 --cross-compile-prefix="$cross" \
         --prefix=C:/Windows/System32/OpenSSL no-engine no-autoload-config
     make -j"$ncpu" build_libs
 
@@ -199,15 +230,19 @@ else
     cp "$prefix/bin/libopenconnect-5.dll" "$stage/"
     copy_libraries "$stage/libopenconnect-5.dll"
     for file in "$stage"/*; do
-        "$host-strip" -S "$file"
+        "${cross}strip" -S "$file"
     done
     unzip -q -j "$work/${wintun_url##*/}" wintun/bin/amd64/wintun.dll -d "$stage"
     for file in "$stage"/*; do
-        "$host-objdump" -f "$file" | grep -q 'file format pei-x86-64' || fail "$file is not x86-64 PE"
+        "${cross}objdump" -f "$file" | grep -q 'file format pei-x86-64' || fail "$file is not x86-64 PE"
         if imports "$file" | grep -qix msvcrt.dll; then
             fail "$file imports msvcrt.dll"
         fi
     done
 fi
 
-ditto -c -k --norsrc --noextattr --noacl "$stage" "$work/openconnect.zip"
+if [ "$system" = Darwin ]; then
+    ditto -c -k --norsrc --noextattr --noacl "$stage" "$work/openconnect.zip"
+else
+    (cd "$stage" && zip -q -r "$work/openconnect.zip" .)
+fi
