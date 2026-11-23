@@ -172,7 +172,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     private async Task<string> Version(Link current)
     {
         Message answer = await current.Channel.Ask(id => new RequestBuild(id, _appBuild)).ConfigureAwait(false);
-        string build = (answer as MessageBuild ?? throw Unreadable(answer)).HelperBuild;
+        string build = (answer as MessageBuild ?? throw Unreadable(answer)).Build;
         lock (_gate)
         {
             if (build == _appBuild && _inbound.IsActive(current.Id))

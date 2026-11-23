@@ -86,7 +86,7 @@ public abstract record Message
 }
 
 /// <summary>Answers <see cref="RequestBuild"/> with the Helper's build.</summary>
-public sealed record MessageBuild(ulong Id, [property: JsonPropertyName("build")] string HelperBuild) : Message;
+public sealed record MessageBuild(ulong Id, string Build) : Message;
 
 /// <summary>Answers a request with its JSON payload; null is the empty (success) reply.</summary>
 public sealed record MessageReply(ulong Id, string? Json = null) : Message;

@@ -226,9 +226,8 @@ public sealed partial class SettingsWindow : Window
     /// <summary>A chosen result, or Enter for the first one; the keyboard stays in the box after Enter.</summary>
     private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        IReadOnlyList<SearchResult> results = SettingsSearch.Results(sender.Text, _ui.IsShown);
         SearchResult? result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
-            ?? (results.Count > 0 ? results[0] : null);
+            ?? (SettingsSearch.Results(sender.Text, _ui.IsShown) is { Count: > 0 } results ? results[0] : null);
         if (result is null)
         {
             return;

@@ -86,11 +86,8 @@ public sealed record PortResponseHelperReplyFlag(bool Value) : PortResponse;
 
 public sealed record PortResponseHelperUnreachable(HelperChannelFailure Failure) : PortResponse;
 
-/// <summary>
-/// A call that needs a verified connection was not sent. The value's C# name differs from
-/// its key, since a case inherits its sibling <see cref="PortResponseHelperBuild"/>'s name.
-/// </summary>
-public sealed record PortResponseHelperBuildMismatch([property: JsonPropertyName("helperBuild")] string Build) : PortResponse;
+/// <summary>A call that needs a verified connection was not sent.</summary>
+public sealed record PortResponseHelperBuildMismatch(string HelperBuild) : PortResponse;
 
 public sealed record PortResponseRouteInterface([property: JsonPropertyName("interface")] string? Name = null) : PortResponse;
 
