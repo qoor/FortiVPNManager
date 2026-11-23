@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using FortiVPNManager.Contract;
 using Microsoft.Win32.SafeHandles;
 
@@ -48,7 +49,7 @@ public sealed class RuntimeLink
                 {
                     message = MessageFraming.ReadFromRuntime(fromRuntime);
                 }
-                catch (Exception error)
+                catch (Exception error) when (error is IOException or JsonException)
                 {
                     Environment.FailFast($"cannot read a message from the runtime: {error.Message}");
                     return;
@@ -64,7 +65,7 @@ public sealed class RuntimeLink
                 {
                     MessageFraming.Write(toRuntime, message);
                 }
-                catch (Exception error)
+                catch (IOException error)
                 {
                     Environment.FailFast($"cannot write a message to the runtime: {error.Message}");
                 }

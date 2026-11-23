@@ -114,7 +114,7 @@ public sealed partial class PanePage : Page
     {
         ArgumentNullException.ThrowIfNull(ui);
         Title.Text = title;
-        Show(ui, pane, pane switch
+        _content = pane switch
         {
             SettingsPane.General => new GeneralPane(ui, this),
             SettingsPane.Account => new AccountPane(ui, this),
@@ -123,7 +123,8 @@ public sealed partial class PanePage : Page
             SettingsPane.Advanced => new AdvancedPane(ui, this),
             SettingsPane.Log => new LogPane(ui, this),
             _ => throw new InvalidOperationException($"unknown pane {pane}"),
-        });
+        };
+        Show(ui, pane);
     }
 
     public void Show(AppUi ui, SettingsSubpage subpage)
@@ -134,19 +135,18 @@ public sealed partial class PanePage : Page
         Breadcrumb.Visibility = Visibility.Visible;
         Breadcrumb.ItemsSource = new List<object> { L(SettingsPane.General.TitleKey()), L("Software Update") };
         Breadcrumb.ItemClicked += (_, _) => Frame.GoBack();
-        Show(ui, SettingsPane.General, subpage switch
+        _content = subpage switch
         {
             SettingsSubpage.SoftwareUpdate => new UpdatePane(ui, this),
             _ => throw new InvalidOperationException($"unknown subpage {subpage}"),
-        });
+        };
+        Show(ui, SettingsPane.General);
     }
 
-    private void Show(AppUi ui, SettingsPane pane, IPane shown)
+    private void Show(AppUi ui, SettingsPane pane)
     {
-        ArgumentNullException.ThrowIfNull(ui);
         this._ui = ui;
         Pane = pane;
-        _content = shown;
         Refresh();
         ui.Changed += Refresh;
     }

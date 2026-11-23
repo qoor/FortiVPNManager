@@ -94,7 +94,7 @@ public static class HelperStart
     /// <summary>Waits on the calling thread. A failed start and a failure are written to the event log.</summary>
     public static HelperStartResult Run()
     {
-        var ending = new ManualResetEventSlim();
+        using var ending = new ManualResetEventSlim();
         void onEnding(object _1, SessionEndingEventArgs _2) => ending.Set();
         // From a pool thread, as in SystemEvents.Start: the first use of them decides their thread.
         Task.Run(() => Microsoft.Win32.SystemEvents.SessionEnding += onEnding).Wait();

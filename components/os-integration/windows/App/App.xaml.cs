@@ -14,7 +14,7 @@ namespace FortiVPNManager.App;
 /// The app lives in the notification area; quitting goes through the runtime, which ends the tunnel
 /// and the log before it approves.
 /// </summary>
-public partial class App : Application
+public sealed partial class App : Application, IDisposable
 {
     private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
     private AppUi? _ui;
@@ -82,10 +82,16 @@ public partial class App : Application
     private void Quit() => _dispatcher.TryEnqueue(() =>
     {
         _ui?.CloseSettings();
-        _tray?.Dispose();
-        _notifier?.Dispose();
+        Dispose();
         Exit();
     });
+
+    public void Dispose()
+    {
+        _tray?.Dispose();
+        _notifier?.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>The UI as the router sees it.</summary>
     private sealed class UiBridge(AppUi ui) : IAppUi
