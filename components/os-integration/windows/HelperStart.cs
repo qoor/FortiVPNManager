@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using FortiVPNManager.Contract.AppInternal;
 using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -208,7 +209,7 @@ public static class HelperStart
 /// The Helper's service through the service manager, opened only for what the installer lets
 /// every account do: read its state and start it.
 /// </summary>
-internal sealed class WindowsHelperService : IHelperService, IDisposable
+internal sealed partial class WindowsHelperService : IHelperService, IDisposable
 {
     /// <summary>The Helper's executable without ".exe" (components/helper/windows/Cargo.toml).</summary>
     private const string HelperProcess = "fvm-helper";
@@ -225,6 +226,16 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
     private const int ServiceMissing = 1060;
     private const int MarkedForDelete = 1072;
 
+    private sealed class ServiceHandle : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        public ServiceHandle()
+            : base(ownsHandle: true)
+        {
+        }
+
+        protected override bool ReleaseHandle() => CloseServiceHandle(handle);
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct ServiceStatus
     {
@@ -237,12 +248,12 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         public uint WaitHint;
     }
 
-    private readonly nint _manager;
+    private readonly ServiceHandle _manager;
 
     public WindowsHelperService()
     {
         _manager = OpenSCManagerW(null, null, ManagerConnect);
-        if (_manager == 0)
+        if (_manager.IsInvalid)
         {
             throw new Win32Exception();
         }
@@ -323,20 +334,28 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         return processes.Length > 0;
     }
 
-    public void Dispose() => CloseServiceHandle(_manager);
+    public void Dispose() => _manager.Dispose();
 
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern nint OpenSCManagerW(string? machine, string? database, uint access);
+    [LibraryImport("advapi32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial ServiceHandle OpenSCManagerW(string? machine, string? database, uint access);
 
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern nint OpenServiceW(nint manager, string name, uint access);
+    [LibraryImport("advapi32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial nint OpenServiceW(ServiceHandle manager, string name, uint access);
 
-    [DllImport("advapi32.dll", SetLastError = true, ExactSpelling = true)]
-    private static extern bool QueryServiceStatus(nint service, out ServiceStatus status);
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool QueryServiceStatus(nint service, out ServiceStatus status);
 
-    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern bool StartServiceW(nint service, uint argumentCount, nint arguments);
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool StartServiceW(nint service, uint argumentCount, nint arguments);
 
-    [DllImport("advapi32.dll", SetLastError = true, ExactSpelling = true)]
-    private static extern bool CloseServiceHandle(nint handle);
+    [LibraryImport("advapi32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseServiceHandle(nint handle);
 }

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui.Text;
@@ -6,7 +7,9 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 
-namespace FortiVPNManager.App;
+[assembly: SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes", Scope = "member", Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32", Justification = "The Windows App SDK package adds this source to the build; it cannot be changed here.")]
+
+namespace FortiVPNManager;
 
 /// <summary>
 /// The entry: one copy per user. Starting the app again, from the Start menu or a notification,
@@ -14,7 +17,7 @@ namespace FortiVPNManager.App;
 /// on macOS) or what the notification is about, and ends. The running copy shows nothing until the
 /// Helper's service runs; when it cannot be made to, a message box says why and the app quits.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private const string InstanceKey = "FortiVPNManager";
 
@@ -144,6 +147,7 @@ internal static class Program
         _ => throw new UnreachableException(),
     };
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int MessageBoxW(nint owner, string text, string caption, uint type);
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int MessageBoxW(nint owner, string text, string caption, uint type);
 }

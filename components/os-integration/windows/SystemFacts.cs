@@ -10,7 +10,7 @@ namespace FortiVPNManager.OsIntegration;
 /// Point-in-time facts about the network, as Windows reports them. Interfaces are named as Windows
 /// shows them, such as "Ethernet", in every fact and event, so the runtime can match them up.
 /// </summary>
-internal static class SystemFacts
+internal static partial class SystemFacts
 {
     [StructLayout(LayoutKind.Sequential)]
     private struct ForwardRow
@@ -31,11 +31,13 @@ internal static class SystemFacts
         public uint Metric5;
     }
 
-    [DllImport("iphlpapi.dll")]
-    private static extern uint GetBestInterface(uint destination, out uint interfaceIndex);
+    [LibraryImport("iphlpapi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint GetBestInterface(uint destination, out uint interfaceIndex);
 
-    [DllImport("iphlpapi.dll")]
-    private static extern uint GetBestRoute(uint destination, uint source, out ForwardRow route);
+    [LibraryImport("iphlpapi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint GetBestRoute(uint destination, uint source, out ForwardRow route);
 
     /// <summary>The interface the routing table uses for <paramref name="destination"/>, an IPv4 address.</summary>
     public static string? RouteInterface(string destination) => !IPAddress.TryParse(destination, out IPAddress? address) || address.AddressFamily != AddressFamily.InterNetwork

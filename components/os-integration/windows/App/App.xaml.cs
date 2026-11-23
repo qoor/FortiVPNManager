@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
 
-namespace FortiVPNManager.App;
+namespace FortiVPNManager;
 
 /// <summary>
 /// Starts the runtime and joins it to the OS integration and the UI (components/os-integration/macos/AppEntry.swift).

@@ -177,6 +177,7 @@ public sealed partial class TrayIcon : IDisposable
         public void Execute(object? parameter) => dispatcher.TryEnqueue(() => action());
     }
 
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForSystem();
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint GetDpiForSystem();
 }

@@ -11,7 +11,7 @@ using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
 
-internal sealed class UpdatePane : IPane
+internal sealed partial class UpdatePane : IPane
 {
     private const double IconSize = 48;
     private const int RoundToNearestDisplayedDigit = 1;
@@ -212,6 +212,7 @@ internal sealed class UpdatePane : IPane
         return new string(buffer, 0, Array.IndexOf(buffer, '\0'));
     }
 
-    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int StrFormatByteSizeEx(ulong size, int flags, [Out] char[] buffer, uint length);
+    [LibraryImport("shlwapi.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int StrFormatByteSizeEx(ulong size, int flags, [Out] char[] buffer, uint length);
 }

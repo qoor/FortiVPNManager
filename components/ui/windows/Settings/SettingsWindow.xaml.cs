@@ -388,8 +388,9 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(IntPtr window);
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial uint GetDpiForWindow(IntPtr window);
 
     /// <summary>The window's place in physical pixels and the pane last shown.</summary>
     private sealed record Placement(SettingsPane Pane, int X, int Y, int Width, int Height)

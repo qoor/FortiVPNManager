@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using FortiVPNManager.Contract;
@@ -15,7 +16,7 @@ namespace FortiVPNManager.OsIntegration;
 /// or write, a message that does not decode and the end of a pipe all stop the process, as on
 /// macOS.
 /// </summary>
-public sealed class RuntimeLink
+public sealed partial class RuntimeLink
 {
     /// <summary>The app's ends of the runtime's pipes (components/runtime/src/windows.rs).</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -25,8 +26,11 @@ public sealed class RuntimeLink
         public nuint Write;
     }
 
-    [DllImport("fvm_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-    private static extern AppPipes fvm_runtime_start();
+    [LibraryImport("fvm_runtime")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory)]
+    [SuppressMessage("Security", "CA5393:Do not use unsafe DllImportSearchPath value", Justification = "The runtime DLL sits only next to the app, in the install folder only administrators can write.")]
+    private static partial AppPipes fvm_runtime_start();
 
     private readonly BlockingCollection<ToRuntime> _outgoing = [];
 

@@ -1,7 +1,7 @@
 ﻿using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 
-namespace FortiVPNManager.App;
+namespace FortiVPNManager;
 
 /// <summary>
 /// Windows notifications, for problems and updates the user should see while Settings is closed
