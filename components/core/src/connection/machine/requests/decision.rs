@@ -109,7 +109,6 @@ impl ConnectionManager {
         self.update_stop.is_none()
     }
 
-    /// The user's Connect, unless it is ignored.
     pub(in crate::connection::machine) fn user_connect(&self) -> Vec<Step> {
         if self.takes_user_requests() {
             vec![Step::ConnectRequested(AttemptReason::User)]
@@ -210,7 +209,6 @@ impl ConnectionManager {
         }
     }
 
-    /// What Disconnect stops; `None` while it is ignored.
     pub(in crate::connection::machine) fn disconnect_request(&self) -> Option<DisconnectRequest> {
         if !self.takes_user_requests() {
             return None;
@@ -228,11 +226,13 @@ impl ConnectionManager {
         })
     }
 
-    pub(in crate::connection::machine) fn reconnect_now_request(&self) -> ReconnectNowRequest {
+    pub(in crate::connection::machine) fn reconnect_now_request(
+        &self,
+    ) -> Option<ReconnectNowRequest> {
         if !self.takes_user_requests() {
-            return ReconnectNowRequest::Nothing;
+            return None;
         }
-        match &self.phase {
+        Some(match &self.phase {
             Phase::Connected(_) => ReconnectNowRequest::Renew,
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } | Phase::Failed(_) => {
                 ReconnectNowRequest::Begin
@@ -243,7 +243,7 @@ impl ConnectionManager {
                 ReconnectNowRequest::Retarget
             }
             _ => ReconnectNowRequest::Nothing,
-        }
+        })
     }
 
     /// How the quit ends what is under way, and when it was first asked for.

@@ -179,8 +179,11 @@ impl ConnectionManager {
 
     pub(in crate::connection::machine) fn reconnect_now(
         &mut self,
-        request: ReconnectNowRequest,
+        request: Option<ReconnectNowRequest>,
     ) -> Vec<Step> {
+        let Some(request) = request else {
+            return Vec::new();
+        };
         match request {
             ReconnectNowRequest::Renew => {
                 let Phase::Connected(session) = self.take_phase() else {

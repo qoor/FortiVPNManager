@@ -498,8 +498,7 @@ impl ConnectionManager {
             Step::RejudgeHeldReconnect => self.held_reconnect(),
             Step::ScheduleChanged => self.change_schedule(self.schedule_change(now)),
             Step::ResetScheduleBoundary => {
-                self.reset_schedule_boundary(self.schedule_boundary_at(now));
-                Vec::new()
+                self.reset_schedule_boundary(self.schedule_boundary_at(now))
             }
             Step::WillSleep => self.go_to_sleep(self.sleep(now)),
             Step::WakeLookDue => self.look_after_wake(self.wake_look(now)),
@@ -517,7 +516,6 @@ impl ConnectionManager {
         }
     }
 
-    /// Where each input goes: its decision, then its action.
     fn run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
         match input {
             Input::Launched(launch) => self.launch(self.launched(launch, now)),
@@ -534,10 +532,7 @@ impl ConnectionManager {
             Input::SettingsOpened | Input::RecheckReadiness => vec![Step::CheckReadiness],
             Input::AppActivated => self.app_activated(),
             Input::HelperRegistered(result) => self.register(registration(result, now)),
-            Input::HelperApprovalSettingsOpened => {
-                self.follow_approval(follow_approval(now));
-                Vec::new()
-            }
+            Input::HelperApprovalSettingsOpened => self.follow_approval(follow_approval(now)),
             Input::ReadinessChecked(facts) => self.take_readiness(self.readiness_checked(facts)),
             Input::OtpSessionReady(attempt) => self.start_run(self.otp_session_ready(&attempt)),
             Input::OtpSessionFailed(attempt, failure) => {

@@ -67,8 +67,12 @@ impl ConnectionManager {
         Vec::new()
     }
 
-    pub(in crate::connection::machine) fn follow_approval(&mut self, follow: FollowApproval) {
+    pub(in crate::connection::machine) fn follow_approval(
+        &mut self,
+        follow: FollowApproval,
+    ) -> Vec<Step> {
         self.readiness.follow_approval = Some(follow);
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn approval_follow_due(

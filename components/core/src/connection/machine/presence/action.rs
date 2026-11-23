@@ -124,7 +124,8 @@ impl ConnectionManager {
     pub(in crate::connection::machine) fn reset_schedule_boundary(
         &mut self,
         boundary: Option<SystemTime>,
-    ) {
+    ) -> Vec<Step> {
         self.schedule_boundary = boundary;
+        Vec::new()
     }
 }
