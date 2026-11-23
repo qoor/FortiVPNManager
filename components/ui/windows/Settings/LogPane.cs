@@ -18,7 +18,7 @@ namespace FortiVPNManager.Ui.Settings;
 /// lines of the app and the Helper, in a box that fills the pane. Its commands sit at the top: find
 /// (Ctrl+F), clear the view (Ctrl+L), copy everything, and the log file in File Explorer.
 /// </summary>
-internal sealed class LogPane : IPane, IDisposable
+internal sealed partial class LogPane : IPane, IDisposable
 {
     /// <summary>
     /// Lines trimmed from the app's log leave the view in chunks: removing text at the top lays out

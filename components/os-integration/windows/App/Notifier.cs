@@ -9,7 +9,7 @@ namespace FortiVPNManager;
 /// clicking a notification or its button calls the constructor's onOpen with its identifier and
 /// whether the button was clicked, or starts the app when it is not running.
 /// </summary>
-internal sealed class Notifier : IDisposable
+internal sealed partial class Notifier : IDisposable
 {
     private const string Group = "FortiVPNManager";
     private const string IdentifierArgument = "identifier";

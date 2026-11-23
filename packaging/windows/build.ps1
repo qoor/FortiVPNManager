@@ -123,7 +123,7 @@ New-Item -ItemType Directory $out | Out-Null
 # Helper's (the Helper carries the same, so the app sends a secret only to its own build), and the
 # version as its file version.
 $app = Join-Path $root 'components\os-integration\windows\App\FortiVPNManager.App.csproj'
-Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:Version=$version", "-p:InformationalVersion=$Build", '-o', $out, '--nologo')
+Invoke-Dotnet @('publish', $app, '-c', 'Release', '-p:Platform=x64', "-p:Version=$version", "-p:InformationalVersion=$Build", '-o', $out, '--nologo', '-warnaserror')
 Copy-Item (Join-Path $RustOutput 'fvm-helper.exe') $out
 Copy-Item (Join-Path $RustOutput 'fvm_runtime.dll') $out
 $taken = @(Get-ChildItem $libraries -Name | Where-Object { Test-Path -LiteralPath (Join-Path $out $_) })
