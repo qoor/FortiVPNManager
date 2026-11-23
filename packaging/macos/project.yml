@@ -24,6 +24,9 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # The app's version, from VERSION at the repository root, which `make gen` passes as FVM_VERSION.
     MARKETING_VERSION: ${FVM_VERSION}
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    OTHER_SWIFT_FLAGS: $(inherited) -warn-implicit-overrides -strict-memory-safety
+    OTHER_LDFLAGS: $(inherited) -Wl,-fatal_warnings
 
 targets:
   FortiVPNManager:
@@ -70,6 +73,9 @@ targets:
         # gitignored file: all outside declared inputs and outputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     preBuildScripts:
+      - name: Check formatting and lints
+        basedOnDependencyAnalysis: false
+        script: 'env -u SYSROOT CARGO_TARGET_DIR="$OBJROOT/cargo-check" "$SRCROOT/../../scripts/check.sh"'
       - name: Build Rust runtime
         basedOnDependencyAnalysis: false
         script: '"$SRCROOT/build-rust.sh" fvm-runtime'

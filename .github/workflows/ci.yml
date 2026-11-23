@@ -111,6 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: xcodebuild -version
+      - run: git ls-files -z '*.swift' | xargs -0 xcrun swift-format lint --strict
       - run: brew install xcodegen
       - run: FVM_VERSION="$(cat VERSION)" xcodegen generate --spec packaging/macos/project.yml
       # The test bundles need no signing identity.

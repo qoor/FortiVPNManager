@@ -41,6 +41,7 @@ release:
 	$(MAKE) build CONFIG=Release
 
 test: gen
+	scripts/check.sh
 	$(CARGO) test --workspace
 	xcodebuild -project $(PROJECT) -scheme ContractTests -derivedDataPath $(DERIVED) test
 	xcodebuild -project $(PROJECT) -scheme AppSwiftTests -derivedDataPath $(DERIVED) test
