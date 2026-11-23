@@ -399,7 +399,7 @@ impl Harness {
         if matches!(input, Input::RouterRead { .. }) {
             self.router_asked = false;
         }
-        self.effects = self.cm.handle(input, self.now);
+        self.effects = self.cm.handle_at(input, self.now);
         self.router_asked |= self.effects.contains(&Effect::ReadRouter);
         for effect in &self.effects {
             match effect {

@@ -427,8 +427,13 @@ impl ConnectionManager {
         manager
     }
 
-    /// Handles one input taken at `now` and returns what to carry out, in order.
-    pub fn handle(&mut self, input: Input, now: SystemTime) -> Vec<Effect> {
+    /// Handles one input at the time it is taken and returns what to carry out, in order.
+    pub fn handle(&mut self, input: Input) -> Vec<Effect> {
+        self.handle_at(input, SystemTime::now())
+    }
+
+    /// Handles one input taken at `now`; every judgement of the input uses that time.
+    pub(super) fn handle_at(&mut self, input: Input, now: SystemTime) -> Vec<Effect> {
         if !self.takes_inputs() {
             return Vec::new();
         }

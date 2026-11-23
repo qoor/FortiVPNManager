@@ -1,7 +1,8 @@
 //! Judgment core: every decision of the app and every data format it reads, with no outside
 //! communication. It reads no files, opens no connections, runs no timers and knows no sentence the
-//! user sees. Given the same inputs in the same order it gives the same results, so the runtime
-//! feeds it every input and carries out what it decides.
+//! user sees; the connection manager reads the wall clock once per input. Given the same inputs at
+//! the same times in the same order it gives the same results, so the runtime feeds it every input
+//! and carries out what it decides.
 
 pub mod auto_update;
 pub mod bypass_rules;

@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::SystemTime;
 
 use fvm_contract::app_helper::{
     AttemptId, HelperError, HelperEvent, OutputBatch, OutputSource, RunRequest, SessionId,
@@ -451,7 +450,7 @@ impl Runtime {
 
     pub(crate) fn feed(&mut self, input: connection::Input) {
         let vpn_wanted = self.cm.wants_vpn();
-        let effects = self.cm.handle(input, SystemTime::now());
+        let effects = self.cm.handle(input);
         for effect in effects {
             self.carry_out(effect);
         }

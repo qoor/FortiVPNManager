@@ -4,11 +4,12 @@
 //! sections show, and readiness.
 //!
 //! The runtime creates one [`ConnectionManager`] per launch and hands it every [`Input`] in order,
-//! one at a time, with the wall-clock time it took the input. It carries out the returned
-//! [`Effect`]s in order before the next input; their results come back as inputs. After each input
-//! it reads the sections ([`ConnectionManager::connection_section`],
-//! [`ConnectionManager::schedule_outlook`], [`ConnectionManager::readiness_section`]) and sends the
-//! ones that changed. The manager reads no clock, opens no connection and runs no timer itself.
+//! one at a time; the manager reads the wall clock once as it takes the input, and every judgement
+//! of that input uses that time. The runtime carries out the returned [`Effect`]s in order before
+//! the next input; their results come back as inputs. After each input it reads the sections
+//! ([`ConnectionManager::connection_section`], [`ConnectionManager::schedule_outlook`],
+//! [`ConnectionManager::readiness_section`]) and sends the ones that changed. The manager opens no
+//! connection and runs no timer itself.
 
 mod certs;
 mod classify;
