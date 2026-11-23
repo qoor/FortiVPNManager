@@ -18,8 +18,6 @@ use fvm_core::config::{self, Settings, Update, UpdateError};
 
 use crate::files;
 
-/// How often the file is looked at for edits made elsewhere; also on app activation.
-pub(crate) const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
 const UPDATE_ATTEMPTS: u32 = 3;
 
 /// What tells a changed file from an unchanged one without reading it.
@@ -76,6 +74,31 @@ impl ConfigFile {
 
     pub(crate) fn warnings(&self) -> &[ConfigWarning] {
         &self.warnings
+    }
+
+    /// The folders whose changes may change the file: its folder and its target's folder when it
+    /// is a symlink; while its folder is missing, the nearest existing parent of that folder, up to
+    /// the home folder on Windows and `~/.config` elsewhere.
+    pub(crate) fn watch_folders(&self) -> Vec<PathBuf> {
+        let levels = if cfg!(windows) { 3 } else { 2 };
+        let Some(nearest) = self
+            .path
+            .ancestors()
+            .skip(1)
+            .take(levels)
+            .find(|folder| folder.is_dir())
+        else {
+            return Vec::new();
+        };
+        let mut folders = vec![nearest.to_path_buf()];
+        if Some(nearest) == self.path.parent()
+            && let Ok(target) = fs::canonicalize(&self.path)
+            && let Some(target_folder) = target.parent()
+            && fs::canonicalize(nearest).ok().as_deref() != Some(target_folder)
+        {
+            folders.push(target_folder.to_path_buf());
+        }
+        folders
     }
 
     /// Reads the file when it may have changed; true when the settings, the error or the warnings
@@ -392,11 +415,11 @@ fn resolve_target(path: &Path) -> Result<PathBuf, ConfigFileError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::fmt::Write as _;
 
-    fn scratch() -> PathBuf {
+    pub(crate) fn scratch() -> PathBuf {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).unwrap();
         let name: String = random.iter().fold(String::new(), |mut hex, byte| {
@@ -501,5 +524,57 @@ mod tests {
             }
         );
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn the_nearest_existing_folder_is_watched() {
+        let home = scratch();
+        let config_home = home.join(".config");
+        let folder = config_home.join("FortiVPNManager");
+        let file = ConfigFile::new(folder.join("config.yaml"));
+        files::make_directory(&home).unwrap();
+        let without_config_home = if cfg!(windows) {
+            vec![home.clone()]
+        } else {
+            Vec::new()
+        };
+        assert_eq!(file.watch_folders(), without_config_home);
+        files::make_directory(&config_home).unwrap();
+        assert_eq!(file.watch_folders(), [config_home]);
+        files::make_directory(&folder).unwrap();
+        assert_eq!(file.watch_folders(), [folder]);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_file_adds_its_target_folder() {
+        let home = scratch();
+        let folder = home.join(".config").join("FortiVPNManager");
+        let dotfiles = home.join("dotfiles");
+        files::make_directory(&folder).unwrap();
+        files::make_directory(&dotfiles).unwrap();
+        let path = folder.join("config.yaml");
+        let file = ConfigFile::new(path.clone());
+        std::os::unix::fs::symlink(dotfiles.join("config.yaml"), &path).unwrap();
+        assert_eq!(
+            file.watch_folders(),
+            std::slice::from_ref(&folder),
+            "a dangling symlink"
+        );
+        fs::write(dotfiles.join("config.yaml"), "").unwrap();
+        assert_eq!(
+            file.watch_folders(),
+            [folder.clone(), fs::canonicalize(&dotfiles).unwrap()]
+        );
+        fs::remove_file(&path).unwrap();
+        fs::write(folder.join("real.yaml"), "").unwrap();
+        std::os::unix::fs::symlink(folder.join("real.yaml"), &path).unwrap();
+        assert_eq!(
+            file.watch_folders(),
+            [folder],
+            "a target in the same folder"
+        );
+        fs::remove_dir_all(home).unwrap();
     }
 }

@@ -7,6 +7,7 @@ use fvm_core::connection::InterfaceAddress;
 
 use crate::orchestration::{Input, Outgoing};
 
+mod config_watch;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -108,6 +109,7 @@ pub(crate) fn describe(failure: &SecretStoreFailure) -> String {
 pub(crate) fn connect(app: Sender<FromRuntime>, inputs: Sender<Input>) -> Sender<Outgoing> {
     let (requests, received) = mpsc::channel();
     let os_inputs = inputs.clone();
+    let config_watch = config_watch::start(inputs.clone());
     thread::Builder::new()
         .name("fvm-runtime-os".into())
         .spawn(move || serve(&received, &os_inputs))
@@ -115,7 +117,7 @@ pub(crate) fn connect(app: Sender<FromRuntime>, inputs: Sender<Input>) -> Sender
     let (outgoing, messages) = mpsc::channel();
     thread::Builder::new()
         .name("fvm-runtime-out".into())
-        .spawn(move || pass(&messages, &app, &requests, &inputs))
+        .spawn(move || pass(&messages, &app, &requests, &config_watch, &inputs))
         .expect("starting the runtime's outgoing thread");
     outgoing
 }
@@ -124,6 +126,7 @@ fn pass(
     messages: &Receiver<Outgoing>,
     app: &Sender<FromRuntime>,
     requests: &Sender<(u64, OsRequest)>,
+    config_watch: &Sender<config_watch::Message>,
     inputs: &Sender<Input>,
 ) {
     for message in messages {
@@ -135,6 +138,9 @@ fn pass(
                 let _ = requests.send((id, request));
             }
             Outgoing::WatchNetworkSettings => platform::watch_network_settings(inputs.clone()),
+            Outgoing::WatchConfigFolders { folders } => {
+                let _ = config_watch.send(config_watch::Message::Folders(folders));
+            }
         }
     }
 }

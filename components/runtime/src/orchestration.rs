@@ -43,12 +43,26 @@ pub(crate) enum Input {
     /// The saved IPv4 settings of a network service or the primary IPv4 state changed; one change
     /// may be reported several times.
     NetworkSettingsChanged,
+    /// Notifications from the folders watched for config.yaml settled, or the watched folders
+    /// changed.
+    ConfigFolderChanged,
+    ConfigWatchFailed {
+        error: String,
+    },
+    ConfigWatchRestored,
 }
 
 pub(crate) enum Outgoing {
     App(FromRuntime),
-    Os { id: u64, request: OsRequest },
+    Os {
+        id: u64,
+        request: OsRequest,
+    },
     WatchNetworkSettings,
+    /// Watches these folders for config.yaml in place of the ones watched so far.
+    WatchConfigFolders {
+        folders: Vec<PathBuf>,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -242,7 +256,9 @@ impl Runtime {
         let _ = runtime.out.send(Outgoing::WatchNetworkSettings);
         let connected_before_update = runtime.take_update_record();
         runtime.check_for_updates();
-        runtime.start_polling_config();
+        let _ = runtime.out.send(Outgoing::WatchConfigFolders {
+            folders: runtime.config.watch_folders(),
+        });
         runtime.register_login_item_once();
         runtime.import_on_first_launch(move |runtime, import_report_shown| {
             runtime
@@ -288,6 +304,19 @@ impl Runtime {
                 self.approve_quit_once_os_answered();
             }
             Input::NetworkSettingsChanged => self.sync_bypass_routes_soon(),
+            Input::ConfigFolderChanged => self.recheck_config(),
+            Input::ConfigWatchFailed { error } => self.system_log(
+                LogLevel::Error,
+                LogCategory::Config,
+                format!("watching config.yaml failed: {error}"),
+            ),
+            Input::ConfigWatchRestored => {
+                self.system_log(
+                    LogLevel::Info,
+                    LogCategory::Config,
+                    "watching config.yaml again",
+                );
+            }
         }
     }
 
@@ -709,37 +738,27 @@ impl Runtime {
 
     // MARK: Config file
 
-    fn start_polling_config(&self) {
-        let queue = self.queue();
-        std::thread::Builder::new()
-            .name("fvm-runtime-config-poll".into())
-            .spawn(move || {
-                loop {
-                    std::thread::sleep(crate::config_file::POLL_INTERVAL);
-                    queue.run(|runtime| {
-                        // The core checks again for the changes it sees; a hand edit that makes
-                        // the file invalid or valid again, or changes the Gmail address, shows
-                        // only in the readiness facts.
-                        let facts = |runtime: &Runtime| {
-                            let address = runtime.config.settings().otp.gmail_address.clone();
-                            (runtime.config.is_valid(), address)
-                        };
-                        let before = facts(runtime);
-                        if runtime.poll_config() && facts(runtime) != before {
-                            runtime.feed(connection::Input::RecheckReadiness);
-                        }
-                    });
-                }
-            })
-            .expect("starting the config poll thread");
+    fn recheck_config(&mut self) {
+        let facts = |runtime: &Runtime| {
+            let address = runtime.config.settings().otp.gmail_address.clone();
+            (runtime.config.is_valid(), address)
+        };
+        let before = facts(self);
+        if self.poll_config() && facts(self) != before {
+            self.feed(connection::Input::RecheckReadiness);
+        }
     }
 
-    /// Whether the file changed outside the app since it was last read.
+    /// Whether the file changed outside the app since it was last read; the folders watched for
+    /// it follow where it is now.
     pub(crate) fn poll_config(&mut self) -> bool {
         let changed = self.config.poll();
         if changed {
             self.config_reloaded();
         }
+        let _ = self.out.send(Outgoing::WatchConfigFolders {
+            folders: self.config.watch_folders(),
+        });
         changed
     }
 

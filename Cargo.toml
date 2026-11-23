@@ -37,6 +37,7 @@ getrandom = "0.3"
 interprocess = "2.4"
 log = "0.4"
 nix = "0.31"
+notify = "8.2"
 objc2 = "0.6.5"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData", "NSError", "NSObject", "NSString", "NSXPCConnection", "block2", "libc"] }
 ring = { version = "0.17", default-features = false }
