@@ -30,8 +30,8 @@ public class HelperPipeTests
     {
         string connect = new HelperPipe.RequestConnect(2, """{"password":"vpn-secret"}""").ToString();
         string otp = new HelperPipe.RequestSubmitOtp(3, "attempt", "123456").ToString();
-        Assert.DoesNotContain("vpn-secret", connect);
-        Assert.DoesNotContain("123456", otp);
+        Assert.DoesNotContain("vpn-secret", connect, StringComparison.Ordinal);
+        Assert.DoesNotContain("123456", otp, StringComparison.Ordinal);
     }
 
     [Fact]

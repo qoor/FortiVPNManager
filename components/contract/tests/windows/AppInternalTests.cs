@@ -179,10 +179,10 @@ public class AppInternalTests
         ];
         foreach (string text in shown)
         {
-            Assert.DoesNotContain("vpn-secret", text);
-            Assert.DoesNotContain("app-secret", text);
-            Assert.DoesNotContain("123456", text);
-            Assert.DoesNotContain("client-secret", text);
+            Assert.DoesNotContain("vpn-secret", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("app-secret", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("123456", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("client-secret", text, StringComparison.Ordinal);
         }
     }
 }

@@ -96,8 +96,8 @@ public class HelperStartTests
         _ = Assert.IsType<HelperStartResultRunning>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(90)], harness.Starts);
         (string? line, TimeSpan at) = Assert.Single(harness.Notes);
-        Assert.Contains("did not start in time", line);
-        Assert.EndsWith("(attempt 1/2)", line);
+        Assert.Contains("did not start in time", line, StringComparison.Ordinal);
+        Assert.EndsWith("(attempt 1/2)", line, StringComparison.Ordinal);
         // Written when the first start failed, not when the second was made.
         Assert.Equal(TimeSpan.FromSeconds(30), at);
     }
@@ -116,7 +116,7 @@ public class HelperStartTests
         };
         _ = Assert.IsType<HelperStartResultRunning>(harness.Wait());
         Assert.Equal([TimeSpan.Zero], harness.Starts);
-        Assert.EndsWith("(attempt 1/2)", Assert.Single(harness.Notes).Line);
+        Assert.EndsWith("(attempt 1/2)", Assert.Single(harness.Notes).Line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,9 +125,9 @@ public class HelperStartTests
         var harness = new Harness { Answer = _ => new StartAnswer.TimedOut(), StartTakes = _ => TimeSpan.FromSeconds(30) };
         HelperStartResultFailed failed = Assert.IsType<HelperStartResultFailed>(harness.Wait());
         Assert.Equal(HelperStartFailure.TimedOut, failed.Reason);
-        Assert.EndsWith("(attempt 2/2)", failed.Detail);
+        Assert.EndsWith("(attempt 2/2)", failed.Detail, StringComparison.Ordinal);
         Assert.Equal(2, harness.Starts.Count);
-        Assert.EndsWith("(attempt 1/2)", Assert.Single(harness.Notes).Line);
+        Assert.EndsWith("(attempt 1/2)", Assert.Single(harness.Notes).Line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class HelperStartTests
         _ = Assert.IsType<HelperStartResultRunning>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(35)], harness.Starts);
         (string? line, TimeSpan at) = Assert.Single(harness.Notes);
-        Assert.Contains("stopped with an error while starting", line);
+        Assert.Contains("stopped with an error while starting", line, StringComparison.Ordinal);
         Assert.Equal(TimeSpan.FromSeconds(20), at);
     }
 
@@ -162,9 +162,9 @@ public class HelperStartTests
         var harness = new Harness { Answer = _ => new StartAnswer.Failed(1069) };
         HelperStartResultFailed failed = Assert.IsType<HelperStartResultFailed>(harness.Wait());
         Assert.Equal(HelperStartFailure.ErrorWhileStarting, failed.Reason);
-        Assert.Contains("1069", failed.Detail);
+        Assert.Contains("1069", failed.Detail, StringComparison.Ordinal);
         Assert.Equal(2, harness.Starts.Count);
-        Assert.Contains("error 1069", Assert.Single(harness.Notes).Line);
+        Assert.Contains("error 1069", Assert.Single(harness.Notes).Line, StringComparison.Ordinal);
     }
 
     [Fact]

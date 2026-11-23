@@ -24,7 +24,7 @@ public partial class StringsTests
     public void EveryKeyTheUiUsesIsInACatalog()
     {
         IEnumerable<string> sources = Directory.GetFiles(Path.Combine(s_repository, "components", "ui", "windows"), "*.cs", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
         var missing = new List<string>();
         foreach (string source in sources)
         {
