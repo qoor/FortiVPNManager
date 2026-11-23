@@ -117,7 +117,7 @@ internal sealed class AccountPane : IPane
 
         // The Gmail API: the Google account, the optional IMAP fallback and the OAuth client.
         _cancelSignIn.Click += (_, _) => _ui.Send(new Command.CancelGoogleSignIn());
-        _disconnectGoogle.Click += async (_, _) => await ConfirmGoogleDisconnect();
+        _disconnectGoogle.Click += async (_, _) => await ConfirmGoogleDisconnect().ConfigureAwait(true);
         _connectGoogle.Click += (_, _) => _ui.Send(new Command.ConnectGoogleAccount());
         StackPanel status = Cards.Row(_googleProgress, _googleMark, _googleText);
         status.Spacing = 6;
@@ -139,7 +139,7 @@ internal sealed class AccountPane : IPane
         _gmailApiRows.Children.Add(_rows["IMAP fallback (optional)"] = fallback);
 
         _useBuiltInClient.Click += (_, _) => _ui.Send(new Command.UseBuiltInOAuthClient());
-        _importClient.Click += async (_, _) => await ImportOAuthClient();
+        _importClient.Click += async (_, _) => await ImportOAuthClient().ConfigureAwait(true);
         ToolTipService.SetToolTip(_importClient, L("Use a Desktop app OAuth client JSON instead of the built-in client."));
         _clientWarning.Foreground = Cards.Brush("SystemFillColorCautionBrush");
         StackPanel clientRow = Cards.Row(_clientWarning, _clientLabel);

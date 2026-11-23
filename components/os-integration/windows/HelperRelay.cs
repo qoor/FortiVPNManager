@@ -60,7 +60,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     {
         try
         {
-            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, s_restartLimit, Version)));
+            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, s_restartLimit, Version).ConfigureAwait(false)));
         }
         catch (HelperChannelException error)
         {
@@ -104,7 +104,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
             {
                 if (verified && VerifiedLinkId != current.Id)
                 {
-                    string build = await Version(current);
+                    string build = await Version(current).ConfigureAwait(false);
                     if (build != _appBuild)
                     {
                         return new PortResponse.HelperBuildMismatch(build);
@@ -114,10 +114,10 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
                 {
                     throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
                 }
-                HelperPipe.Message answer = await current.Channel.Ask(request);
+                HelperPipe.Message answer = await current.Channel.Ask(request).ConfigureAwait(false);
                 HelperPipe.Message.Reply replied = answer as HelperPipe.Message.Reply ?? throw Unreadable(answer);
                 return new PortResponse.HelperReply(replied.Json);
-            }));
+            }).ConfigureAwait(false));
         }
         catch (HelperChannelException error)
         {
@@ -135,7 +135,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
         try
         {
             current = CurrentLink(s_connectLimit);
-            HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id));
+            HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id)).ConfigureAwait(false);
             HelperPipe.Message.ReplyFlag flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
             reply(new PortResponse.HelperReplyFlag(flag.Value));
         }
@@ -150,7 +150,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     /// <summary>The Helper's build on <paramref name="current"/>, which is verified when the build is the app's.</summary>
     private async Task<string> Version(Link current)
     {
-        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, _appBuild));
+        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, _appBuild)).ConfigureAwait(false);
         string build = (answer as HelperPipe.Message.Build ?? throw Unreadable(answer)).HelperBuild;
         lock (_gate)
         {
@@ -173,7 +173,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
         try
         {
             current = CurrentLink(s_connectLimit);
-            return await body(current);
+            return await body(current).ConfigureAwait(false);
         }
         catch (HelperChannelException error) when (retrying && IsConnectionFailure(error.Failure))
         {
@@ -181,8 +181,8 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
             {
                 Invalidate(current);
             }
-            await Task.Delay(_retryDelay);
-            return await body(CurrentLink(retryLimit));
+            await Task.Delay(_retryDelay).ConfigureAwait(false);
+            return await body(CurrentLink(retryLimit)).ConfigureAwait(false);
         }
     }
 

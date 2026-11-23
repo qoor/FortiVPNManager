@@ -84,7 +84,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
                 MessageFraming.Write(_pipe, message);
             }
         });
-        if (await Task.WhenAny(sending, limit) == limit)
+        if (await Task.WhenAny(sending, limit).ConfigureAwait(false) == limit)
         {
             // A request left sending could reach the Helper after the runtime gave up on it, such as a
             // connect that starts a run nobody waits for. Closing cancels it. One that got through just
@@ -96,7 +96,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
         }
         try
         {
-            await sending;
+            await sending.ConfigureAwait(false);
         }
         // Closing the connection cancels a write still under way.
         catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
@@ -104,12 +104,12 @@ internal sealed class PipeHelperChannel : IHelperChannel
             _ = _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.Connection(error.Message));
         }
-        if (await Task.WhenAny(answer.Task, limit) == limit)
+        if (await Task.WhenAny(answer.Task, limit).ConfigureAwait(false) == limit)
         {
             _ = _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.NoReply());
         }
-        return await answer.Task;
+        return await answer.Task.ConfigureAwait(false);
     }
 
     public void Dispose() => Close();

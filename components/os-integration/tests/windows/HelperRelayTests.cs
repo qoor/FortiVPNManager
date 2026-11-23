@@ -177,7 +177,7 @@ public class HelperRelayTests
             {
                 answer = response;
                 Record("reply");
-            });
+            }).ConfigureAwait(true);
             return answer!;
         }
 
@@ -188,7 +188,7 @@ public class HelperRelayTests
             {
                 answer = response;
                 Record("reply");
-            });
+            }).ConfigureAwait(true);
             return answer!;
         }
 
