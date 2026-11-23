@@ -15,6 +15,9 @@
          ICE57 take the Start menu folder of this per-machine package for a user's, and ICE61 warns of
          the same version replacing itself, which Package.wxs allows on purpose. -->
     <SuppressIces>ICE03;ICE43;ICE57;ICE61</SuppressIces>
+    <SuppressSpecificWarnings>1149</SuppressSpecificWarnings>
+    <Pedantic>true</Pedantic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.1" />

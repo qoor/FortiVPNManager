@@ -145,7 +145,7 @@ $productCode = [Guid]::NewGuid().ToString('B').ToUpperInvariant()
 Invoke-Dotnet @('build', (Join-Path $PSScriptRoot 'FortiVPNManager.Installer.wixproj'), '-c', 'Release',
     "-p:OutputPath=$msiBuild", "-p:ProductVersion=$version", "-p:ProductCode=$productCode",
     "-p:CloseRunningScript=$(Get-EncodedScript 'CloseRunning.ps1')",
-    "-p:UninstallCleanupScript=$(Get-EncodedScript 'UninstallCleanup.ps1')", '--nologo')
+    "-p:UninstallCleanupScript=$(Get-EncodedScript 'UninstallCleanup.ps1')", '--nologo', '-warnaserror')
 $msi = Join-Path $root ".build\windows\FortiVPNManager-$version.msi"
 # The app's symbols (its native code's, tens of MB) stay out of the installer (Package.wxs) and next to
 # it, for crash dumps of this build; a debugger looks them up as FortiVPNManager.pdb. Copied first, so a
