@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use fvm_contract::app_helper::HelperStatus;
 use fvm_contract::app_internal::port::{HelperChannelFailure, RegistrationError};
 
-use super::machine::{AttemptReason, ConnectionManager, Phase, Stage};
+use super::machine::{AttemptReason, ConnectionManager, Phase, Stage, Step};
 use super::{Effect, policy};
 
 /// What the runtime gathered for a readiness check. Secrets are only asked about, never read,
@@ -128,7 +128,7 @@ impl ConnectionManager {
         match &mut self.phase {
             Phase::Connecting(attempt) if attempt.stage == Stage::CheckingReadiness => {
                 if missing.is_empty() {
-                    self.prepare_otp();
+                    self.run_now(Step::PrepareOtp);
                 } else if let Some(session) = attempt.replacing.take() {
                     self.replacement_failed(session);
                 } else {

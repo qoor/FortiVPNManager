@@ -28,7 +28,9 @@ use std::mem;
 use std::net::Ipv4Addr;
 use std::time::{Duration, SystemTime};
 
-use fvm_contract::app_helper::{AttemptId, Milestone, SessionId, StopReason};
+use fvm_contract::app_helper::{
+    AttemptId, HelperEvent, HelperEventKind, Milestone, SessionId, StopReason,
+};
 use jiff::tz::TimeZone;
 
 use super::classify::Outcome;
@@ -38,7 +40,8 @@ use super::readiness::{Readiness, SetupNeed};
 use super::system::{PathSnapshot, SystemObservation, Underlay};
 use super::view::Shown;
 use super::{
-    ConnectionSettings, Effect, Input, Launch, OtpFailure, Settings, Startup, TimerKind, VpnAccount,
+    ConnectionSettings, Effect, Input, Launch, Note, OtpFailure, Settings, Startup, TimerKind,
+    VpnAccount,
 };
 
 const SECONDS_FROM_1970_TO_2026: u64 = 1_767_225_600;
@@ -323,6 +326,10 @@ pub(super) enum Step {
         delay: Duration,
     },
     Fail(Failure),
+    EnterConnected {
+        tunnel_ip: Option<Ipv4Addr>,
+    },
+    StaleOtpWaitOver(Note),
     PrepareOtp,
     CheckReadiness,
     StoppedForUpdate,
@@ -399,30 +406,99 @@ impl ConnectionManager {
     /// Judges one step, then carries it out.
     fn run_step(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
         match step {
-            Step::Input(Input::TimerFired(timer)) => {
+            Step::Input(input) => self.run_input(input, now),
+            Step::TimerDue(kind) => self.run_timer(kind, now),
+            step => self.run_transition(step, now),
+        }
+    }
+
+    fn run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
+        match input {
+            Input::TimerFired(timer) => {
                 let due = self.due_timer(timer);
                 self.fire_timer(due)
             }
-            Step::Input(input) => {
+            Input::Helper(HelperEvent { attempt_id, kind }) => match kind {
+                HelperEventKind::Milestone {
+                    milestone,
+                    tunnel_ip,
+                } => {
+                    let reached = self.milestone_reached(&attempt_id, milestone, tunnel_ip, now);
+                    self.reach_milestone(reached)
+                }
+                HelperEventKind::Exited { facts } => {
+                    let exit = self.run_exit(&attempt_id, &facts, now);
+                    self.end_run(exit)
+                }
+            },
+            Input::RunRejected(attempt, code) => {
+                let rejection = self.run_rejection(&attempt, code, now);
+                self.reject_run(rejection)
+            }
+            Input::HelperConnectionLost => {
+                let loss = self.connection_loss(now);
+                self.lose_connection(loss)
+            }
+            Input::OtpSessionReady(attempt) => {
+                let ready = self.otp_session_ready(&attempt);
+                self.start_run(ready);
+                Vec::new()
+            }
+            Input::OtpSessionFailed(attempt, failure) => {
+                let failure = self.otp_session_failure(&attempt, failure);
+                self.end_otp_session(failure)
+            }
+            Input::OtpCodeFound(attempt, code) => {
+                let usable = self.otp_code_usable(&attempt);
+                self.submit_otp(usable, code);
+                Vec::new()
+            }
+            Input::OtpFoundInSpam(attempt) => {
+                let finding = self.spam_finding(&attempt);
+                self.note_spam(finding);
+                Vec::new()
+            }
+            Input::StaleOtpTrashed(attempt) => {
+                let trashed = self.stale_otp_session(&attempt);
+                self.end_stale_otp_wait(trashed)
+            }
+            input => {
                 self.dispatch(input);
                 Vec::new()
             }
-            Step::TimerDue(TimerKind::AttemptDeadline) => {
+        }
+    }
+
+    fn run_timer(&mut self, kind: TimerKind, now: SystemTime) -> Vec<Step> {
+        match kind {
+            TimerKind::AttemptDeadline => {
                 let deadline = self.attempt_deadline(now);
                 self.end_attempt_at_deadline(deadline)
             }
-            Step::TimerDue(TimerKind::Retry) => {
+            TimerKind::OtpDeadline => {
+                let deadline = self.otp_deadline(now);
+                self.stop_at_otp_deadline(deadline);
+                Vec::new()
+            }
+            TimerKind::StaleOtp => self.stop_stale_otp_search(),
+            TimerKind::Retry => {
                 let due = self.retry_due();
                 self.start_due_retry(due)
             }
-            Step::TimerDue(TimerKind::ProactiveReconnect) => {
+            TimerKind::ProactiveReconnect => {
                 let due = self.proactive_reconnect_due(now);
                 self.renew_when_due(due)
             }
-            Step::TimerDue(kind) => {
+            kind => {
                 self.timer_due(kind);
                 Vec::new()
             }
+        }
+    }
+
+    fn run_transition(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
+        match step {
+            Step::Input(_) | Step::TimerDue(_) => unreachable!("run by run_step"),
             Step::BeginAttempt {
                 reason,
                 cert_retry_used,
@@ -478,8 +554,18 @@ impl ConnectionManager {
                 self.fail(failure);
                 Vec::new()
             }
+            Step::EnterConnected { tunnel_ip } => {
+                let connected = self.connected(tunnel_ip, now);
+                self.enter_connected(connected);
+                Vec::new()
+            }
+            Step::StaleOtpWaitOver(note) => {
+                let deadline = self.stale_otp_wait_over(now);
+                self.go_on_after_stale_otp(deadline, note)
+            }
             Step::PrepareOtp => {
-                self.prepare_otp();
+                let preparation = self.otp_preparation(now);
+                self.prepare_otp(preparation);
                 Vec::new()
             }
             Step::CheckReadiness => {
@@ -494,7 +580,7 @@ impl ConnectionManager {
     }
 
     /// Runs `step` and what follows from it at once, for transitions not split yet.
-    fn run_now(&mut self, step: Step) {
+    pub(in crate::connection) fn run_now(&mut self, step: Step) {
         self.run_all(vec![step]);
     }
 
@@ -527,15 +613,15 @@ impl ConnectionManager {
             Input::HelperRegistered(result) => self.helper_registered(result),
             Input::HelperApprovalSettingsOpened => self.follow_helper_approval(),
             Input::ReadinessChecked(facts) => self.readiness_checked(facts),
-            Input::OtpSessionReady(attempt) => self.otp_session_ready(&attempt),
-            Input::OtpSessionFailed(attempt, failure) => self.otp_session_failed(&attempt, failure),
-            Input::OtpCodeFound(attempt, code) => self.otp_code_found(&attempt, code),
-            Input::OtpFoundInSpam(attempt) => self.otp_found_in_spam(&attempt),
-            Input::StaleOtpTrashed(attempt) => self.stale_otp_trashed(&attempt),
-            Input::Helper(event) => self.helper_event(event),
-            Input::RunRejected(attempt, code) => self.run_rejected(&attempt, code),
-            Input::HelperConnectionLost => self.helper_connection_lost(),
-            Input::TimerFired(_) => unreachable!("a timer input runs as its own step"),
+            Input::OtpSessionReady(_)
+            | Input::OtpSessionFailed(..)
+            | Input::OtpCodeFound(..)
+            | Input::OtpFoundInSpam(_)
+            | Input::StaleOtpTrashed(_)
+            | Input::Helper(_)
+            | Input::RunRejected(..)
+            | Input::HelperConnectionLost
+            | Input::TimerFired(_) => unreachable!("runs as its own step"),
             Input::WillSleep { at } => self.will_sleep_reported(at),
             Input::DidWake => self.did_wake_reported(),
             Input::ScreenLocked { at } => {
@@ -843,11 +929,11 @@ impl ConnectionManager {
 
     fn timer_due(&mut self, kind: TimerKind) {
         match kind {
-            TimerKind::AttemptDeadline | TimerKind::Retry | TimerKind::ProactiveReconnect => {
-                unreachable!("run as their own steps")
-            }
-            TimerKind::OtpDeadline => self.otp_deadline_passed(),
-            TimerKind::StaleOtp => self.stale_otp_wait_ran_out(),
+            TimerKind::AttemptDeadline
+            | TimerKind::Retry
+            | TimerKind::ProactiveReconnect
+            | TimerKind::OtpDeadline
+            | TimerKind::StaleOtp => unreachable!("run as their own steps"),
             TimerKind::QuitDeadline if self.quit != Quit::NotRequested => {
                 self.quit = Quit::Terminated;
             }
