@@ -15,50 +15,50 @@ internal sealed class UpdatePane : IPane
 {
     private const double IconSize = 48;
     private const int RoundToNearestDisplayedDigit = 1;
-    private readonly AppUi ui;
-    private readonly StackPanel body = new() { Spacing = 4 };
-    private readonly ProgressRing busy = new() { Width = IconSize, Height = IconSize };
-    private readonly FontIcon upToDate = new() { Glyph = "\uEC61", FontSize = IconSize, Foreground = Cards.Brush("SystemFillColorSuccessBrush") };
-    private readonly Image appIcon = new() { Width = IconSize, Height = IconSize };
-    private readonly TextBlock headline = new() { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
-    private readonly TextBlock subtitle = new() { Foreground = Cards.Brush("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap };
-    private readonly Button check = new() { Content = L("Check for updates") };
-    private readonly Button updateNow = new() { Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-    private readonly Button restart = new() { Content = L("Restart app"), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-    private readonly InfoBar failure = Cards.Notice(InfoBarSeverity.Error);
-    private readonly Border item = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
-    private readonly TextBlock itemName = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock itemStatus = new() { Foreground = Cards.Brush("TextFillColorSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button cancel = new() { Content = L("Cancel") };
-    private readonly ProgressBar bar = new() { Maximum = 100 };
-    private readonly TextBlock details = new() { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Cards.Brush("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap };
-    private readonly Border notes = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
-    private readonly StackPanel whatsNew = new() { Spacing = 4 };
-    private readonly StackPanel noteTitles = new() { Spacing = 4 };
-    private readonly HyperlinkButton releasePage = new() { Content = L("View on GitHub"), Padding = new Thickness(0), Margin = new Thickness(0, 6, 0, 0) };
-    private readonly TextBlock footnote = Cards.Footer(L("The VPN disconnects briefly during the install."));
-    private IReadOnlyList<string> shownNotes = [];
+    private readonly AppUi _ui;
+    private readonly StackPanel _body = new() { Spacing = 4 };
+    private readonly ProgressRing _busy = new() { Width = IconSize, Height = IconSize };
+    private readonly FontIcon _upToDate = new() { Glyph = "\uEC61", FontSize = IconSize, Foreground = Cards.Brush("SystemFillColorSuccessBrush") };
+    private readonly Image _appIcon = new() { Width = IconSize, Height = IconSize };
+    private readonly TextBlock _headline = new() { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _subtitle = new() { Foreground = Cards.Brush("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap };
+    private readonly Button _check = new() { Content = L("Check for updates") };
+    private readonly Button _updateNow = new() { Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+    private readonly Button _restart = new() { Content = L("Restart app"), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+    private readonly InfoBar _failure = Cards.Notice(InfoBarSeverity.Error);
+    private readonly Border _item = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
+    private readonly TextBlock _itemName = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _itemStatus = new() { Foreground = Cards.Brush("TextFillColorSecondaryBrush"), VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _cancel = new() { Content = L("Cancel") };
+    private readonly ProgressBar _bar = new() { Maximum = 100 };
+    private readonly TextBlock _details = new() { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Cards.Brush("TextFillColorSecondaryBrush"), TextWrapping = TextWrapping.Wrap };
+    private readonly Border _notes = new() { Style = (Style)Application.Current.Resources["UpdateCardStyle"] };
+    private readonly StackPanel _whatsNew = new() { Spacing = 4 };
+    private readonly StackPanel _noteTitles = new() { Spacing = 4 };
+    private readonly HyperlinkButton _releasePage = new() { Content = L("View on GitHub"), Padding = new Thickness(0), Margin = new Thickness(0, 6, 0, 0) };
+    private readonly TextBlock _footnote = Cards.Footer(L("The VPN disconnects briefly during the install."));
+    private IReadOnlyList<string> _shownNotes = [];
 
     public UpdatePane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
-        check.Click += (_, _) => ui.Send(new Command.CheckForUpdates());
-        updateNow.Click += (_, _) => ui.Send(new Command.UpdateNow());
-        restart.Click += (_, _) => ui.Send(new Command.RestartToUpdate());
-        cancel.Click += (_, _) => ui.Send(new Command.CancelUpdateDownload());
-        appIcon.Loaded += (_, _) => ShowIcon();
+        this._ui = ui;
+        _check.Click += (_, _) => ui.Send(new Command.CheckForUpdates());
+        _updateNow.Click += (_, _) => ui.Send(new Command.UpdateNow());
+        _restart.Click += (_, _) => ui.Send(new Command.RestartToUpdate());
+        _cancel.Click += (_, _) => ui.Send(new Command.CancelUpdateDownload());
+        _appIcon.Loaded += (_, _) => ShowIcon();
 
         var icons = new Grid { Width = IconSize, Height = IconSize, VerticalAlignment = VerticalAlignment.Center };
-        icons.Children.Add(busy);
-        icons.Children.Add(upToDate);
-        icons.Children.Add(appIcon);
+        icons.Children.Add(_busy);
+        icons.Children.Add(_upToDate);
+        icons.Children.Add(_appIcon);
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(headline);
-        text.Children.Add(subtitle);
+        text.Children.Add(_headline);
+        text.Children.Add(_subtitle);
         var actions = new Grid { VerticalAlignment = VerticalAlignment.Center };
-        actions.Children.Add(check);
-        actions.Children.Add(updateNow);
-        actions.Children.Add(restart);
+        actions.Children.Add(_check);
+        actions.Children.Add(_updateNow);
+        actions.Children.Add(_restart);
         var hero = new Grid { ColumnSpacing = 16, Margin = new Thickness(0, 4, 0, 14) };
         hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -73,36 +73,36 @@ internal sealed class UpdatePane : IPane
         itemLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         itemLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         itemLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(itemStatus, 1);
-        Grid.SetColumn(cancel, 2);
-        itemLine.Children.Add(itemName);
-        itemLine.Children.Add(itemStatus);
-        itemLine.Children.Add(cancel);
+        Grid.SetColumn(_itemStatus, 1);
+        Grid.SetColumn(_cancel, 2);
+        itemLine.Children.Add(_itemName);
+        itemLine.Children.Add(_itemStatus);
+        itemLine.Children.Add(_cancel);
         var itemBody = new StackPanel { Spacing = 8 };
         itemBody.Children.Add(itemLine);
-        itemBody.Children.Add(bar);
-        itemBody.Children.Add(details);
-        item.Child = itemBody;
+        itemBody.Children.Add(_bar);
+        itemBody.Children.Add(_details);
+        _item.Child = itemBody;
 
-        whatsNew.Children.Add(new TextBlock { Text = L("What's new"), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], Margin = new Thickness(0, 0, 0, 4) });
-        whatsNew.Children.Add(noteTitles);
+        _whatsNew.Children.Add(new TextBlock { Text = L("What's new"), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], Margin = new Thickness(0, 0, 0, 4) });
+        _whatsNew.Children.Add(_noteTitles);
         var notesBody = new StackPanel();
-        notesBody.Children.Add(whatsNew);
-        notesBody.Children.Add(releasePage);
-        notes.Child = notesBody;
+        notesBody.Children.Add(_whatsNew);
+        notesBody.Children.Add(_releasePage);
+        _notes.Child = notesBody;
 
-        foreach (UIElement element in new UIElement[] { hero, failure, item, notes, footnote })
+        foreach (UIElement element in new UIElement[] { hero, _failure, _item, _notes, _footnote })
         {
-            body.Children.Add(element);
+            _body.Children.Add(element);
         }
-        page.BodyPanel.Children.Add(body);
+        page.BodyPanel.Children.Add(_body);
         ui.Send(new Command.UpdatePageOpened());
     }
 
     public void Refresh()
     {
-        body.Visible(ui.AutoUpdate is not null);
-        if (ui.AutoUpdate is not { } update)
+        _body.Visible(_ui.AutoUpdate is not null);
+        if (_ui.AutoUpdate is not { } update)
         {
             return;
         }
@@ -112,68 +112,68 @@ internal sealed class UpdatePane : IPane
 
         bool spinning = settled ? update.Status is UpdateStatus.Checking : progress is UpdateProgress.Installing;
         bool current = settled && update.Status is UpdateStatus.UpToDate;
-        busy.IsActive = spinning;
-        upToDate.Visible(current);
-        appIcon.Visible(!spinning && !current);
-        headline.Text = update.Headline();
+        _busy.IsActive = spinning;
+        _upToDate.Visible(current);
+        _appIcon.Visible(!spinning && !current);
+        _headline.Text = update.Headline();
         string? line = update.Subtitle();
-        subtitle.Visible(line is not null);
-        subtitle.Text = line ?? "";
+        _subtitle.Visible(line is not null);
+        _subtitle.Text = line ?? "";
         Button action = settled
-            ? available is not null ? updateNow : check
-            : progress is UpdateProgress.Downloading or UpdateProgress.Preparing ? updateNow : restart;
-        check.Apply(action == check ? update.Check : ButtonState.Hidden);
-        updateNow.Apply(action == updateNow ? update.UpdateNow : ButtonState.Hidden);
-        restart.Apply(action == restart ? update.Restart : ButtonState.Hidden);
-        updateNow.Content = progress is UpdateProgress.Failed ? L("Try again") : L("Install now");
+            ? available is not null ? _updateNow : _check
+            : progress is UpdateProgress.Downloading or UpdateProgress.Preparing ? _updateNow : _restart;
+        _check.Apply(action == _check ? update.Check : ButtonState.Hidden);
+        _updateNow.Apply(action == _updateNow ? update.UpdateNow : ButtonState.Hidden);
+        _restart.Apply(action == _restart ? update.Restart : ButtonState.Hidden);
+        _updateNow.Content = progress is UpdateProgress.Failed ? L("Try again") : L("Install now");
 
         string? failedInstall = update.FailedInstallLine();
         string? reason = (progress as UpdateProgress.Failed)?.Reason.Message();
-        failure.Title = failedInstall ?? "";
-        failure.Message = reason ?? "";
-        failure.Visible(failedInstall is not null || reason is not null);
+        _failure.Title = failedInstall ?? "";
+        _failure.Message = reason ?? "";
+        _failure.Visible(failedInstall is not null || reason is not null);
 
         string? status = progress.ItemStatus();
-        item.Visible(status is not null);
-        itemStatus.Text = status ?? "";
-        itemName.Text = progress switch
+        _item.Visible(status is not null);
+        _itemStatus.Text = status ?? "";
+        _itemName.Text = progress switch
         {
             UpdateProgress.Downloading or UpdateProgress.Preparing => $"FortiVPNManager {available!.Version}",
             UpdateProgress.ReadyToRestart ready => $"FortiVPNManager {ready.Version}",
             UpdateProgress.Installing installing => $"FortiVPNManager {installing.Version}",
             _ => "",
         };
-        cancel.Apply(update.Cancel);
+        _cancel.Apply(update.Cancel);
         byte? percent = progress switch
         {
             UpdateProgress.Downloading downloading => downloading.Percent,
             UpdateProgress.Preparing preparing => preparing.Percent,
             _ => (byte?)null,
         };
-        bar.Visible(percent is not null);
-        bar.Value = percent ?? 0;
+        _bar.Visible(percent is not null);
+        _bar.Value = percent ?? 0;
         var download = progress as UpdateProgress.Downloading;
-        details.Visible(download is not null);
-        details.Text = download is null ? "" : $"{Size(download.ReceivedBytes)} / {Size(download.TotalBytes)} · {download.Remaining.Line()}";
+        _details.Visible(download is not null);
+        _details.Text = download is null ? "" : $"{Size(download.ReceivedBytes)} / {Size(download.TotalBytes)} · {download.Remaining.Line()}";
 
-        notes.Visible(settled && available is not null);
-        footnote.Visible(settled && available is not null);
+        _notes.Visible(settled && available is not null);
+        _footnote.Visible(settled && available is not null);
         if (settled && available is not null)
         {
-            releasePage.NavigateUri = new Uri(available.ReleasePageUrl);
+            _releasePage.NavigateUri = new Uri(available.ReleasePageUrl);
             ShowNotes(available.ReleaseNotes() ?? []);
         }
     }
 
     private void ShowNotes(IReadOnlyList<string> titles)
     {
-        whatsNew.Visible(titles.Count > 0);
-        if (titles.SequenceEqual(shownNotes))
+        _whatsNew.Visible(titles.Count > 0);
+        if (titles.SequenceEqual(_shownNotes))
         {
             return;
         }
-        shownNotes = titles;
-        noteTitles.Children.Clear();
+        _shownNotes = titles;
+        _noteTitles.Children.Clear();
         foreach (string title in titles)
         {
             var line = new Grid { ColumnSpacing = 8 };
@@ -183,13 +183,13 @@ internal sealed class UpdatePane : IPane
             Grid.SetColumn(text, 1);
             line.Children.Add(new TextBlock { Text = "•" });
             line.Children.Add(text);
-            noteTitles.Children.Add(line);
+            _noteTitles.Children.Add(line);
         }
     }
 
     private async void ShowIcon()
     {
-        uint size = (uint)Math.Round(IconSize * appIcon.XamlRoot.RasterizationScale);
+        uint size = (uint)Math.Round(IconSize * _appIcon.XamlRoot.RasterizationScale);
         using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(Path.Combine(AppContext.BaseDirectory, "AppIcon.ico"), FileAccessMode.Read);
         BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
         var frames = new List<BitmapFrame>();
@@ -202,7 +202,7 @@ internal sealed class UpdatePane : IPane
         SoftwareBitmap bitmap = await frame.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, transform, ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
         var source = new SoftwareBitmapSource();
         await source.SetBitmapAsync(bitmap);
-        appIcon.Source = source;
+        _appIcon.Source = source;
     }
 
     private static string Size(ulong bytes)

@@ -13,94 +13,94 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 internal sealed class AdvancedPane : IPane
 {
-    private readonly AppUi ui;
-    private readonly StackPanel body = new() { Spacing = 4 };
-    private readonly Grid helperLine;
-    private readonly FontIcon helperMark;
-    private readonly TextBlock helperText;
-    private readonly Button registerHelper = new() { Content = L("Register Helper") };
-    private readonly SettingsCard registerCard;
-    private readonly InfoBar registerError = Cards.Notice(InfoBarSeverity.Error);
-    private readonly StackPanel backend = new() { Spacing = 4 };
-    private readonly TextBlock backendVersion = Cards.Value();
-    private readonly TextBlock filePath = new() { IsTextSelectionEnabled = true, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button showFile = new() { Content = L("Show in File Explorer") };
-    private readonly SettingsCard fileCard;
-    private readonly InfoBar loadError = Cards.Notice(InfoBarSeverity.Error);
-    private readonly StackPanel warnings = new() { Spacing = 4 };
+    private readonly AppUi _ui;
+    private readonly StackPanel _body = new() { Spacing = 4 };
+    private readonly Grid _helperLine;
+    private readonly FontIcon _helperMark;
+    private readonly TextBlock _helperText;
+    private readonly Button _registerHelper = new() { Content = L("Register Helper") };
+    private readonly SettingsCard _registerCard;
+    private readonly InfoBar _registerError = Cards.Notice(InfoBarSeverity.Error);
+    private readonly StackPanel _backend = new() { Spacing = 4 };
+    private readonly TextBlock _backendVersion = Cards.Value();
+    private readonly TextBlock _filePath = new() { IsTextSelectionEnabled = true, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _showFile = new() { Content = L("Show in File Explorer") };
+    private readonly SettingsCard _fileCard;
+    private readonly InfoBar _loadError = Cards.Notice(InfoBarSeverity.Error);
+    private readonly StackPanel _warnings = new() { Spacing = 4 };
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
-    private readonly Dictionary<string, FrameworkElement> rows = [];
-    private string? settingsPath;
-    private IReadOnlyList<ConfigWarning> shownWarnings = [];
+    private readonly Dictionary<string, FrameworkElement> _rows = [];
+    private string? _settingsPath;
+    private IReadOnlyList<ConfigWarning> _shownWarnings = [];
 
     public AdvancedPane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
-        (helperLine, helperMark, helperText) = Cards.StatusLine();
-        registerHelper.Click += (_, _) => ui.Send(new Command.RegisterHelper());
-        body.Children.Add(Cards.SectionHeader(L("Helper"), first: true));
-        body.Children.Add(rows["Helper"] = Cards.Card(L("Status"), helperLine));
-        registerCard = Cards.ActionCard(registerHelper);
-        body.Children.Add(rows["Register Helper"] = registerCard);
-        body.Children.Add(registerError);
+        this._ui = ui;
+        (_helperLine, _helperMark, _helperText) = Cards.StatusLine();
+        _registerHelper.Click += (_, _) => ui.Send(new Command.RegisterHelper());
+        _body.Children.Add(Cards.SectionHeader(L("Helper"), first: true));
+        _body.Children.Add(_rows["Helper"] = Cards.Card(L("Status"), _helperLine));
+        _registerCard = Cards.ActionCard(_registerHelper);
+        _body.Children.Add(_rows["Register Helper"] = _registerCard);
+        _body.Children.Add(_registerError);
 
-        backend.Children.Add(Cards.SectionHeader(L("VPN client")));
-        backend.Children.Add(rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
-        backend.Children.Add(rows["Version"] = Cards.Card(L("Version"), backendVersion));
-        body.Children.Add(backend);
+        _backend.Children.Add(Cards.SectionHeader(L("VPN client")));
+        _backend.Children.Add(_rows["Type"] = Cards.Card(L("Type"), new TextBlock { Text = "openconnect", Style = (Style)Application.Current.Resources["ValueStyle"] }));
+        _backend.Children.Add(_rows["Version"] = Cards.Card(L("Version"), _backendVersion));
+        _body.Children.Add(_backend);
 
-        showFile.Click += (_, _) =>
+        _showFile.Click += (_, _) =>
         {
-            if (settingsPath is { } path)
+            if (_settingsPath is { } path)
             {
                 Cards.ShowInFileExplorer(path);
             }
         };
-        fileCard = new SettingsCard { Header = filePath, Content = showFile };
-        body.Children.Add(Cards.SectionHeader(L("Settings File")));
-        body.Children.Add(rows["Settings File"] = fileCard);
-        body.Children.Add(loadError);
-        body.Children.Add(warnings);
-        page.BodyPanel.Children.Add(body);
+        _fileCard = new SettingsCard { Header = _filePath, Content = _showFile };
+        _body.Children.Add(Cards.SectionHeader(L("Settings File")));
+        _body.Children.Add(_rows["Settings File"] = _fileCard);
+        _body.Children.Add(_loadError);
+        _body.Children.Add(_warnings);
+        page.BodyPanel.Children.Add(_body);
     }
 
-    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
+    public FrameworkElement? OpenRow(string key) => _rows.GetValueOrDefault(key);
 
     public void Refresh()
     {
-        body.Visible(ui.Readiness is not null && ui.Config is not null);
-        if (ui.Readiness is not { } readiness || ui.Config is not { } config)
+        _body.Visible(_ui.Readiness is not null && _ui.Config is not null);
+        if (_ui.Readiness is not { } readiness || _ui.Config is not { } config)
         {
             return;
         }
-        helperText.Text = readiness.Helper.Label();
-        helperMark.SetStyle(readiness.Helper.Style());
-        registerHelper.Apply(readiness.RegisterHelper);
-        registerCard.Visible(readiness.RegisterHelper != ButtonState.Hidden);
-        registerError.Show(readiness.RegisterError?.HelperMessage());
+        _helperText.Text = readiness.Helper.Label();
+        _helperMark.SetStyle(readiness.Helper.Style());
+        _registerHelper.Apply(readiness.RegisterHelper);
+        _registerCard.Visible(readiness.RegisterHelper != ButtonState.Hidden);
+        _registerError.Show(readiness.RegisterError?.HelperMessage());
 
-        backend.Visible(readiness.Backend is not null);
+        _backend.Visible(readiness.Backend is not null);
         if (readiness.Backend is { } info)
         {
-            backendVersion.Text = info.Version ?? L("Unknown");
+            _backendVersion.Text = info.Version ?? L("Unknown");
         }
 
         ConfigFileState file = config.File;
-        settingsPath = file.Path;
-        filePath.Text = file.Path;
-        ToolTipService.SetToolTip(filePath, file.Path);
-        showFile.IsEnabled = file.Exists;
-        fileCard.Describe(file.Exists ? null : L("Not created yet. Saving the account creates it."));
-        loadError.Show(file.LoadError is { } error ? L("%@ Using the last valid settings.", error.Message()) : null);
-        if (!file.Warnings.SequenceEqual(shownWarnings))
+        _settingsPath = file.Path;
+        _filePath.Text = file.Path;
+        ToolTipService.SetToolTip(_filePath, file.Path);
+        _showFile.IsEnabled = file.Exists;
+        _fileCard.Describe(file.Exists ? null : L("Not created yet. Saving the account creates it."));
+        _loadError.Show(file.LoadError is { } error ? L("%@ Using the last valid settings.", error.Message()) : null);
+        if (!file.Warnings.SequenceEqual(_shownWarnings))
         {
-            shownWarnings = file.Warnings;
-            warnings.Children.Clear();
+            _shownWarnings = file.Warnings;
+            _warnings.Children.Clear();
             foreach (ConfigWarning warning in file.Warnings)
             {
                 InfoBar notice = Cards.Notice(InfoBarSeverity.Warning);
                 notice.Show(warning.DisplayMessage());
-                warnings.Children.Add(notice);
+                _warnings.Children.Add(notice);
             }
         }
     }

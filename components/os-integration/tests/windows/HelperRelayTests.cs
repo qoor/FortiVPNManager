@@ -93,7 +93,7 @@ public class HelperRelayTests
         Assert.Equal(1, harness.Opened);
     }
 
-    private static readonly (HelperCall Call, Type Request)[] UpdateCalls =
+    private static readonly (HelperCall Call, Type Request)[] s_updateCalls =
     [
         (new HelperCall.PrepareUpdate("{}"), typeof(HelperPipe.Request.PrepareUpdate)),
         (new HelperCall.InstallUpdate("{}"), typeof(HelperPipe.Request.InstallUpdate)),
@@ -104,7 +104,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AnUpdateCallChecksTheBuildAndPassesTheReplyOnUnread()
     {
-        foreach ((HelperCall? call, Type? request) in UpdateCalls)
+        foreach ((HelperCall? call, Type? request) in s_updateCalls)
         {
             var helper = new FakeHelper(AppBuild);
             var harness = new Harness(helper);
@@ -116,7 +116,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AHelperOfAnotherBuildGetsNoUpdateCall()
     {
-        foreach ((HelperCall? call, Type _) in UpdateCalls)
+        foreach ((HelperCall? call, Type _) in s_updateCalls)
         {
             var helper = new FakeHelper("another build");
             var harness = new Harness(helper);
@@ -128,7 +128,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AnUpdateCallIsNeverRepeated()
     {
-        foreach ((HelperCall? call, Type _) in UpdateCalls)
+        foreach ((HelperCall? call, Type _) in s_updateCalls)
         {
             var harness = new Harness(new FakeHelper(AppBuild, failing: true), new FakeHelper(AppBuild));
             Assert.Equal(new PortResponse.HelperUnreachable(new HelperChannelFailure.ConnectionLost()), await harness.Call(call));
@@ -154,14 +154,14 @@ public class HelperRelayTests
     /// </summary>
     private sealed class Harness
     {
-        private readonly Queue<FakeHelper?> helpers;
-        private readonly HelperRelay relay;
+        private readonly Queue<FakeHelper?> _helpers;
+        private readonly HelperRelay _relay;
 
         public Harness(params FakeHelper?[] helpers)
         {
-            this.helpers = new Queue<FakeHelper?>(helpers);
+            this._helpers = new Queue<FakeHelper?>(helpers);
             var inbound = new HelperInbound(systemEvent => Record(systemEvent.GetType().Name));
-            relay = new HelperRelay(AppBuild, inbound, (_, _, limit) => Open(limit), TimeSpan.Zero);
+            _relay = new HelperRelay(AppBuild, inbound, (_, _, limit) => Open(limit), TimeSpan.Zero);
         }
 
         public TimeSpan PipeAppearsAfter { get; init; }
@@ -173,7 +173,7 @@ public class HelperRelayTests
         public async Task<PortResponse> Call(HelperCall call)
         {
             PortResponse? answer = null;
-            await relay.Handle(call, response =>
+            await _relay.Handle(call, response =>
             {
                 answer = response;
                 Record("reply");
@@ -184,7 +184,7 @@ public class HelperRelayTests
         public async Task<PortResponse> Build()
         {
             PortResponse? answer = null;
-            await relay.Build(response =>
+            await _relay.Build(response =>
             {
                 answer = response;
                 Record("reply");
@@ -195,7 +195,7 @@ public class HelperRelayTests
         private IHelperChannel Open(TimeSpan limit)
         {
             Opened++;
-            return PipeAppearsAfter <= limit && helpers.Dequeue() is { } helper
+            return PipeAppearsAfter <= limit && _helpers.Dequeue() is { } helper
                 ? helper
                 : throw new HelperChannelException(new HelperChannelFailure.Connection("no pipe"));
         }
@@ -214,7 +214,7 @@ public class HelperRelayTests
     {
         public const string UpdateReply = "{\"done\":{}}";
 
-        private ulong lastRequest;
+        private ulong _lastRequest;
 
         public List<HelperPipe.Request> Received { get; } = [];
 
@@ -224,7 +224,7 @@ public class HelperRelayTests
 
         public Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
         {
-            HelperPipe.Request sent = request(++lastRequest);
+            HelperPipe.Request sent = request(++_lastRequest);
             Received.Add(sent);
             if (failing)
             {

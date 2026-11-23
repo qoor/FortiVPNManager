@@ -43,34 +43,34 @@ internal sealed class HelperRelay
     private sealed record Link(IHelperChannel Channel, ulong Id);
 
     /// <summary>The service keeps the pipe ready; a missing one means it is not running.</summary>
-    private static readonly TimeSpan ConnectLimit = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_connectLimit = TimeSpan.FromSeconds(2);
 
-    private static readonly TimeSpan RestartLimit = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan s_restartLimit = TimeSpan.FromSeconds(20);
 
-    private readonly string appBuild;
-    private readonly HelperInbound inbound;
-    private readonly OpenHelperChannel open;
-    private readonly TimeSpan retryDelay;
-    private readonly object gate = new();
-    private Link? link;
-    private ulong lastLinkId;
+    private readonly string _appBuild;
+    private readonly HelperInbound _inbound;
+    private readonly OpenHelperChannel _open;
+    private readonly TimeSpan _retryDelay;
+    private readonly object _gate = new();
+    private Link? _link;
+    private ulong _lastLinkId;
     /// <summary>The connection whose Helper answered with the app's build.</summary>
-    private ulong? verifiedLinkId;
+    private ulong? _verifiedLinkId;
 
     /// <param name="retryDelay">How long a retry waits for the Helper; Windows restarts a Helper that stopped.</param>
     public HelperRelay(string appBuild, HelperInbound inbound, OpenHelperChannel open, TimeSpan retryDelay)
     {
-        this.appBuild = appBuild;
-        this.inbound = inbound;
-        this.open = open;
-        this.retryDelay = retryDelay;
+        this._appBuild = appBuild;
+        this._inbound = inbound;
+        this._open = open;
+        this._retryDelay = retryDelay;
     }
 
     public async Task Build(Action<PortResponse> reply)
     {
         try
         {
-            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, RestartLimit, Version)));
+            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, s_restartLimit, Version)));
         }
         catch (HelperChannelException error)
         {
@@ -110,17 +110,17 @@ internal sealed class HelperRelay
     {
         try
         {
-            reply(await OnConnection<PortResponse>(retrying, ConnectLimit, async current =>
+            reply(await OnConnection<PortResponse>(retrying, s_connectLimit, async current =>
             {
                 if (verified && VerifiedLinkId != current.Id)
                 {
                     string build = await Version(current);
-                    if (build != appBuild)
+                    if (build != _appBuild)
                     {
                         return new PortResponse.HelperBuildMismatch(build);
                     }
                 }
-                if (!inbound.IsActive(current.Id))
+                if (!_inbound.IsActive(current.Id))
                 {
                     throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
                 }
@@ -144,7 +144,7 @@ internal sealed class HelperRelay
         Link current;
         try
         {
-            current = CurrentLink(ConnectLimit);
+            current = CurrentLink(s_connectLimit);
             HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id));
             HelperPipe.Message.ReplyFlag flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
             reply(new PortResponse.HelperReplyFlag(flag.Value));
@@ -160,13 +160,13 @@ internal sealed class HelperRelay
     /// <summary>The Helper's build on <paramref name="current"/>, which is verified when the build is the app's.</summary>
     private async Task<string> Version(Link current)
     {
-        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, appBuild));
+        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, _appBuild));
         string build = (answer as HelperPipe.Message.Build ?? throw Unreadable(answer)).HelperBuild;
-        lock (gate)
+        lock (_gate)
         {
-            if (build == appBuild && inbound.IsActive(current.Id))
+            if (build == _appBuild && _inbound.IsActive(current.Id))
             {
-                verifiedLinkId = current.Id;
+                _verifiedLinkId = current.Id;
             }
         }
         return build;
@@ -182,7 +182,7 @@ internal sealed class HelperRelay
         Link? current = null;
         try
         {
-            current = CurrentLink(ConnectLimit);
+            current = CurrentLink(s_connectLimit);
             return await body(current);
         }
         catch (HelperChannelException error) when (retrying && IsConnectionFailure(error.Failure))
@@ -191,7 +191,7 @@ internal sealed class HelperRelay
             {
                 Invalidate(current);
             }
-            await Task.Delay(retryDelay);
+            await Task.Delay(_retryDelay);
             return await body(CurrentLink(retryLimit));
         }
     }
@@ -200,9 +200,9 @@ internal sealed class HelperRelay
     {
         get
         {
-            lock (gate)
+            lock (_gate)
             {
-                return verifiedLinkId;
+                return _verifiedLinkId;
             }
         }
     }
@@ -210,29 +210,29 @@ internal sealed class HelperRelay
     /// <summary>The live connection, or a new one when there is none or the last one was lost.</summary>
     private Link CurrentLink(TimeSpan limit)
     {
-        lock (gate)
+        lock (_gate)
         {
-            if (link is { } current)
+            if (_link is { } current)
             {
-                if (inbound.IsActive(current.Id))
+                if (_inbound.IsActive(current.Id))
                 {
                     return current;
                 }
                 InvalidateLocked(current);
             }
-            ulong id = ++lastLinkId;
-            IHelperChannel channel = open(id, inbound, limit);
+            ulong id = ++_lastLinkId;
+            IHelperChannel channel = _open(id, _inbound, limit);
             // Active before anything is read, so a connection that ends at once is reported and dropped.
-            inbound.Activate(id);
+            _inbound.Activate(id);
             channel.Start();
-            link = new Link(channel, id);
-            return link;
+            _link = new Link(channel, id);
+            return _link;
         }
     }
 
     private void Invalidate(Link target)
     {
-        lock (gate)
+        lock (_gate)
         {
             InvalidateLocked(target);
         }
@@ -244,12 +244,12 @@ internal sealed class HelperRelay
     /// </summary>
     private void InvalidateLocked(Link target)
     {
-        inbound.End(target.Id);
+        _inbound.End(target.Id);
         target.Channel.Dispose();
-        if (link?.Id == target.Id)
+        if (_link?.Id == target.Id)
         {
-            link = null;
-            verifiedLinkId = null;
+            _link = null;
+            _verifiedLinkId = null;
         }
     }
 
@@ -268,30 +268,30 @@ internal sealed class HelperRelay
 /// </summary>
 internal sealed class HelperInbound(Action<SystemEvent> post)
 {
-    private readonly object gate = new();
-    private ulong? activeId;
+    private readonly object _gate = new();
+    private ulong? _activeId;
 
     public void Activate(ulong id)
     {
-        lock (gate)
+        lock (_gate)
         {
-            activeId = id;
+            _activeId = id;
         }
     }
 
     public bool IsActive(ulong id)
     {
-        lock (gate)
+        lock (_gate)
         {
-            return activeId == id;
+            return _activeId == id;
         }
     }
 
     public void Pass(SystemEvent systemEvent, ulong id)
     {
-        lock (gate)
+        lock (_gate)
         {
-            if (activeId == id)
+            if (_activeId == id)
             {
                 post(systemEvent);
             }
@@ -301,13 +301,13 @@ internal sealed class HelperInbound(Action<SystemEvent> post)
     /// <summary>Reports the loss once, if <paramref name="id"/> is still the active connection.</summary>
     public void End(ulong id)
     {
-        lock (gate)
+        lock (_gate)
         {
-            if (activeId != id)
+            if (_activeId != id)
             {
                 return;
             }
-            activeId = null;
+            _activeId = null;
             post(new SystemEvent.HelperConnectionLost());
         }
     }

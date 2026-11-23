@@ -190,8 +190,8 @@ public class HelperStartTests
     /// </summary>
     private sealed class Harness : IHelperService
     {
-        private int accepted;
-        private TimeSpan acceptedAt;
+        private int _accepted;
+        private TimeSpan _acceptedAt;
 
         public HelperServiceState Before { get; init; } = HelperServiceState.Stopped;
 
@@ -226,8 +226,8 @@ public class HelperStartTests
             },
             line => Notes.Add((line, Now)));
 
-        public HelperServiceState State() => accepted > 0
-            ? After(accepted, Now - acceptedAt)
+        public HelperServiceState State() => _accepted > 0
+            ? After(_accepted, Now - _acceptedAt)
             : Now < BeforeUntil ? Before : ThenBefore;
 
         public StartAnswer Start()
@@ -238,8 +238,8 @@ public class HelperStartTests
             Now += StartTakes(number);
             if (answer is StartAnswer.Requested)
             {
-                accepted = number;
-                acceptedAt = Now;
+                _accepted = number;
+                _acceptedAt = Now;
             }
             return answer;
         }

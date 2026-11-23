@@ -9,110 +9,110 @@ namespace FortiVPNManager.Ui.Settings;
 
 internal sealed class GeneralPane : IPane
 {
-    private readonly AppUi ui;
-    private readonly StackPanel status = new() { Spacing = 4 };
-    private readonly StackPanel startup = new() { Spacing = 4 };
-    private readonly StackPanel import = new() { Spacing = 4 };
-    private readonly StackPanel importReport = new() { Spacing = 4 };
-    private readonly TextBlock importSource = Cards.Value();
-    private readonly TextBlock importServer = Cards.Value();
-    private readonly InfoBar importFailed = Cards.Notice(InfoBarSeverity.Error);
-    private readonly SettingsCard importClose = new() { ContentAlignment = ContentAlignment.Left };
-    private readonly SettingsCard current = Cards.Card(L("Current status"));
-    private readonly FontIcon currentMark;
-    private readonly TextBlock currentText;
-    private readonly TextBlock reasonValue = Cards.Value();
-    private readonly SettingsCard reason;
-    private readonly StackPanel setupItems = new() { Spacing = 4 };
-    private readonly InfoBar failure = Cards.Notice(InfoBarSeverity.Error);
-    private readonly Button failureAction = new();
-    private readonly TextBlock connectedAtValue = Cards.Value();
-    private readonly TextBlock tunnelIpValue = Cards.Value();
-    private readonly TextBlock proactiveValue = Cards.Value();
-    private readonly TextBlock nextAttemptValue = Cards.Value();
-    private readonly SettingsCard connectedAt;
-    private readonly SettingsCard tunnelIp;
-    private readonly SettingsCard proactive;
-    private readonly SettingsCard nextAttempt;
-    private readonly Button connect = new() { Content = L("Connect") };
-    private readonly Button disconnect = new() { Content = L("Disconnect") };
-    private readonly Button reconnectNow = new() { Content = L("Reconnect Now") };
-    private readonly ToggleSwitch openAtLogin = new();
-    private readonly SettingsCard openAtLoginCard;
-    private readonly InfoBar openAtLoginError = Cards.Notice(InfoBarSeverity.Error);
-    private readonly ToggleSwitch autoConnect = new();
-    private readonly SettingsCard autoConnectCard;
-    private readonly SettingsCard update = new() { Header = L("Software Update"), HeaderIcon = new FontIcon { Glyph = "\uE72C" }, IsClickEnabled = true };
-    private readonly InfoBadge updateDot = new() { Style = (Style)Application.Current.Resources["AttentionDotInfoBadgeStyle"] };
-    private IReadOnlyList<SetupItem> shownItems = [];
-    private FailureReason? shownFailure;
+    private readonly AppUi _ui;
+    private readonly StackPanel _status = new() { Spacing = 4 };
+    private readonly StackPanel _startup = new() { Spacing = 4 };
+    private readonly StackPanel _import = new() { Spacing = 4 };
+    private readonly StackPanel _importReport = new() { Spacing = 4 };
+    private readonly TextBlock _importSource = Cards.Value();
+    private readonly TextBlock _importServer = Cards.Value();
+    private readonly InfoBar _importFailed = Cards.Notice(InfoBarSeverity.Error);
+    private readonly SettingsCard _importClose = new() { ContentAlignment = ContentAlignment.Left };
+    private readonly SettingsCard _current = Cards.Card(L("Current status"));
+    private readonly FontIcon _currentMark;
+    private readonly TextBlock _currentText;
+    private readonly TextBlock _reasonValue = Cards.Value();
+    private readonly SettingsCard _reason;
+    private readonly StackPanel _setupItems = new() { Spacing = 4 };
+    private readonly InfoBar _failure = Cards.Notice(InfoBarSeverity.Error);
+    private readonly Button _failureAction = new();
+    private readonly TextBlock _connectedAtValue = Cards.Value();
+    private readonly TextBlock _tunnelIpValue = Cards.Value();
+    private readonly TextBlock _proactiveValue = Cards.Value();
+    private readonly TextBlock _nextAttemptValue = Cards.Value();
+    private readonly SettingsCard _connectedAt;
+    private readonly SettingsCard _tunnelIp;
+    private readonly SettingsCard _proactive;
+    private readonly SettingsCard _nextAttempt;
+    private readonly Button _connect = new() { Content = L("Connect") };
+    private readonly Button _disconnect = new() { Content = L("Disconnect") };
+    private readonly Button _reconnectNow = new() { Content = L("Reconnect Now") };
+    private readonly ToggleSwitch _openAtLogin = new();
+    private readonly SettingsCard _openAtLoginCard;
+    private readonly InfoBar _openAtLoginError = Cards.Notice(InfoBarSeverity.Error);
+    private readonly ToggleSwitch _autoConnect = new();
+    private readonly SettingsCard _autoConnectCard;
+    private readonly SettingsCard _update = new() { Header = L("Software Update"), HeaderIcon = new FontIcon { Glyph = "\uE72C" }, IsClickEnabled = true };
+    private readonly InfoBadge _updateDot = new() { Style = (Style)Application.Current.Resources["AttentionDotInfoBadgeStyle"] };
+    private IReadOnlyList<SetupItem> _shownItems = [];
+    private FailureReason? _shownFailure;
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
-    private readonly Dictionary<string, FrameworkElement> rows = [];
-    private bool refreshing;
+    private readonly Dictionary<string, FrameworkElement> _rows = [];
+    private bool _refreshing;
 
     public GeneralPane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
-        (Grid? currentLine, currentMark, currentText) = Cards.StatusLine();
-        current.Content = currentLine;
-        reason = Cards.Card(L("Reason"), reasonValue);
-        connectedAt = Cards.Card(L("Connected at"), connectedAtValue);
-        tunnelIp = Cards.Card(L("Tunnel IP"), tunnelIpValue);
-        proactive = Cards.Card(L("Next proactive reconnect"), proactiveValue);
-        nextAttempt = Cards.Card(L("Next attempt"), nextAttemptValue);
-        failure.ActionButton = failureAction;
-        failureAction.Click += (_, _) =>
+        this._ui = ui;
+        (Grid? currentLine, _currentMark, _currentText) = Cards.StatusLine();
+        _current.Content = currentLine;
+        _reason = Cards.Card(L("Reason"), _reasonValue);
+        _connectedAt = Cards.Card(L("Connected at"), _connectedAtValue);
+        _tunnelIp = Cards.Card(L("Tunnel IP"), _tunnelIpValue);
+        _proactive = Cards.Card(L("Next proactive reconnect"), _proactiveValue);
+        _nextAttempt = Cards.Card(L("Next attempt"), _nextAttemptValue);
+        _failure.ActionButton = _failureAction;
+        _failureAction.Click += (_, _) =>
         {
-            if (shownFailure is { } shown)
+            if (_shownFailure is { } shown)
             {
                 ui.Settings.Show(shown.Pane());
             }
         };
-        connect.Click += (_, _) => ui.Send(new Command.Connect());
-        disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
-        reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
-        status.Children.Add(Cards.SectionHeader(L("Status")));
-        SettingsCard buttons = Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow));
-        rows["Current status"] = current;
-        rows["Connected at"] = connectedAt;
-        rows["Tunnel IP"] = tunnelIp;
-        rows["Next proactive reconnect"] = proactive;
-        rows[SettingsSearch.ConnectionButtons] = buttons;
-        foreach (UIElement element in new UIElement[] { current, reason, setupItems, failure, connectedAt, tunnelIp, proactive, nextAttempt, buttons })
+        _connect.Click += (_, _) => ui.Send(new Command.Connect());
+        _disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
+        _reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
+        _status.Children.Add(Cards.SectionHeader(L("Status")));
+        SettingsCard buttons = Cards.ActionCard(Cards.Buttons(_connect, _disconnect, _reconnectNow));
+        _rows["Current status"] = _current;
+        _rows["Connected at"] = _connectedAt;
+        _rows["Tunnel IP"] = _tunnelIp;
+        _rows["Next proactive reconnect"] = _proactive;
+        _rows[SettingsSearch.ConnectionButtons] = buttons;
+        foreach (UIElement element in new UIElement[] { _current, _reason, _setupItems, _failure, _connectedAt, _tunnelIp, _proactive, _nextAttempt, buttons })
         {
-            status.Children.Add(element);
+            _status.Children.Add(element);
         }
 
-        openAtLoginCard = Cards.Card(L("Open at login"), openAtLogin);
-        openAtLogin.Toggled += (_, _) =>
+        _openAtLoginCard = Cards.Card(L("Open at login"), _openAtLogin);
+        _openAtLogin.Toggled += (_, _) =>
         {
-            if (!refreshing)
+            if (!_refreshing)
             {
-                ui.Send(new Command.SetOpenAtLogin(openAtLogin.IsOn));
+                ui.Send(new Command.SetOpenAtLogin(_openAtLogin.IsOn));
             }
         };
-        autoConnectCard = Cards.Card(L("Connect automatically at launch"), autoConnect);
-        autoConnect.Toggled += (_, _) =>
+        _autoConnectCard = Cards.Card(L("Connect automatically at launch"), _autoConnect);
+        _autoConnect.Toggled += (_, _) =>
         {
-            if (!refreshing)
+            if (!_refreshing)
             {
-                ui.Send(new Command.SetConnectionOption(new ConnectionOption.AutoConnectOnLaunch(autoConnect.IsOn)));
+                ui.Send(new Command.SetConnectionOption(new ConnectionOption.AutoConnectOnLaunch(_autoConnect.IsOn)));
             }
         };
-        rows["Open at login"] = openAtLoginCard;
-        rows["Connect automatically at launch"] = autoConnectCard;
-        startup.Children.Add(Cards.SectionHeader(L("Startup")));
-        startup.Children.Add(openAtLoginCard);
-        startup.Children.Add(openAtLoginError);
-        startup.Children.Add(autoConnectCard);
+        _rows["Open at login"] = _openAtLoginCard;
+        _rows["Connect automatically at launch"] = _autoConnectCard;
+        _startup.Children.Add(Cards.SectionHeader(L("Startup")));
+        _startup.Children.Add(_openAtLoginCard);
+        _startup.Children.Add(_openAtLoginError);
+        _startup.Children.Add(_autoConnectCard);
 
-        update.Content = updateDot;
-        update.Click += (_, _) => ui.Settings.ShowUpdates();
-        page.BodyPanel.Children.Add(rows["Software Update"] = update);
-        page.BodyPanel.Children.Add(status);
-        page.BodyPanel.Children.Add(startup);
+        _update.Content = _updateDot;
+        _update.Click += (_, _) => ui.Settings.ShowUpdates();
+        page.BodyPanel.Children.Add(_rows["Software Update"] = _update);
+        page.BodyPanel.Children.Add(_status);
+        page.BodyPanel.Children.Add(_startup);
         AddImportRows();
-        page.BodyPanel.Children.Add(import);
+        page.BodyPanel.Children.Add(_import);
     }
 
     /// <summary>
@@ -122,65 +122,65 @@ internal sealed class GeneralPane : IPane
     private void AddImportRows()
     {
         var importButton = new Button { Content = L("Import Settings") };
-        importButton.Click += (_, _) => ui.Send(new Command.ImportClientSettings());
-        import.Children.Add(Cards.SectionHeader(L("Import Settings")));
+        importButton.Click += (_, _) => _ui.Send(new Command.ImportClientSettings());
+        _import.Children.Add(Cards.SectionHeader(L("Import Settings")));
         SettingsCard source = Cards.Card(L("FortiClient settings"), importButton);
         source.Describe(L("Brings in the server address from FortiClient."));
-        import.Children.Add(rows[SettingsSearch.ImportRow] = source);
+        _import.Children.Add(_rows[SettingsSearch.ImportRow] = source);
         var close = new Button { Content = L("Close") };
-        close.Click += (_, _) => ui.Send(new Command.DismissImportReport());
-        importSource.TextWrapping = TextWrapping.Wrap;
+        close.Click += (_, _) => _ui.Send(new Command.DismissImportReport());
+        _importSource.TextWrapping = TextWrapping.Wrap;
         var report = new StackPanel { Spacing = 4 };
-        report.Children.Add(importSource);
-        report.Children.Add(importServer);
-        importReport.Children.Add(new SettingsCard { Content = report, ContentAlignment = ContentAlignment.Left });
-        import.Children.Add(importReport);
-        import.Children.Add(importFailed);
+        report.Children.Add(_importSource);
+        report.Children.Add(_importServer);
+        _importReport.Children.Add(new SettingsCard { Content = report, ContentAlignment = ContentAlignment.Left });
+        _import.Children.Add(_importReport);
+        _import.Children.Add(_importFailed);
         // Closes the report, whether the import took the server or failed.
-        importClose.Content = close;
-        import.Children.Add(importClose);
+        _importClose.Content = close;
+        _import.Children.Add(_importClose);
     }
 
-    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
+    public FrameworkElement? OpenRow(string key) => _rows.GetValueOrDefault(key);
 
     public void Refresh()
     {
-        refreshing = true;
-        status.Visible(ui.Connection is not null);
-        if (ui.Connection is { } connection)
+        _refreshing = true;
+        _status.Visible(_ui.Connection is not null);
+        if (_ui.Connection is { } connection)
         {
-            ShowStatus(connection, ui.Time);
+            ShowStatus(connection, _ui.Time);
         }
-        startup.Visible(ui.Config is not null);
-        import.Visible(ui.Config is not null);
-        if (ui.Config is { } config)
+        _startup.Visible(_ui.Config is not null);
+        _import.Visible(_ui.Config is not null);
+        if (_ui.Config is { } config)
         {
             ShowStartup(config);
             ShowImport(config.Account.ImportReport);
         }
-        updateDot.Visible(ui.AutoUpdate?.CardDot == true);
-        refreshing = false;
+        _updateDot.Visible(_ui.AutoUpdate?.CardDot == true);
+        _refreshing = false;
     }
 
     private void ShowImport(ClientSettingsImport? report)
     {
         ImportReport? imported = (report as ClientSettingsImport.Imported)?.Report;
-        importReport.Visible(imported is not null);
+        _importReport.Visible(imported is not null);
         if (imported is not null)
         {
-            importSource.Text = L("Imported from the FortiClient connection '%@'.", imported.Source);
+            _importSource.Text = L("Imported from the FortiClient connection '%@'.", imported.Source);
             // Only the server came from FortiClient; the account's other values stay as they were.
-            importServer.Text = L("Server: %@:%@", imported.Host, imported.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            _importServer.Text = L("Server: %@:%@", imported.Host, imported.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
-        importFailed.Show((report as ClientSettingsImport.Failed)?.Error.Message());
-        importClose.Visible(report is not null);
+        _importFailed.Show((report as ClientSettingsImport.Failed)?.Error.Message());
+        _importClose.Visible(report is not null);
     }
 
     private void ShowStatus(ConnectionSection connection, TimeStyle time)
     {
         // The planned reconnect is left to the "Next proactive reconnect" card, as it would make the status long.
-        currentText.Text = connection.StatusLine(ui.Schedule?.Outlook, time, includesPlannedReconnect: false);
-        (currentMark.Glyph, currentMark.Foreground) = connection.Icon switch
+        _currentText.Text = connection.StatusLine(_ui.Schedule?.Outlook, time, includesPlannedReconnect: false);
+        (_currentMark.Glyph, _currentMark.Foreground) = connection.Icon switch
         {
             ConnectionIcon.Connected => ("\uEC61", Cards.Brush("SystemFillColorSuccessBrush")),
             ConnectionIcon.Disconnected => ("\uE738", Cards.Brush("TextFillColorSecondaryBrush")),
@@ -188,39 +188,39 @@ internal sealed class GeneralPane : IPane
             ConnectionIcon.Error => ("\uE7BA", Cards.Brush("SystemFillColorCautionBrush")),
             _ => throw new InvalidOperationException($"unknown connection icon {connection.Icon}"),
         };
-        current.Describe(connection.AccountAppliesNextConnection ? L("Account changes apply from the next connection.") : null);
+        _current.Describe(connection.AccountAppliesNextConnection ? L("Account changes apply from the next connection.") : null);
 
-        reason.Visible(connection.WaitReason is not null);
-        reasonValue.Text = connection.WaitReason?.Summary(time) ?? "";
+        _reason.Visible(connection.WaitReason is not null);
+        _reasonValue.Text = connection.WaitReason?.Summary(time) ?? "";
 
         IReadOnlyList<SetupItem> items = connection.Status is ConnectionStatus.SetupRequired setup ? setup.Items : [];
-        if (!items.SequenceEqual(shownItems))
+        if (!items.SequenceEqual(_shownItems))
         {
-            shownItems = items;
-            setupItems.Children.Clear();
+            _shownItems = items;
+            _setupItems.Children.Clear();
             foreach (SetupItem item in items)
             {
                 var card = new SettingsCard { Header = item.ActionTitle(), IsClickEnabled = true };
-                card.Click += (_, _) => ui.Settings.Show(item.Pane());
-                setupItems.Children.Add(card);
+                card.Click += (_, _) => _ui.Settings.Show(item.Pane());
+                _setupItems.Children.Add(card);
             }
         }
-        setupItems.Visible(items.Count > 0);
+        _setupItems.Visible(items.Count > 0);
 
-        shownFailure = (connection.Status as ConnectionStatus.Failed)?.Reason;
-        failure.Show(shownFailure?.Guidance(time));
-        failureAction.Content = shownFailure?.ActionTitle();
+        _shownFailure = (connection.Status as ConnectionStatus.Failed)?.Reason;
+        _failure.Show(_shownFailure?.Guidance(time));
+        _failureAction.Content = _shownFailure?.ActionTitle();
 
         var connected = connection.Status as ConnectionStatus.Connected;
-        foreach (SettingsCard? card in new[] { connectedAt, tunnelIp, proactive })
+        foreach (SettingsCard? card in new[] { _connectedAt, _tunnelIp, _proactive })
         {
             card.Visible(connected is not null);
         }
         if (connected is not null)
         {
-            connectedAtValue.Text = L("%@ (%@ ago)", time.ClockTime(connected.Since), time.Duration(time.Now - connected.Since));
-            tunnelIpValue.Text = connected.TunnelIp ?? L("Unknown");
-            proactiveValue.Text = connected.ProactiveReconnect switch
+            _connectedAtValue.Text = L("%@ (%@ ago)", time.ClockTime(connected.Since), time.Duration(time.Now - connected.Since));
+            _tunnelIpValue.Text = connected.TunnelIp ?? L("Unknown");
+            _proactiveValue.Text = connected.ProactiveReconnect switch
             {
                 ProactiveReconnect.At at => $"{time.ClockTime(at.Time)} ({time.PlannedReconnect(at.Time)})",
                 ProactiveReconnect.PausedBySchedule => L("Paused by the schedule"),
@@ -230,26 +230,26 @@ internal sealed class GeneralPane : IPane
         }
 
         DateTimeOffset? next = connection.NextAttempt();
-        nextAttempt.Visible(next is not null);
-        nextAttemptValue.Text = next is { } nextAt ? time.ClockTime(nextAt) : "";
+        _nextAttempt.Visible(next is not null);
+        _nextAttemptValue.Text = next is { } nextAt ? time.ClockTime(nextAt) : "";
 
         // Always shown; the ones that don't apply now are dimmed, as in the menu.
-        connect.IsEnabled = connection.Connect == ButtonState.Enabled;
-        disconnect.IsEnabled = connection.Disconnect == ButtonState.Enabled;
-        reconnectNow.IsEnabled = connection.ReconnectNow == ButtonState.Enabled;
+        _connect.IsEnabled = connection.Connect == ButtonState.Enabled;
+        _disconnect.IsEnabled = connection.Disconnect == ButtonState.Enabled;
+        _reconnectNow.IsEnabled = connection.ReconnectNow == ButtonState.Enabled;
     }
 
     private void ShowStartup(ConfigSection config)
     {
         OpenAtLogin login = config.OpenAtLogin;
-        openAtLogin.IsOn = login.Enabled;
-        openAtLoginCard.IsEnabled = login.Available;
-        openAtLoginCard.Describe(login.Available ? null : L("Only available for the app installed in Program Files."));
+        _openAtLogin.IsOn = login.Enabled;
+        _openAtLoginCard.IsEnabled = login.Available;
+        _openAtLoginCard.Describe(login.Available ? null : L("Only available for the app installed in Program Files."));
         // The description already gives the reason a copy outside Program Files can't set it.
         string? error = login.Error is { } failed && (login.Available || failed is not RegistrationError.NotInstalledCopy) ? failed.LoginItemMessage() : null;
-        openAtLoginError.Show(error);
+        _openAtLoginError.Show(error);
 
-        autoConnect.IsOn = config.Options.AutoConnectOnLaunch;
-        autoConnectCard.Describe(ui.Schedule?.Enabled == true ? L("With the schedule on, this connects only during the scheduled hours.") : null);
+        _autoConnect.IsOn = config.Options.AutoConnectOnLaunch;
+        _autoConnectCard.Describe(_ui.Schedule?.Enabled == true ? L("With the schedule on, this connects only during the scheduled hours.") : null);
     }
 }

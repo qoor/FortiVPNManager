@@ -11,16 +11,16 @@ namespace FortiVPNManager.Contract.Tests;
 /// </summary>
 public class MessageCodingTests
 {
-    private static readonly Type[] ContractTypes = typeof(MessageCoding).Assembly.GetTypes();
+    private static readonly Type[] s_contractTypes = typeof(MessageCoding).Assembly.GetTypes();
 
     /// <summary>The abstract records whose nested records are their cases; static classes are abstract too, but sealed.</summary>
-    private static readonly Type[] CasesTypes = ContractTypes.Where(type => type.IsAbstract && !type.IsSealed).ToArray();
+    private static readonly Type[] s_casesTypes = s_contractTypes.Where(type => type.IsAbstract && !type.IsSealed).ToArray();
 
     [Fact]
     public void EveryCaseIsListed()
     {
-        Assert.Contains(typeof(AppInternal.ToRuntime), CasesTypes);
-        IEnumerable<string?> unlisted = CasesTypes
+        Assert.Contains(typeof(AppInternal.ToRuntime), s_casesTypes);
+        IEnumerable<string?> unlisted = s_casesTypes
             .SelectMany(type => type.GetNestedTypes().Where(nested => nested.IsSubclassOf(type)))
             .Where(@case => MessageCoding.Default.GetTypeInfo(@case) is null)
             .Select(@case => @case.FullName);
@@ -30,8 +30,8 @@ public class MessageCodingTests
     [Fact]
     public void EveryTypeOfCasesOrEnumHasItsConverter()
     {
-        IEnumerable<string?> unconverted = CasesTypes
-            .Concat(ContractTypes.Where(type => type.IsEnum))
+        IEnumerable<string?> unconverted = s_casesTypes
+            .Concat(s_contractTypes.Where(type => type.IsEnum))
             .Where(type => type.GetCustomAttribute<JsonConverterAttribute>() is null)
             .Select(type => type.FullName);
         Assert.Empty(unconverted);

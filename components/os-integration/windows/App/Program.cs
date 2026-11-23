@@ -32,12 +32,12 @@ public static class Program
     /// </summary>
     private const string RunningName = @"Local\FortiVPNManager.Running";
 
-    private static readonly object LaunchGate = new();
-    private static AppInstance? instance;
-    private static Mutex? running;
-    private static App? launched;
-    private static AppActivationArguments? reopenedEarly;
-    private static bool leaving;
+    private static readonly object s_launchGate = new();
+    private static AppInstance? s_instance;
+    private static Mutex? s_running;
+    private static App? s_launched;
+    private static AppActivationArguments? s_reopenedEarly;
+    private static bool s_leaving;
 
     [STAThread]
     public static void Main()
@@ -54,11 +54,11 @@ public static class Program
             Task.Run(() => main.RedirectActivationToAsync(activation).AsTask()).Wait();
             return;
         }
-        instance = main;
-        running = new Mutex(false, RunningName);
+        s_instance = main;
+        s_running = new Mutex(false, RunningName);
         try
         {
-            running.WaitOne();
+            s_running.WaitOne();
         }
         catch (AbandonedMutexException)
         {
@@ -88,10 +88,10 @@ public static class Program
     /// </remarks>
     internal static void Launched(App app)
     {
-        lock (LaunchGate)
+        lock (s_launchGate)
         {
-            launched = app;
-            if (reopenedEarly is { } early)
+            s_launched = app;
+            if (s_reopenedEarly is { } early)
             {
                 app.Reopened(early);
             }
@@ -104,28 +104,28 @@ public static class Program
     /// </summary>
     internal static void Leave()
     {
-        lock (LaunchGate)
+        lock (s_launchGate)
         {
-            leaving = true;
+            s_leaving = true;
         }
-        instance?.UnregisterKey();
+        s_instance?.UnregisterKey();
     }
 
     /// <summary>A start of another copy, kept until the app has launched; only the latest counts.</summary>
     private static void Reopened(AppActivationArguments activation)
     {
-        lock (LaunchGate)
+        lock (s_launchGate)
         {
-            if (leaving)
+            if (s_leaving)
             {
                 return;
             }
-            if (launched is null)
+            if (s_launched is null)
             {
-                reopenedEarly = activation;
+                s_reopenedEarly = activation;
                 return;
             }
-            launched.Reopened(activation);
+            s_launched.Reopened(activation);
         }
     }
 

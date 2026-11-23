@@ -15,51 +15,51 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 internal sealed class ConnectionPane : IPane
 {
-    private readonly AppUi ui;
-    private readonly StackPanel body = new() { Spacing = 4 };
-    private readonly ToggleSwitch scheduleEnabled = new();
-    private readonly List<SettingsCard> scheduleRows = [];
-    private readonly Dictionary<Weekday, ToggleButton> days = [];
-    private readonly TimePicker start = new();
-    private readonly TimePicker end = new();
-    private readonly InfoBar hoursError = Cards.Notice(InfoBarSeverity.Error);
-    private readonly MinutesBox awayMinutes;
-    private readonly TextBlock outlookValue = Cards.Value();
-    private readonly SettingsCard outlook;
-    private readonly MinutesBox sessionMax;
-    private readonly ToggleSwitch proactive = new();
-    private readonly MinutesBox margin;
-    private readonly SettingsCard marginCard;
-    private readonly ToggleSwitch afterSleep = new();
-    private readonly MinutesBox minSleep;
-    private readonly SettingsCard minSleepCard;
-    private readonly InfoBar optionsError = Cards.Notice(InfoBarSeverity.Error);
+    private readonly AppUi _ui;
+    private readonly StackPanel _body = new() { Spacing = 4 };
+    private readonly ToggleSwitch _scheduleEnabled = new();
+    private readonly List<SettingsCard> _scheduleRows = [];
+    private readonly Dictionary<Weekday, ToggleButton> _days = [];
+    private readonly TimePicker _start = new();
+    private readonly TimePicker _end = new();
+    private readonly InfoBar _hoursError = Cards.Notice(InfoBarSeverity.Error);
+    private readonly MinutesBox _awayMinutes;
+    private readonly TextBlock _outlookValue = Cards.Value();
+    private readonly SettingsCard _outlook;
+    private readonly MinutesBox _sessionMax;
+    private readonly ToggleSwitch _proactive = new();
+    private readonly MinutesBox _margin;
+    private readonly SettingsCard _marginCard;
+    private readonly ToggleSwitch _afterSleep = new();
+    private readonly MinutesBox _minSleep;
+    private readonly SettingsCard _minSleepCard;
+    private readonly InfoBar _optionsError = Cards.Notice(InfoBarSeverity.Error);
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
-    private readonly Dictionary<string, FrameworkElement> rows = [];
+    private readonly Dictionary<string, FrameworkElement> _rows = [];
     /// <summary>The expander each row in one is in, which the person may have collapsed.</summary>
-    private readonly Dictionary<FrameworkElement, SettingsExpander> expanders = [];
-    private ScheduleSection? schedule;
-    private bool refreshing;
+    private readonly Dictionary<FrameworkElement, SettingsExpander> _expanders = [];
+    private ScheduleSection? _schedule;
+    private bool _refreshing;
 
     public ConnectionPane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
-        awayMinutes = new MinutesBox(this, minutes => new ConnectionOption.AwayMinutes(minutes));
-        sessionMax = new MinutesBox(this, minutes => new ConnectionOption.SessionMaxMinutes(minutes));
-        margin = new MinutesBox(this, minutes => new ConnectionOption.ProactiveMarginMinutes(minutes));
-        minSleep = new MinutesBox(this, minutes => new ConnectionOption.MinSleepMinutes(minutes));
-        outlook = Cards.Card(L("Next"), outlookValue);
-        marginCard = Cards.Card(L("Margin"), margin.Row);
-        minSleepCard = Cards.Card(L("Minimum sleep time"), minSleep.Row);
+        this._ui = ui;
+        _awayMinutes = new MinutesBox(this, minutes => new ConnectionOption.AwayMinutes(minutes));
+        _sessionMax = new MinutesBox(this, minutes => new ConnectionOption.SessionMaxMinutes(minutes));
+        _margin = new MinutesBox(this, minutes => new ConnectionOption.ProactiveMarginMinutes(minutes));
+        _minSleep = new MinutesBox(this, minutes => new ConnectionOption.MinSleepMinutes(minutes));
+        _outlook = Cards.Card(L("Next"), _outlookValue);
+        _marginCard = Cards.Card(L("Margin"), _margin.Row);
+        _minSleepCard = Cards.Card(L("Minimum sleep time"), _minSleep.Row);
         AddScheduleRows();
         AddReconnectRows();
-        page.BodyPanel.Children.Add(body);
+        page.BodyPanel.Children.Add(_body);
     }
 
     private void AddScheduleRows()
     {
-        body.Children.Add(Cards.SectionHeader(L("Schedule"), first: true));
-        var expander = new SettingsExpander { Header = L("Connect on a schedule"), Content = Switch(scheduleEnabled, on => new ConnectionOption.ScheduleEnabled(on)), IsExpanded = true };
+        _body.Children.Add(Cards.SectionHeader(L("Schedule"), first: true));
+        var expander = new SettingsExpander { Header = L("Connect on a schedule"), Content = Switch(_scheduleEnabled, on => new ConnectionOption.ScheduleEnabled(on)), IsExpanded = true };
         // Seven equal buttons, 40 px each beside the header and narrower when the card is narrow.
         var dayRow = new Grid { ColumnSpacing = 4 };
         foreach (Weekday day in Enum.GetValues<Weekday>())
@@ -69,14 +69,14 @@ internal sealed class ConnectionPane : IPane
             dayRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             // Click comes only from the person, unlike Checked, which the refresh would also raise.
             button.Click += (_, _) => Send(new ConnectionOption.ScheduleDay(day, button.IsChecked == true));
-            days[day] = button;
+            _days[day] = button;
             dayRow.Children.Add(button);
         }
-        scheduleRows.Add((SettingsCard)(rows["Days"] = Cards.Card(L("Days"), dayRow).Fit(dayRow, (7 * 40) + (6 * 4))));
-        start.SelectedTimeChanged += (_, _) => HoursPicked();
-        end.SelectedTimeChanged += (_, _) => HoursPicked();
+        _scheduleRows.Add((SettingsCard)(_rows["Days"] = Cards.Card(L("Days"), dayRow).Fit(dayRow, (7 * 40) + (6 * 4))));
+        _start.SelectedTimeChanged += (_, _) => HoursPicked();
+        _end.SelectedTimeChanged += (_, _) => HoursPicked();
         // The picker and the button inside it keep 242 px, which would run past a narrow card.
-        foreach (TimePicker? picker in new[] { start, end })
+        foreach (TimePicker? picker in new[] { _start, _end })
         {
             picker.MinWidth = 0;
             picker.Loaded += (_, _) =>
@@ -87,45 +87,45 @@ internal sealed class ConnectionPane : IPane
                 }
             };
         }
-        scheduleRows.Add((SettingsCard)(rows["Start time"] = Cards.Card(L("Start time"), start).Fit(start, 242)));
-        scheduleRows.Add((SettingsCard)(rows["End time"] = Cards.Card(L("End time"), end).Fit(end, 242)));
-        SettingsCard away = Cards.Card(L("Stop reconnecting after being away"), awayMinutes.Row);
+        _scheduleRows.Add((SettingsCard)(_rows["Start time"] = Cards.Card(L("Start time"), _start).Fit(_start, 242)));
+        _scheduleRows.Add((SettingsCard)(_rows["End time"] = Cards.Card(L("End time"), _end).Fit(_end, 242)));
+        SettingsCard away = Cards.Card(L("Stop reconnecting after being away"), _awayMinutes.Row);
         ToolTipService.SetToolTip(away, L("After the end time, reconnects wait while you're away (screen locked or off, PC asleep) and stop after this long."));
-        scheduleRows.Add(away);
-        rows["Stop reconnecting after being away"] = away;
-        scheduleRows.Add(outlook);
-        foreach (SettingsCard row in scheduleRows)
+        _scheduleRows.Add(away);
+        _rows["Stop reconnecting after being away"] = away;
+        _scheduleRows.Add(_outlook);
+        foreach (SettingsCard row in _scheduleRows)
         {
             expander.Items.Add(row);
-            expanders[row] = expander;
+            _expanders[row] = expander;
         }
-        body.Children.Add(rows["Connect on a schedule"] = expander);
-        body.Children.Add(hoursError);
-        body.Children.Add(Cards.Footer(L("Connects at the start time on the selected days. The end time never disconnects.")));
+        _body.Children.Add(_rows["Connect on a schedule"] = expander);
+        _body.Children.Add(_hoursError);
+        _body.Children.Add(Cards.Footer(L("Connects at the start time on the selected days. The end time never disconnects.")));
     }
 
     private void AddReconnectRows()
     {
-        body.Children.Add(Cards.SectionHeader(L("Reconnect")));
-        body.Children.Add(rows["Maximum session length"] = Cards.Card(L("Maximum session length"), sessionMax.Row));
-        var proactiveRow = new SettingsExpander { Header = L("Proactive reconnect"), Content = Switch(proactive, on => new ConnectionOption.ProactiveReconnect(on)), IsExpanded = true };
-        proactiveRow.Items.Add(marginCard);
-        body.Children.Add(rows["Proactive reconnect"] = proactiveRow);
-        rows["Margin"] = marginCard;
-        expanders[marginCard] = proactiveRow;
-        var sleepRow = new SettingsExpander { Header = L("Reconnect after sleep"), Content = Switch(afterSleep, on => new ConnectionOption.ReconnectAfterSleep(on)), IsExpanded = true };
+        _body.Children.Add(Cards.SectionHeader(L("Reconnect")));
+        _body.Children.Add(_rows["Maximum session length"] = Cards.Card(L("Maximum session length"), _sessionMax.Row));
+        var proactiveRow = new SettingsExpander { Header = L("Proactive reconnect"), Content = Switch(_proactive, on => new ConnectionOption.ProactiveReconnect(on)), IsExpanded = true };
+        proactiveRow.Items.Add(_marginCard);
+        _body.Children.Add(_rows["Proactive reconnect"] = proactiveRow);
+        _rows["Margin"] = _marginCard;
+        _expanders[_marginCard] = proactiveRow;
+        var sleepRow = new SettingsExpander { Header = L("Reconnect after sleep"), Content = Switch(_afterSleep, on => new ConnectionOption.ReconnectAfterSleep(on)), IsExpanded = true };
         ToolTipService.SetToolTip(sleepRow, L("Starts a new connection when the PC wakes from sleeping at least the minimum sleep time."));
-        sleepRow.Items.Add(minSleepCard);
-        body.Children.Add(rows["Reconnect after sleep"] = sleepRow);
-        rows["Minimum sleep time"] = minSleepCard;
-        expanders[minSleepCard] = sleepRow;
-        body.Children.Add(optionsError);
-        body.Children.Add(Cards.Footer(L("Connects again before the server ends the session (maximum session length − margin).")));
+        sleepRow.Items.Add(_minSleepCard);
+        _body.Children.Add(_rows["Reconnect after sleep"] = sleepRow);
+        _rows["Minimum sleep time"] = _minSleepCard;
+        _expanders[_minSleepCard] = sleepRow;
+        _body.Children.Add(_optionsError);
+        _body.Children.Add(Cards.Footer(L("Connects again before the server ends the session (maximum session length − margin).")));
     }
 
     public void FinishTyping()
     {
-        foreach (MinutesBox? minutes in new[] { awayMinutes, sessionMax, margin, minSleep })
+        foreach (MinutesBox? minutes in new[] { _awayMinutes, _sessionMax, _margin, _minSleep })
         {
             minutes.Commit();
         }
@@ -140,9 +140,9 @@ internal sealed class ConnectionPane : IPane
 
     private void Send(ConnectionOption option)
     {
-        if (!refreshing)
+        if (!_refreshing)
         {
-            ui.Send(new Command.SetConnectionOption(option));
+            _ui.Send(new Command.SetConnectionOption(option));
         }
     }
 
@@ -153,22 +153,22 @@ internal sealed class ConnectionPane : IPane
     /// </summary>
     private void HoursPicked()
     {
-        if (refreshing || schedule is null || start.SelectedTime is not { } startTime || end.SelectedTime is not { } endTime)
+        if (_refreshing || _schedule is null || _start.SelectedTime is not { } startTime || _end.SelectedTime is not { } endTime)
         {
             return;
         }
         var newStart = new TimeOfDay((byte)startTime.Hours, (byte)startTime.Minutes);
         var newEnd = new TimeOfDay((byte)endTime.Hours, (byte)endTime.Minutes);
-        if (newStart != schedule.Start || newEnd != schedule.End || schedule.HoursError is not null)
+        if (newStart != _schedule.Start || newEnd != _schedule.End || _schedule.HoursError is not null)
         {
-            ui.Send(new Command.SetScheduleHours(newStart, newEnd));
+            _ui.Send(new Command.SetScheduleHours(newStart, newEnd));
         }
     }
 
     public FrameworkElement? OpenRow(string key)
     {
-        FrameworkElement? row = rows.GetValueOrDefault(key);
-        if (row is not null && expanders.TryGetValue(row, out SettingsExpander? expander))
+        FrameworkElement? row = _rows.GetValueOrDefault(key);
+        if (row is not null && _expanders.TryGetValue(row, out SettingsExpander? expander))
         {
             expander.IsExpanded = true;
         }
@@ -177,44 +177,44 @@ internal sealed class ConnectionPane : IPane
 
     public void Refresh()
     {
-        body.Visible(ui.Schedule is not null && ui.Config is not null);
-        if (ui.Schedule is not { } current || ui.Config is not { } config)
+        _body.Visible(_ui.Schedule is not null && _ui.Config is not null);
+        if (_ui.Schedule is not { } current || _ui.Config is not { } config)
         {
             return;
         }
-        refreshing = true;
-        bool hoursChanged = schedule is null || schedule.Start != current.Start || schedule.End != current.End;
-        schedule = current;
-        scheduleEnabled.IsOn = current.Enabled;
-        foreach ((Weekday day, ToggleButton? button) in days)
+        _refreshing = true;
+        bool hoursChanged = _schedule is null || _schedule.Start != current.Start || _schedule.End != current.End;
+        _schedule = current;
+        _scheduleEnabled.IsOn = current.Enabled;
+        foreach ((Weekday day, ToggleButton? button) in _days)
         {
             button.IsChecked = current.Days.Contains(day);
         }
         // A pick that wasn't saved stays in its picker until the saved times change.
         if (hoursChanged)
         {
-            start.SelectedTime = new TimeSpan(current.Start.Hour, current.Start.Minute, 0);
-            end.SelectedTime = new TimeSpan(current.End.Hour, current.End.Minute, 0);
+            _start.SelectedTime = new TimeSpan(current.Start.Hour, current.Start.Minute, 0);
+            _end.SelectedTime = new TimeSpan(current.End.Hour, current.End.Minute, 0);
         }
-        hoursError.Show(current.HoursError?.Message());
-        awayMinutes.Show(current.AwayMinutes);
-        outlook.Visible(current.Enabled && current.Outlook is not null);
-        outlookValue.Text = current.Outlook?.Summary(ui.Time) ?? "";
-        foreach (SettingsCard row in scheduleRows)
+        _hoursError.Show(current.HoursError?.Message());
+        _awayMinutes.Show(current.AwayMinutes);
+        _outlook.Visible(current.Enabled && current.Outlook is not null);
+        _outlookValue.Text = current.Outlook?.Summary(_ui.Time) ?? "";
+        foreach (SettingsCard row in _scheduleRows)
         {
             row.IsEnabled = current.Enabled;
         }
 
         ConnectionOptions options = config.Options;
-        sessionMax.Show(options.SessionMaxMinutes);
-        proactive.IsOn = options.ProactiveReconnect;
-        margin.Show(options.MarginMinutes);
-        marginCard.IsEnabled = options.ProactiveReconnect;
-        afterSleep.IsOn = options.ReconnectAfterSleep;
-        minSleep.Show(options.MinSleepMinutes);
-        minSleepCard.IsEnabled = options.ReconnectAfterSleep;
-        optionsError.Show(config.OptionsError?.Message());
-        refreshing = false;
+        _sessionMax.Show(options.SessionMaxMinutes);
+        _proactive.IsOn = options.ProactiveReconnect;
+        _margin.Show(options.MarginMinutes);
+        _marginCard.IsEnabled = options.ProactiveReconnect;
+        _afterSleep.IsOn = options.ReconnectAfterSleep;
+        _minSleep.Show(options.MinSleepMinutes);
+        _minSleepCard.IsEnabled = options.ReconnectAfterSleep;
+        _optionsError.Show(config.OptionsError?.Message());
+        _refreshing = false;
     }
 
     /// <summary>
@@ -225,40 +225,40 @@ internal sealed class ConnectionPane : IPane
     private sealed class MinutesBox
     {
         // Wide enough for the number beside the spin buttons (72) and the clear button (30) shown while typing.
-        private readonly NumberBox box = new()
+        private readonly NumberBox _box = new()
         {
             Width = 160,
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
             SmallChange = 1,
             LargeChange = 10,
         };
-        private readonly ConnectionPane pane;
-        private readonly Func<long, ConnectionOption> change;
-        private MinutesSetting? setting;
+        private readonly ConnectionPane _pane;
+        private readonly Func<long, ConnectionOption> _change;
+        private MinutesSetting? _setting;
 
         public MinutesBox(ConnectionPane pane, Func<long, ConnectionOption> change)
         {
-            this.pane = pane;
-            this.change = change;
-            ToolTipService.SetToolTip(box, L("Page Up and Page Down change it by 10 minutes"));
-            box.ValueChanged += (_, args) =>
+            this._pane = pane;
+            this._change = change;
+            ToolTipService.SetToolTip(_box, L("Page Up and Page Down change it by 10 minutes"));
+            _box.ValueChanged += (_, args) =>
             {
-                if (pane.refreshing || setting is null)
+                if (pane._refreshing || _setting is null)
                 {
                     return;
                 }
                 if (double.IsNaN(args.NewValue))
                 {
-                    box.Value = setting.Value;
+                    _box.Value = _setting.Value;
                     return;
                 }
                 long minutes = (long)Math.Round(args.NewValue);
-                if (minutes != setting.Value)
+                if (minutes != _setting.Value)
                 {
                     pane.Send(change(minutes));
                 }
             };
-            Row = Cards.Row(box, new TextBlock { Text = L("min"), VerticalAlignment = VerticalAlignment.Center });
+            Row = Cards.Row(_box, new TextBlock { Text = L("min"), VerticalAlignment = VerticalAlignment.Center });
         }
 
         public StackPanel Row { get; }
@@ -269,25 +269,25 @@ internal sealed class ConnectionPane : IPane
         /// </summary>
         public void Show(MinutesSetting current)
         {
-            if (current == setting)
+            if (current == _setting)
             {
                 return;
             }
-            setting = current;
-            box.Minimum = current.Minimum;
-            box.Maximum = current.Maximum;
-            box.Value = current.Value;
+            _setting = current;
+            _box.Minimum = current.Minimum;
+            _box.Maximum = current.Maximum;
+            _box.Value = current.Value;
         }
 
         /// <summary>Sends a number still being typed, kept within the range as the box keeps it.</summary>
         public void Commit()
         {
-            if (setting is not null && long.TryParse(box.Text.Trim(), out long typed))
+            if (_setting is not null && long.TryParse(_box.Text.Trim(), out long typed))
             {
-                long minutes = Math.Clamp(typed, setting.Minimum, setting.Maximum);
-                if (minutes != setting.Value)
+                long minutes = Math.Clamp(typed, _setting.Minimum, _setting.Maximum);
+                if (minutes != _setting.Value)
                 {
-                    pane.Send(change(minutes));
+                    _pane.Send(_change(minutes));
                 }
             }
         }

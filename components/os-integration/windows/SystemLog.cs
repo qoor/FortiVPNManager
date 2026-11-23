@@ -24,7 +24,7 @@ internal static class SystemLog
     public static void Write(LogLevel level, LogCategory category, string message) =>
         Write(level == LogLevel.Error ? EventLogEntryType.Error : EventLogEntryType.Information, Name(category), message);
 
-    private static int faultWritten;
+    private static int s_faultWritten;
 
     /// <summary>
     /// A fault that stops the app, kept as macOS keeps a crash report. A fault on the UI thread can reach
@@ -32,7 +32,7 @@ internal static class SystemLog
     /// </summary>
     public static void WriteFault(Exception fault)
     {
-        if (Interlocked.Exchange(ref faultWritten, 1) == 0)
+        if (Interlocked.Exchange(ref s_faultWritten, 1) == 0)
         {
             Write(EventLogEntryType.Error, "app", $"unhandled exception: {fault}");
         }

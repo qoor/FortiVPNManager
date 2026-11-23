@@ -28,7 +28,7 @@ namespace FortiVPNManager.Ui.Settings;
 public sealed partial class SettingsWindow : Window
 {
     /// <summary>The panes' Segoe Fluent Icons glyphs, in the navigation's order.</summary>
-    private static readonly (SettingsPane Pane, string Glyph)[] Panes =
+    private static readonly (SettingsPane Pane, string Glyph)[] s_panes =
     [
         (SettingsPane.General, "\uE713"),
         (SettingsPane.Account, "\uE77B"),
@@ -39,17 +39,17 @@ public sealed partial class SettingsWindow : Window
     ];
 
     /// <summary>Where the window's place and last pane are kept between runs.</summary>
-    private static readonly string PlacementFile = Path.Combine(
+    private static readonly string s_placementFile = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FortiVPNManager", "settings-window.json");
 
-    private readonly AppUi ui;
-    private bool narrow;
-    private bool shown;
-    private SettingsPane lastPane;
+    private readonly AppUi _ui;
+    private bool _narrow;
+    private bool _shown;
+    private SettingsPane _lastPane;
 
     public SettingsWindow(AppUi ui)
     {
-        this.ui = ui;
+        this._ui = ui;
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -59,7 +59,7 @@ public sealed partial class SettingsWindow : Window
         FlyoutSearch.PlaceholderText = L("Search");
         ToolTipService.SetToolTip(NarrowSearchButton, L("Search"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NarrowSearchButton, L("Search"));
-        foreach ((SettingsPane pane, string? glyph) in Panes)
+        foreach ((SettingsPane pane, string? glyph) in s_panes)
         {
             Navigation.MenuItems.Add(new NavigationViewItem { Content = L(pane.TitleKey()), Tag = pane, Icon = new FontIcon { Glyph = glyph } });
         }
@@ -75,7 +75,7 @@ public sealed partial class SettingsWindow : Window
             }
         };
         var placement = Placement.Load();
-        lastPane = placement?.Pane ?? SettingsPane.General;
+        _lastPane = placement?.Pane ?? SettingsPane.General;
         Place(placement);
         SizeChanged += (_, args) => ApplyWidth(args.Size.Width);
         ApplyWidth(AppWindow.Size.Width / Scale);
@@ -85,7 +85,7 @@ public sealed partial class SettingsWindow : Window
     /// <summary>Shows the window on <paramref name="pane"/>, or on the pane last shown.</summary>
     public void Show(SettingsPane? pane)
     {
-        Select(pane ?? lastPane);
+        Select(pane ?? _lastPane);
         // A minimized window comes back, so the menu's Settings… or a notification never looks ignored.
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
         {
@@ -93,10 +93,10 @@ public sealed partial class SettingsWindow : Window
         }
         AppWindow.Show();
         Activate();
-        if (!shown)
+        if (!_shown)
         {
-            shown = true;
-            ui.Send(new AppInternal.Command.SettingsOpened());
+            _shown = true;
+            _ui.Send(new AppInternal.Command.SettingsOpened());
         }
     }
 
@@ -120,8 +120,8 @@ public sealed partial class SettingsWindow : Window
     private void OnClosed()
     {
         (ContentFrame.Content as PanePage)?.Leave();
-        new Placement(lastPane, AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height).Save();
-        ui.Send(new AppInternal.Command.SettingsClosed());
+        new Placement(_lastPane, AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height).Save();
+        _ui.Send(new AppInternal.Command.SettingsClosed());
     }
 
     /// <summary>Sends what the shown pane still has in its fields, as before the window closes or the app quits.</summary>
@@ -153,17 +153,17 @@ public sealed partial class SettingsWindow : Window
         var page = (PanePage)e.Content;
         if (e.Parameter is SettingsSubpage subpage)
         {
-            page.Show(ui, subpage);
-            lastPane = SettingsPane.General;
+            page.Show(_ui, subpage);
+            _lastPane = SettingsPane.General;
         }
         else
         {
             var pane = (SettingsPane)e.Parameter;
-            page.Show(ui, pane, L(pane.TitleKey()));
-            lastPane = pane;
+            page.Show(_ui, pane, L(pane.TitleKey()));
+            _lastPane = pane;
         }
         AppTitleBar.IsBackButtonEnabled = ContentFrame.CanGoBack;
-        Select(lastPane);
+        Select(_lastPane);
     }
 
     private void OnBackRequested(TitleBar sender, object args) => GoBack();
@@ -192,7 +192,7 @@ public sealed partial class SettingsWindow : Window
             sender.ItemsSource = null;
             return;
         }
-        List<SearchResult> results = SettingsSearch.Results(sender.Text, ui.IsShown);
+        List<SearchResult> results = SettingsSearch.Results(sender.Text, _ui.IsShown);
         // The input method finishes the syllable being composed when Down moves into the list, which
         // reports the text again; the same results stay as they are, so the line just chosen stays chosen.
         var shown = (sender.ItemsSource as List<object>)?.Select(line => (line as FrameworkElement)?.Tag as SearchResult).ToList();
@@ -211,7 +211,7 @@ public sealed partial class SettingsWindow : Window
         var line = new Grid { ColumnSpacing = 12, Tag = result, Padding = new Thickness(0, 4, 0, 4) };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        line.Children.Add(new FontIcon { Glyph = Panes.First(p => p.Pane == result.Pane).Glyph, FontSize = 16, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
+        line.Children.Add(new FontIcon { Glyph = s_panes.First(p => p.Pane == result.Pane).Glyph, FontSize = 16, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
         var text = new StackPanel();
         text.Children.Add(new TextBlock { Text = result.Item?.Title ?? L(result.Pane.TitleKey()), TextWrapping = TextWrapping.Wrap, MaxLines = 3 });
         if (result.Item is not null)
@@ -227,7 +227,7 @@ public sealed partial class SettingsWindow : Window
     private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
         SearchResult? result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
-            ?? SettingsSearch.Results(sender.Text, ui.IsShown).FirstOrDefault();
+            ?? SettingsSearch.Results(sender.Text, _ui.IsShown).FirstOrDefault();
         if (result is null)
         {
             return;
@@ -293,9 +293,9 @@ public sealed partial class SettingsWindow : Window
     private void ApplyWidth(double width)
     {
         const double reserved = 230;
-        narrow = width < 800;
+        _narrow = width < 800;
         SearchArea.Width = Math.Clamp(width - 2 * reserved, 200, 516);
-        Navigation.PaneDisplayMode = narrow ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.Left;
+        Navigation.PaneDisplayMode = _narrow ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.Left;
         ApplyWidthLayout();
     }
 
@@ -303,15 +303,15 @@ public sealed partial class SettingsWindow : Window
 
     private void ApplyWidthLayout()
     {
-        AppTitleBar.IsPaneToggleButtonVisible = narrow;
-        SearchArea.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        NarrowSearchButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
+        AppTitleBar.IsPaneToggleButtonVisible = _narrow;
+        SearchArea.Visibility = _narrow ? Visibility.Collapsed : Visibility.Visible;
+        NarrowSearchButton.Visibility = _narrow ? Visibility.Visible : Visibility.Collapsed;
         // The title bar centers its content; the magnifier sits right after the title instead.
         if (Cards.FindDescendant(AppTitleBar, "PART_ContentPresenter") is FrameworkElement presenter)
         {
-            presenter.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+            presenter.HorizontalAlignment = _narrow ? HorizontalAlignment.Left : HorizontalAlignment.Center;
         }
-        if (!narrow)
+        if (!_narrow)
         {
             SearchFlyout.Hide();
         }
@@ -349,7 +349,7 @@ public sealed partial class SettingsWindow : Window
             {
                 return;
             }
-            if (narrow)
+            if (_narrow)
             {
                 OpenNarrowSearch();
             }
@@ -397,7 +397,7 @@ public sealed partial class SettingsWindow : Window
         {
             try
             {
-                Placement? placement = JsonSerializer.Deserialize(File.ReadAllText(PlacementFile), PlacementCoding.Default.Placement);
+                Placement? placement = JsonSerializer.Deserialize(File.ReadAllText(s_placementFile), PlacementCoding.Default.Placement);
                 // A pane number this build doesn't have, from an edited or older file, opens General.
                 return placement is { } read && !Enum.IsDefined(read.Pane) ? read with { Pane = SettingsPane.General } : placement;
             }
@@ -411,8 +411,8 @@ public sealed partial class SettingsWindow : Window
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(PlacementFile)!);
-                File.WriteAllText(PlacementFile, JsonSerializer.Serialize(this, PlacementCoding.Default.Placement));
+                Directory.CreateDirectory(Path.GetDirectoryName(s_placementFile)!);
+                File.WriteAllText(s_placementFile, JsonSerializer.Serialize(this, PlacementCoding.Default.Placement));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {

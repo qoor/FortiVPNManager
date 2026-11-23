@@ -16,8 +16,8 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 internal sealed class AddressList
 {
-    private readonly ListView list = new() { SelectionMode = ListViewSelectionMode.Extended };
-    private readonly TextBlock empty = new()
+    private readonly ListView _list = new() { SelectionMode = ListViewSelectionMode.Extended };
+    private readonly TextBlock _empty = new()
     {
         TextWrapping = TextWrapping.Wrap,
         TextAlignment = TextAlignment.Center,
@@ -27,55 +27,55 @@ internal sealed class AddressList
         IsHitTestVisible = false,
         Foreground = Cards.Brush("TextFillColorSecondaryBrush"),
     };
-    private readonly string placeholder;
-    private readonly Action<IReadOnlyList<string>> onChange;
+    private readonly string _placeholder;
+    private readonly Action<IReadOnlyList<string>> _onChange;
 
     /// <summary>The rows as last shown, the marked ones, and the explained one's (short, full) message.</summary>
-    private IReadOnlyList<string> rows = [];
-    private IReadOnlySet<int> problemRows = new HashSet<int>();
-    private IReadOnlyDictionary<int, (string Text, string Help)> messages = new Dictionary<int, (string, string)>();
-    private bool canAdd;
+    private IReadOnlyList<string> _rows = [];
+    private IReadOnlySet<int> _problemRows = new HashSet<int>();
+    private IReadOnlyDictionary<int, (string Text, string Help)> _messages = new Dictionary<int, (string, string)>();
+    private bool _canAdd;
 
     /// <summary>The row being typed (rows.Count for a new one), its text before, and the box it is typed in.</summary>
-    private int? editingRow;
-    private string? editingOriginal;
-    private TextBox? editor;
-    private bool cancelsEdit;
+    private int? _editingRow;
+    private string? _editingOriginal;
+    private TextBox? _editor;
+    private bool _cancelsEdit;
 
     /// <summary>Rows that arrived while a row was typed; shown when the edit ends.</summary>
-    private (IReadOnlyList<string> Rows, IReadOnlySet<int> Problems, IReadOnlyDictionary<int, (string, string)> Messages)? pending;
+    private (IReadOnlyList<string> Rows, IReadOnlySet<int> Problems, IReadOnlyDictionary<int, (string, string)> Messages)? _pending;
 
     public AddressList(string emptyText, string placeholder, double minHeight, string addTitle, string addHelp, string removeTitle,
         Action<IReadOnlyList<string>> onChange)
     {
-        this.placeholder = placeholder;
-        this.onChange = onChange;
-        empty.Text = emptyText;
-        ScrollViewer.SetVerticalScrollMode(list, ScrollMode.Disabled);
-        ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Disabled);
+        this._placeholder = placeholder;
+        this._onChange = onChange;
+        _empty.Text = emptyText;
+        ScrollViewer.SetVerticalScrollMode(_list, ScrollMode.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
         // The list's own scroll area takes the mouse wheel though it doesn't scroll; the pane scrolls instead.
-        list.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, args) =>
+        _list.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, args) =>
         {
             if (args.Handled && Ancestor<ScrollViewer>(VisualTreeHelper.GetParent(View)) is { } pane)
             {
-                pane.ChangeView(null, pane.VerticalOffset - args.GetCurrentPoint(list).Properties.MouseWheelDelta, null);
+                pane.ChangeView(null, pane.VerticalOffset - args.GetCurrentPoint(_list).Properties.MouseWheelDelta, null);
             }
         }), handledEventsToo: true);
-        list.SelectionChanged += (_, _) => UpdateButtons();
-        list.DoubleTapped += (_, args) =>
+        _list.SelectionChanged += (_, _) => UpdateButtons();
+        _list.DoubleTapped += (_, args) =>
         {
             args.Handled = true;
             var source = args.OriginalSource as DependencyObject;
             // A double-click in the row being typed selects a word there.
-            if (editor is not null && IsWithin(source, editor))
+            if (_editor is not null && IsWithin(source, _editor))
             {
                 return;
             }
             // Elsewhere it ends that edit first, then edits the row clicked or adds one below the rows.
             ListViewItem? item = Ancestor<ListViewItem>(source);
-            int index = item is null ? -1 : list.IndexFromContainer(item);
+            int index = item is null ? -1 : _list.IndexFromContainer(item);
             CommitEdit();
-            if (index >= 0 && index < rows.Count)
+            if (index >= 0 && index < _rows.Count)
             {
                 BeginEditing(index);
             }
@@ -84,9 +84,9 @@ internal sealed class AddressList
                 AddRow();
             }
         };
-        list.KeyDown += (_, args) =>
+        _list.KeyDown += (_, args) =>
         {
-            if (editingRow is not null)
+            if (_editingRow is not null)
             {
                 return;
             }
@@ -96,16 +96,16 @@ internal sealed class AddressList
                     RemoveSelected();
                     args.Handled = true;
                     break;
-                case VirtualKey.Enter or VirtualKey.F2 when list.SelectedItems.Count == 1:
-                    BeginEditing(list.SelectedIndex);
+                case VirtualKey.Enter or VirtualKey.F2 when _list.SelectedItems.Count == 1:
+                    BeginEditing(_list.SelectedIndex);
                     args.Handled = true;
                     break;
             }
         };
 
         var area = new Grid { MinHeight = minHeight, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        area.Children.Add(list);
-        area.Children.Add(empty);
+        area.Children.Add(_list);
+        area.Children.Add(_empty);
         // Below the last row, a double-click adds one, as on the empty list.
         area.DoubleTapped += (_, args) =>
         {
@@ -120,7 +120,7 @@ internal sealed class AddressList
         Add.Click += (_, _) => AddRow();
         Remove = IconButton("\uE738", removeTitle, L("Remove the selected rows"));
         Remove.Click += (_, _) => RemoveSelected();
-        Show(rows, problemRows, messages, canAdd: false);
+        Show(_rows, _problemRows, _messages, canAdd: false);
     }
 
     /// <summary>The card with the rows.</summary>
@@ -132,48 +132,48 @@ internal sealed class AddressList
 
     public void Show(IReadOnlyList<string> newRows, IReadOnlySet<int> newProblems, IReadOnlyDictionary<int, (string Text, string Help)> newMessages, bool canAdd)
     {
-        this.canAdd = canAdd;
+        this._canAdd = canAdd;
         UpdateButtons();
-        if (editingRow is not null)
+        if (_editingRow is not null)
         {
-            pending = (newRows, newProblems, newMessages);
+            _pending = (newRows, newProblems, newMessages);
             return;
         }
-        if (list.Items.Count > 0 && newRows.SequenceEqual(rows) && newProblems.SetEquals(problemRows) && SameMessages(newMessages))
+        if (_list.Items.Count > 0 && newRows.SequenceEqual(_rows) && newProblems.SetEquals(_problemRows) && SameMessages(newMessages))
         {
             return;
         }
-        rows = newRows;
-        problemRows = newProblems;
-        messages = newMessages;
+        _rows = newRows;
+        _problemRows = newProblems;
+        _messages = newMessages;
         Reload();
     }
 
     /// <summary>Ends a row being typed, as moving the focus away would, before the list is applied.</summary>
     public void CommitEdit()
     {
-        if (editor is not null)
+        if (_editor is not null)
         {
             EndEditing();
         }
     }
 
     private bool SameMessages(IReadOnlyDictionary<int, (string Text, string Help)> other) =>
-        other.Count == messages.Count && other.All(pair => messages.TryGetValue(pair.Key, out (string Text, string Help) message) && message == pair.Value);
+        other.Count == _messages.Count && other.All(pair => _messages.TryGetValue(pair.Key, out (string Text, string Help) message) && message == pair.Value);
 
     private void Reload()
     {
-        var selected = list.SelectedItems.Select(item => list.Items.IndexOf(item)).Where(index => index < rows.Count).ToList();
-        list.Items.Clear();
-        for (int index = 0; index < rows.Count; index++)
+        var selected = _list.SelectedItems.Select(item => _list.Items.IndexOf(item)).Where(index => index < _rows.Count).ToList();
+        _list.Items.Clear();
+        for (int index = 0; index < _rows.Count; index++)
         {
-            list.Items.Add(Row(rows[index], problemRows.Contains(index), messages.TryGetValue(index, out (string Text, string Help) message) ? message : null));
+            _list.Items.Add(Row(_rows[index], _problemRows.Contains(index), _messages.TryGetValue(index, out (string Text, string Help) message) ? message : null));
         }
         foreach (int index in selected)
         {
-            list.SelectRange(new Microsoft.UI.Xaml.Data.ItemIndexRange(index, 1));
+            _list.SelectRange(new Microsoft.UI.Xaml.Data.ItemIndexRange(index, 1));
         }
-        empty.Visible(rows.Count == 0);
+        _empty.Visible(_rows.Count == 0);
         UpdateButtons();
     }
 
@@ -202,115 +202,115 @@ internal sealed class AddressList
 
     private void UpdateButtons()
     {
-        Add.IsEnabled = canAdd;
-        Remove.IsEnabled = editingRow is null && list.SelectedItems.Count > 0;
+        Add.IsEnabled = _canAdd;
+        Remove.IsEnabled = _editingRow is null && _list.SelectedItems.Count > 0;
     }
 
     private void AddRow()
     {
         CommitEdit();
-        if (!canAdd)
+        if (!_canAdd)
         {
             return;
         }
-        list.Items.Add(Row("", problem: false, message: null));
-        empty.Visible(false);
-        BeginEditing(rows.Count);
+        _list.Items.Add(Row("", problem: false, message: null));
+        _empty.Visible(false);
+        BeginEditing(_rows.Count);
     }
 
     private void RemoveSelected()
     {
-        if (editingRow is not null)
+        if (_editingRow is not null)
         {
             return;
         }
-        var selected = list.SelectedItems.Select(item => list.Items.IndexOf(item)).ToHashSet();
-        var remaining = rows.Where((_, index) => !selected.Contains(index)).ToList();
-        if (remaining.Count == rows.Count)
+        var selected = _list.SelectedItems.Select(item => _list.Items.IndexOf(item)).ToHashSet();
+        var remaining = _rows.Where((_, index) => !selected.Contains(index)).ToList();
+        if (remaining.Count == _rows.Count)
         {
             return;
         }
-        rows = remaining;
-        problemRows = new HashSet<int>();
-        messages = new Dictionary<int, (string, string)>();
+        _rows = remaining;
+        _problemRows = new HashSet<int>();
+        _messages = new Dictionary<int, (string, string)>();
         // The selection doesn't move on to the rows that took the removed ones' places.
-        list.SelectedIndex = -1;
+        _list.SelectedIndex = -1;
         Reload();
-        onChange(remaining);
+        _onChange(remaining);
     }
 
     /// <summary>Puts a text box over the row, with its text selected.</summary>
     private void BeginEditing(int row)
     {
-        if (row < 0 || row >= list.Items.Count || list.Items[row] is not ListViewItem item || item.Content is not Grid grid)
+        if (row < 0 || row >= _list.Items.Count || _list.Items[row] is not ListViewItem item || item.Content is not Grid grid)
         {
             return;
         }
-        list.SelectedIndex = row;
-        list.ScrollIntoView(item);
-        editingRow = row;
-        editingOriginal = row < rows.Count ? rows[row] : null;
+        _list.SelectedIndex = row;
+        _list.ScrollIntoView(item);
+        _editingRow = row;
+        _editingOriginal = row < _rows.Count ? _rows[row] : null;
         grid.Children.Clear();
-        editor = new TextBox { Text = editingOriginal ?? "", PlaceholderText = placeholder };
-        editor.KeyDown += (_, args) =>
+        _editor = new TextBox { Text = _editingOriginal ?? "", PlaceholderText = _placeholder };
+        _editor.KeyDown += (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
             {
                 args.Handled = true;
                 EndEditing();
-                list.Focus(FocusState.Keyboard);
+                _list.Focus(FocusState.Keyboard);
             }
             else if (args.Key == VirtualKey.Escape)
             {
                 args.Handled = true;
-                cancelsEdit = true;
+                _cancelsEdit = true;
                 EndEditing();
-                list.Focus(FocusState.Keyboard);
+                _list.Focus(FocusState.Keyboard);
             }
         };
         // The box's own menu (Paste and the like) takes the focus for a moment; the edit goes on.
-        editor.LostFocus += (_, _) =>
+        _editor.LostFocus += (_, _) =>
         {
-            if (editor is { XamlRoot: { } root } && FocusManager.GetFocusedElement(root) is DependencyObject focused && InOpenPopup(focused, root))
+            if (_editor is { XamlRoot: { } root } && FocusManager.GetFocusedElement(root) is DependencyObject focused && InOpenPopup(focused, root))
             {
                 return;
             }
             EndEditing();
         };
-        grid.Children.Add(editor);
-        editor.Loaded += (_, _) =>
+        grid.Children.Add(_editor);
+        _editor.Loaded += (_, _) =>
         {
-            editor?.Focus(FocusState.Programmatic);
-            editor?.SelectAll();
+            _editor?.Focus(FocusState.Programmatic);
+            _editor?.SelectAll();
         };
         UpdateButtons();
     }
 
     private void EndEditing()
     {
-        if (editingRow is not { } row || editor is null)
+        if (_editingRow is not { } row || _editor is null)
         {
             return;
         }
-        string text = editor.Text.Trim();
-        string? original = editingOriginal;
-        bool cancelled = cancelsEdit;
-        editingRow = null;
-        editingOriginal = null;
-        editor = null;
-        cancelsEdit = false;
+        string text = _editor.Text.Trim();
+        string? original = _editingOriginal;
+        bool cancelled = _cancelsEdit;
+        _editingRow = null;
+        _editingOriginal = null;
+        _editor = null;
+        _cancelsEdit = false;
         // Rows that changed meanwhile may have moved the edited row; then it is found by its text.
         bool rowMoved = false;
-        if (pending is { } waiting)
+        if (_pending is { } waiting)
         {
-            rowMoved = !waiting.Rows.SequenceEqual(rows);
-            (rows, problemRows, messages) = waiting;
-            pending = null;
+            rowMoved = !waiting.Rows.SequenceEqual(_rows);
+            (_rows, _problemRows, _messages) = waiting;
+            _pending = null;
         }
         List<string>? proposed = null;
         if (!cancelled && text.Length > 0 && text != original)
         {
-            proposed = [.. rows];
+            proposed = [.. _rows];
             if (original is null)
             {
                 proposed.Add(text);
@@ -327,14 +327,14 @@ internal sealed class AddressList
             {
                 proposed.Add(text);
             }
-            rows = proposed;
-            problemRows = new HashSet<int>();
-            messages = new Dictionary<int, (string, string)>();
+            _rows = proposed;
+            _problemRows = new HashSet<int>();
+            _messages = new Dictionary<int, (string, string)>();
         }
         Reload();
         if (proposed is not null)
         {
-            onChange(proposed);
+            _onChange(proposed);
         }
     }
 

@@ -50,10 +50,10 @@ public static class SettingsSearch
     public const string ImportRow = "FortiClient settings";
     public const string OAuthClientButtons = "Import JSON…";
 
-    private static readonly Dictionary<SettingsPane, List<SearchItem>> Index =
+    private static readonly Dictionary<SettingsPane, List<SearchItem>> s_index =
         Enum.GetValues<SettingsPane>().ToDictionary(pane => pane, Items);
 
-    public static IReadOnlyList<SearchItem> ItemsIn(SettingsPane pane) => Index[pane];
+    public static IReadOnlyList<SearchItem> ItemsIn(SettingsPane pane) => s_index[pane];
 
     /// <summary>The results for <paramref name="text"/>, in the panes' order; none for an empty search.</summary>
     public static List<SearchResult> Results(string text, Func<SearchCondition, bool> isShown)
@@ -71,7 +71,7 @@ public static class SettingsSearch
                 results.Add(new SearchResult(pane, null));
                 continue;
             }
-            results.AddRange(Index[pane]
+            results.AddRange(s_index[pane]
                 .Where(item => (item.Condition is not { } condition || isShown(condition)) && terms.All(term => SettingsSearchMatch.Matches(term, item.Name)))
                 .Select(item => new SearchResult(pane, item)));
         }
@@ -246,10 +246,10 @@ public static class SettingsSearchMatch
         return false;
     }
 
-    private static readonly string[] Initials = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ".Select(c => c.ToString()).ToArray();
-    private static readonly string[] Medials = ["ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅗㅏ", "ㅗㅐ", "ㅗㅣ", "ㅛ", "ㅜ", "ㅜㅓ", "ㅜㅔ", "ㅜㅣ", "ㅠ", "ㅡ", "ㅡㅣ", "ㅣ"];
-    private static readonly string[] Finals = ["", "ㄱ", "ㄲ", "ㄱㅅ", "ㄴ", "ㄴㅈ", "ㄴㅎ", "ㄷ", "ㄹ", "ㄹㄱ", "ㄹㅁ", "ㄹㅂ", "ㄹㅅ", "ㄹㅌ", "ㄹㅍ", "ㄹㅎ", "ㅁ", "ㅂ", "ㅂㅅ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
-    private static readonly Dictionary<string, string> Compounds = new()
+    private static readonly string[] s_initials = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ".Select(c => c.ToString()).ToArray();
+    private static readonly string[] s_medials = ["ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅗㅏ", "ㅗㅐ", "ㅗㅣ", "ㅛ", "ㅜ", "ㅜㅓ", "ㅜㅔ", "ㅜㅣ", "ㅠ", "ㅡ", "ㅡㅣ", "ㅣ"];
+    private static readonly string[] s_finals = ["", "ㄱ", "ㄲ", "ㄱㅅ", "ㄴ", "ㄴㅈ", "ㄴㅎ", "ㄷ", "ㄹ", "ㄹㄱ", "ㄹㅁ", "ㄹㅂ", "ㄹㅅ", "ㄹㅌ", "ㄹㅍ", "ㄹㅎ", "ㅁ", "ㅂ", "ㅂㅅ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+    private static readonly Dictionary<string, string> s_compounds = new()
     {
         ["ㄳ"] = "ㄱㅅ",
         ["ㄵ"] = "ㄴㅈ",
@@ -293,6 +293,6 @@ public static class SettingsSearchMatch
     /// <summary>Compatibility jamo with compound vowels and finals split, so a composing syllable is a prefix of its result.</summary>
     private static string Jamo(string character) =>
         SyllableIndex(character) is { } index
-            ? Initials[index / 588] + Medials[index % 588 / 28] + Finals[index % 28]
-            : Compounds.GetValueOrDefault(character, character);
+            ? s_initials[index / 588] + s_medials[index % 588 / 28] + s_finals[index % 28]
+            : s_compounds.GetValueOrDefault(character, character);
 }

@@ -9,7 +9,7 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 public sealed class AccountDraft
 {
-    private bool loaded;
+    private bool _loaded;
 
     public string Server { get; set; } = "";
 
@@ -27,11 +27,11 @@ public sealed class AccountDraft
 
     public void Replace(AccountFormState state)
     {
-        if (loaded && state.Revision == Revision)
+        if (_loaded && state.Revision == Revision)
         {
             return;
         }
-        loaded = true;
+        _loaded = true;
         Revision = state.Revision;
         Server = state.Server;
         Username = state.Username;

@@ -12,94 +12,94 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 internal sealed class ExceptionRulesPane : IPane
 {
-    private readonly AppUi ui;
-    private readonly StackPanel body = new() { Spacing = 4 };
-    private readonly TextBlock currentNetwork = Cards.Value();
-    private readonly Grid statusLine;
-    private readonly FontIcon statusMark;
-    private readonly TextBlock statusText;
-    private readonly InfoBar applyFailed = Cards.Notice(InfoBarSeverity.Error);
-    private readonly InfoBar stoppedRetrying = Cards.Notice(InfoBarSeverity.Error);
-    private readonly AddressList networks;
-    private readonly AddressList targets;
-    private readonly Button addCurrentNetwork = new() { Content = L("Add Current Network") };
+    private readonly AppUi _ui;
+    private readonly StackPanel _body = new() { Spacing = 4 };
+    private readonly TextBlock _currentNetwork = Cards.Value();
+    private readonly Grid _statusLine;
+    private readonly FontIcon _statusMark;
+    private readonly TextBlock _statusText;
+    private readonly InfoBar _applyFailed = Cards.Notice(InfoBarSeverity.Error);
+    private readonly InfoBar _stoppedRetrying = Cards.Notice(InfoBarSeverity.Error);
+    private readonly AddressList _networks;
+    private readonly AddressList _targets;
+    private readonly Button _addCurrentNetwork = new() { Content = L("Add Current Network") };
     /// <summary>The rows a search result goes to, by the setting's catalog key.</summary>
-    private readonly Dictionary<string, FrameworkElement> rows = [];
+    private readonly Dictionary<string, FrameworkElement> _rows = [];
 
     public ExceptionRulesPane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
-        (statusLine, statusMark, statusText) = Cards.StatusLine();
-        body.Children.Add(rows["Current network"] = Cards.Card(L("Current network"), currentNetwork));
-        body.Children.Add(rows["Status"] = Cards.Card(L("Status"), statusLine));
-        body.Children.Add(applyFailed);
-        body.Children.Add(stoppedRetrying);
+        this._ui = ui;
+        (_statusLine, _statusMark, _statusText) = Cards.StatusLine();
+        _body.Children.Add(_rows["Current network"] = Cards.Card(L("Current network"), _currentNetwork));
+        _body.Children.Add(_rows["Status"] = Cards.Card(L("Status"), _statusLine));
+        _body.Children.Add(_applyFailed);
+        _body.Children.Add(_stoppedRetrying);
 
-        networks = new AddressList(
+        _networks = new AddressList(
             L("Double-click here or click + to add a network."), L("e.g. 10.20.161.0/24"), 44,
             L("Add Network"), L("Add a network"), L("Remove Selected Network"),
             rows => ui.Send(new Command.SetBypassRows(BypassList.Networks, rows)));
-        addCurrentNetwork.Click += (_, _) => ui.Send(new Command.AddCurrentNetwork());
-        body.Children.Add(Cards.SectionHeader(L("Networks where the rules apply")));
-        body.Children.Add(rows["Networks where the rules apply"] = networks.View);
-        rows["Add Current Network"] = addCurrentNetwork;
+        _addCurrentNetwork.Click += (_, _) => ui.Send(new Command.AddCurrentNetwork());
+        _body.Children.Add(Cards.SectionHeader(L("Networks where the rules apply")));
+        _body.Children.Add(_rows["Networks where the rules apply"] = _networks.View);
+        _rows["Add Current Network"] = _addCurrentNetwork;
         var networkButtons = new Grid { Margin = new Thickness(0, 4, 0, 0) };
-        networkButtons.Children.Add(Cards.Row(networks.Add, networks.Remove));
-        addCurrentNetwork.HorizontalAlignment = HorizontalAlignment.Right;
-        networkButtons.Children.Add(addCurrentNetwork);
-        body.Children.Add(networkButtons);
+        networkButtons.Children.Add(Cards.Row(_networks.Add, _networks.Remove));
+        _addCurrentNetwork.HorizontalAlignment = HorizontalAlignment.Right;
+        networkButtons.Children.Add(_addCurrentNetwork);
+        _body.Children.Add(networkButtons);
 
         // A PC is used on a few networks, unlike the many exception targets.
-        targets = new AddressList(
+        _targets = new AddressList(
             L("Double-click here or click + to add a host or network."), L("e.g. 10.30.161.16 or 10.30.170.0/24"), 175,
             L("Add Exception Target"), L("Add a host or network"), L("Remove Selected Exception Target"),
             rows => ui.Send(new Command.SetBypassRows(BypassList.Targets, rows)));
-        body.Children.Add(Cards.SectionHeader(L("Exception targets")));
-        body.Children.Add(rows["Exception targets"] = targets.View);
-        StackPanel targetButtons = Cards.Row(targets.Add, targets.Remove);
+        _body.Children.Add(Cards.SectionHeader(L("Exception targets")));
+        _body.Children.Add(_rows["Exception targets"] = _targets.View);
+        StackPanel targetButtons = Cards.Row(_targets.Add, _targets.Remove);
         targetButtons.Margin = new Thickness(0, 4, 0, 0);
-        body.Children.Add(targetButtons);
+        _body.Children.Add(targetButtons);
         TextBlock footer = Cards.Footer(L("While this PC is on one of the networks above, the exception targets skip the VPN and go out directly through that network's router."));
         ToolTipService.SetToolTip(footer, L("Elsewhere, everything goes through the VPN. Routes are saved in Windows network settings and survive restarts."));
-        body.Children.Add(footer);
-        page.BodyPanel.Children.Add(body);
+        _body.Children.Add(footer);
+        page.BodyPanel.Children.Add(_body);
     }
 
-    public FrameworkElement? OpenRow(string key) => rows.GetValueOrDefault(key);
+    public FrameworkElement? OpenRow(string key) => _rows.GetValueOrDefault(key);
 
     public void Refresh()
     {
-        body.Visible(ui.BypassRules is not null);
-        if (ui.BypassRules is not { } rules)
+        _body.Visible(_ui.BypassRules is not null);
+        if (_ui.BypassRules is not { } rules)
         {
             return;
         }
-        currentNetwork.Text = rules.CurrentNetworkText();
+        _currentNetwork.Text = rules.CurrentNetworkText();
 
         // Marked addresses come first; otherwise how the rules stand on this network.
         if (rules.Networks.ProblemRows.Count > 0 || rules.Targets.ProblemRows.Count > 0)
         {
-            statusText.Text = L("Fix the marked addresses to apply.");
-            statusMark.SetStyle(NoticeStyle.Error);
+            _statusText.Text = L("Fix the marked addresses to apply.");
+            _statusMark.SetStyle(NoticeStyle.Error);
         }
         else
         {
-            (string? text, NoticeStyle style) = rules.Status.Line(ui.Time);
-            statusText.Text = text;
-            statusMark.SetStyle(style);
+            (string? text, NoticeStyle style) = rules.Status.Line(_ui.Time);
+            _statusText.Text = text;
+            _statusMark.SetStyle(style);
         }
-        applyFailed.Show(rules.Notice is BypassNotice.ApplyFailed failed ? failed.Error.Message() : null);
-        stoppedRetrying.Show(rules.StoppedRetryingMessage());
+        _applyFailed.Show(rules.Notice is BypassNotice.ApplyFailed failed ? failed.Error.Message() : null);
+        _stoppedRetrying.Show(rules.StoppedRetryingMessage());
 
-        networks.Show(rules.Networks.Rows, ProblemRows(rules.Networks), RowMessages(rules, BypassList.Networks), rules.Networks.AddRow == ButtonState.Enabled);
-        targets.Show(rules.Targets.Rows, ProblemRows(rules.Targets), RowMessages(rules, BypassList.Targets), rules.Targets.AddRow == ButtonState.Enabled);
-        addCurrentNetwork.Apply(rules.AddCurrentNetwork);
+        _networks.Show(rules.Networks.Rows, ProblemRows(rules.Networks), RowMessages(rules, BypassList.Networks), rules.Networks.AddRow == ButtonState.Enabled);
+        _targets.Show(rules.Targets.Rows, ProblemRows(rules.Targets), RowMessages(rules, BypassList.Targets), rules.Targets.AddRow == ButtonState.Enabled);
+        _addCurrentNetwork.Apply(rules.AddCurrentNetwork);
     }
 
     public void FinishTyping()
     {
-        networks.CommitEdit();
-        targets.CommitEdit();
+        _networks.CommitEdit();
+        _targets.CommitEdit();
     }
 
     private static HashSet<int> ProblemRows(RuleList list) => list.ProblemRows.Select(row => (int)row).ToHashSet();

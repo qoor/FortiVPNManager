@@ -11,13 +11,13 @@ internal sealed class UpdateWaiter
     private const string App = "FortiVPNManager.exe";
     private const string Installer = "msiexec.exe";
 
-    private Process? running;
+    private Process? _running;
 
     public PortResponse Start()
     {
         try
         {
-            running = Process.Start(StartInfo(
+            _running = Process.Start(StartInfo(
                 Environment.ProcessId,
                 Path.Combine(ServiceRegistration.InstallFolder, App),
                 App))!;
@@ -31,8 +31,8 @@ internal sealed class UpdateWaiter
 
     public void Release(uint installerProcessId)
     {
-        using Process? waiter = running;
-        running = null;
+        using Process? waiter = _running;
+        _running = null;
         if (waiter is null || waiter.HasExited)
         {
             SystemLog.Write(LogLevel.Error, LogCategory.Update, "the update waiter was not running when given the installer");
@@ -51,8 +51,8 @@ internal sealed class UpdateWaiter
 
     public void Stop()
     {
-        using Process? waiter = running;
-        running = null;
+        using Process? waiter = _running;
+        _running = null;
         if (waiter is null || waiter.HasExited)
         {
             SystemLog.Write(LogLevel.Error, LogCategory.Update, "the update waiter was not running when asked to stop");

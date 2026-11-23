@@ -17,11 +17,11 @@ namespace FortiVPNManager.App;
 /// </summary>
 public partial class App : Application
 {
-    private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
-    private AppUi? ui;
-    private TrayIcon? tray;
-    private AppRouter? router;
-    private Notifier? notifier;
+    private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
+    private AppUi? _ui;
+    private TrayIcon? _tray;
+    private AppRouter? _router;
+    private Notifier? _notifier;
 
     public App()
     {
@@ -36,55 +36,55 @@ public partial class App : Application
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        notifier = new Notifier((identifier, button) => dispatcher.TryEnqueue(() => ui?.OpenNotification(identifier, button)));
+        _notifier = new Notifier((identifier, button) => _dispatcher.TryEnqueue(() => _ui?.OpenNotification(identifier, button)));
         AppFacts facts = CurrentAppFacts.Read(GmailText.SignInPages());
         RuntimeLink? link = null;
-        ui = new AppUi(dispatcher, command => router!.Send(command), notifier.Post);
+        _ui = new AppUi(_dispatcher, command => _router!.Send(command), _notifier.Post);
         // The runtime sends nothing before the launch message, which Start sends; the link exists by then.
-        router = new AppRouter(facts.AppBuild, new UiBridge(ui), Quit, message => link!.Send(message));
-        link = RuntimeLink.Start(router.Receive);
-        tray = new TrayIcon(ui, () =>
+        _router = new AppRouter(facts.AppBuild, new UiBridge(_ui), Quit, message => link!.Send(message));
+        link = RuntimeLink.Start(_router.Receive);
+        _tray = new TrayIcon(_ui, () =>
         {
             // What is still typed in Settings reaches the runtime before it is asked to quit.
-            ui.FinishSettingsTyping();
+            _ui.FinishSettingsTyping();
             // The app is gone for the user at once while the runtime ends the tunnel, and a start
             // meanwhile waits for this process instead of handing itself to it (Program.Leave).
             Program.Leave();
-            ui.CloseSettings();
-            tray?.Dispose();
-            tray = null;
-            router.Lifetime.RequestQuit();
+            _ui.CloseSettings();
+            _tray?.Dispose();
+            _tray = null;
+            _router.Lifetime.RequestQuit();
         });
-        router.Start(facts);
+        _router.Start(facts);
         AppActivationArguments activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         if (activation.Kind == ExtendedActivationKind.AppNotification)
         {
             var notification = (AppNotificationActivatedEventArgs)activation.Data;
-            ui.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
+            _ui.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
         }
         Program.Launched(this);
     }
 
     /// <summary>The app was started again: a notification opens what it is about, anything else the settings window.</summary>
-    public void Reopened(AppActivationArguments activation) => dispatcher.TryEnqueue(() =>
+    public void Reopened(AppActivationArguments activation) => _dispatcher.TryEnqueue(() =>
     {
         if (activation.Kind == ExtendedActivationKind.AppNotification)
         {
             var notification = (AppNotificationActivatedEventArgs)activation.Data;
-            ui?.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
+            _ui?.OpenNotification(Notifier.Identifier(notification), Notifier.FromButton(notification));
         }
         else
         {
-            ui?.Settings.Show(null);
+            _ui?.Settings.Show(null);
         }
     });
 
     /// <summary>Ends the app once the runtime approved the quit; called from the runtime's reader thread.</summary>
-    private void Quit() => dispatcher.TryEnqueue(() =>
+    private void Quit() => _dispatcher.TryEnqueue(() =>
     {
-        ui?.CloseSettings();
-        tray?.Dispose();
-        notifier?.Dispose();
+        _ui?.CloseSettings();
+        _tray?.Dispose();
+        _notifier?.Dispose();
         Exit();
     });
 

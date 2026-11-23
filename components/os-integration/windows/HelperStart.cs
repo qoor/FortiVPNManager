@@ -89,7 +89,7 @@ public static class HelperStart
     /// <summary>The app's starts of the service: the first and the one more.</summary>
     private const int Starts = 2;
 
-    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan s_poll = TimeSpan.FromSeconds(1);
 
     /// <summary>Waits on the calling thread. A failed start and a failure are written to the event log.</summary>
     public static HelperStartResult Run()
@@ -183,7 +183,7 @@ public static class HelperStart
                 announced = true;
                 retrying($"An error occurred while the Helper was starting ({first.Why}); starting the Helper again (attempt {starts}/{Starts})");
             }
-            if (!pause(Poll))
+            if (!pause(s_poll))
             {
                 return new HelperStartResult.SessionEnding();
             }
@@ -228,12 +228,12 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         public uint WaitHint;
     }
 
-    private readonly nint manager;
+    private readonly nint _manager;
 
     public WindowsHelperService()
     {
-        manager = OpenSCManagerW(null, null, ManagerConnect);
-        if (manager == 0)
+        _manager = OpenSCManagerW(null, null, ManagerConnect);
+        if (_manager == 0)
         {
             throw new Win32Exception();
         }
@@ -241,7 +241,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
 
     public HelperServiceState State()
     {
-        nint service = OpenServiceW(manager, ServiceRegistration.HelperService, QueryStatusAccess);
+        nint service = OpenServiceW(_manager, ServiceRegistration.HelperService, QueryStatusAccess);
         if (service == 0)
         {
             return Marshal.GetLastWin32Error() switch
@@ -272,7 +272,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
 
     public StartAnswer Start()
     {
-        nint service = OpenServiceW(manager, ServiceRegistration.HelperService, StartAccess);
+        nint service = OpenServiceW(_manager, ServiceRegistration.HelperService, StartAccess);
         if (service == 0)
         {
             return Marshal.GetLastWin32Error() switch
@@ -318,7 +318,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         return processes.Length > 0;
     }
 
-    public void Dispose() => CloseServiceHandle(manager);
+    public void Dispose() => CloseServiceHandle(_manager);
 
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern nint OpenSCManagerW(string? machine, string? database, uint access);

@@ -16,41 +16,41 @@ public sealed class LogLines
     public const int MaxLines = 5_000;
     public const int MaxBytes = 2 * 1024 * 1024;
 
-    private readonly List<LogEntry> entries = [];
-    private ulong nextId = 1;
-    private int byteCount;
+    private readonly List<LogEntry> _entries = [];
+    private ulong _nextId = 1;
+    private int _byteCount;
 
-    public IReadOnlyList<LogEntry> Entries => entries;
+    public IReadOnlyList<LogEntry> Entries => _entries;
 
     public void Append(IReadOnlyList<LogLine> lines)
     {
         foreach (LogLine line in lines)
         {
-            entries.Add(new LogEntry(nextId++, line));
-            byteCount += Cost(line);
+            _entries.Add(new LogEntry(_nextId++, line));
+            _byteCount += Cost(line);
         }
         int drop = 0;
-        while (entries.Count - drop > MaxLines || (byteCount > MaxBytes && drop < entries.Count))
+        while (_entries.Count - drop > MaxLines || (_byteCount > MaxBytes && drop < _entries.Count))
         {
-            byteCount -= Cost(entries[drop].Line);
+            _byteCount -= Cost(_entries[drop].Line);
             drop++;
         }
-        entries.RemoveRange(0, drop);
+        _entries.RemoveRange(0, drop);
     }
 
     /// <summary>Entries newer than <paramref name="id"/> (all of them when it is null or older than the buffer).</summary>
-    public IEnumerable<LogEntry> After(ulong? id) => id is { } last ? entries.Where(entry => entry.Id > last) : entries;
+    public IEnumerable<LogEntry> After(ulong? id) => id is { } last ? _entries.Where(entry => entry.Id > last) : _entries;
 
     /// <summary>"Clear": empties the pane only.</summary>
     public void Clear()
     {
-        entries.Clear();
-        byteCount = 0;
+        _entries.Clear();
+        _byteCount = 0;
     }
 
     /// <summary>"Copy All": the lines in the log file's format, times in <paramref name="zone"/>.</summary>
     public string CopyAllText(TimeZoneInfo zone) =>
-        string.Join("\n", entries.Select((entry, index) => FileLine(entry.Line, zone, afterAnother: index > 0)));
+        string.Join("\n", _entries.Select((entry, index) => FileLine(entry.Line, zone, afterAnother: index > 0)));
 
     /// <summary>
     /// <c>&lt;ISO 8601 local time with milliseconds&gt; [info|err|▸] &lt;text&gt;</c>, the line format of the

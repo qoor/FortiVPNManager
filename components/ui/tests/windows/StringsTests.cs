@@ -13,7 +13,7 @@ namespace FortiVPNManager.Ui.Tests;
 /// <summary>The sentences: every key the UI uses is in a catalog, and they come out as macOS writes them.</summary>
 public class StringsTests
 {
-    internal static readonly string Repository = FindRepository();
+    internal static readonly string s_repository = FindRepository();
 
     public StringsTests()
     {
@@ -23,7 +23,7 @@ public class StringsTests
     [Fact]
     public void EveryKeyTheUiUsesIsInACatalog()
     {
-        IEnumerable<string> sources = Directory.GetFiles(Path.Combine(Repository, "components", "ui", "windows"), "*.cs", SearchOption.AllDirectories)
+        IEnumerable<string> sources = Directory.GetFiles(Path.Combine(s_repository, "components", "ui", "windows"), "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
         var missing = new List<string>();
         foreach (string source in sources)
@@ -116,40 +116,40 @@ public class StringsTests
             HelperStartText.MessageAfterRetry(HelperStartText.TimedOut()));
     }
 
-    private static readonly AutoUpdateSection UpdateSection = new(
+    private static readonly AutoUpdateSection s_updateSection = new(
         "26.1.0", new UpdateStatus.Checking(), new UpdateProgress.Idle(),
         ButtonState.Disabled, ButtonState.Hidden, ButtonState.Hidden, ButtonState.Hidden, false, false);
 
-    private static readonly UpdateProgress.Downloading Downloading = new(19_500_000, 30_800_000, 63, new RemainingTime.Minutes(2));
-    private static readonly UpdateProgress.Preparing Preparing = new(95);
-    private static readonly UpdateProgress.ReadyToRestart Ready = new("26.2.0");
-    private static readonly UpdateProgress.Failed DownloadFailed = new(new InstallFailure.DownloadFailed("timed out"));
+    private static readonly UpdateProgress.Downloading s_downloading = new(19_500_000, 30_800_000, 63, new RemainingTime.Minutes(2));
+    private static readonly UpdateProgress.Preparing s_preparing = new(95);
+    private static readonly UpdateProgress.ReadyToRestart s_ready = new("26.2.0");
+    private static readonly UpdateProgress.Failed s_downloadFailed = new(new InstallFailure.DownloadFailed("timed out"));
 
     private static UpdateStatus.Available Available(Dictionary<string, IReadOnlyList<string>>? titles = null) =>
         new("26.2.0", "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0", 30_800_000, titles ?? []);
 
     private static AutoUpdateSection Section(UpdateStatus status, UpdateProgress? progress = null) =>
-        UpdateSection with { Status = status, Progress = progress ?? new UpdateProgress.Idle() };
+        s_updateSection with { Status = status, Progress = progress ?? new UpdateProgress.Idle() };
 
     private static AutoUpdateSection CheckFailed(UpdateCheckFailure reason) => Section(new UpdateStatus.CheckFailed(reason));
 
     [Fact]
     public void TheUpdatePageSaysWhatIsAvailableAndHowTheInstallGoes()
     {
-        Assert.Equal("Checking for updates…", UpdateSection.Headline());
-        Assert.Null(UpdateSection.Subtitle());
+        Assert.Equal("Checking for updates…", s_updateSection.Headline());
+        Assert.Null(s_updateSection.Subtitle());
         AutoUpdateSection upToDate = Section(new UpdateStatus.UpToDate());
         Assert.Equal("You're up to date", upToDate.Headline());
         Assert.Equal("FortiVPNManager 26.1.0", upToDate.Subtitle());
-        foreach (UpdateProgress progress in new UpdateProgress[] { new UpdateProgress.Idle(), Downloading, Preparing, DownloadFailed })
+        foreach (UpdateProgress progress in new UpdateProgress[] { new UpdateProgress.Idle(), s_downloading, s_preparing, s_downloadFailed })
         {
             Assert.Equal("Updates available", Section(Available(), progress).Headline());
             Assert.Equal("Current version: 26.1.0", Section(Available(), progress).Subtitle());
         }
-        Assert.Equal("Restart required", Section(Available(), Ready).Headline());
+        Assert.Equal("Restart required", Section(Available(), s_ready).Headline());
         Assert.Equal(
             "The update installs when you restart the app. The VPN disconnects briefly during the install.",
-            Section(Available(), Ready).Subtitle());
+            Section(Available(), s_ready).Subtitle());
         AutoUpdateSection installing = Section(Available(), new UpdateProgress.Installing("26.2.0"));
         Assert.Equal("Installing…", installing.Headline());
         Assert.Equal("The app quits to install the update and opens again when it's done.", installing.Subtitle());
@@ -171,10 +171,10 @@ public class StringsTests
     public void TheUpdateItemSaysHowFarTheInstallGot()
     {
         Assert.Null(new UpdateProgress.Idle().ItemStatus());
-        Assert.Null(DownloadFailed.ItemStatus());
-        Assert.Equal("Downloading - 63%", Downloading.ItemStatus());
-        Assert.Equal("Preparing update", Preparing.ItemStatus());
-        Assert.Equal("Pending restart", Ready.ItemStatus());
+        Assert.Null(s_downloadFailed.ItemStatus());
+        Assert.Equal("Downloading - 63%", s_downloading.ItemStatus());
+        Assert.Equal("Preparing update", s_preparing.ItemStatus());
+        Assert.Equal("Pending restart", s_ready.ItemStatus());
         Assert.Equal("Installing", new UpdateProgress.Installing("26.2.0").ItemStatus());
         Assert.Equal("Calculating time remaining…", new RemainingTime.Calculating().Line());
         Assert.Equal("About 1 minute remaining", new RemainingTime.Minutes(1).Line());
@@ -185,8 +185,8 @@ public class StringsTests
     [Fact]
     public void AFailedInstallSaysWhatToDo()
     {
-        Assert.Null(UpdateSection.FailedInstallLine());
-        Assert.Equal("Couldn't install version 26.2.0.", (UpdateSection with { FailedInstallVersion = "26.2.0" }).FailedInstallLine());
+        Assert.Null(s_updateSection.FailedInstallLine());
+        Assert.Equal("Couldn't install version 26.2.0.", (s_updateSection with { FailedInstallVersion = "26.2.0" }).FailedInstallLine());
         Assert.Equal("Couldn't download the update. Check the network connection.", new InstallFailure.DownloadFailed("timed out").Message());
         string prepare = "Couldn't prepare the install. Try installing again.";
         Assert.Equal(prepare, new InstallFailure.WaiterFailed("access denied").Message());
@@ -242,12 +242,12 @@ public class StringsTests
         try
         {
             Assert.Equal("소프트웨어 업데이트", L("Software Update"));
-            Assert.Equal("업데이트 확인 중…", UpdateSection.Headline());
+            Assert.Equal("업데이트 확인 중…", s_updateSection.Headline());
             Assert.Equal("최신 상태입니다", Section(new UpdateStatus.UpToDate()).Headline());
             Assert.Equal("업데이트 사용 가능", Section(Available()).Headline());
             Assert.Equal("현재 버전: 26.1.0", Section(Available()).Subtitle());
-            Assert.Equal("재시작 필요", Section(Available(), Ready).Headline());
-            Assert.Equal("앱을 다시 시작하면 업데이트가 설치됩니다. 설치하는 동안 VPN 연결이 잠시 끊깁니다.", Section(Available(), Ready).Subtitle());
+            Assert.Equal("재시작 필요", Section(Available(), s_ready).Headline());
+            Assert.Equal("앱을 다시 시작하면 업데이트가 설치됩니다. 설치하는 동안 VPN 연결이 잠시 끊깁니다.", Section(Available(), s_ready).Subtitle());
             Assert.Equal("설치 중…", Section(Available(), new UpdateProgress.Installing("26.2.0")).Headline());
             Assert.Equal("앱을 종료하고 업데이트를 설치합니다. 설치가 끝나면 앱이 다시 열립니다.", Section(Available(), new UpdateProgress.Installing("26.2.0")).Subtitle());
             Assert.Equal("업데이트 확인", L("Check for updates"));
@@ -255,9 +255,9 @@ public class StringsTests
             Assert.Equal("다시 시도", L("Try again"));
             Assert.Equal("앱 재시작", L("Restart app"));
             Assert.Equal("취소", L("Cancel"));
-            Assert.Equal("다운로드 중 - 63%", Downloading.ItemStatus());
-            Assert.Equal("업데이트 준비 중", Preparing.ItemStatus());
-            Assert.Equal("재시작 대기 중", Ready.ItemStatus());
+            Assert.Equal("다운로드 중 - 63%", s_downloading.ItemStatus());
+            Assert.Equal("업데이트 준비 중", s_preparing.ItemStatus());
+            Assert.Equal("재시작 대기 중", s_ready.ItemStatus());
             Assert.Equal("설치 중", new UpdateProgress.Installing("26.2.0").ItemStatus());
             Assert.Equal("남은 시간 계산 중…", new RemainingTime.Calculating().Line());
             Assert.Equal("약 1분 남음", new RemainingTime.Minutes(1).Line());
@@ -270,7 +270,7 @@ public class StringsTests
             Assert.Equal("업데이트를 확인하지 못했습니다: timed out", new UpdateCheckFailure.Network("timed out").Message());
             Assert.Equal("업데이트를 확인하지 못했습니다(응답 형식 오류).", new UpdateCheckFailure.InvalidReply().Message());
             Assert.Equal("업데이트를 확인하지 못했습니다(설치 파일 없음).", new UpdateCheckFailure.InstallerMissing().Message());
-            Assert.Equal("26.2.0 버전을 설치하지 못했습니다.", (UpdateSection with { FailedInstallVersion = "26.2.0" }).FailedInstallLine());
+            Assert.Equal("26.2.0 버전을 설치하지 못했습니다.", (s_updateSection with { FailedInstallVersion = "26.2.0" }).FailedInstallLine());
             Assert.Equal("업데이트를 받지 못했습니다. 네트워크 연결을 확인하세요.", new InstallFailure.DownloadFailed("").Message());
             Assert.Equal("Helper와 통신하지 못해 설치하지 못했습니다.", new InstallFailure.HelperFailed("").Message());
             Assert.Equal("업데이트 파일을 확인하지 못했습니다. 다시 설치하세요.", new InstallFailure.HelperRefused(UpdateRefusal.SignatureInvalid, "").Message());
@@ -292,8 +292,8 @@ public class StringsTests
     private static string Korean(string catalog, string key)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(catalog == "Windows.xcstrings"
-            ? Path.Combine(Repository, "components", "ui", "windows", catalog)
-            : Path.Combine(Repository, "components", "ui", "macos", catalog)));
+            ? Path.Combine(s_repository, "components", "ui", "windows", catalog)
+            : Path.Combine(s_repository, "components", "ui", "macos", catalog)));
         return document.RootElement.GetProperty("strings").GetProperty(key).GetProperty("localizations")
             .GetProperty("ko").GetProperty("stringUnit").GetProperty("value").GetString()!;
     }

@@ -26,8 +26,8 @@ internal sealed class LogPane : IPane, IDisposable
     /// </summary>
     private const int TrimChunk = 500;
 
-    private readonly AppUi ui;
-    private readonly RichEditBox view = new()
+    private readonly AppUi _ui;
+    private readonly RichEditBox _view = new()
     {
         IsReadOnly = true,
         TextWrapping = TextWrapping.Wrap,
@@ -38,25 +38,25 @@ internal sealed class LogPane : IPane, IDisposable
         BorderThickness = new Thickness(0),
         Padding = new Thickness(8, 6, 8, 6),
     };
-    private readonly CheckBox autoScroll = new() { Content = L("Auto-scroll") };
-    private readonly StackPanel findBar = new() { Orientation = Orientation.Horizontal, Spacing = 4, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Right };
-    private readonly TextBox findBox = new() { PlaceholderText = L("Find in log"), Width = 240 };
-    private readonly TextBlock noMatch = new() { Text = L("No results"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Visibility = Visibility.Collapsed };
-    private readonly AppBarButton showFile;
+    private readonly CheckBox _autoScroll = new() { Content = L("Auto-scroll") };
+    private readonly StackPanel _findBar = new() { Orientation = Orientation.Horizontal, Spacing = 4, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Right };
+    private readonly TextBox _findBox = new() { PlaceholderText = L("Find in log"), Width = 240 };
+    private readonly TextBlock _noMatch = new() { Text = L("No results"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Visibility = Visibility.Collapsed };
+    private readonly AppBarButton _showFile;
 
     /// <summary>
     /// The entries shown, oldest first, with their length in the view (each ends with a line break). The gap
     /// before an attempt's first line counts as the previous entry's, so trimming that entry takes the gap
     /// with it and the line left at the top has none.
     /// </summary>
-    private readonly List<(ulong Id, int Length)> shown = [];
-    private int length;
-    private ScrollViewer? scroller;
-    private bool drawn;
+    private readonly List<(ulong Id, int Length)> _shown = [];
+    private int _length;
+    private ScrollViewer? _scroller;
+    private bool _drawn;
 
     public LogPane(AppUi ui, PanePage page)
     {
-        this.ui = ui;
+        this._ui = ui;
         var commands = new CommandBar
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
@@ -70,26 +70,26 @@ internal sealed class LogPane : IPane, IDisposable
         clear.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         commands.PrimaryCommands.Add(clear);
         commands.PrimaryCommands.Add(Command("\uE8C8", L("Copy All"), L("Copy Entire Log"), CopyAll));
-        showFile = Command("\uE838", L("Show in File Explorer"), L("Show the log file in File Explorer"), () =>
+        _showFile = Command("\uE838", L("Show in File Explorer"), L("Show the log file in File Explorer"), () =>
         {
             if (ui.Config is { } config)
             {
                 Cards.ShowInFileExplorer(config.LogFile);
             }
         });
-        commands.PrimaryCommands.Add(showFile);
+        commands.PrimaryCommands.Add(_showFile);
         page.ActionsPanel.Children.Add(commands);
 
-        autoScroll.IsChecked = ui.LogAutoScroll;
-        autoScroll.Click += (_, _) =>
+        _autoScroll.IsChecked = ui.LogAutoScroll;
+        _autoScroll.Click += (_, _) =>
         {
-            ui.LogAutoScroll = autoScroll.IsChecked == true;
+            ui.LogAutoScroll = _autoScroll.IsChecked == true;
             if (ui.LogAutoScroll)
             {
                 ScrollToEnd();
             }
         };
-        findBox.KeyDown += (_, args) =>
+        _findBox.KeyDown += (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
             {
@@ -99,83 +99,83 @@ internal sealed class LogPane : IPane, IDisposable
             else if (args.Key == VirtualKey.Escape)
             {
                 args.Handled = true;
-                findBar.Visibility = Visibility.Collapsed;
-                view.Focus(FocusState.Keyboard);
+                _findBar.Visibility = Visibility.Collapsed;
+                _view.Focus(FocusState.Keyboard);
             }
         };
-        findBox.TextChanged += (_, _) => noMatch.Visibility = Visibility.Collapsed;
+        _findBox.TextChanged += (_, _) => _noMatch.Visibility = Visibility.Collapsed;
         Button previous = IconButton("\uE70E", L("Previous match (Shift+Enter)"), () => FindNext(forward: false));
         Button next = IconButton("\uE70D", L("Next match (Enter)"), () => FindNext(forward: true));
-        findBar.Children.Add(noMatch);
-        findBar.Children.Add(findBox);
-        findBar.Children.Add(previous);
-        findBar.Children.Add(next);
+        _findBar.Children.Add(_noMatch);
+        _findBar.Children.Add(_findBox);
+        _findBar.Children.Add(previous);
+        _findBar.Children.Add(next);
 
         // On the pane's card, as the other panes' groups, and the found text stays marked while typing in the find box.
         foreach (string? key in new[] { "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused", "TextControlBorderBrush", "TextControlBorderBrushPointerOver", "TextControlBorderBrushFocused" })
         {
-            view.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            _view.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
-        view.SelectionHighlightColorWhenNotFocused = (SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+        _view.SelectionHighlightColorWhenNotFocused = (SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"];
         // The lines are drawn once the view is in the window, whose theme decides their colours, and
         // drawn again when the theme changes, as their colours are fixed in the text.
-        view.Loaded += (_, _) =>
+        _view.Loaded += (_, _) =>
         {
-            scroller = Cards.FindDescendant(view, "ContentElement") as ScrollViewer;
+            _scroller = Cards.FindDescendant(_view, "ContentElement") as ScrollViewer;
             Redraw(toEnd: ui.LogAutoScroll);
         };
-        view.ActualThemeChanged += (_, _) => Recolor();
+        _view.ActualThemeChanged += (_, _) => Recolor();
 
         Grid fill = page.UseFill();
         fill.RowSpacing = 8;
         fill.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         fill.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        fill.Children.Add(autoScroll);
-        fill.Children.Add(findBar);
-        var card = new Border { Style = (Style)Application.Current.Resources["ListCardStyle"], Child = view };
+        fill.Children.Add(_autoScroll);
+        fill.Children.Add(_findBar);
+        var card = new Border { Style = (Style)Application.Current.Resources["ListCardStyle"], Child = _view };
         Grid.SetRow(card, 1);
         fill.Children.Add(card);
 
         ui.LogAppended += Appended;
     }
 
-    public void Dispose() => ui.LogAppended -= Appended;
+    public void Dispose() => _ui.LogAppended -= Appended;
 
-    public void Refresh() => showFile.IsEnabled = ui.Config is not null;
+    public void Refresh() => _showFile.IsEnabled = _ui.Config is not null;
 
     /// <summary>The pane's one row; its commands at the top have none.</summary>
-    public FrameworkElement? OpenRow(string key) => key == "Auto-scroll" ? autoScroll : null;
+    public FrameworkElement? OpenRow(string key) => key == "Auto-scroll" ? _autoScroll : null;
 
     /// <summary>Opens the find box with the keyboard in it.</summary>
     public bool ShowFind()
     {
-        findBar.Visibility = Visibility.Visible;
-        findBox.Focus(FocusState.Keyboard);
-        findBox.SelectAll();
+        _findBar.Visibility = Visibility.Visible;
+        _findBox.Focus(FocusState.Keyboard);
+        _findBox.SelectAll();
         return true;
     }
 
     private void Appended(IReadOnlyList<LogLine> lines)
     {
-        if (!drawn)
+        if (!_drawn)
         {
             // Loaded draws every line.
             return;
         }
-        bool wasAtBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
-        IReadOnlyList<LogEntry> entries = ui.Log.Entries;
+        bool wasAtBottom = _scroller is null || _scroller.VerticalOffset >= _scroller.ScrollableHeight - 8;
+        IReadOnlyList<LogEntry> entries = _ui.Log.Entries;
         // Lines the app's log dropped leave the view once there are enough of them, and only while the
         // view is at the end: while the person reads further up, nothing above them moves.
-        int stale = entries.Count == 0 ? shown.Count : shown.TakeWhile(entry => entry.Id < entries[0].Id).Count();
+        int stale = entries.Count == 0 ? _shown.Count : _shown.TakeWhile(entry => entry.Id < entries[0].Id).Count();
         if (stale >= TrimChunk && wasAtBottom)
         {
-            int removed = shown.Take(stale).Sum(entry => entry.Length);
-            Edit(() => view.Document.GetRange(0, removed).SetText(TextSetOptions.None, ""));
-            shown.RemoveRange(0, stale);
-            length -= removed;
+            int removed = _shown.Take(stale).Sum(entry => entry.Length);
+            Edit(() => _view.Document.GetRange(0, removed).SetText(TextSetOptions.None, ""));
+            _shown.RemoveRange(0, stale);
+            _length -= removed;
         }
-        Append(ui.Log.After(shown.Count > 0 ? shown[^1].Id : null));
-        if (ui.LogAutoScroll && wasAtBottom)
+        Append(_ui.Log.After(_shown.Count > 0 ? _shown[^1].Id : null));
+        if (_ui.LogAutoScroll && wasAtBottom)
         {
             ScrollToEnd();
         }
@@ -186,20 +186,20 @@ internal sealed class LogPane : IPane, IDisposable
     /// </summary>
     private void Append(IEnumerable<LogEntry> entries)
     {
-        var colors = Palette.For(view.ActualTheme);
+        var colors = Palette.For(_view.ActualTheme);
         Edit(() =>
         {
             foreach (LogEntry entry in entries)
             {
                 LogLine line = entry.Line;
                 // The view's line break is \r.
-                string gap = LogLines.Gap(line, afterAnother: shown.Count > 0).ReplaceLineEndings("\r");
+                string gap = LogLines.Gap(line, afterAnother: _shown.Count > 0).ReplaceLineEndings("\r");
                 if (gap.Length > 0)
                 {
                     Run(gap, colors.Tertiary);
-                    shown[^1] = (shown[^1].Id, shown[^1].Length + gap.Length);
+                    _shown[^1] = (_shown[^1].Id, _shown[^1].Length + gap.Length);
                 }
-                int start = length;
+                int start = _length;
                 Run(line.Time.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " ", colors.Tertiary);
                 Color text = colors.Primary;
                 switch (line.Source)
@@ -219,7 +219,7 @@ internal sealed class LogPane : IPane, IDisposable
                 }
                 // The view's line break is one character.
                 Run(line.Text.ReplaceLineEndings(" ") + "\r", text);
-                shown.Add((entry.Id, length - start));
+                _shown.Add((entry.Id, _length - start));
             }
         });
     }
@@ -227,25 +227,25 @@ internal sealed class LogPane : IPane, IDisposable
     /// <summary>Adds <paramref name="text"/> at the end; each run sets its own look, as text added there takes the look before it.</summary>
     private void Run(string text, Color color, float size = 12)
     {
-        ITextRange range = view.Document.GetRange(length, length);
+        ITextRange range = _view.Document.GetRange(_length, _length);
         range.SetText(TextSetOptions.None, text);
         range.CharacterFormat.ForegroundColor = color;
         range.CharacterFormat.Size = size;
-        length += text.Length;
+        _length += text.Length;
     }
 
     /// <summary>The view is read-only to the person; the app's own changes lift that for the moment.</summary>
     private void Edit(Action change)
     {
-        view.IsReadOnly = false;
+        _view.IsReadOnly = false;
         // The view lays out once for the whole change, not once per piece of text.
-        view.Document.BatchDisplayUpdates();
+        _view.Document.BatchDisplayUpdates();
         change();
-        view.Document.ApplyDisplayUpdates();
-        view.IsReadOnly = true;
+        _view.Document.ApplyDisplayUpdates();
+        _view.IsReadOnly = true;
     }
 
-    private void ScrollToEnd() => view.Document.GetRange(length, length).ScrollIntoView(PointOptions.None);
+    private void ScrollToEnd() => _view.Document.GetRange(_length, _length).ScrollIntoView(PointOptions.None);
 
     /// <summary>
     /// The lines in the new theme's colours. The text is the same, so the place being read and the
@@ -253,72 +253,72 @@ internal sealed class LogPane : IPane, IDisposable
     /// </summary>
     private void Recolor()
     {
-        bool atBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
-        if (ui.LogAutoScroll && atBottom)
+        bool atBottom = _scroller is null || _scroller.VerticalOffset >= _scroller.ScrollableHeight - 8;
+        if (_ui.LogAutoScroll && atBottom)
         {
             Redraw(toEnd: true);
             return;
         }
-        double offset = scroller?.VerticalOffset ?? 0;
-        (int start, int end) = (view.Document.Selection.StartPosition, view.Document.Selection.EndPosition);
+        double offset = _scroller?.VerticalOffset ?? 0;
+        (int start, int end) = (_view.Document.Selection.StartPosition, _view.Document.Selection.EndPosition);
         Redraw(toEnd: false);
-        view.Document.Selection.SetRange(start, end);
-        view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => scroller?.ChangeView(null, offset, null, disableAnimation: true));
+        _view.Document.Selection.SetRange(start, end);
+        _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _scroller?.ChangeView(null, offset, null, disableAnimation: true));
     }
 
     /// <summary>Every line again, in the current theme's colours, then the end when <paramref name="toEnd"/>.</summary>
     private void Redraw(bool toEnd)
     {
-        drawn = true;
-        Edit(() => view.Document.SetText(TextSetOptions.None, ""));
-        shown.Clear();
-        length = 0;
-        Append(ui.Log.Entries);
+        _drawn = true;
+        Edit(() => _view.Document.SetText(TextSetOptions.None, ""));
+        _shown.Clear();
+        _length = 0;
+        Append(_ui.Log.Entries);
         if (toEnd)
         {
             // After the new text is laid out, or the scroll lands short of the end.
-            view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ScrollToEnd);
+            _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ScrollToEnd);
         }
     }
 
     private void Clear()
     {
-        ui.Log.Clear();
-        Edit(() => view.Document.SetText(TextSetOptions.None, ""));
-        shown.Clear();
-        length = 0;
+        _ui.Log.Clear();
+        Edit(() => _view.Document.SetText(TextSetOptions.None, ""));
+        _shown.Clear();
+        _length = 0;
     }
 
     private void CopyAll()
     {
         var package = new DataPackage();
-        package.SetText(ui.Log.CopyAllText(TimeZoneInfo.Local));
+        package.SetText(_ui.Log.CopyAllText(TimeZoneInfo.Local));
         Clipboard.SetContent(package);
     }
 
     /// <summary>The next match after the selection, or the one before it, starting over at the other end.</summary>
     private void FindNext(bool forward)
     {
-        string query = findBox.Text;
+        string query = _findBox.Text;
         if (query.Length == 0)
         {
             return;
         }
-        RichEditTextDocument document = view.Document;
+        RichEditTextDocument document = _view.Document;
         int from = forward ? document.Selection.EndPosition : document.Selection.StartPosition;
         int scope = forward ? TextConstants.MaxUnitCount : -TextConstants.MaxUnitCount;
         ITextRange range = document.GetRange(from, from);
         if (range.FindText(query, scope, FindOptions.None) == 0)
         {
-            int wrap = forward ? 0 : length;
+            int wrap = forward ? 0 : _length;
             range = document.GetRange(wrap, wrap);
             if (range.FindText(query, scope, FindOptions.None) == 0)
             {
-                noMatch.Visibility = Visibility.Visible;
+                _noMatch.Visibility = Visibility.Visible;
                 return;
             }
         }
-        noMatch.Visibility = Visibility.Collapsed;
+        _noMatch.Visibility = Visibility.Collapsed;
         document.Selection.SetRange(range.StartPosition, range.EndPosition);
         range.ScrollIntoView(PointOptions.None);
     }
@@ -347,10 +347,10 @@ internal sealed class LogPane : IPane, IDisposable
     /// </summary>
     private sealed record Palette(Color Primary, Color Secondary, Color Tertiary, Color Critical)
     {
-        private static readonly Palette Light = new(Hex(0x1B1B1B), Hex(0x5E5E5E), Hex(0x8A8A8A), Hex(0xC42B1C));
-        private static readonly Palette Dark = new(Hex(0xFFFFFF), Hex(0xC5C5C5), Hex(0x8A8A8A), Hex(0xFF99A4));
+        private static readonly Palette s_light = new(Hex(0x1B1B1B), Hex(0x5E5E5E), Hex(0x8A8A8A), Hex(0xC42B1C));
+        private static readonly Palette s_dark = new(Hex(0xFFFFFF), Hex(0xC5C5C5), Hex(0x8A8A8A), Hex(0xFF99A4));
 
-        public static Palette For(ElementTheme theme) => theme == ElementTheme.Dark ? Dark : Light;
+        public static Palette For(ElementTheme theme) => theme == ElementTheme.Dark ? s_dark : s_light;
 
         private static Color Hex(int rgb) => Color.FromArgb(0xFF, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
     }

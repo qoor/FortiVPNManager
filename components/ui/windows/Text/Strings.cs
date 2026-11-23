@@ -14,8 +14,8 @@ namespace FortiVPNManager.Ui.Text;
 /// </summary>
 public static class Strings
 {
-    private static readonly Lazy<Catalog> Windows = new(() => Catalog.Load("Windows.xcstrings"));
-    private static readonly Lazy<Catalog> Shared = new(() => Catalog.Load("Localizable.xcstrings"));
+    private static readonly Lazy<Catalog> s_windows = new(() => Catalog.Load("Windows.xcstrings"));
+    private static readonly Lazy<Catalog> s_shared = new(() => Catalog.Load("Localizable.xcstrings"));
 
     /// <summary>"ko" when Windows shows Korean, otherwise "en", the catalogs' source language.</summary>
     public static string Language { get; set; } =
@@ -24,13 +24,13 @@ public static class Strings
     /// <summary>The sentence <paramref name="key"/> with <paramref name="arguments"/> in its specifiers' places.</summary>
     public static string L(string key, params object[] arguments)
     {
-        Unit? unit = Windows.Value.Find(key, Language) ?? Shared.Value.Find(key, Language);
+        Unit? unit = s_windows.Value.Find(key, Language) ?? s_shared.Value.Find(key, Language);
         string template = unit is null ? key : unit.Choose(arguments);
         return Format(template, arguments);
     }
 
     /// <summary>Whether a catalog has <paramref name="key"/>, for the test that every key used exists.</summary>
-    internal static bool Has(string key) => Windows.Value.Has(key) || Shared.Value.Has(key);
+    internal static bool Has(string key) => s_windows.Value.Has(key) || s_shared.Value.Has(key);
 
     /// <summary>Replaces Apple's specifiers, in order or by position (%2$@), with the arguments.</summary>
     internal static string Format(string template, object[] arguments)

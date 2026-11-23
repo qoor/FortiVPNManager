@@ -7,7 +7,7 @@ public class UpdateWaiterTests
 {
     private const string App = @"C:\Program Files\FortiVPNManager\FortiVPNManager.exe";
     private const string CharMap = @"C:\Windows\System32\charmap.exe";
-    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan s_limit = TimeSpan.FromSeconds(30);
 
     [Fact]
     public void TheWaiterIsAHiddenCmdThatReadsTheInstallerFromItsInput()
@@ -125,7 +125,7 @@ public class UpdateWaiterTests
 
     private static T Until<T>(Func<T> read, Func<T, bool> done)
     {
-        DateTime deadline = DateTime.UtcNow + Limit;
+        DateTime deadline = DateTime.UtcNow + s_limit;
         while (true)
         {
             T? value = read();

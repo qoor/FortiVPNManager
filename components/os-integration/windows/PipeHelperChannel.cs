@@ -18,21 +18,21 @@ namespace FortiVPNManager.OsIntegration;
 internal sealed class PipeHelperChannel : IHelperChannel
 {
     /// <summary>Answers normally arrive within milliseconds; this only guards against a hung Helper.</summary>
-    private static readonly TimeSpan ReplyLimit = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan s_replyLimit = TimeSpan.FromSeconds(20);
 
-    private readonly NamedPipeClientStream pipe;
-    private readonly ulong id;
-    private readonly HelperInbound inbound;
-    private readonly object writeGate = new();
-    private readonly ConcurrentDictionary<ulong, TaskCompletionSource<HelperPipe.Message>> pending = new();
-    private ulong lastRequest;
-    private int closed;
+    private readonly NamedPipeClientStream _pipe;
+    private readonly ulong _id;
+    private readonly HelperInbound _inbound;
+    private readonly object _writeGate = new();
+    private readonly ConcurrentDictionary<ulong, TaskCompletionSource<HelperPipe.Message>> _pending = new();
+    private ulong _lastRequest;
+    private int _closed;
 
     private PipeHelperChannel(NamedPipeClientStream pipe, ulong id, HelperInbound inbound)
     {
-        this.pipe = pipe;
-        this.id = id;
-        this.inbound = inbound;
+        this._pipe = pipe;
+        this._id = id;
+        this._inbound = inbound;
     }
 
     public static IHelperChannel Open(ulong id, HelperInbound inbound, TimeSpan limit)
@@ -62,27 +62,27 @@ internal sealed class PipeHelperChannel : IHelperChannel
     }
 
     public void Start() =>
-        new Thread(Read) { Name = $"fvm-helper-read-{id}", IsBackground = true }.Start();
+        new Thread(Read) { Name = $"fvm-helper-read-{_id}", IsBackground = true }.Start();
 
     /// <summary>The time limit covers sending too: a Helper that stops reading holds the write.</summary>
     public async Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
     {
-        ulong id = Interlocked.Increment(ref lastRequest);
+        ulong id = Interlocked.Increment(ref _lastRequest);
         HelperPipe.Request message = request(id);
-        var limit = Task.Delay(ReplyLimit);
+        var limit = Task.Delay(s_replyLimit);
         var answer = new TaskCompletionSource<HelperPipe.Message>(TaskCreationOptions.RunContinuationsAsynchronously);
-        pending[id] = answer;
+        _pending[id] = answer;
         // Closing fails what is pending; a request added after it would wait for nothing.
-        if (Volatile.Read(ref closed) == 1)
+        if (Volatile.Read(ref _closed) == 1)
         {
-            pending.TryRemove(id, out _);
+            _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
         }
         var sending = Task.Run(() =>
         {
-            lock (writeGate)
+            lock (_writeGate)
             {
-                MessageFraming.Write(pipe, message);
+                MessageFraming.Write(_pipe, message);
             }
         });
         if (await Task.WhenAny(sending, limit) == limit)
@@ -102,12 +102,12 @@ internal sealed class PipeHelperChannel : IHelperChannel
         // Closing the connection cancels a write still under way.
         catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
         {
-            pending.TryRemove(id, out _);
+            _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.Connection(error.Message));
         }
         if (await Task.WhenAny(answer.Task, limit) == limit)
         {
-            pending.TryRemove(id, out _);
+            _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.NoReply());
         }
         return await answer.Task;
@@ -121,13 +121,13 @@ internal sealed class PipeHelperChannel : IHelperChannel
         {
             while (true)
             {
-                switch (MessageFraming.ReadFromHelper(pipe))
+                switch (MessageFraming.ReadFromHelper(_pipe))
                 {
                     case HelperPipe.Message.Event message:
-                        inbound.Pass(new SystemEvent.HelperEvent(message.Json), id);
+                        _inbound.Pass(new SystemEvent.HelperEvent(message.Json), _id);
                         break;
                     case HelperPipe.Message.Output message:
-                        inbound.Pass(new SystemEvent.HelperOutput(message.Json), id);
+                        _inbound.Pass(new SystemEvent.HelperOutput(message.Json), _id);
                         break;
                     case var message:
                         Answer(message);
@@ -142,7 +142,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
             // message this build cannot read: the connection is done.
         }
         Close();
-        inbound.End(id);
+        _inbound.End(_id);
     }
 
     private void Answer(HelperPipe.Message message)
@@ -155,7 +155,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
             _ => throw new InvalidOperationException($"no request is answered by {message.GetType().Name}"),
         };
         // An answer after the time limit finds no request.
-        if (pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
+        if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
         {
             answer.TrySetResult(message);
         }
@@ -163,14 +163,14 @@ internal sealed class PipeHelperChannel : IHelperChannel
 
     private void Close()
     {
-        if (Interlocked.Exchange(ref closed, 1) == 1)
+        if (Interlocked.Exchange(ref _closed, 1) == 1)
         {
             return;
         }
-        pipe.Dispose();
-        foreach (ulong id in pending.Keys)
+        _pipe.Dispose();
+        foreach (ulong id in _pending.Keys)
         {
-            if (pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
+            if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
             {
                 answer.TrySetException(new HelperChannelException(new HelperChannelFailure.ConnectionLost()));
             }

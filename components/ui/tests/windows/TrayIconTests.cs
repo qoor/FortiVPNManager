@@ -10,7 +10,7 @@ public class TrayIconTests
     {
         IEnumerable<string> missing = Enum.GetValues<ConnectionIcon>()
             .Select(TrayIcon.IconFile)
-            .Where(file => !File.Exists(Path.Combine(StringsTests.Repository, "packaging", "windows", file)));
+            .Where(file => !File.Exists(Path.Combine(StringsTests.s_repository, "packaging", "windows", file)));
         Assert.Empty(missing);
     }
 }

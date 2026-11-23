@@ -468,16 +468,16 @@ internal sealed class EnumNameConverter<T>() : JsonStringEnumConverter<T>(JsonNa
 internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicNestedTypes)] T>
     : JsonConverter<T> where T : class
 {
-    private readonly Dictionary<string, Type> byName;
-    private readonly Dictionary<Type, string> byType;
+    private readonly Dictionary<string, Type> _byName;
+    private readonly Dictionary<Type, string> _byType;
 
     public CasesConverter()
     {
         IEnumerable<Type> cases = typeof(T)
             .GetNestedTypes(BindingFlags.Public)
             .Where(nested => nested.IsSubclassOf(typeof(T)));
-        byName = cases.ToDictionary(nested => JsonNamingPolicy.CamelCase.ConvertName(nested.Name));
-        byType = byName.ToDictionary(entry => entry.Value, entry => entry.Key);
+        _byName = cases.ToDictionary(nested => JsonNamingPolicy.CamelCase.ConvertName(nested.Name));
+        _byType = _byName.ToDictionary(entry => entry.Value, entry => entry.Key);
     }
 
     public override T Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
@@ -486,7 +486,7 @@ internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAcce
         reader.Read();
         Expect(reader.TokenType == JsonTokenType.PropertyName, "a case name");
         string name = reader.GetString()!;
-        if (!byName.TryGetValue(name, out Type? caseType))
+        if (!_byName.TryGetValue(name, out Type? caseType))
         {
             throw new JsonException($"{typeof(T).Name} has no case {name}");
         }
@@ -502,7 +502,7 @@ internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAcce
     public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
-        writer.WritePropertyName(byType[value.GetType()]);
+        writer.WritePropertyName(_byType[value.GetType()]);
         JsonSerializer.Serialize(writer, value, options.GetTypeInfo(value.GetType()));
         writer.WriteEndObject();
     }

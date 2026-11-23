@@ -13,20 +13,20 @@ namespace FortiVPNManager.Ui;
 /// </summary>
 public sealed class AppUi
 {
-    private readonly DispatcherQueue dispatcher;
-    private readonly Action<string, string, string, string?> notify;
-    private readonly DispatcherQueueTimer ticker;
-    private SettingsWindow? settings;
+    private readonly DispatcherQueue _dispatcher;
+    private readonly Action<string, string, string, string?> _notify;
+    private readonly DispatcherQueueTimer _ticker;
+    private SettingsWindow? _settings;
 
     /// <param name="send">Sends a command to the runtime.</param>
     /// <param name="notify">Posts a notification as (identifier, title, body, button), replacing one of the same identifier.</param>
     public AppUi(DispatcherQueue dispatcher, Action<Command> send, Action<string, string, string, string?> notify)
     {
-        this.dispatcher = dispatcher;
-        this.notify = notify;
+        this._dispatcher = dispatcher;
+        this._notify = notify;
         Send = send;
-        ticker = dispatcher.CreateTimer();
-        ticker.Tick += (_, _) => Tick();
+        _ticker = dispatcher.CreateTimer();
+        _ticker.Tick += (_, _) => Tick();
     }
 
     public Action<Command> Send { get; }
@@ -83,17 +83,17 @@ public sealed class AppUi
     {
         get
         {
-            if (settings is null)
+            if (_settings is null)
             {
-                settings = new SettingsWindow(this);
-                settings.Closed += (_, _) => settings = null;
+                _settings = new SettingsWindow(this);
+                _settings.Closed += (_, _) => _settings = null;
             }
-            return settings;
+            return _settings;
         }
     }
 
     /// <summary>Closes the settings window when it is open; quitting doesn't make one only to close it.</summary>
-    public void CloseSettings() => settings?.Close();
+    public void CloseSettings() => _settings?.Close();
 
     public void OpenNotification(string? identifier, bool button)
     {
@@ -112,11 +112,11 @@ public sealed class AppUi
     }
 
     /// <summary>Sends what Settings still has in its fields; quitting asks the runtime only after it.</summary>
-    public void FinishSettingsTyping() => settings?.FinishTyping();
+    public void FinishSettingsTyping() => _settings?.FinishTyping();
 
     // From the runtime, on its reader thread.
 
-    public void Apply(Section section) => dispatcher.TryEnqueue(() =>
+    public void Apply(Section section) => _dispatcher.TryEnqueue(() =>
     {
         switch (section)
         {
@@ -147,21 +147,21 @@ public sealed class AppUi
         Changed?.Invoke();
     });
 
-    public void AppendLog(IReadOnlyList<LogLine> lines) => dispatcher.TryEnqueue(() =>
+    public void AppendLog(IReadOnlyList<LogLine> lines) => _dispatcher.TryEnqueue(() =>
     {
         Log.Append(lines);
         LogAppended?.Invoke(lines);
     });
 
-    public void PostNotification(UserNotification notification) => dispatcher.TryEnqueue(() =>
-        notify(notification.Identifier(), notification.Title(), notification.Body(), notification.ButtonTitle()));
+    public void PostNotification(UserNotification notification) => _dispatcher.TryEnqueue(() =>
+        _notify(notification.Identifier(), notification.Title(), notification.Body(), notification.ButtonTitle()));
 
     private void RestartClock()
     {
         Now = DateTimeOffset.Now;
-        ticker.Stop();
-        ticker.Interval = Counting ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(30);
-        ticker.Start();
+        _ticker.Stop();
+        _ticker.Interval = Counting ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(30);
+        _ticker.Start();
     }
 
     private bool Counting => Connection?.NextAttempt() is { } next && next > DateTimeOffset.Now;
@@ -169,9 +169,9 @@ public sealed class AppUi
     private void Tick()
     {
         Now = DateTimeOffset.Now;
-        if (!Counting && ticker.Interval < TimeSpan.FromSeconds(30))
+        if (!Counting && _ticker.Interval < TimeSpan.FromSeconds(30))
         {
-            ticker.Interval = TimeSpan.FromSeconds(30);
+            _ticker.Interval = TimeSpan.FromSeconds(30);
         }
         Changed?.Invoke();
     }

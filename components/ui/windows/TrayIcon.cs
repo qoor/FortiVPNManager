@@ -23,41 +23,41 @@ namespace FortiVPNManager.Ui;
 /// </remarks>
 public sealed partial class TrayIcon : IDisposable
 {
-    private readonly AppUi ui;
-    private readonly Action quit;
-    private readonly TaskbarIcon icon;
-    private readonly Dictionary<ConnectionIcon, System.Drawing.Icon> stateIcons;
-    private readonly MenuFlyout menu = new();
-    private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
-    private ConnectionIcon? shownIcon;
-    private List<(string? Text, bool Enabled)> shownMenu = [];
+    private readonly AppUi _ui;
+    private readonly Action _quit;
+    private readonly TaskbarIcon _icon;
+    private readonly Dictionary<ConnectionIcon, System.Drawing.Icon> _stateIcons;
+    private readonly MenuFlyout _menu = new();
+    private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
+    private ConnectionIcon? _shownIcon;
+    private List<(string? Text, bool Enabled)> _shownMenu = [];
 
     /// <param name="quit">Asks the runtime to quit, as the menu's Quit does.</param>
     /// <remarks>Made on the UI thread, where the menu's and the double-click's actions run.</remarks>
     public TrayIcon(AppUi ui, Action quit)
     {
-        this.ui = ui;
-        this.quit = quit;
+        this._ui = ui;
+        this._quit = quit;
         int size = (int)Math.Round(16 * GetDpiForSystem() / 96.0);
-        stateIcons = Enum.GetValues<ConnectionIcon>().ToDictionary(state => state, state => new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, IconFile(state)), size, size));
-        icon = new TaskbarIcon
+        _stateIcons = Enum.GetValues<ConnectionIcon>().ToDictionary(state => state, state => new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, IconFile(state)), size, size));
+        _icon = new TaskbarIcon
         {
             ContextMenuMode = ContextMenuMode.PopupMenu,
             MenuActivation = PopupActivationMode.LeftOrRightClick,
-            ContextFlyout = menu,
+            ContextFlyout = _menu,
             // A double-click opens Settings, as for other apps' icons there.
-            DoubleClickCommand = new MenuCommand(dispatcher, () => ui.Settings.Show(null)),
+            DoubleClickCommand = new MenuCommand(_dispatcher, () => ui.Settings.Show(null)),
         };
         Update();
-        icon.ForceCreate(false);
+        _icon.ForceCreate(false);
         ui.Changed += Update;
     }
 
     public void Dispose()
     {
-        ui.Changed -= Update;
-        icon.Dispose();
-        foreach (Icon stateIcon in stateIcons.Values)
+        _ui.Changed -= Update;
+        _icon.Dispose();
+        foreach (Icon stateIcon in _stateIcons.Values)
         {
             stateIcon.Dispose();
         }
@@ -65,12 +65,12 @@ public sealed partial class TrayIcon : IDisposable
 
     private void Update()
     {
-        ConnectionIcon state = ui.Connection?.Icon ?? ConnectionIcon.Disconnected;
-        icon.ToolTipText = "FortiVPNManager: " + state.AccessibilityText();
-        if (state != shownIcon)
+        ConnectionIcon state = _ui.Connection?.Icon ?? ConnectionIcon.Disconnected;
+        _icon.ToolTipText = "FortiVPNManager: " + state.AccessibilityText();
+        if (state != _shownIcon)
         {
-            shownIcon = state;
-            icon.UpdateIcon(stateIcons[state]);
+            _shownIcon = state;
+            _icon.UpdateIcon(_stateIcons[state]);
         }
         ShowMenu(Entries());
     }
@@ -79,18 +79,18 @@ public sealed partial class TrayIcon : IDisposable
     private void ShowMenu(List<Entry> entries)
     {
         var content = entries.Select(entry => (entry.Text, entry.Enabled)).ToList();
-        if (content.SequenceEqual(shownMenu))
+        if (content.SequenceEqual(_shownMenu))
         {
             return;
         }
-        shownMenu = content;
-        menu.Items.Clear();
+        _shownMenu = content;
+        _menu.Items.Clear();
         foreach (Entry entry in entries)
         {
             // The standard menu takes "&" as the mark of a shortcut key; "&&" shows the "&" itself.
-            menu.Items.Add(entry.Text is null
+            _menu.Items.Add(entry.Text is null
                 ? new MenuFlyoutSeparator()
-                : new MenuFlyoutItem { Text = entry.Text.Replace("&", "&&", StringComparison.Ordinal), IsEnabled = entry.Enabled, Command = entry.Run is { } run ? new MenuCommand(dispatcher, run) : null });
+                : new MenuFlyoutItem { Text = entry.Text.Replace("&", "&&", StringComparison.Ordinal), IsEnabled = entry.Enabled, Command = entry.Run is { } run ? new MenuCommand(_dispatcher, run) : null });
         }
     }
 
@@ -98,10 +98,10 @@ public sealed partial class TrayIcon : IDisposable
     private List<Entry> Entries()
     {
         var entries = new List<Entry>();
-        if (ui.Connection is { } connection)
+        if (_ui.Connection is { } connection)
         {
-            TimeStyle time = ui.Time;
-            ScheduleOutlook? outlook = ui.Schedule?.Outlook;
+            TimeStyle time = _ui.Time;
+            ScheduleOutlook? outlook = _ui.Schedule?.Outlook;
             entries.Add(Line(connection.StatusLine(outlook, time)));
             if (connection.Status is ConnectionStatus.Connected connected)
             {
@@ -120,29 +120,29 @@ public sealed partial class TrayIcon : IDisposable
                 case ConnectionStatus.SetupRequired setup:
                     foreach (SetupItem item in setup.Items)
                     {
-                        entries.Add(new Entry(item.ActionTitle(), true, () => ui.Settings.Show(item.Pane())));
+                        entries.Add(new Entry(item.ActionTitle(), true, () => _ui.Settings.Show(item.Pane())));
                     }
                     break;
                 case ConnectionStatus.Failed failed:
                     entries.Add(Line(failed.Reason.Guidance(time)));
-                    entries.Add(new Entry(failed.Reason.ActionTitle(), true, () => ui.Settings.Show(failed.Reason.Pane())));
+                    entries.Add(new Entry(failed.Reason.ActionTitle(), true, () => _ui.Settings.Show(failed.Reason.Pane())));
                     break;
             }
             // Always listed; the ones that don't apply now are dimmed.
-            entries.Add(Separator);
-            entries.Add(new Entry(L("Connect"), connection.Connect == ButtonState.Enabled, () => ui.Send(new Command.Connect())));
-            entries.Add(new Entry(L("Disconnect"), connection.Disconnect == ButtonState.Enabled, () => ui.Send(new Command.Disconnect())));
-            entries.Add(new Entry(L("Reconnect Now"), connection.ReconnectNow == ButtonState.Enabled, () => ui.Send(new Command.ReconnectNow())));
+            entries.Add(s_separator);
+            entries.Add(new Entry(L("Connect"), connection.Connect == ButtonState.Enabled, () => _ui.Send(new Command.Connect())));
+            entries.Add(new Entry(L("Disconnect"), connection.Disconnect == ButtonState.Enabled, () => _ui.Send(new Command.Disconnect())));
+            entries.Add(new Entry(L("Reconnect Now"), connection.ReconnectNow == ButtonState.Enabled, () => _ui.Send(new Command.ReconnectNow())));
         }
-        entries.Add(Separator);
-        entries.Add(new Entry(L("Show Log"), true, () => ui.Settings.Show(SettingsPane.Log)));
-        entries.Add(new Entry(L("Settings…"), true, () => ui.Settings.Show(null)));
-        entries.Add(Separator);
-        entries.Add(new Entry(L("Quit FortiVPNManager"), true, quit));
+        entries.Add(s_separator);
+        entries.Add(new Entry(L("Show Log"), true, () => _ui.Settings.Show(SettingsPane.Log)));
+        entries.Add(new Entry(L("Settings…"), true, () => _ui.Settings.Show(null)));
+        entries.Add(s_separator);
+        entries.Add(new Entry(L("Quit FortiVPNManager"), true, _quit));
         return entries;
     }
 
-    private static readonly Entry Separator = new(null, false, null);
+    private static readonly Entry s_separator = new(null, false, null);
 
     /// <summary>A line of text, dimmed as the macOS menu's text lines are.</summary>
     private static Entry Line(string text) => new(text, false, null);

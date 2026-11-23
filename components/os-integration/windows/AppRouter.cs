@@ -24,23 +24,23 @@ public interface IAppUi
 public sealed class AppRouter
 {
     /// <summary>Gives Windows time to start a Helper that stopped before a call is tried again.</summary>
-    private static readonly TimeSpan HelperRetryDelay = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan s_helperRetryDelay = TimeSpan.FromMilliseconds(1500);
 
-    private readonly IAppUi ui;
-    private readonly Action<ToRuntime> send;
-    private readonly HelperRelay relay;
-    private readonly SystemEvents events;
-    private readonly UpdateWaiter waiter = new();
+    private readonly IAppUi _ui;
+    private readonly Action<ToRuntime> _send;
+    private readonly HelperRelay _relay;
+    private readonly SystemEvents _events;
+    private readonly UpdateWaiter _waiter = new();
 
     /// <param name="quit">Ends the app once the runtime approves a quit.</param>
     public AppRouter(string appBuild, IAppUi ui, Action quit, Action<ToRuntime> send)
     {
-        this.ui = ui;
-        this.send = send;
+        this._ui = ui;
+        this._send = send;
         Action<SystemEvent> post = systemEvent => send(new ToRuntime.Event(systemEvent));
         Lifetime = new AppLifetime(post, quit);
-        relay = new HelperRelay(appBuild, new HelperInbound(post), PipeHelperChannel.Open, HelperRetryDelay);
-        events = new SystemEvents(post, Lifetime);
+        _relay = new HelperRelay(appBuild, new HelperInbound(post), PipeHelperChannel.Open, s_helperRetryDelay);
+        _events = new SystemEvents(post, Lifetime);
     }
 
     public AppLifetime Lifetime { get; }
@@ -48,25 +48,25 @@ public sealed class AppRouter
     /// <summary>Reports the app's facts, which the runtime takes before anything else, then the system's events.</summary>
     public void Start(AppFacts facts)
     {
-        send(new ToRuntime.Launched(facts));
-        events.Start();
+        _send(new ToRuntime.Launched(facts));
+        _events.Start();
     }
 
     /// <summary>A command from the UI.</summary>
-    public void Send(Command command) => send(new ToRuntime.Command(command));
+    public void Send(Command command) => _send(new ToRuntime.Command(command));
 
     public void Receive(FromRuntime message)
     {
         switch (message)
         {
             case FromRuntime.Section section:
-                ui.Apply(section.Value);
+                _ui.Apply(section.Value);
                 break;
             case FromRuntime.LogLines lines:
-                ui.AppendLog(lines.Lines);
+                _ui.AppendLog(lines.Lines);
                 break;
             case FromRuntime.PortRequest request:
-                Answer(request.Request, response => send(new ToRuntime.PortResponse(request.Id, response)));
+                Answer(request.Request, response => _send(new ToRuntime.PortResponse(request.Id, response)));
                 break;
             case FromRuntime.PortAction action:
                 Perform(action.Value);
@@ -90,10 +90,10 @@ public sealed class AppRouter
                 break;
             // Opening the pipe can take seconds, so a Helper call never runs on the runtime's reader thread.
             case PortRequest.HelperBuild:
-                Watch(Task.Run(() => relay.Build(reply)));
+                Watch(Task.Run(() => _relay.Build(reply)));
                 break;
             case PortRequest.CallHelper call:
-                Watch(Task.Run(() => relay.Handle(call.Call, reply)));
+                Watch(Task.Run(() => _relay.Handle(call.Call, reply)));
                 break;
             case PortRequest.RouteInterface route:
                 reply(new PortResponse.RouteInterface(SystemFacts.RouteInterface(route.Destination)));
@@ -103,7 +103,7 @@ public sealed class AppRouter
                 break;
             case PortRequest.ScreenState:
                 // Displays off comes with the UI, which receives that event.
-                reply(new PortResponse.ScreenState(events.Locked, DisplaysAsleep: false));
+                reply(new PortResponse.ScreenState(_events.Locked, DisplaysAsleep: false));
                 break;
             case PortRequest.OpenBrowser browser:
                 reply(new PortResponse.BrowserOpened(OpenBrowser(browser.Url)));
@@ -118,7 +118,7 @@ public sealed class AppRouter
                 reply(new PortResponse.FortiClientConnections(FortiClientSettings.Connections()));
                 break;
             case PortRequest.StartUpdateWaiter:
-                reply(waiter.Start());
+                reply(_waiter.Start());
                 break;
         }
     }
@@ -131,7 +131,7 @@ public sealed class AppRouter
                 SystemLog.Write(log.Level, log.Category, log.Message);
                 break;
             case PortAction.PostNotification notification:
-                ui.PostNotification(notification.Notification);
+                _ui.PostNotification(notification.Notification);
                 break;
             // Windows neither suspends a desktop app nor asks the user to approve the Helper.
             case PortAction.HoldActivity or PortAction.OpenHelperApprovalSettings:
@@ -139,10 +139,10 @@ public sealed class AppRouter
             case PortAction.UseHelperTeam:
                 break;
             case PortAction.ReleaseUpdateWaiter release:
-                waiter.Release(release.InstallerProcessId);
+                _waiter.Release(release.InstallerProcessId);
                 break;
             case PortAction.StopUpdateWaiter:
-                waiter.Stop();
+                _waiter.Stop();
                 break;
             case PortAction.ApproveQuit:
                 Lifetime.ApproveQuit();

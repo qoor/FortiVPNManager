@@ -25,7 +25,7 @@ public sealed class RuntimeLink
     [DllImport("fvm_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     private static extern AppPipes fvm_runtime_start();
 
-    private readonly BlockingCollection<AppInternal.ToRuntime> outgoing = new();
+    private readonly BlockingCollection<AppInternal.ToRuntime> _outgoing = new();
 
     private RuntimeLink() { }
 
@@ -58,7 +58,7 @@ public sealed class RuntimeLink
         });
         StartThread("fvm-runtime-write", () =>
         {
-            foreach (AppInternal.ToRuntime message in link.outgoing.GetConsumingEnumerable())
+            foreach (AppInternal.ToRuntime message in link._outgoing.GetConsumingEnumerable())
             {
                 try
                 {
@@ -74,7 +74,7 @@ public sealed class RuntimeLink
     }
 
     /// <summary>Messages go out in call order, from any thread.</summary>
-    public void Send(AppInternal.ToRuntime message) => outgoing.Add(message);
+    public void Send(AppInternal.ToRuntime message) => _outgoing.Add(message);
 
     private static FileStream Open(nuint handle, FileAccess access) =>
         new(new SafeFileHandle((nint)handle, ownsHandle: true), access, bufferSize: 0);

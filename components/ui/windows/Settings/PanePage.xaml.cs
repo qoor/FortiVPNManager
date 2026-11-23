@@ -12,8 +12,8 @@ namespace FortiVPNManager.Ui.Settings;
 /// </summary>
 public sealed partial class PanePage : Page
 {
-    private AppUi? ui;
-    private IPane? content;
+    private AppUi? _ui;
+    private IPane? _content;
 
     public PanePage()
     {
@@ -37,10 +37,10 @@ public sealed partial class PanePage : Page
     }
 
     /// <summary>Ctrl+F: the log's own find, on the Log pane; false elsewhere, where it goes to the settings search.</summary>
-    internal bool Find() => content is LogPane log && log.ShowFind();
+    internal bool Find() => _content is LogPane log && log.ShowFind();
 
     /// <summary>Saves what is still being typed, before the pane or the window goes away.</summary>
-    internal void FinishTyping() => content?.FinishTyping();
+    internal void FinishTyping() => _content?.FinishTyping();
 
     /// <summary>
     /// A search result's row: the pane opens the expander it is in, then, once the row is laid out (a
@@ -49,7 +49,7 @@ public sealed partial class PanePage : Page
     /// </summary>
     internal void Reveal(string row)
     {
-        if (content?.OpenRow(row) is not { } element)
+        if (_content?.OpenRow(row) is not { } element)
         {
             return;
         }
@@ -73,7 +73,7 @@ public sealed partial class PanePage : Page
     }
 
     /// <summary>Rows highlighted now, each with the timer that ends its highlight.</summary>
-    private static readonly Dictionary<FrameworkElement, DispatcherQueueTimer> Highlighted = [];
+    private static readonly Dictionary<FrameworkElement, DispatcherQueueTimer> s_highlighted = [];
 
     /// <summary>
     /// The row's border in the accent colour for two seconds, as Windows Settings marks the setting a
@@ -82,7 +82,7 @@ public sealed partial class PanePage : Page
     /// </summary>
     private static void Highlight(FrameworkElement element)
     {
-        if (Highlighted.TryGetValue(element, out DispatcherQueueTimer? running))
+        if (s_highlighted.TryGetValue(element, out DispatcherQueueTimer? running))
         {
             running.Stop();
             running.Start();
@@ -107,9 +107,9 @@ public sealed partial class PanePage : Page
         {
             element.ClearValue(brush);
             element.ClearValue(thickness);
-            Highlighted.Remove(element);
+            s_highlighted.Remove(element);
         };
-        Highlighted[element] = timer;
+        s_highlighted[element] = timer;
         timer.Start();
     }
 
@@ -144,9 +144,9 @@ public sealed partial class PanePage : Page
 
     private void Show(AppUi ui, SettingsPane pane, IPane shown)
     {
-        this.ui = ui;
+        this._ui = ui;
         Pane = pane;
-        content = shown;
+        _content = shown;
         Refresh();
         ui.Changed += Refresh;
     }
@@ -164,15 +164,15 @@ public sealed partial class PanePage : Page
     internal void Leave()
     {
         FinishTyping();
-        if (ui is not null)
+        if (_ui is not null)
         {
-            ui.Changed -= Refresh;
+            _ui.Changed -= Refresh;
         }
-        (content as IDisposable)?.Dispose();
-        content = null;
+        (_content as IDisposable)?.Dispose();
+        _content = null;
     }
 
-    private void Refresh() => content?.Refresh();
+    private void Refresh() => _content?.Refresh();
 
     /// <summary>
     /// Below 560 px, about the narrow window's width, the buttons move under the title, where the Log

@@ -16,27 +16,27 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
     /// How long signing out or shutting down waits for the runtime to end the tunnel and the log.
     /// Windows asks the user about an app that holds it up longer.
     /// </summary>
-    private static readonly TimeSpan QuitWait = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan s_quitWait = TimeSpan.FromSeconds(5);
 
-    private readonly object gate = new();
-    private string timeZone = "";
-    private bool locked;
+    private readonly object _gate = new();
+    private string _timeZone = "";
+    private bool _locked;
 
     /// <summary>Whether the session is locked, from the lock and unlock events since the start.</summary>
     public bool Locked
     {
         get
         {
-            lock (gate)
+            lock (_gate)
             {
-                return locked;
+                return _locked;
             }
         }
     }
 
     public void Start()
     {
-        timeZone = IanaTimeZone();
+        _timeZone = IanaTimeZone();
         // These come through the subscribing thread's SynchronizationContext, and WinUI's UI thread has
         // one that cannot deliver them. Subscribed from a pool thread, which has none, they come on the
         // thread .NET keeps for its hidden window, so the wait on signing out holds up no app window.
@@ -67,16 +67,16 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         };
         Microsoft.Win32.SystemEvents.SessionSwitch += (_, change) =>
         {
-            lock (gate)
+            lock (_gate)
             {
                 switch (change.Reason)
                 {
                     case SessionSwitchReason.SessionLock:
-                        locked = true;
+                        _locked = true;
                         post(new SystemEvent.ScreenLocked(DateTimeOffset.Now));
                         break;
                     case SessionSwitchReason.SessionUnlock:
-                        locked = false;
+                        _locked = false;
                         post(new SystemEvent.ScreenUnlocked());
                         break;
                 }
@@ -88,13 +88,13 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
             post(new SystemEvent.ClockChanged());
             TimeZoneInfo.ClearCachedData();
             string current = IanaTimeZone();
-            lock (gate)
+            lock (_gate)
             {
-                if (current == timeZone)
+                if (current == _timeZone)
                 {
                     return;
                 }
-                timeZone = current;
+                _timeZone = current;
             }
             post(new SystemEvent.TimeZoneChanged(current));
         };
@@ -103,7 +103,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         Microsoft.Win32.SystemEvents.SessionEnding += (_, _) =>
         {
             lifetime.RequestQuit();
-            lifetime.WaitForApproval(QuitWait);
+            lifetime.WaitForApproval(s_quitWait);
         };
     }
 
