@@ -51,7 +51,7 @@ public static class BypassText
             case BypassStatus.Failed failed:
                 string message = failed.Failure.Message();
                 return failed.RetryInSeconds is { } seconds
-                    ? (message + " " + L("Trying again in %@.", time.SpelledOut(seconds)), NoticeStyle.Error)
+                    ? (message + " " + L("Trying again in %@.", TimeStyle.SpelledOut(seconds)), NoticeStyle.Error)
                     : (message, NoticeStyle.Error);
             default:
                 throw new InvalidOperationException($"unknown bypass status {status}");

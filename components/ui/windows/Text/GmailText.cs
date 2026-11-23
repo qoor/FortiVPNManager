@@ -12,7 +12,7 @@ public static class GmailText
         GoogleError.ClientFileInvalid invalid => invalid.Problem.Message(),
         GoogleError.ListenerFailed listener => L("Couldn't start the local sign-in listener: %@", listener.Detail),
         GoogleError.BrowserUnavailable => L("Couldn't open the web browser for Google sign-in."),
-        GoogleError.TimedOut timedOut => L("Google sign-in timed out after %@.", time.SpelledOut(timedOut.AfterSeconds)),
+        GoogleError.TimedOut timedOut => L("Google sign-in timed out after %@.", TimeStyle.SpelledOut(timedOut.AfterSeconds)),
         GoogleError.CancelledInBrowser => L("Google sign-in was cancelled in the browser."),
         GoogleError.Denied denied => L("Google sign-in failed (%@).", denied.Code),
         GoogleError.TokenRejected rejected => L("Google rejected the sign-in: %@", rejected.Detail),

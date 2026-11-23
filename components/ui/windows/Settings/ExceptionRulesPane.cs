@@ -102,7 +102,7 @@ internal sealed class ExceptionRulesPane : IPane
         _targets.CommitEdit();
     }
 
-    private static HashSet<int> ProblemRows(RuleList list) => list.ProblemRows.Select(row => (int)row).ToHashSet();
+    private static HashSet<int> ProblemRows(RuleList list) => [.. list.ProblemRows.Select(row => (int)row)];
 
     /// <summary>
     /// The problem the runtime explains, beside its row in <paramref name="list"/>. It reports only the
@@ -117,10 +117,8 @@ internal sealed class ExceptionRulesPane : IPane
             return [];
         }
         int index = (int)rows.ProblemRows[0];
-        if (index >= rows.Rows.Count || rows.Rows[index] != notice.Row)
-        {
-            return [];
-        }
-        return new() { [index] = (notice.Problem.RowMessage(), notice.Problem.Message(notice.Row)) };
+        return index >= rows.Rows.Count || rows.Rows[index] != notice.Row
+            ? []
+            : new() { [index] = (notice.Problem.RowMessage(), notice.Problem.Message(notice.Row)) };
     }
 }

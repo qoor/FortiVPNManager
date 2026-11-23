@@ -13,7 +13,7 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     public static TimeStyle Current(DateTimeOffset now) => new(now, CultureInfo.CurrentCulture);
 
     /// <summary>A time value that came with a kind, such as a time limit: "50 seconds", "1 hour, 5 minutes".</summary>
-    public string SpelledOut(ulong seconds)
+    public static string SpelledOut(ulong seconds)
     {
         var parts = new List<string>();
         (ulong hours, ulong rest) = Math.DivRem(seconds, 3600UL);
@@ -34,7 +34,7 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     }
 
     /// <summary>Whole minutes: "1 hr 23 min", "45 min", "2 hr", or "less than a minute".</summary>
-    public string Duration(TimeSpan interval)
+    public static string Duration(TimeSpan interval)
     {
         long minutes = (long)Math.Floor(interval.TotalMinutes);
         if (minutes < 1)
@@ -42,11 +42,7 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
             return L("less than a minute");
         }
         (long hours, long rest) = Math.DivRem(minutes, 60L);
-        if (hours == 0)
-        {
-            return L("%lld min", rest);
-        }
-        return rest == 0 ? L("%lld hr", hours) : L("%lld hr", hours) + " " + L("%lld min", rest);
+        return hours == 0 ? L("%lld min", rest) : rest == 0 ? L("%lld hr", hours) : L("%lld hr", hours) + " " + L("%lld min", rest);
     }
 
     /// <summary>"Reconnects in about 1 hr 32 min", or "Reconnects soon" within the last minute.</summary>

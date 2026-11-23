@@ -1,5 +1,4 @@
-﻿using FortiVPNManager.Contract;
-using FortiVPNManager.OsIntegration;
+﻿using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Dispatching;
@@ -39,7 +38,7 @@ public partial class App : Application
         _notifier = new Notifier((identifier, button) => _dispatcher.TryEnqueue(() => _ui?.OpenNotification(identifier, button)));
         AppFacts facts = CurrentAppFacts.Read(GmailText.SignInPages());
         RuntimeLink? link = null;
-        _ui = new AppUi(_dispatcher, command => _router!.Send(command), _notifier.Post);
+        _ui = new AppUi(_dispatcher, command => _router!.Send(command), Notifier.Post);
         // The runtime sends nothing before the launch message, which Start sends; the link exists by then.
         _router = new AppRouter(facts.AppBuild, new UiBridge(_ui), Quit, message => link!.Send(message));
         link = RuntimeLink.Start(_router.Receive);

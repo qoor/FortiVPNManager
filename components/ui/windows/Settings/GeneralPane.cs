@@ -218,7 +218,7 @@ internal sealed class GeneralPane : IPane
         }
         if (connected is not null)
         {
-            _connectedAtValue.Text = L("%@ (%@ ago)", time.ClockTime(connected.Since), time.Duration(time.Now - connected.Since));
+            _connectedAtValue.Text = L("%@ (%@ ago)", time.ClockTime(connected.Since), TimeStyle.Duration(time.Now - connected.Since));
             _tunnelIpValue.Text = connected.TunnelIp ?? L("Unknown");
             _proactiveValue.Text = connected.ProactiveReconnect switch
             {

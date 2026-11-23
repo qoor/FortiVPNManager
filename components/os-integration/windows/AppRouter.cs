@@ -37,7 +37,7 @@ public sealed class AppRouter
     {
         this._ui = ui;
         this._send = send;
-        Action<SystemEvent> post = systemEvent => send(new ToRuntime.Event(systemEvent));
+        void post(SystemEvent systemEvent) => send(new ToRuntime.Event(systemEvent));
         Lifetime = new AppLifetime(post, quit);
         _relay = new HelperRelay(appBuild, new HelperInbound(post), PipeHelperChannel.Open, s_helperRetryDelay);
         _events = new SystemEvents(post, Lifetime);

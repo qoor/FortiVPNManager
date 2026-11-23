@@ -163,7 +163,7 @@ internal sealed class AddressList
 
     private void Reload()
     {
-        var selected = _list.SelectedItems.Select(item => _list.Items.IndexOf(item)).Where(index => index < _rows.Count).ToList();
+        var selected = _list.SelectedItems.Select(_list.Items.IndexOf).Where(index => index < _rows.Count).ToList();
         _list.Items.Clear();
         for (int index = 0; index < _rows.Count; index++)
         {
@@ -224,7 +224,7 @@ internal sealed class AddressList
         {
             return;
         }
-        var selected = _list.SelectedItems.Select(item => _list.Items.IndexOf(item)).ToHashSet();
+        var selected = _list.SelectedItems.Select(_list.Items.IndexOf).ToHashSet();
         var remaining = _rows.Where((_, index) => !selected.Contains(index)).ToList();
         if (remaining.Count == _rows.Count)
         {

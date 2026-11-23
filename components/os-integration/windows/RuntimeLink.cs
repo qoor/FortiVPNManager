@@ -25,7 +25,7 @@ public sealed class RuntimeLink
     [DllImport("fvm_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     private static extern AppPipes fvm_runtime_start();
 
-    private readonly BlockingCollection<AppInternal.ToRuntime> _outgoing = new();
+    private readonly BlockingCollection<AppInternal.ToRuntime> _outgoing = [];
 
     private RuntimeLink() { }
 

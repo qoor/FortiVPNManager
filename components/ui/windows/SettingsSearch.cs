@@ -178,7 +178,7 @@ public static class SettingsSearchMatch
         internal Name(string text)
         {
             Characters = Elements(text);
-            Jamo = Characters.Select(SettingsSearchMatch.Jamo).ToArray();
+            Jamo = [.. Characters.Select(SettingsSearchMatch.Jamo)];
         }
 
         internal string[] Characters { get; }
@@ -246,7 +246,7 @@ public static class SettingsSearchMatch
         return false;
     }
 
-    private static readonly string[] s_initials = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ".Select(c => c.ToString()).ToArray();
+    private static readonly string[] s_initials = [.. "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ".Select(c => c.ToString())];
     private static readonly string[] s_medials = ["ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅗㅏ", "ㅗㅐ", "ㅗㅣ", "ㅛ", "ㅜ", "ㅜㅓ", "ㅜㅔ", "ㅜㅣ", "ㅠ", "ㅡ", "ㅡㅣ", "ㅣ"];
     private static readonly string[] s_finals = ["", "ㄱ", "ㄲ", "ㄱㅅ", "ㄴ", "ㄴㅈ", "ㄴㅎ", "ㄷ", "ㄹ", "ㄹㄱ", "ㄹㅁ", "ㄹㅂ", "ㄹㅅ", "ㄹㅌ", "ㄹㅍ", "ㄹㅎ", "ㅁ", "ㅂ", "ㅂㅅ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
     private static readonly Dictionary<string, string> s_compounds = new()
@@ -281,7 +281,7 @@ public static class SettingsSearchMatch
         {
             elements.Add(enumerator.GetTextElement());
         }
-        return elements.ToArray();
+        return [.. elements];
     }
 
     private static int? SyllableIndex(string character) =>

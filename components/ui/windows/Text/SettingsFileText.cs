@@ -30,18 +30,11 @@ public static class SettingsFileText
         _ => throw new InvalidOperationException($"unknown config file error {error}"),
     };
 
-    public static string DisplayMessage(this ConfigProblem problem)
-    {
-        if (problem.Location is not { } location)
-        {
-            return problem.Kind.Message();
-        }
-        if (problem.Kind is ConfigProblemKind.VpnServerAsRouteTarget server)
-        {
-            return location.Description() + " (" + server.Path + "): " + problem.Kind.Message();
-        }
-        return location.Description() + ": " + problem.Kind.Message();
-    }
+    public static string DisplayMessage(this ConfigProblem problem) => problem.Location is not { } location
+            ? problem.Kind.Message()
+            : problem.Kind is ConfigProblemKind.VpnServerAsRouteTarget server
+            ? location.Description() + " (" + server.Path + "): " + problem.Kind.Message()
+            : location.Description() + ": " + problem.Kind.Message();
 
     public static string DisplayMessage(this ConfigWarning warning) =>
         warning.Location is { } location ? location.Description() + ": " + warning.Kind.Message() : warning.Kind.Message();

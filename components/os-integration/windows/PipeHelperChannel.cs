@@ -41,8 +41,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
         try
         {
             pipe.Connect(limit);
-            var owner = pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
-            if (owner is null || !owner.IsWellKnown(WellKnownSidType.LocalSystemSid))
+            if (pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !owner.IsWellKnown(WellKnownSidType.LocalSystemSid))
             {
                 throw new HelperChannelException(new HelperChannelFailure.Connection(
                     "the Helper's pipe is not owned by the system account"));

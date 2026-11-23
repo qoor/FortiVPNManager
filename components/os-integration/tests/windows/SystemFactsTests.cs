@@ -46,8 +46,5 @@ public class SystemFactsTests
     }
 
     [Fact]
-    public void TheTimeZoneIsAnIanaName()
-    {
-        Assert.Contains('/', SystemEvents.IanaTimeZone());
-    }
+    public void TheTimeZoneIsAnIanaName() => Assert.Contains('/', SystemEvents.IanaTimeZone());
 }

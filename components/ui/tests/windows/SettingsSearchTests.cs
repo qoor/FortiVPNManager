@@ -43,7 +43,7 @@ public class SettingsSearchTests
         SettingsSearch.Results(text, isShown ?? (_ => true));
 
     private static List<string> Keys(List<SearchResult> results, SettingsPane pane) =>
-        results.Where(result => result.Pane == pane && result.Item is not null).Select(result => result.Item!.Key).ToList();
+        [.. results.Where(result => result.Pane == pane && result.Item is not null).Select(result => result.Item!.Key)];
 
     [Fact]
     public void ListsTheMatchingSettingsWithTheirPane()

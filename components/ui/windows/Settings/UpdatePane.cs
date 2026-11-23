@@ -148,7 +148,7 @@ internal sealed class UpdatePane : IPane
         {
             UpdateProgress.Downloading downloading => downloading.Percent,
             UpdateProgress.Preparing preparing => preparing.Percent,
-            _ => (byte?)null,
+            _ => null,
         };
         _bar.Visible(percent is not null);
         _bar.Value = percent ?? 0;

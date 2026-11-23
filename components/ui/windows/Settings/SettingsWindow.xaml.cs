@@ -67,11 +67,11 @@ public sealed partial class SettingsWindow : Window
         Search.UpdateTextOnSelect = false;
         FlyoutSearch.UpdateTextOnSelect = false;
         AddKeyboardShortcuts();
-        Navigation.ItemInvoked += (_, args) =>
+        Navigation.ItemInvoked += (sender, args) =>
         {
             if (args.InvokedItemContainer is NavigationViewItem { Tag: SettingsPane pane } && ContentFrame.Content is PanePage { Subpage: not null })
             {
-                ContentFrame.Navigate(typeof(PanePage), pane);
+                _ = ContentFrame.Navigate(typeof(PanePage), pane);
             }
         };
         var placement = Placement.Load();
@@ -106,9 +106,9 @@ public sealed partial class SettingsWindow : Window
         {
             if (ContentFrame.Content is not PanePage { Pane: SettingsPane.General })
             {
-                ContentFrame.Navigate(typeof(PanePage), SettingsPane.General);
+                _ = ContentFrame.Navigate(typeof(PanePage), SettingsPane.General);
             }
-            ContentFrame.Navigate(typeof(PanePage), SettingsSubpage.SoftwareUpdate);
+            _ = ContentFrame.Navigate(typeof(PanePage), SettingsSubpage.SoftwareUpdate);
         }
         Show(null);
     }
@@ -131,7 +131,7 @@ public sealed partial class SettingsWindow : Window
 
     private void Select(SettingsPane pane)
     {
-        var item = Navigation.MenuItems.OfType<NavigationViewItem>().First(i => (SettingsPane)i.Tag == pane);
+        NavigationViewItem item = Navigation.MenuItems.OfType<NavigationViewItem>().First(i => (SettingsPane)i.Tag == pane);
         if (Navigation.SelectedItem != (object)item)
         {
             Navigation.SelectedItem = item;
@@ -143,7 +143,7 @@ public sealed partial class SettingsWindow : Window
         if (args.SelectedItem is NavigationViewItem { Tag: SettingsPane pane }
             && (ContentFrame.Content as PanePage)?.Pane != pane)
         {
-            ContentFrame.Navigate(typeof(PanePage), pane);
+            _ = ContentFrame.Navigate(typeof(PanePage), pane);
         }
     }
 
@@ -202,7 +202,7 @@ public sealed partial class SettingsWindow : Window
         }
         sender.ItemsSource = results.Count == 0
             ? new List<object> { new TextBlock { Text = L("No results"), Foreground = Cards.Brush("TextFillColorSecondaryBrush") } }
-            : results.Select(Suggestion).ToList<object>();
+            : [.. results.Select(Suggestion)];
     }
 
     /// <summary>A result's line: the pane's glyph, the setting's name (up to three lines) and, for a setting, its pane.</summary>
@@ -244,7 +244,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (ContentFrame.Content is PanePage { Subpage: not null })
         {
-            ContentFrame.Navigate(typeof(PanePage), result.Pane);
+            _ = ContentFrame.Navigate(typeof(PanePage), result.Pane);
         }
         else
         {
@@ -252,7 +252,7 @@ public sealed partial class SettingsWindow : Window
         }
         if (result.Item?.Row is { } row)
         {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => (ContentFrame.Content as PanePage)?.Reveal(row));
+            _ = DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => (ContentFrame.Content as PanePage)?.Reveal(row));
         }
     }
 
@@ -294,7 +294,7 @@ public sealed partial class SettingsWindow : Window
     {
         const double reserved = 230;
         _narrow = width < 800;
-        SearchArea.Width = Math.Clamp(width - 2 * reserved, 200, 516);
+        SearchArea.Width = Math.Clamp(width - (2 * reserved), 200, 516);
         Navigation.PaneDisplayMode = _narrow ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.Left;
         ApplyWidthLayout();
     }
@@ -341,7 +341,7 @@ public sealed partial class SettingsWindow : Window
             args.Handled = true;
         };
         var find = new KeyboardAccelerator { Key = VirtualKey.F, Modifiers = VirtualKeyModifiers.Control };
-        find.Invoked += (_, args) =>
+        find.Invoked += (sender, args) =>
         {
             args.Handled = true;
             // The Log pane finds in the log, as Ctrl+F does in a document.
@@ -355,7 +355,7 @@ public sealed partial class SettingsWindow : Window
             }
             else
             {
-                Search.Focus(FocusState.Keyboard);
+                _ = Search.Focus(FocusState.Keyboard);
             }
         };
         RootGrid.KeyboardAccelerators.Add(back);
@@ -377,7 +377,7 @@ public sealed partial class SettingsWindow : Window
         {
             RectInt32 work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
             var size = new SizeInt32((int)(1040 * scale), (int)(720 * scale));
-            rect = new RectInt32(work.X + (work.Width - size.Width) / 2, work.Y + (work.Height - size.Height) / 2, size.Width, size.Height);
+            rect = new RectInt32(work.X + ((work.Width - size.Width) / 2), work.Y + ((work.Height - size.Height) / 2), size.Width, size.Height);
         }
         AppWindow.MoveAndResize(rect);
         if (AppWindow.Presenter is OverlappedPresenter presenter)

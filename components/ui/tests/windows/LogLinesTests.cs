@@ -30,7 +30,7 @@ public class LogLinesTests
     public void KeepsTheNewestLinesWithinTheLineLimit()
     {
         var log = new LogLines();
-        log.Append(Enumerable.Range(0, LogLines.MaxLines + 3).Select(index => Line($"{index}")).ToList());
+        log.Append([.. Enumerable.Range(0, LogLines.MaxLines + 3).Select(index => Line($"{index}"))]);
         Assert.Equal(LogLines.MaxLines, log.Entries.Count);
         Assert.Equal("3", log.Entries[0].Line.Text);
         Assert.Equal($"{LogLines.MaxLines + 2}", log.Entries[^1].Line.Text);
@@ -41,8 +41,8 @@ public class LogLinesTests
     {
         var log = new LogLines();
         // Each line costs its UTF-8 length plus one for its line break: 1 KiB.
-        string text = new string('x', 1023);
-        log.Append(Enumerable.Range(0, (2 * 1024) + 2).Select(_ => Line(text)).ToList());
+        string text = new('x', 1023);
+        log.Append([.. Enumerable.Range(0, (2 * 1024) + 2).Select(_ => Line(text))]);
         Assert.Equal(2 * 1024, log.Entries.Count);
     }
 

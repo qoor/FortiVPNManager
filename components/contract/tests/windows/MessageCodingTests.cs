@@ -14,7 +14,7 @@ public class MessageCodingTests
     private static readonly Type[] s_contractTypes = typeof(MessageCoding).Assembly.GetTypes();
 
     /// <summary>The abstract records whose nested records are their cases; static classes are abstract too, but sealed.</summary>
-    private static readonly Type[] s_casesTypes = s_contractTypes.Where(type => type.IsAbstract && !type.IsSealed).ToArray();
+    private static readonly Type[] s_casesTypes = [.. s_contractTypes.Where(type => type.IsAbstract && !type.IsSealed)];
 
     [Fact]
     public void EveryCaseIsListed()

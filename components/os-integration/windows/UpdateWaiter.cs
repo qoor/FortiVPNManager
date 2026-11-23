@@ -20,7 +20,7 @@ internal sealed class UpdateWaiter
             _running = Process.Start(StartInfo(
                 Environment.ProcessId,
                 Path.Combine(ServiceRegistration.InstallFolder, App),
-                App))!;
+                App));
             return new PortResponse.UpdateWaiterStarted();
         }
         catch (Win32Exception error)

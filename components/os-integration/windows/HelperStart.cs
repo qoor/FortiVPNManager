@@ -95,7 +95,7 @@ public static class HelperStart
     public static HelperStartResult Run()
     {
         var ending = new ManualResetEventSlim();
-        SessionEndingEventHandler onEnding = (_, _) => ending.Set();
+        void onEnding(object _1, SessionEndingEventArgs _2) => ending.Set();
         // From a pool thread, as in SystemEvents.Start: the first use of them decides their thread.
         Task.Run(() => Microsoft.Win32.SystemEvents.SessionEnding += onEnding).Wait();
         try
@@ -253,16 +253,14 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         }
         try
         {
-            if (!QueryServiceStatus(service, out ServiceStatus status))
-            {
-                throw new Win32Exception();
-            }
-            return status.CurrentState switch
-            {
-                Stopped => HelperServiceState.Stopped,
-                Running => HelperServiceState.Running,
-                _ => HelperServiceState.Changing,
-            };
+            return !QueryServiceStatus(service, out ServiceStatus status)
+                ? throw new Win32Exception()
+                : status.CurrentState switch
+                {
+                    Stopped => HelperServiceState.Stopped,
+                    Running => HelperServiceState.Running,
+                    _ => HelperServiceState.Changing,
+                };
         }
         finally
         {
@@ -284,19 +282,17 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         }
         try
         {
-            if (StartServiceW(service, 0, 0))
-            {
-                return new StartAnswer.Requested();
-            }
-            return Marshal.GetLastWin32Error() switch
-            {
-                AlreadyRunning => new StartAnswer.Requested(),
-                ServiceDisabled => new StartAnswer.Refused(HelperStartFailure.Disabled),
-                // Being uninstalled.
-                MarkedForDelete => new StartAnswer.Refused(HelperStartFailure.NotInstalled),
-                RequestTimedOut => new StartAnswer.TimedOut(),
-                var error => new StartAnswer.Failed(error),
-            };
+            return StartServiceW(service, 0, 0)
+                ? new StartAnswer.Requested()
+                : Marshal.GetLastWin32Error() switch
+                {
+                    AlreadyRunning => new StartAnswer.Requested(),
+                    ServiceDisabled => new StartAnswer.Refused(HelperStartFailure.Disabled),
+                    // Being uninstalled.
+                    MarkedForDelete => new StartAnswer.Refused(HelperStartFailure.NotInstalled),
+                    RequestTimedOut => new StartAnswer.TimedOut(),
+                    var error => new StartAnswer.Failed(error),
+                };
         }
         finally
         {

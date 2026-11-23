@@ -1,5 +1,4 @@
-﻿using FortiVPNManager.Contract;
-using FortiVPNManager.Ui.Settings;
+﻿using FortiVPNManager.Ui.Settings;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Dispatching;
 using static FortiVPNManager.Contract.AppInternal;

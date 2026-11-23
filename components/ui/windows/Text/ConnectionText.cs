@@ -1,5 +1,4 @@
-﻿using FortiVPNManager.Contract;
-using static FortiVPNManager.Contract.AppInternal;
+﻿using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
@@ -28,7 +27,7 @@ public static class ConnectionText
                 string verb = connecting.Reconnecting ? L("Reconnecting") : L("Connecting");
                 return verb + " · " + connecting.Progress.Text();
             case ConnectionStatus.Connected connected:
-                var parts = new List<string> { L("Connected"), time.Duration(time.Now - connected.Since) };
+                var parts = new List<string> { L("Connected"), TimeStyle.Duration(time.Now - connected.Since) };
                 if (connected.ProactiveReconnect is ProactiveReconnect.At at)
                 {
                     if (includesPlannedReconnect)
@@ -110,13 +109,13 @@ public static class ConnectionText
     {
         FailureReason.VpnLoginRejected => L("The server rejected the login. Check the username and password."),
         FailureReason.OtpNotReceived { InSpam: true } => L("The OTP email is in Spam. Check your Gmail filter."),
-        FailureReason.OtpNotReceived otp => L("No OTP email was found within %@.", time.SpelledOut(otp.WaitedSeconds)),
+        FailureReason.OtpNotReceived otp => L("No OTP email was found within %@.", TimeStyle.SpelledOut(otp.WaitedSeconds)),
         FailureReason.OtpRejected => L("The server did not accept the OTP."),
         FailureReason.TunnelSetupFailed => L("Couldn't open the tunnel after login."),
         FailureReason.CertificateChangedAfterLogin => L("The server certificate was rejected after login."),
         FailureReason.GmailRejected { Method: OtpMethod.Imap } => L("Gmail rejected the login. Check the app password and that IMAP is enabled."),
         FailureReason.GmailRejected => L("Couldn't read Gmail. Connect the Google account again."),
-        FailureReason.TooManyReconnects reconnects => L("Automatic reconnection stopped after too many sign-in attempts within %@.", time.SpelledOut(reconnects.WindowSeconds)),
+        FailureReason.TooManyReconnects reconnects => L("Automatic reconnection stopped after too many sign-in attempts within %@.", TimeStyle.SpelledOut(reconnects.WindowSeconds)),
         FailureReason.Network => L("Couldn't connect to the VPN server."),
         FailureReason.Helper { Code: HelperErrorCode.InvalidRequest } => L("The connection request was rejected. Check the account and VPN password."),
         FailureReason.Helper helper => L("Helper error: %@", helper.Code.Summary()),
@@ -159,7 +158,7 @@ public static class ConnectionText
         WaitReason.ServerEndedSession => L("Server ended the session"),
         WaitReason.ForcedTermination => L("Connection was forcibly ended"),
         WaitReason.AuthFailure failure => L("Authentication failed (%@), retrying once", failure.Reason.Summary()),
-        WaitReason.AuthCooldown cooldown => L("Waiting %@ after authentication failure", time.SpelledOut(cooldown.DelaySeconds)),
+        WaitReason.AuthCooldown cooldown => L("Waiting %@ after authentication failure", TimeStyle.SpelledOut(cooldown.DelaySeconds)),
         WaitReason.Sleep => L("Resuming after sleep"),
         WaitReason.UserAway => L("Outside the scheduled hours, reconnects when you're back"),
         _ => throw new InvalidOperationException($"unknown wait reason {reason}"),

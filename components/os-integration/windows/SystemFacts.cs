@@ -38,18 +38,11 @@ internal static class SystemFacts
     private static extern uint GetBestRoute(uint destination, uint source, out ForwardRow route);
 
     /// <summary>The interface the routing table uses for <paramref name="destination"/>, an IPv4 address.</summary>
-    public static string? RouteInterface(string destination)
-    {
-        if (!IPAddress.TryParse(destination, out IPAddress? address) || address.AddressFamily != AddressFamily.InterNetwork)
-        {
-            return null;
-        }
-        if (GetBestInterface(NetworkOrder(address), out uint index) != 0)
-        {
-            return null;
-        }
-        return NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(nic => Ipv4Index(nic) == index)?.Name;
-    }
+    public static string? RouteInterface(string destination) => !IPAddress.TryParse(destination, out IPAddress? address) || address.AddressFamily != AddressFamily.InterNetwork
+            ? null
+            : GetBestInterface(NetworkOrder(address), out uint index) != 0
+            ? null
+            : (NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(nic => Ipv4Index(nic) == index)?.Name);
 
     /// <summary>The next hop of the default route the routing table picks.</summary>
     public static string? PrimaryRouter() =>
@@ -62,10 +55,9 @@ internal static class SystemFacts
 
     /// <summary>The interfaces that are up.</summary>
     public static IReadOnlyList<PathInterface> PathInterfaces() =>
-        NetworkInterface.GetAllNetworkInterfaces()
+        [.. NetworkInterface.GetAllNetworkInterfaces()
             .Where(nic => nic.OperationalStatus == OperationalStatus.Up)
-            .Select(nic => new PathInterface(nic.Name, Kind(nic.NetworkInterfaceType)))
-            .ToList();
+            .Select(nic => new PathInterface(nic.Name, Kind(nic.NetworkInterfaceType)))];
 
     /// <summary>A tunnel or any other interface counts as other.</summary>
     public static InterfaceKind Kind(NetworkInterfaceType type) => type switch

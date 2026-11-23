@@ -15,10 +15,7 @@ public sealed partial class PanePage : Page
     private AppUi? _ui;
     private IPane? _content;
 
-    public PanePage()
-    {
-        InitializeComponent();
-    }
+    public PanePage() => InitializeComponent();
 
     public SettingsPane? Pane { get; private set; }
 
@@ -164,10 +161,7 @@ public sealed partial class PanePage : Page
     internal void Leave()
     {
         FinishTyping();
-        if (_ui is not null)
-        {
-            _ui.Changed -= Refresh;
-        }
+        _ui?.Changed -= Refresh;
         (_content as IDisposable)?.Dispose();
         _content = null;
     }

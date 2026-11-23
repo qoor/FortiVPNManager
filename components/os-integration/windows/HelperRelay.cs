@@ -38,7 +38,8 @@ internal delegate IHelperChannel OpenHelperChannel(ulong id, HelperInbound inbou
 /// the connection fails or cannot be opened. Other calls are never repeated or moved.</item>
 /// </list>
 /// </summary>
-internal sealed class HelperRelay
+/// <param name="retryDelay">How long a retry waits for the Helper; Windows restarts a Helper that stopped.</param>
+internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHelperChannel open, TimeSpan retryDelay)
 {
     private sealed record Link(IHelperChannel Channel, ulong Id);
 
@@ -47,24 +48,13 @@ internal sealed class HelperRelay
 
     private static readonly TimeSpan s_restartLimit = TimeSpan.FromSeconds(20);
 
-    private readonly string _appBuild;
-    private readonly HelperInbound _inbound;
-    private readonly OpenHelperChannel _open;
-    private readonly TimeSpan _retryDelay;
+    private readonly string _appBuild = appBuild;
+    private readonly HelperInbound _inbound = inbound;
+    private readonly OpenHelperChannel _open = open;
+    private readonly TimeSpan _retryDelay = retryDelay;
     private readonly object _gate = new();
     private Link? _link;
     private ulong _lastLinkId;
-    /// <summary>The connection whose Helper answered with the app's build.</summary>
-    private ulong? _verifiedLinkId;
-
-    /// <param name="retryDelay">How long a retry waits for the Helper; Windows restarts a Helper that stopped.</param>
-    public HelperRelay(string appBuild, HelperInbound inbound, OpenHelperChannel open, TimeSpan retryDelay)
-    {
-        this._appBuild = appBuild;
-        this._inbound = inbound;
-        this._open = open;
-        this._retryDelay = retryDelay;
-    }
 
     public async Task Build(Action<PortResponse> reply)
     {
@@ -166,7 +156,7 @@ internal sealed class HelperRelay
         {
             if (build == _appBuild && _inbound.IsActive(current.Id))
             {
-                _verifiedLinkId = current.Id;
+                VerifiedLinkId = current.Id;
             }
         }
         return build;
@@ -202,9 +192,11 @@ internal sealed class HelperRelay
         {
             lock (_gate)
             {
-                return _verifiedLinkId;
+                return field;
             }
         }
+
+        set;
     }
 
     /// <summary>The live connection, or a new one when there is none or the last one was lost.</summary>
@@ -249,7 +241,7 @@ internal sealed class HelperRelay
         if (_link?.Id == target.Id)
         {
             _link = null;
-            _verifiedLinkId = null;
+            VerifiedLinkId = null;
         }
     }
 

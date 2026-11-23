@@ -20,7 +20,6 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
 
     private readonly object _gate = new();
     private string _timeZone = "";
-    private bool _locked;
 
     /// <summary>Whether the session is locked, from the lock and unlock events since the start.</summary>
     public bool Locked
@@ -29,9 +28,11 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         {
             lock (_gate)
             {
-                return _locked;
+                return field;
             }
         }
+
+        private set;
     }
 
     public void Start()
@@ -72,11 +73,11 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
                 switch (change.Reason)
                 {
                     case SessionSwitchReason.SessionLock:
-                        _locked = true;
+                        Locked = true;
                         post(new SystemEvent.ScreenLocked(DateTimeOffset.Now));
                         break;
                     case SessionSwitchReason.SessionUnlock:
-                        _locked = false;
+                        Locked = false;
                         post(new SystemEvent.ScreenUnlocked());
                         break;
                 }

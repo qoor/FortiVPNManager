@@ -15,10 +15,7 @@ public class StringsTests
 {
     internal static readonly string s_repository = FindRepository();
 
-    public StringsTests()
-    {
-        Language = "en";
-    }
+    public StringsTests() => Language = "en";
 
     [Fact]
     public void EveryKeyTheUiUsesIsInACatalog()
@@ -75,11 +72,11 @@ public class StringsTests
     {
         DateTimeOffset now = DateTimeOffset.Now;
         var time = new TimeStyle(now, CultureInfo.GetCultureInfo("en-US"));
-        Assert.Equal("1 hr 23 min", time.Duration(TimeSpan.FromMinutes(83)));
-        Assert.Equal("2 hr", time.Duration(TimeSpan.FromMinutes(120)));
-        Assert.Equal("less than a minute", time.Duration(TimeSpan.FromSeconds(59)));
-        Assert.Equal("1 hour, 5 minutes", time.SpelledOut(3900));
-        Assert.Equal("50 seconds", time.SpelledOut(50));
+        Assert.Equal("1 hr 23 min", TimeStyle.Duration(TimeSpan.FromMinutes(83)));
+        Assert.Equal("2 hr", TimeStyle.Duration(TimeSpan.FromMinutes(120)));
+        Assert.Equal("less than a minute", TimeStyle.Duration(TimeSpan.FromSeconds(59)));
+        Assert.Equal("1 hour, 5 minutes", TimeStyle.SpelledOut(3900));
+        Assert.Equal("50 seconds", TimeStyle.SpelledOut(50));
         Assert.Equal("1:12", TimeStyle.Countdown(TimeSpan.FromSeconds(71.2)));
         Assert.Equal("Reconnects soon", time.PlannedReconnect(now.AddSeconds(30)));
         Assert.Equal("Reconnects in about 1 hr 32 min", time.PlannedReconnect(now.AddMinutes(92).AddSeconds(20)));

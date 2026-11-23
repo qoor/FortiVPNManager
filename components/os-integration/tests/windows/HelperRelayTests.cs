@@ -192,7 +192,7 @@ public class HelperRelayTests
             return answer!;
         }
 
-        private IHelperChannel Open(TimeSpan limit)
+        private FakeHelper Open(TimeSpan limit)
         {
             Opened++;
             return PipeAppearsAfter <= limit && _helpers.Dequeue() is { } helper
