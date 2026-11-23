@@ -5,37 +5,45 @@ namespace FortiVPNManager.Ui.Text;
 
 public static class UpdateText
 {
-    public static string Headline(this AutoUpdateSection section) => section.Progress switch
+    public static string Headline(this AutoUpdateSection section)
     {
-        UpdateProgress.Downloading or UpdateProgress.Preparing => L("Updates available"),
-        UpdateProgress.ReadyToRestart => L("Restart required"),
-        UpdateProgress.Installing => L("Installing…"),
-        UpdateProgress.Idle or UpdateProgress.Failed => section.Status switch
+        ArgumentNullException.ThrowIfNull(section);
+        return section.Progress switch
         {
-            UpdateStatus.Checking => L("Checking for updates…"),
-            UpdateStatus.UpToDate => L("You're up to date"),
-            UpdateStatus.Available => L("Updates available"),
-            UpdateStatus.CheckFailed failed => failed.Reason.Message(),
-            _ => throw new InvalidOperationException($"unknown update status {section.Status}"),
-        },
-        _ => throw new InvalidOperationException($"unknown update progress {section.Progress}"),
-    };
+            UpdateProgress.Downloading or UpdateProgress.Preparing => L("Updates available"),
+            UpdateProgress.ReadyToRestart => L("Restart required"),
+            UpdateProgress.Installing => L("Installing…"),
+            UpdateProgress.Idle or UpdateProgress.Failed => section.Status switch
+            {
+                UpdateStatus.Checking => L("Checking for updates…"),
+                UpdateStatus.UpToDate => L("You're up to date"),
+                UpdateStatus.Available => L("Updates available"),
+                UpdateStatus.CheckFailed failed => failed.Reason.Message(),
+                _ => throw new InvalidOperationException($"unknown update status {section.Status}"),
+            },
+            _ => throw new InvalidOperationException($"unknown update progress {section.Progress}"),
+        };
+    }
 
-    public static string? Subtitle(this AutoUpdateSection section) => section.Progress switch
+    public static string? Subtitle(this AutoUpdateSection section)
     {
-        UpdateProgress.Downloading or UpdateProgress.Preparing => L("Current version: %@", section.CurrentVersion),
-        UpdateProgress.ReadyToRestart =>
-            L("The update installs when you restart the app. The VPN disconnects briefly during the install."),
-        UpdateProgress.Installing => L("The app quits to install the update and opens again when it's done."),
-        UpdateProgress.Idle or UpdateProgress.Failed => section.Status switch
+        ArgumentNullException.ThrowIfNull(section);
+        return section.Progress switch
         {
-            UpdateStatus.Checking => null,
-            UpdateStatus.UpToDate => $"FortiVPNManager {section.CurrentVersion}",
-            UpdateStatus.Available or UpdateStatus.CheckFailed => L("Current version: %@", section.CurrentVersion),
-            _ => throw new InvalidOperationException($"unknown update status {section.Status}"),
-        },
-        _ => throw new InvalidOperationException($"unknown update progress {section.Progress}"),
-    };
+            UpdateProgress.Downloading or UpdateProgress.Preparing => L("Current version: %@", section.CurrentVersion),
+            UpdateProgress.ReadyToRestart =>
+                L("The update installs when you restart the app. The VPN disconnects briefly during the install."),
+            UpdateProgress.Installing => L("The app quits to install the update and opens again when it's done."),
+            UpdateProgress.Idle or UpdateProgress.Failed => section.Status switch
+            {
+                UpdateStatus.Checking => null,
+                UpdateStatus.UpToDate => $"FortiVPNManager {section.CurrentVersion}",
+                UpdateStatus.Available or UpdateStatus.CheckFailed => L("Current version: %@", section.CurrentVersion),
+                _ => throw new InvalidOperationException($"unknown update status {section.Status}"),
+            },
+            _ => throw new InvalidOperationException($"unknown update progress {section.Progress}"),
+        };
+    }
 
     public static string Message(this UpdateCheckFailure failure) => failure switch
     {
@@ -46,11 +54,17 @@ public static class UpdateText
         _ => throw new InvalidOperationException($"unknown update check failure {failure}"),
     };
 
-    public static string? FailedInstallLine(this AutoUpdateSection section) =>
-        section.FailedInstallVersion is { } version ? L("Couldn't install version %@.", version) : null;
+    public static string? FailedInstallLine(this AutoUpdateSection section)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        return section.FailedInstallVersion is { } version ? L("Couldn't install version %@.", version) : null;
+    }
 
-    public static IReadOnlyList<string>? ReleaseNotes(this UpdateStatus.Available available) =>
-        available.ReleaseNoteTitles.GetValueOrDefault(Language) ?? available.ReleaseNoteTitles.GetValueOrDefault("en");
+    public static IReadOnlyList<string>? ReleaseNotes(this UpdateStatus.Available available)
+    {
+        ArgumentNullException.ThrowIfNull(available);
+        return available.ReleaseNoteTitles.GetValueOrDefault(Language) ?? available.ReleaseNoteTitles.GetValueOrDefault("en");
+    }
 
     public static string? ItemStatus(this UpdateProgress progress) => progress switch
     {

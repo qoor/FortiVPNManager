@@ -30,16 +30,27 @@ public static class SettingsFileText
         _ => throw new InvalidOperationException($"unknown config file error {error}"),
     };
 
-    public static string DisplayMessage(this ConfigProblem problem) => problem.Location is not { } location
+    public static string DisplayMessage(this ConfigProblem problem)
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        return problem.Location is not { } location
             ? problem.Kind.Message()
             : problem.Kind is ConfigProblemKind.VpnServerAsRouteTarget server
             ? location.Description() + " (" + server.Path + "): " + problem.Kind.Message()
             : location.Description() + ": " + problem.Kind.Message();
+    }
 
-    public static string DisplayMessage(this ConfigWarning warning) =>
-        warning.Location is { } location ? location.Description() + ": " + warning.Kind.Message() : warning.Kind.Message();
+    public static string DisplayMessage(this ConfigWarning warning)
+    {
+        ArgumentNullException.ThrowIfNull(warning);
+        return warning.Location is { } location ? location.Description() + ": " + warning.Kind.Message() : warning.Kind.Message();
+    }
 
-    public static string Description(this LineColumn location) => L("Line %lld, column %lld", location.Line, location.Column);
+    public static string Description(this LineColumn location)
+    {
+        ArgumentNullException.ThrowIfNull(location);
+        return L("Line %lld, column %lld", location.Line, location.Column);
+    }
 
     public static string Message(this ConfigProblemKind kind) => kind switch
     {
@@ -126,8 +137,11 @@ public static class SettingsFileText
     }
 
     /// <summary>HH:mm, as the settings file writes it.</summary>
-    public static string Description(this TimeOfDay time) =>
-        string.Create(CultureInfo.InvariantCulture, $"{time.Hour:00}:{time.Minute:00}");
+    public static string Description(this TimeOfDay time)
+    {
+        ArgumentNullException.ThrowIfNull(time);
+        return string.Create(CultureInfo.InvariantCulture, $"{time.Hour:00}:{time.Minute:00}");
+    }
 
     /// <summary>The system's description of an error code the runtime reported for a file operation.</summary>
     public static string ErrorText(int code) => new Win32Exception(code).Message;
@@ -135,6 +149,7 @@ public static class SettingsFileText
     /// <summary>At most 40 characters of user text on one line, for messages.</summary>
     public static string Preview(string raw)
     {
+        ArgumentNullException.ThrowIfNull(raw);
         const int limit = 40;
         var text = new StringBuilder();
         int count = 0;

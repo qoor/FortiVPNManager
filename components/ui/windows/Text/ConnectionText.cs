@@ -17,6 +17,8 @@ public static class ConnectionText
     /// </summary>
     public static string StatusLine(this ConnectionSection section, ScheduleOutlook? outlook, TimeStyle time, bool includesPlannedReconnect = true)
     {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(time);
         switch (section.Status)
         {
             case ConnectionStatus.NotConnected:
@@ -69,12 +71,16 @@ public static class ConnectionText
     }
 
     /// <summary>When the next attempt starts, while one is awaited.</summary>
-    public static DateTimeOffset? NextAttempt(this ConnectionSection section) => section.Status switch
+    public static DateTimeOffset? NextAttempt(this ConnectionSection section)
     {
-        ConnectionStatus.WaitingToReconnect waiting => waiting.Until,
-        ConnectionStatus.ReconnectOnHold onHold => onHold.Until,
-        _ => null,
-    };
+        ArgumentNullException.ThrowIfNull(section);
+        return section.Status switch
+        {
+            ConnectionStatus.WaitingToReconnect waiting => waiting.Until,
+            ConnectionStatus.ReconnectOnHold onHold => onHold.Until,
+            _ => null,
+        };
+    }
 
     public static string Text(this ConnectProgress progress) => progress switch
     {

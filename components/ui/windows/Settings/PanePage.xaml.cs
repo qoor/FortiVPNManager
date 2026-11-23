@@ -112,6 +112,7 @@ public sealed partial class PanePage : Page
 
     public void Show(AppUi ui, SettingsPane pane, string title)
     {
+        ArgumentNullException.ThrowIfNull(ui);
         Title.Text = title;
         Show(ui, pane, pane switch
         {
@@ -127,6 +128,7 @@ public sealed partial class PanePage : Page
 
     public void Show(AppUi ui, SettingsSubpage subpage)
     {
+        ArgumentNullException.ThrowIfNull(ui);
         Subpage = subpage;
         Title.Visibility = Visibility.Collapsed;
         Breadcrumb.Visibility = Visibility.Visible;
@@ -141,6 +143,7 @@ public sealed partial class PanePage : Page
 
     private void Show(AppUi ui, SettingsPane pane, IPane shown)
     {
+        ArgumentNullException.ThrowIfNull(ui);
         this._ui = ui;
         Pane = pane;
         _content = shown;

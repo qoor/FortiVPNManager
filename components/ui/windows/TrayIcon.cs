@@ -36,6 +36,7 @@ public sealed partial class TrayIcon : IDisposable
     /// <remarks>Made on the UI thread, where the menu's and the double-click's actions run.</remarks>
     public TrayIcon(AppUi ui, Action quit)
     {
+        ArgumentNullException.ThrowIfNull(ui);
         this._ui = ui;
         this._quit = quit;
         int size = (int)Math.Round(16 * GetDpiForSystem() / 96.0);

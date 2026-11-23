@@ -24,6 +24,8 @@ public static class Strings
     /// <summary>The sentence <paramref name="key"/> with <paramref name="arguments"/> in its specifiers' places.</summary>
     public static string L(string key, params object[] arguments)
     {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(arguments);
         Unit? unit = s_windows.Value.Find(key, Language) ?? s_shared.Value.Find(key, Language);
         string template = unit is null ? key : unit.Choose(arguments);
         return Format(template, arguments);

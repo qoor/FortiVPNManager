@@ -7,16 +7,20 @@ namespace FortiVPNManager.Ui.Text;
 public static class ScheduleText
 {
     /// <summary>One line for the menu ("Schedule: …") and the Connection pane.</summary>
-    public static string Summary(this ScheduleOutlook outlook, TimeStyle time) => outlook switch
+    public static string Summary(this ScheduleOutlook outlook, TimeStyle time)
     {
-        ScheduleOutlook.Connects connects => L("Connects %@", time.DayTime(connects.At)),
-        ScheduleOutlook.NoDays => L("No days selected"),
-        ScheduleOutlook.WithinHours within => L("After %@, reconnects wait while you're away", time.ClockTime(within.End)),
-        ScheduleOutlook.OutsideHoursPresent => L("Reconnects wait while you're away"),
-        ScheduleOutlook.HoldingWhileAway holding => L("Reconnects stop if you're still away at %@", time.ClockTime(holding.Until)),
-        ScheduleOutlook.Suspended => L("Won't reconnect after this connection ends"),
-        _ => throw new InvalidOperationException($"unknown outlook {outlook}"),
-    };
+        ArgumentNullException.ThrowIfNull(time);
+        return outlook switch
+        {
+            ScheduleOutlook.Connects connects => L("Connects %@", time.DayTime(connects.At)),
+            ScheduleOutlook.NoDays => L("No days selected"),
+            ScheduleOutlook.WithinHours within => L("After %@, reconnects wait while you're away", time.ClockTime(within.End)),
+            ScheduleOutlook.OutsideHoursPresent => L("Reconnects wait while you're away"),
+            ScheduleOutlook.HoldingWhileAway holding => L("Reconnects stop if you're still away at %@", time.ClockTime(holding.Until)),
+            ScheduleOutlook.Suspended => L("Won't reconnect after this connection ends"),
+            _ => throw new InvalidOperationException($"unknown outlook {outlook}"),
+        };
+    }
 
     public static string Message(this ScheduleHoursError error) => error switch
     {

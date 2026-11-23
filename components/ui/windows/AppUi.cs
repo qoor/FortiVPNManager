@@ -21,6 +21,7 @@ public sealed class AppUi
     /// <param name="notify">Posts a notification as (identifier, title, body, button), replacing one of the same identifier.</param>
     public AppUi(DispatcherQueue dispatcher, Action<Command> send, Action<string, string, string, string?> notify)
     {
+        ArgumentNullException.ThrowIfNull(dispatcher);
         this._dispatcher = dispatcher;
         this._notify = notify;
         Send = send;

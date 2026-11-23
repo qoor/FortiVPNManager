@@ -9,6 +9,7 @@ public static class BypassText
     /// <summary>"Ethernet · 10.20.161.20/24". Whether the rules apply on it, the status line says.</summary>
     public static string CurrentNetworkText(this BypassRulesSection rules)
     {
+        ArgumentNullException.ThrowIfNull(rules);
         if (rules.CurrentNetwork is not { } network)
         {
             return L("Unknown");
@@ -18,10 +19,13 @@ public static class BypassText
     }
 
     /// <summary>Set once the retries of a failed write ran out.</summary>
-    public static string? StoppedRetryingMessage(this BypassRulesSection rules) =>
-        rules.Status is BypassStatus.Failed { StoppedAfterRetries: { } retries }
+    public static string? StoppedRetryingMessage(this BypassRulesSection rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        return rules.Status is BypassStatus.Failed { StoppedAfterRetries: { } retries }
             ? L("Stopped after %lld failed retries. Tries again when the network or rules change.", retries)
             : null;
+    }
 
     public static (string Text, NoticeStyle Style) Line(this BypassStatus status, TimeStyle time)
     {

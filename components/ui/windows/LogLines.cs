@@ -24,6 +24,7 @@ public sealed class LogLines
 
     public void Append(IReadOnlyList<LogLine> lines)
     {
+        ArgumentNullException.ThrowIfNull(lines);
         foreach (LogLine line in lines)
         {
             _entries.Add(new LogEntry(_nextId++, line));
@@ -59,6 +60,7 @@ public sealed class LogLines
     /// </summary>
     public static string FileLine(LogLine line, TimeZoneInfo zone, bool afterAnother)
     {
+        ArgumentNullException.ThrowIfNull(line);
         DateTimeOffset local = TimeZoneInfo.ConvertTime(line.Time, zone);
         string offset = local.Offset == TimeSpan.Zero
             ? "Z"
@@ -70,7 +72,11 @@ public sealed class LogLines
     /// The two empty lines before the first line of an attempt, unless no line comes before it. The Log
     /// pane puts the same before its own line.
     /// </summary>
-    public static string Gap(LogLine line, bool afterAnother) => line.StartsAttempt && afterAnother ? "\n\n" : "";
+    public static string Gap(LogLine line, bool afterAnother)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        return line.StartsAttempt && afterAnother ? "\n\n" : "";
+    }
 
     public static string Tag(LogSource source) => source switch
     {

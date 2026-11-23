@@ -54,6 +54,9 @@ public static class AccountText
     public static string StoredPrompt(bool stored) =>
         stored ? L("Saved in Credential Manager · type to change") : L("Required");
 
-    public static string Text(this SecretStoreFailure failure) =>
-        failure.Description ?? $"Unknown error (0x{failure.Code:x})";
+    public static string Text(this SecretStoreFailure failure)
+    {
+        ArgumentNullException.ThrowIfNull(failure);
+        return failure.Description ?? $"Unknown error (0x{failure.Code:x})";
+    }
 }

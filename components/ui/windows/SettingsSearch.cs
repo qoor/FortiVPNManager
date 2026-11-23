@@ -58,6 +58,7 @@ public static class SettingsSearch
     /// <summary>The results for <paramref name="text"/>, in the panes' order; none for an empty search.</summary>
     public static List<SearchResult> Results(string text, Func<SearchCondition, bool> isShown)
     {
+        ArgumentNullException.ThrowIfNull(text);
         var terms = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(term => new SettingsSearchMatch.Term(term)).ToList();
         var results = new List<SearchResult>();
         if (terms.Count == 0)
@@ -191,6 +192,7 @@ public static class SettingsSearchMatch
     {
         public Term(string term)
         {
+            ArgumentNullException.ThrowIfNull(term);
             Characters = Elements(term);
             LastJamo = Characters.Length > 0 ? SettingsSearchMatch.Jamo(Characters[^1]) : "";
         }
@@ -204,6 +206,8 @@ public static class SettingsSearchMatch
 
     public static bool Matches(Term prepared, Name name)
     {
+        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(name);
         string[] term = prepared.Characters;
         string[] text = name.Characters;
         if (term.Length == 0)

@@ -27,6 +27,7 @@ public sealed class AccountDraft
 
     public void Replace(AccountFormState state)
     {
+        ArgumentNullException.ThrowIfNull(state);
         if (_loaded && state.Revision == Revision)
         {
             return;

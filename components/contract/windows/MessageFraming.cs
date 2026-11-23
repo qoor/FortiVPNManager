@@ -14,19 +14,32 @@ namespace FortiVPNManager.Contract;
 public static class MessageFraming
 {
     /// <summary>Writes one message to the runtime and flushes it.</summary>
-    public static void Write(Stream stream, AppInternal.ToRuntime message) =>
+    public static void Write(Stream stream, AppInternal.ToRuntime message)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
         WriteFrame(stream, message, MessageCoding.Default.ToRuntime);
+    }
 
     /// <summary>Writes one request to the Helper and flushes it.</summary>
-    public static void Write(Stream stream, HelperPipe.Request request) =>
+    public static void Write(Stream stream, HelperPipe.Request request)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
         WriteFrame(stream, request, MessageCoding.Default.Request);
+    }
 
     /// <summary>Blocks until a whole message from the runtime arrives; see <see cref="ReadFrame{T}"/>.</summary>
-    public static AppInternal.FromRuntime ReadFromRuntime(Stream stream) =>
-        ReadFrame(stream, MessageCoding.Default.FromRuntime);
+    public static AppInternal.FromRuntime ReadFromRuntime(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        return ReadFrame(stream, MessageCoding.Default.FromRuntime);
+    }
 
     /// <summary>Blocks until a whole message from the Helper arrives; see <see cref="ReadFrame{T}"/>.</summary>
-    public static HelperPipe.Message ReadFromHelper(Stream stream) => ReadFrame(stream, MessageCoding.Default.Message);
+    public static HelperPipe.Message ReadFromHelper(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        return ReadFrame(stream, MessageCoding.Default.Message);
+    }
 
     private static void WriteFrame<T>(Stream stream, T message, JsonTypeInfo<T> coding)
     {
