@@ -5,9 +5,30 @@ using static FortiVPNManager.Contract.AppInternal;
 namespace FortiVPNManager.OsIntegration;
 
 /// <summary>A failure of the channel to the Helper, carried as an exception inside the relay.</summary>
-internal sealed class HelperChannelException(HelperChannelFailure failure) : Exception(failure.ToString())
+public sealed class HelperChannelException : Exception
 {
-    public HelperChannelFailure Failure { get; } = failure;
+    public HelperChannelException()
+    {
+    }
+
+    public HelperChannelException(string message)
+        : base(message)
+    {
+    }
+
+    public HelperChannelException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public HelperChannelException(HelperChannelFailure failure)
+        : base((failure ?? throw new ArgumentNullException(nameof(failure))).ToString()) => Failure = failure;
+
+    public HelperChannelFailure Failure
+    {
+        get => field ?? throw new InvalidOperationException("the exception carries no channel failure");
+        private init;
+    }
 }
 
 /// <summary>One connection to the Helper; the pipe in the app.</summary>

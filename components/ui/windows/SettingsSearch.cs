@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using static FortiVPNManager.Ui.Text.Strings;
 
@@ -276,6 +277,7 @@ public static class SettingsSearchMatch
     };
 
     /// <summary>The text's characters as the reader sees them (as Swift's Character), composed and lowercased.</summary>
+    [SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "The search folds case as the macOS search does, with lowercased().")]
     private static string[] Elements(string text)
     {
         string normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();

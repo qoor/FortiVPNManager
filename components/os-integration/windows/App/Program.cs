@@ -14,7 +14,7 @@ namespace FortiVPNManager.App;
 /// on macOS) or what the notification is about, and ends. The running copy shows nothing until the
 /// Helper's service runs; when it cannot be made to, a message box says why and the app quits.
 /// </summary>
-public static class Program
+internal static class Program
 {
     private const string InstanceKey = "FortiVPNManager";
 
