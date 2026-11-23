@@ -1,4 +1,4 @@
-﻿using static FortiVPNManager.Contract.AppInternal;
+﻿using FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
@@ -11,10 +11,10 @@ public static class AccountText
 {
     public static string Message(this AccountValueProblem problem) => problem switch
     {
-        AccountValueProblem.InvalidHost => L("Enter only a host name or IPv4 address (no https:// or /)."),
-        AccountValueProblem.TooLong tooLong => L("%@ is too long (at most %lld bytes).", tooLong.Field.Name(), tooLong.MaxBytes),
-        AccountValueProblem.LeadingOrTrailingSpace space => L("%@ can't start or end with a space.", space.Field.Name()),
-        AccountValueProblem.DisallowedCharacters characters => L("%@ contains characters that aren't allowed.", characters.Field.Name()),
+        AccountValueProblemInvalidHost => L("Enter only a host name or IPv4 address (no https:// or /)."),
+        AccountValueProblemTooLong tooLong => L("%@ is too long (at most %lld bytes).", tooLong.Field.Name(), tooLong.MaxBytes),
+        AccountValueProblemLeadingOrTrailingSpace space => L("%@ can't start or end with a space.", space.Field.Name()),
+        AccountValueProblemDisallowedCharacters characters => L("%@ contains characters that aren't allowed.", characters.Field.Name()),
         _ => throw new InvalidOperationException($"unknown account value problem {problem}"),
     };
 
@@ -29,25 +29,25 @@ public static class AccountText
 
     public static string Message(this AccountSaveError error) => error switch
     {
-        AccountSaveError.InvalidPort => L("The port must be a number from 1 to 65535."),
-        AccountSaveError.PasswordNeedsAccount => L("Enter the server address and username first."),
-        AccountSaveError.AppPasswordNeedsAddress => L("Enter the Gmail address first."),
-        AccountSaveError.AccountValue value => value.Problem.Message(),
-        AccountSaveError.InvalidVpnPassword password => L("The VPN password can't contain line breaks and must be at most %lld bytes.", password.MaxBytes),
-        AccountSaveError.Config config => config.Error.Message(),
-        AccountSaveError.SecretStore store => L("Couldn't save the password to Credential Manager: %@", store.Failure.Text()),
+        AccountSaveErrorInvalidPort => L("The port must be a number from 1 to 65535."),
+        AccountSaveErrorPasswordNeedsAccount => L("Enter the server address and username first."),
+        AccountSaveErrorAppPasswordNeedsAddress => L("Enter the Gmail address first."),
+        AccountSaveErrorAccountValue value => value.Problem.Message(),
+        AccountSaveErrorInvalidVpnPassword password => L("The VPN password can't contain line breaks and must be at most %lld bytes.", password.MaxBytes),
+        AccountSaveErrorConfig config => config.Error.Message(),
+        AccountSaveErrorSecretStore store => L("Couldn't save the password to Credential Manager: %@", store.Failure.Text()),
         _ => throw new InvalidOperationException($"unknown account save error {error}"),
     };
 
     /// <summary>Why an import took nothing. Windows imports FortiClient's connection; the file cases are macOS's.</summary>
     public static string Message(this ImportError error) => error switch
     {
-        ImportError.NoFortiClientConnection => L("FortiClient has no SSL VPN connection."),
-        ImportError.InvalidFortiClientServer invalid => L("The server address of the FortiClient connection '%@' isn't supported.", invalid.Connection),
-        ImportError.Config config => config.Error.Message(),
-        ImportError.SourceNotFound notFound => L("openfortivpn config file not found: %@", notFound.Path),
-        ImportError.Unreadable unreadable => L("Could not read the openfortivpn config file (%@): %@", unreadable.Path, unreadable.Problem.ClientFileReason()),
-        ImportError.MissingHost missing => L("The openfortivpn config file has no host: %@", missing.Path),
+        ImportErrorNoFortiClientConnection => L("FortiClient has no SSL VPN connection."),
+        ImportErrorInvalidFortiClientServer invalid => L("The server address of the FortiClient connection '%@' isn't supported.", invalid.Connection),
+        ImportErrorConfig config => config.Error.Message(),
+        ImportErrorSourceNotFound notFound => L("openfortivpn config file not found: %@", notFound.Path),
+        ImportErrorUnreadable unreadable => L("Could not read the openfortivpn config file (%@): %@", unreadable.Path, unreadable.Problem.ClientFileReason()),
+        ImportErrorMissingHost missing => L("The openfortivpn config file has no host: %@", missing.Path),
         _ => throw new InvalidOperationException($"unknown import error {error}"),
     };
 

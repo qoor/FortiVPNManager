@@ -1,7 +1,7 @@
 ﻿using System.Security;
 using System.ServiceProcess;
+using FortiVPNManager.Contract.AppInternal;
 using Microsoft.Win32;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -35,23 +35,23 @@ internal static class ServiceRegistration
         {
             using var service = new ServiceController(HelperService);
             _ = service.Status;
-            return new PortResponse.Registration(RegistrationStatus.Enabled);
+            return new PortResponseRegistration(RegistrationStatus.Enabled);
         }
         catch (InvalidOperationException)
         {
-            return new PortResponse.Registration(RegistrationStatus.NotRegistered);
+            return new PortResponseRegistration(RegistrationStatus.NotRegistered);
         }
     }
 
     public static PortResponse RegisterHelper() =>
-        new PortResponse.RegistrationFailed(
-            new RegistrationError.Failed("the installer registers the Helper service"));
+        new PortResponseRegistrationFailed(
+            new RegistrationErrorFailed("the installer registers the Helper service"));
 
     public static PortResponse LoginItemStatus()
     {
         using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey);
         bool registered = key?.GetValue(RunValue) is string;
-        return new PortResponse.Registration(registered ? RegistrationStatus.Enabled : RegistrationStatus.NotRegistered);
+        return new PortResponseRegistration(registered ? RegistrationStatus.Enabled : RegistrationStatus.NotRegistered);
     }
 
     public static PortResponse SetLoginItem(bool enabled)
@@ -59,7 +59,7 @@ internal static class ServiceRegistration
         string executable = Environment.ProcessPath ?? "";
         if (!IsInstalledCopy(executable))
         {
-            return new PortResponse.RegistrationFailed(new RegistrationError.NotInstalledCopy());
+            return new PortResponseRegistrationFailed(new RegistrationErrorNotInstalledCopy());
         }
         try
         {
@@ -72,11 +72,11 @@ internal static class ServiceRegistration
             {
                 key.DeleteValue(RunValue, throwOnMissingValue: false);
             }
-            return new PortResponse.Registered();
+            return new PortResponseRegistered();
         }
         catch (Exception error) when (error is UnauthorizedAccessException or IOException or SecurityException)
         {
-            return new PortResponse.RegistrationFailed(new RegistrationError.Failed(error.Message));
+            return new PortResponseRegistrationFailed(new RegistrationErrorFailed(error.Message));
         }
     }
 }

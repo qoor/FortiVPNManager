@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui;
 using FortiVPNManager.Ui.Text;
@@ -6,7 +7,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.App;
 

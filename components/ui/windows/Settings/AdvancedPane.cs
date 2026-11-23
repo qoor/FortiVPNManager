@@ -1,8 +1,8 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -37,7 +37,7 @@ internal sealed class AdvancedPane : IPane
     {
         this._ui = ui;
         (_helperLine, _helperMark, _helperText) = Cards.StatusLine();
-        _registerHelper.Click += (_, _) => ui.Send(new Command.RegisterHelper());
+        _registerHelper.Click += (_, _) => ui.Send(new CommandRegisterHelper());
         _body.Children.Add(Cards.SectionHeader(L("Helper"), first: true));
         _body.Children.Add(_rows["Helper"] = Cards.Card(L("Status"), _helperLine));
         _registerCard = Cards.ActionCard(_registerHelper);

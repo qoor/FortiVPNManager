@@ -1,10 +1,10 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Windows.Storage.Pickers;
 using Windows.System;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -76,7 +76,7 @@ internal sealed class AccountPane : IPane
         AddGmailRows();
         page.BodyPanel.Children.Add(_body);
         (_testResult, _testMark, _testText) = Cards.StatusLine();
-        _testGmail.Click += (_, _) => ui.Send(new Command.TestGmail());
+        _testGmail.Click += (_, _) => ui.Send(new CommandTestGmail());
         _body.Children.Add(_rows["Test Gmail Connection"] = Cards.ActionCard(Cards.Buttons(_testGmail, _testProgress, _testChecking, _testResult)));
         _body.Children.Add(_methodFooter);
         TextBlock filterTip = Cards.Footer(L("Recommended: create a Gmail filter for subject:AuthCode that never sends it to Spam."));
@@ -107,7 +107,7 @@ internal sealed class AccountPane : IPane
         {
             if (!_refreshing && _method.SelectedIndex >= 0)
             {
-                _ui.Send(new Command.SetOtpMethod(_method.SelectedIndex == 0 ? OtpMethod.GmailApi : OtpMethod.Imap));
+                _ui.Send(new CommandSetOtpMethod(_method.SelectedIndex == 0 ? OtpMethod.GmailApi : OtpMethod.Imap));
             }
         };
         SettingsCard methodCard = Cards.Card(L("Connection method"), _method).Fit(_method, FieldWidth);
@@ -116,9 +116,9 @@ internal sealed class AccountPane : IPane
         _body.Children.Add(_methodError);
 
         // The Gmail API: the Google account, the optional IMAP fallback and the OAuth client.
-        _cancelSignIn.Click += (_, _) => _ui.Send(new Command.CancelGoogleSignIn());
+        _cancelSignIn.Click += (_, _) => _ui.Send(new CommandCancelGoogleSignIn());
         _disconnectGoogle.Click += async (_, _) => await ConfirmGoogleDisconnect().ConfigureAwait(true);
-        _connectGoogle.Click += (_, _) => _ui.Send(new Command.ConnectGoogleAccount());
+        _connectGoogle.Click += (_, _) => _ui.Send(new CommandConnectGoogleAccount());
         StackPanel status = Cards.Row(_googleProgress, _googleMark, _googleText);
         status.Spacing = 6;
         status.VerticalAlignment = VerticalAlignment.Center;
@@ -138,7 +138,7 @@ internal sealed class AccountPane : IPane
         _expanders[fallback] = fallback;
         _gmailApiRows.Children.Add(_rows["IMAP fallback (optional)"] = fallback);
 
-        _useBuiltInClient.Click += (_, _) => _ui.Send(new Command.UseBuiltInOAuthClient());
+        _useBuiltInClient.Click += (_, _) => _ui.Send(new CommandUseBuiltInOAuthClient());
         _importClient.Click += async (_, _) => await ImportOAuthClient().ConfigureAwait(true);
         ToolTipService.SetToolTip(_importClient, L("Use a Desktop app OAuth client JSON instead of the built-in client."));
         _clientWarning.Foreground = Cards.Brush("SystemFillColorCautionBrush");
@@ -185,17 +185,17 @@ internal sealed class AccountPane : IPane
 
     private void SavesOnCommit(Control box)
     {
-        box.LostFocus += (_, _) => _ui.Send(new Command.SaveAccount());
+        box.LostFocus += (_, _) => _ui.Send(new CommandSaveAccount());
         box.KeyDown += (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
             {
-                _ui.Send(new Command.SaveAccount());
+                _ui.Send(new CommandSaveAccount());
             }
         };
     }
 
-    public void FinishTyping() => _ui.Send(new Command.SaveAccount());
+    public void FinishTyping() => _ui.Send(new CommandSaveAccount());
 
     private void Edited(string text, Func<AccountDraft, string> read, Action<AccountDraft, string> keep)
     {
@@ -283,17 +283,17 @@ internal sealed class AccountPane : IPane
             ? L("Connecting opens Google sign-in in your web browser. Sign in with the Gmail address above.")
             : L("Uses a 16-character app password created in your Google Account. Spaces are ignored.");
 
-        bool busy = gmail.GoogleAccount is GoogleAccountStatus.SigningIn or GoogleAccountStatus.Disconnecting;
+        bool busy = gmail.GoogleAccount is GoogleAccountStatusSigningIn or GoogleAccountStatusDisconnecting;
         _googleProgress.Visible(busy);
-        _googleMark.Visible(gmail.GoogleAccount is GoogleAccountStatus.Connected);
+        _googleMark.Visible(gmail.GoogleAccount is GoogleAccountStatusConnected);
         _googleMark.SetSucceeded(true);
         (_googleText.Text, _googleText.Foreground) = gmail.GoogleAccount switch
         {
-            GoogleAccountStatus.SigningIn => (L("Signing in via browser…"), Cards.Brush("TextFillColorSecondaryBrush")),
-            GoogleAccountStatus.Disconnecting => (L("Disconnecting"), Cards.Brush("TextFillColorSecondaryBrush")),
+            GoogleAccountStatusSigningIn => (L("Signing in via browser…"), Cards.Brush("TextFillColorSecondaryBrush")),
+            GoogleAccountStatusDisconnecting => (L("Disconnecting"), Cards.Brush("TextFillColorSecondaryBrush")),
             // The address is the Gmail address above; the Gmail test and the OTP session catch a sign-in with another account.
-            GoogleAccountStatus.Connected => (L("Connected"), Cards.Brush("TextFillColorPrimaryBrush")),
-            GoogleAccountStatus.NotConnected => (L("Not connected"), Cards.Brush("TextFillColorSecondaryBrush")),
+            GoogleAccountStatusConnected => (L("Connected"), Cards.Brush("TextFillColorPrimaryBrush")),
+            GoogleAccountStatusNotConnected => (L("Not connected"), Cards.Brush("TextFillColorSecondaryBrush")),
             _ => throw new InvalidOperationException($"unknown Google account status {gmail.GoogleAccount}"),
         };
         _cancelSignIn.Apply(gmail.CancelSignIn);
@@ -304,7 +304,7 @@ internal sealed class AccountPane : IPane
 
         // Opened on its own while there is no client, so the import is easy to find; once there is one,
         // it goes back to how the person left it.
-        bool notConfigured = gmail.OauthClient is OAuthClientSource.NotConfigured;
+        bool notConfigured = gmail.OauthClient is OAuthClientSourceNotConfigured;
         if (notConfigured != _oauthClientOpenedForMissing)
         {
             _oauthClient.IsExpanded = notConfigured || _ui.OpenDisclosures.Contains("oauthClient");
@@ -314,8 +314,8 @@ internal sealed class AccountPane : IPane
         _clientWarning.Visible(notConfigured);
         ToolTipService.SetToolTip(_clientLabel, gmail.OauthClient switch
         {
-            OAuthClientSource.BuiltIn builtIn => builtIn.ClientId,
-            OAuthClientSource.Imported imported => imported.ClientId,
+            OAuthClientSourceBuiltIn builtIn => builtIn.ClientId,
+            OAuthClientSourceImported imported => imported.ClientId,
             _ => null,
         });
         _useBuiltInClient.Apply(gmail.UseBuiltInClient);
@@ -323,7 +323,7 @@ internal sealed class AccountPane : IPane
         _secretMissing.Show(gmail.ImportedClientSecretMissing ? L("The imported client's secret is missing from Credential Manager. Import the JSON again.") : null);
 
         _testGmail.Apply(gmail.TestButton);
-        bool running = gmail.Test is GmailTest.Running;
+        bool running = gmail.Test is GmailTestRunning;
         _testProgress.Visible(running);
         _testChecking.Visible(running);
         (string Text, bool Succeeded)? result = gmail.Test.Result();
@@ -366,7 +366,7 @@ internal sealed class AccountPane : IPane
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            _ui.Send(new Command.DisconnectGoogleAccount());
+            _ui.Send(new CommandDisconnectGoogleAccount());
         }
     }
 
@@ -381,7 +381,7 @@ internal sealed class AccountPane : IPane
         picker.FileTypeFilter.Add(".json");
         if (await picker.PickSingleFileAsync() is { } file)
         {
-            _ui.Send(new Command.ImportOAuthClient(file.Path));
+            _ui.Send(new CommandImportOAuthClient(file.Path));
         }
     }
 }

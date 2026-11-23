@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics;
-using FortiVPNManager.Contract;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.HelperPipe;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -42,7 +42,7 @@ internal interface IHelperChannel : IDisposable
     /// Helper's answer to it. Fails with <see cref="HelperChannelException"/> when the connection
     /// breaks or no answer comes in time.
     /// </summary>
-    Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request);
+    Task<Message> Ask(Func<ulong, Request> request);
 }
 
 /// <summary>Opens connection <paramref name="id"/>, whose events go to <paramref name="inbound"/>.</summary>
@@ -81,43 +81,43 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     {
         try
         {
-            reply(new PortResponse.HelperBuild(await OnConnection(retrying: true, s_restartLimit, Version).ConfigureAwait(false)));
+            reply(new PortResponseHelperBuild(await OnConnection(retrying: true, s_restartLimit, Version).ConfigureAwait(false)));
         }
         catch (HelperChannelException error)
         {
-            reply(new PortResponse.HelperUnreachable(error.Failure));
+            reply(new PortResponseHelperUnreachable(error.Failure));
         }
     }
 
     public Task Handle(HelperCall call, Action<PortResponse> reply) => call switch
     {
-        HelperCall.Connect connect =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.Connect(id, connect.Json), reply),
-        HelperCall.SubmitOtp otp =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.SubmitOtp(id, otp.Attempt, otp.Code), reply),
-        HelperCall.Disconnect disconnect =>
-            Relay(verified: false, retrying: false, id => new HelperPipe.Request.Disconnect(id, disconnect.Attempt, disconnect.Reason), reply),
-        HelperCall.Status =>
-            Relay(verified: false, retrying: true, id => new HelperPipe.Request.Status(id), reply),
-        HelperCall.ExitWhenIdle => ExitWhenIdle(reply),
-        HelperCall.ReadBypassRoutes =>
-            Relay(verified: true, retrying: true, id => new HelperPipe.Request.ReadBypassRoutes(id), reply),
-        HelperCall.WriteBypassRoutes write =>
-            Relay(verified: true, retrying: true, id => new HelperPipe.Request.WriteBypassRoutes(id, write.Json), reply),
-        HelperCall.PrepareUpdate prepare =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.PrepareUpdate(id, prepare.Json), reply),
-        HelperCall.InstallUpdate install =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.InstallUpdate(id, install.Json), reply),
-        HelperCall.ReadPreparedUpdate =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.ReadPreparedUpdate(id), reply),
-        HelperCall.DiscardPreparedUpdate =>
-            Relay(verified: true, retrying: false, id => new HelperPipe.Request.DiscardPreparedUpdate(id), reply),
+        HelperCallConnect connect =>
+            Relay(verified: true, retrying: false, id => new RequestConnect(id, connect.Json), reply),
+        HelperCallSubmitOtp otp =>
+            Relay(verified: true, retrying: false, id => new RequestSubmitOtp(id, otp.Attempt, otp.Code), reply),
+        HelperCallDisconnect disconnect =>
+            Relay(verified: false, retrying: false, id => new RequestDisconnect(id, disconnect.Attempt, disconnect.Reason), reply),
+        HelperCallStatus =>
+            Relay(verified: false, retrying: true, id => new RequestStatus(id), reply),
+        HelperCallExitWhenIdle => ExitWhenIdle(reply),
+        HelperCallReadBypassRoutes =>
+            Relay(verified: true, retrying: true, id => new RequestReadBypassRoutes(id), reply),
+        HelperCallWriteBypassRoutes write =>
+            Relay(verified: true, retrying: true, id => new RequestWriteBypassRoutes(id, write.Json), reply),
+        HelperCallPrepareUpdate prepare =>
+            Relay(verified: true, retrying: false, id => new RequestPrepareUpdate(id, prepare.Json), reply),
+        HelperCallInstallUpdate install =>
+            Relay(verified: true, retrying: false, id => new RequestInstallUpdate(id, install.Json), reply),
+        HelperCallReadPreparedUpdate =>
+            Relay(verified: true, retrying: false, id => new RequestReadPreparedUpdate(id), reply),
+        HelperCallDiscardPreparedUpdate =>
+            Relay(verified: true, retrying: false, id => new RequestDiscardPreparedUpdate(id), reply),
         _ => throw new UnreachableException(),
     };
 
     /// <summary>A Helper of another build gets no call that needs a verified connection.</summary>
     private async Task Relay(
-        bool verified, bool retrying, Func<ulong, HelperPipe.Request> request, Action<PortResponse> reply)
+        bool verified, bool retrying, Func<ulong, Request> request, Action<PortResponse> reply)
     {
         try
         {
@@ -128,21 +128,21 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
                     string build = await Version(current).ConfigureAwait(false);
                     if (build != _appBuild)
                     {
-                        return new PortResponse.HelperBuildMismatch(build);
+                        return new PortResponseHelperBuildMismatch(build);
                     }
                 }
                 if (!_inbound.IsActive(current.Id))
                 {
-                    throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
+                    throw new HelperChannelException(new HelperChannelFailureConnectionLost());
                 }
-                HelperPipe.Message answer = await current.Channel.Ask(request).ConfigureAwait(false);
-                HelperPipe.Message.Reply replied = answer as HelperPipe.Message.Reply ?? throw Unreadable(answer);
-                return new PortResponse.HelperReply(replied.Json);
+                Message answer = await current.Channel.Ask(request).ConfigureAwait(false);
+                MessageReply replied = answer as MessageReply ?? throw Unreadable(answer);
+                return new PortResponseHelperReply(replied.Json);
             }).ConfigureAwait(false));
         }
         catch (HelperChannelException error)
         {
-            reply(new PortResponse.HelperUnreachable(error.Failure));
+            reply(new PortResponseHelperUnreachable(error.Failure));
         }
     }
 
@@ -156,13 +156,13 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
         try
         {
             current = CurrentLink(s_connectLimit);
-            HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id)).ConfigureAwait(false);
-            HelperPipe.Message.ReplyFlag flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
-            reply(new PortResponse.HelperReplyFlag(flag.Value));
+            Message answer = await current.Channel.Ask(id => new RequestExitWhenIdle(id)).ConfigureAwait(false);
+            MessageReplyFlag flag = answer as MessageReplyFlag ?? throw Unreadable(answer);
+            reply(new PortResponseHelperReplyFlag(flag.Value));
         }
         catch (HelperChannelException error)
         {
-            reply(new PortResponse.HelperUnreachable(error.Failure));
+            reply(new PortResponseHelperUnreachable(error.Failure));
             return;
         }
         Invalidate(current);
@@ -171,8 +171,8 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     /// <summary>The Helper's build on <paramref name="current"/>, which is verified when the build is the app's.</summary>
     private async Task<string> Version(Link current)
     {
-        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, _appBuild)).ConfigureAwait(false);
-        string build = (answer as HelperPipe.Message.Build ?? throw Unreadable(answer)).HelperBuild;
+        Message answer = await current.Channel.Ask(id => new RequestBuild(id, _appBuild)).ConfigureAwait(false);
+        string build = (answer as MessageBuild ?? throw Unreadable(answer)).HelperBuild;
         lock (_gate)
         {
             if (build == _appBuild && _inbound.IsActive(current.Id))
@@ -268,10 +268,10 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
 
     /// <summary>The connection went away, so a fresh one may answer.</summary>
     private static bool IsConnectionFailure(HelperChannelFailure failure) =>
-        failure is HelperChannelFailure.Connection or HelperChannelFailure.ConnectionLost;
+        failure is HelperChannelFailureConnection or HelperChannelFailureConnectionLost;
 
-    private static HelperChannelException Unreadable(HelperPipe.Message answer) =>
-        new(new HelperChannelFailure.UnreadableReply($"an answer of the wrong kind: {answer.GetType().Name}"));
+    private static HelperChannelException Unreadable(Message answer) =>
+        new(new HelperChannelFailureUnreadableReply($"an answer of the wrong kind: {answer.GetType().Name}"));
 }
 
 /// <summary>
@@ -321,7 +321,7 @@ internal sealed class HelperInbound(Action<SystemEvent> post)
                 return;
             }
             _activeId = null;
-            post(new SystemEvent.HelperConnectionLost());
+            post(new SystemEventHelperConnectionLost());
         }
     }
 }

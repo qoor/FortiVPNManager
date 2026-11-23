@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Globalization;
 using System.Text;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
@@ -21,12 +21,12 @@ public static class SettingsFileText
 
     public static string Message(this ConfigFileError error) => error switch
     {
-        ConfigFileError.InvalidSettings invalid => L("Couldn't save: %@", invalid.Problem.Kind.Message()),
-        ConfigFileError.UnreadableFile unreadable => L("Can't read the config file (%@). %@", unreadable.Path, unreadable.Problem.DisplayMessage()),
-        ConfigFileError.NotRegularFile notRegular => L("The config file path (%@) is not a regular file.", notRegular.Path),
-        ConfigFileError.DanglingSymlink dangling => L("The config file (%@) is a symbolic link to a target that doesn't exist.", dangling.Path),
-        ConfigFileError.KeptChanging changing => L("The config file (%@) kept changing while it was being saved, so it wasn't saved. Try again.", changing.Path),
-        ConfigFileError.Io io => L("Config file operation (%@) failed: %@: %@", io.Operation, io.Path, ErrorText(io.Errno)),
+        ConfigFileErrorInvalidSettings invalid => L("Couldn't save: %@", invalid.Problem.Kind.Message()),
+        ConfigFileErrorUnreadableFile unreadable => L("Can't read the config file (%@). %@", unreadable.Path, unreadable.Problem.DisplayMessage()),
+        ConfigFileErrorNotRegularFile notRegular => L("The config file path (%@) is not a regular file.", notRegular.Path),
+        ConfigFileErrorDanglingSymlink dangling => L("The config file (%@) is a symbolic link to a target that doesn't exist.", dangling.Path),
+        ConfigFileErrorKeptChanging changing => L("The config file (%@) kept changing while it was being saved, so it wasn't saved. Try again.", changing.Path),
+        ConfigFileErrorIo io => L("Config file operation (%@) failed: %@: %@", io.Operation, io.Path, ErrorText(io.Errno)),
         _ => throw new InvalidOperationException($"unknown config file error {error}"),
     };
 
@@ -35,7 +35,7 @@ public static class SettingsFileText
         ArgumentNullException.ThrowIfNull(problem);
         return problem.Location is not { } location
             ? problem.Kind.Message()
-            : problem.Kind is ConfigProblemKind.VpnServerAsRouteTarget server
+            : problem.Kind is ConfigProblemKindVpnServerAsRouteTarget server
             ? location.Description() + " (" + server.Path + "): " + problem.Kind.Message()
             : location.Description() + ": " + problem.Kind.Message();
     }
@@ -54,48 +54,48 @@ public static class SettingsFileText
 
     public static string Message(this ConfigProblemKind kind) => kind switch
     {
-        ConfigProblemKind.FileTooLarge large => L("The config file is too large (%lld bytes). It must be %lld KiB (%lld bytes) or smaller.", large.ByteCount, large.Limit / 1024, large.Limit),
-        ConfigProblemKind.InvalidUtf8 => L("The config file is not valid UTF-8 text. Save it as UTF-8."),
-        ConfigProblemKind.DisallowedCharacter character => L("The config file contains a character that is not allowed (%@). Remove that character.", CodePoint(character.Scalar)),
-        ConfigProblemKind.Syntax syntax => L("YAML syntax error (%@).", syntax.Problem),
-        ConfigProblemKind.MultipleDocuments => L("The config file must contain only one YAML document. Remove the document separator (---)."),
-        ConfigProblemKind.NestingTooDeep => L("The YAML structure is nested too deeply."),
-        ConfigProblemKind.DuplicateKey duplicate => L("The key '%@' appears more than once at the same level. Keep only one.", duplicate.Key),
-        ConfigProblemKind.RootNotMapping => L("The top level of the config file must be in 'key: value' form."),
-        ConfigProblemKind.AnchorOrAlias => L("Anchors (&) and aliases (*) are not allowed. Write the values out directly."),
-        ConfigProblemKind.MergeKey => L("Merge keys (<<) are not allowed. Write the values out directly."),
-        ConfigProblemKind.ExplicitTag tag => L("YAML tags (%@) are not allowed. Write just the value, without a tag.", tag.Tag),
-        ConfigProblemKind.ComplexKey => L("Keys must be plain strings."),
-        ConfigProblemKind.TypeMismatch mismatch => L("The value of %@ has the wrong type. %@.", mismatch.Path, mismatch.Expected.Requirement()),
-        ConfigProblemKind.InvalidInteger integer => string.Join(" ",
+        ConfigProblemKindFileTooLarge large => L("The config file is too large (%lld bytes). It must be %lld KiB (%lld bytes) or smaller.", large.ByteCount, large.Limit / 1024, large.Limit),
+        ConfigProblemKindInvalidUtf8 => L("The config file is not valid UTF-8 text. Save it as UTF-8."),
+        ConfigProblemKindDisallowedCharacter character => L("The config file contains a character that is not allowed (%@). Remove that character.", CodePoint(character.Scalar)),
+        ConfigProblemKindSyntax syntax => L("YAML syntax error (%@).", syntax.Problem),
+        ConfigProblemKindMultipleDocuments => L("The config file must contain only one YAML document. Remove the document separator (---)."),
+        ConfigProblemKindNestingTooDeep => L("The YAML structure is nested too deeply."),
+        ConfigProblemKindDuplicateKey duplicate => L("The key '%@' appears more than once at the same level. Keep only one.", duplicate.Key),
+        ConfigProblemKindRootNotMapping => L("The top level of the config file must be in 'key: value' form."),
+        ConfigProblemKindAnchorOrAlias => L("Anchors (&) and aliases (*) are not allowed. Write the values out directly."),
+        ConfigProblemKindMergeKey => L("Merge keys (<<) are not allowed. Write the values out directly."),
+        ConfigProblemKindExplicitTag tag => L("YAML tags (%@) are not allowed. Write just the value, without a tag.", tag.Tag),
+        ConfigProblemKindComplexKey => L("Keys must be plain strings."),
+        ConfigProblemKindTypeMismatch mismatch => L("The value of %@ has the wrong type. %@.", mismatch.Path, mismatch.Expected.Requirement()),
+        ConfigProblemKindInvalidInteger integer => string.Join(" ",
             L("%@ is set to '%@', which is not an accepted number format.", integer.Path, Preview(integer.Raw)),
             L("Write it as a decimal number without leading zeros (e.g. %@: 443).", Leaf(integer.Path)),
             L("Formats such as 0443 (octal), 2:30 (base 60), 0x1BB (hex) and 1_000 are not accepted.")),
-        ConfigProblemKind.InvalidBoolean boolean => L("%@ is set to '%@', which is not allowed. Use true or false.", boolean.Path, Preview(boolean.Raw)),
-        ConfigProblemKind.QuotedNumber number => string.Join(" ",
+        ConfigProblemKindInvalidBoolean boolean => L("%@ is set to '%@', which is not allowed. Use true or false.", boolean.Path, Preview(boolean.Raw)),
+        ConfigProblemKindQuotedNumber number => string.Join(" ",
             L("%@ has a quoted value \"%@\".", number.Path, Preview(number.Raw)),
             L("Write numbers without quotes (e.g. %@: 443).", Leaf(number.Path))),
-        ConfigProblemKind.QuotedBoolean boolean => string.Join(" ",
+        ConfigProblemKindQuotedBoolean boolean => string.Join(" ",
             L("%@ has a quoted value \"%@\".", boolean.Path, Preview(boolean.Raw)),
             L("Write true/false without quotes (e.g. %@: true).", Leaf(boolean.Path))),
-        ConfigProblemKind.InvalidChoice choice => L("%@ is set to '%@', which is not allowed. Use one of: %@.", choice.Path, Preview(choice.Raw), string.Join(", ", choice.Allowed)),
-        ConfigProblemKind.OutOfRange { Minimum: var minimum, Maximum: var maximum } range when minimum == maximum =>
+        ConfigProblemKindInvalidChoice choice => L("%@ is set to '%@', which is not allowed. Use one of: %@.", choice.Path, Preview(choice.Raw), string.Join(", ", choice.Allowed)),
+        ConfigProblemKindOutOfRange { Minimum: var minimum, Maximum: var maximum } range when minimum == maximum =>
             L("%@ is set to %@, which is not allowed. It must be %lld.", range.Path, Preview(range.Raw), minimum),
-        ConfigProblemKind.OutOfRange range => L("%@ is set to %@, which is outside the allowed range (%lld–%lld).", range.Path, Preview(range.Raw), range.Minimum, range.Maximum),
-        ConfigProblemKind.MarginNotLessThanSession margin => L("%@ (%lld) must be less than %@ (%lld).", MarginMinutes, margin.Margin, SessionMaxMinutes, margin.Session),
-        ConfigProblemKind.InvalidTime time => L("%@ is set to '%@', which is not a time. Write it as \"HH:mm\" between 00:00 and 23:59 (e.g. %@: \"09:00\").", time.Path, Preview(time.Raw), Leaf(time.Path)),
-        ConfigProblemKind.ScheduleEndNotAfterStart hours => L("%@ (%@) must be later than %@ (%@).", ScheduleEnd, hours.End.Description(), ScheduleStart, hours.Start.Description()),
-        ConfigProblemKind.InvalidCharacter character => string.Join(" ",
+        ConfigProblemKindOutOfRange range => L("%@ is set to %@, which is outside the allowed range (%lld–%lld).", range.Path, Preview(range.Raw), range.Minimum, range.Maximum),
+        ConfigProblemKindMarginNotLessThanSession margin => L("%@ (%lld) must be less than %@ (%lld).", MarginMinutes, margin.Margin, SessionMaxMinutes, margin.Session),
+        ConfigProblemKindInvalidTime time => L("%@ is set to '%@', which is not a time. Write it as \"HH:mm\" between 00:00 and 23:59 (e.g. %@: \"09:00\").", time.Path, Preview(time.Raw), Leaf(time.Path)),
+        ConfigProblemKindScheduleEndNotAfterStart hours => L("%@ (%@) must be later than %@ (%@).", ScheduleEnd, hours.End.Description(), ScheduleStart, hours.Start.Description()),
+        ConfigProblemKindInvalidCharacter character => string.Join(" ",
             L("%@ contains a character that is not allowed (%@).", character.Path, CodePoint(character.Scalar)),
             L("Control characters, line breaks, BOMs and similar characters are not allowed.")),
-        ConfigProblemKind.NewerSchemaVersion version => string.Join(" ",
+        ConfigProblemKindNewerSchemaVersion version => string.Join(" ",
             L("This config file was written by a newer version of the app (schema_version %lld).", version.Version),
             L("Update the app. Until then, this file won't be overwritten.")),
-        ConfigProblemKind.InvalidRouteEntry entry => L("In %@, entry %lld: %@", entry.Path, entry.Index + 1, entry.Problem.Message(entry.Raw)),
-        ConfigProblemKind.TooManyRouteEntries tooMany => L("%@ has %lld entries. It can have at most %lld.", tooMany.Path, tooMany.Count, tooMany.Limit),
-        ConfigProblemKind.DuplicateRouteEntry duplicate => L("In %@, entry %lld repeats an earlier entry.", duplicate.Path, duplicate.Index + 1),
-        ConfigProblemKind.OverlappingRouteEntry overlap => L("In %@, entry %lld overlaps %@, which is already listed. Entries in one list must not overlap.", overlap.Path, overlap.Index + 1, overlap.Other),
-        ConfigProblemKind.VpnServerAsRouteTarget => L("The VPN server's address can't be registered as an exception target."),
+        ConfigProblemKindInvalidRouteEntry entry => L("In %@, entry %lld: %@", entry.Path, entry.Index + 1, entry.Problem.Message(entry.Raw)),
+        ConfigProblemKindTooManyRouteEntries tooMany => L("%@ has %lld entries. It can have at most %lld.", tooMany.Path, tooMany.Count, tooMany.Limit),
+        ConfigProblemKindDuplicateRouteEntry duplicate => L("In %@, entry %lld repeats an earlier entry.", duplicate.Path, duplicate.Index + 1),
+        ConfigProblemKindOverlappingRouteEntry overlap => L("In %@, entry %lld overlaps %@, which is already listed. Entries in one list must not overlap.", overlap.Path, overlap.Index + 1, overlap.Other),
+        ConfigProblemKindVpnServerAsRouteTarget => L("The VPN server's address can't be registered as an exception target."),
         _ => throw new InvalidOperationException($"unknown config problem {kind}"),
     };
 
@@ -111,14 +111,14 @@ public static class SettingsFileText
 
     public static string Message(this ConfigWarningKind kind) => kind switch
     {
-        ConfigWarningKind.UnknownKey unknown => L("Ignoring unknown key '%@'. It will be removed the next time you save in Settings.", unknown.Path),
-        ConfigWarningKind.InvalidTrustedCert invalid => L("In %@, entry %lld is not a SHA-256 digest (64 hex digits) and is ignored.", TrustedCerts, invalid.Index + 1),
-        ConfigWarningKind.DuplicateTrustedCert duplicate => L("In %@, entry %lld duplicates an earlier entry and is ignored.", TrustedCerts, duplicate.Index + 1),
-        ConfigWarningKind.TooManyTrustedCerts tooMany => L("%@ keeps at most %lld entries; the entries after them are ignored.", TrustedCerts, tooMany.Limit),
-        ConfigWarningKind.DuplicateRouteEntry duplicate => L("In %@, entry %lld duplicates an earlier entry and is ignored.", duplicate.Path, duplicate.Index + 1),
-        ConfigWarningKind.MultipleHardLinks links => L("The config file has %lld hard links. Saving won't update the other links.", links.Count),
-        ConfigWarningKind.InsecurePermissions insecure => L("The config file permissions are %@. They will be changed to 0600 on the next save.", Octal(insecure.Mode)),
-        ConfigWarningKind.PermissionsCorrected corrected => L("Changed the config file permissions from %@ to 0600.", Octal(corrected.PreviousMode)),
+        ConfigWarningKindUnknownKey unknown => L("Ignoring unknown key '%@'. It will be removed the next time you save in Settings.", unknown.Path),
+        ConfigWarningKindInvalidTrustedCert invalid => L("In %@, entry %lld is not a SHA-256 digest (64 hex digits) and is ignored.", TrustedCerts, invalid.Index + 1),
+        ConfigWarningKindDuplicateTrustedCert duplicate => L("In %@, entry %lld duplicates an earlier entry and is ignored.", TrustedCerts, duplicate.Index + 1),
+        ConfigWarningKindTooManyTrustedCerts tooMany => L("%@ keeps at most %lld entries; the entries after them are ignored.", TrustedCerts, tooMany.Limit),
+        ConfigWarningKindDuplicateRouteEntry duplicate => L("In %@, entry %lld duplicates an earlier entry and is ignored.", duplicate.Path, duplicate.Index + 1),
+        ConfigWarningKindMultipleHardLinks links => L("The config file has %lld hard links. Saving won't update the other links.", links.Count),
+        ConfigWarningKindInsecurePermissions insecure => L("The config file permissions are %@. They will be changed to 0600 on the next save.", Octal(insecure.Mode)),
+        ConfigWarningKindPermissionsCorrected corrected => L("Changed the config file permissions from %@ to 0600.", Octal(corrected.PreviousMode)),
         _ => throw new InvalidOperationException($"unknown config warning {kind}"),
     };
 
@@ -128,11 +128,11 @@ public static class SettingsFileText
         string text = Preview(raw);
         return problem switch
         {
-            AddressProblem.Malformed => L("'%@' is not an IPv4 address or network. Write it like 10.30.161.16 or 10.30.170.0/24.", text),
-            AddressProblem.PrefixOutOfRange range => L("'%@' has the prefix length /%lld. Use /%lld to /%lld.", text, range.Length, range.Minimum, range.Maximum),
-            AddressProblem.NonContiguousMask => L("'%@' has a subnet mask that is not contiguous.", text),
-            AddressProblem.Unroutable => L("'%@' is a loopback, multicast or reserved address and can't be routed.", text),
-            AddressProblem.HostBitsSet hostBits => L("'%@' has bits set after the prefix. Did you mean %@?", text, hostBits.Network),
+            AddressProblemMalformed => L("'%@' is not an IPv4 address or network. Write it like 10.30.161.16 or 10.30.170.0/24.", text),
+            AddressProblemPrefixOutOfRange range => L("'%@' has the prefix length /%lld. Use /%lld to /%lld.", text, range.Length, range.Minimum, range.Maximum),
+            AddressProblemNonContiguousMask => L("'%@' has a subnet mask that is not contiguous.", text),
+            AddressProblemUnroutable => L("'%@' is a loopback, multicast or reserved address and can't be routed.", text),
+            AddressProblemHostBitsSet hostBits => L("'%@' has bits set after the prefix. Did you mean %@?", text, hostBits.Network),
             _ => throw new InvalidOperationException($"unknown address problem {problem}"),
         };
     }

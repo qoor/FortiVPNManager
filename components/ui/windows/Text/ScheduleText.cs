@@ -1,4 +1,4 @@
-﻿using static FortiVPNManager.Contract.AppInternal;
+﻿using FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
@@ -12,20 +12,20 @@ public static class ScheduleText
         ArgumentNullException.ThrowIfNull(time);
         return outlook switch
         {
-            ScheduleOutlook.Connects connects => L("Connects %@", time.DayTime(connects.At)),
-            ScheduleOutlook.NoDays => L("No days selected"),
-            ScheduleOutlook.WithinHours within => L("After %@, reconnects wait while you're away", time.ClockTime(within.End)),
-            ScheduleOutlook.OutsideHoursPresent => L("Reconnects wait while you're away"),
-            ScheduleOutlook.HoldingWhileAway holding => L("Reconnects stop if you're still away at %@", time.ClockTime(holding.Until)),
-            ScheduleOutlook.Suspended => L("Won't reconnect after this connection ends"),
+            ScheduleOutlookConnects connects => L("Connects %@", time.DayTime(connects.At)),
+            ScheduleOutlookNoDays => L("No days selected"),
+            ScheduleOutlookWithinHours within => L("After %@, reconnects wait while you're away", time.ClockTime(within.End)),
+            ScheduleOutlookOutsideHoursPresent => L("Reconnects wait while you're away"),
+            ScheduleOutlookHoldingWhileAway holding => L("Reconnects stop if you're still away at %@", time.ClockTime(holding.Until)),
+            ScheduleOutlookSuspended => L("Won't reconnect after this connection ends"),
             _ => throw new InvalidOperationException($"unknown outlook {outlook}"),
         };
     }
 
     public static string Message(this ScheduleHoursError error) => error switch
     {
-        ScheduleHoursError.EndNotAfterStart => L("The end time must be later than the start time."),
-        ScheduleHoursError.NotSaved notSaved => notSaved.Error.Message(),
+        ScheduleHoursErrorEndNotAfterStart => L("The end time must be later than the start time."),
+        ScheduleHoursErrorNotSaved notSaved => notSaved.Error.Message(),
         _ => throw new InvalidOperationException($"unknown hours error {error}"),
     };
 

@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 using System.Text;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui;
 

@@ -3,7 +3,8 @@ using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text.Json;
 using FortiVPNManager.Contract;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.HelperPipe;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -24,7 +25,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
     private readonly ulong _id;
     private readonly HelperInbound _inbound;
     private readonly Lock _writeGate = new();
-    private readonly ConcurrentDictionary<ulong, TaskCompletionSource<HelperPipe.Message>> _pending = new();
+    private readonly ConcurrentDictionary<ulong, TaskCompletionSource<Message>> _pending = new();
     private ulong _lastRequest;
     private int _closed;
 
@@ -37,20 +38,20 @@ internal sealed class PipeHelperChannel : IHelperChannel
 
     public static IHelperChannel Open(ulong id, HelperInbound inbound, TimeSpan limit)
     {
-        var pipe = new NamedPipeClientStream(".", HelperPipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        var pipe = new NamedPipeClientStream(".", Pipe.Name, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
             pipe.Connect(limit);
             if (pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !owner.IsWellKnown(WellKnownSidType.LocalSystemSid))
             {
-                throw new HelperChannelException(new HelperChannelFailure.Connection(
+                throw new HelperChannelException(new HelperChannelFailureConnection(
                     "the Helper's pipe is not owned by the system account"));
             }
         }
         catch (Exception error) when (error is TimeoutException or IOException or UnauthorizedAccessException)
         {
             pipe.Dispose();
-            throw new HelperChannelException(new HelperChannelFailure.Connection(error.Message));
+            throw new HelperChannelException(new HelperChannelFailureConnection(error.Message));
         }
         catch
         {
@@ -64,18 +65,18 @@ internal sealed class PipeHelperChannel : IHelperChannel
         new Thread(Read) { Name = $"fvm-helper-read-{_id}", IsBackground = true }.Start();
 
     /// <summary>The time limit covers sending too: a Helper that stops reading holds the write.</summary>
-    public async Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
+    public async Task<Message> Ask(Func<ulong, Request> request)
     {
         ulong id = Interlocked.Increment(ref _lastRequest);
-        HelperPipe.Request message = request(id);
+        Request message = request(id);
         var limit = Task.Delay(s_replyLimit);
-        var answer = new TaskCompletionSource<HelperPipe.Message>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var answer = new TaskCompletionSource<Message>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = answer;
         // Closing fails what is pending; a request added after it would wait for nothing.
         if (Volatile.Read(ref _closed) == 1)
         {
             _ = _pending.TryRemove(id, out _);
-            throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
+            throw new HelperChannelException(new HelperChannelFailureConnectionLost());
         }
         var sending = Task.Run(() =>
         {
@@ -91,7 +92,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
             // then is undone by the close, as the Helper ends the run of a connection that goes away,
             // or, for a route write, found stale when it is tried again on a fresh connection.
             Close();
-            throw new HelperChannelException(new HelperChannelFailure.Connection(
+            throw new HelperChannelException(new HelperChannelFailureConnection(
                 "the Helper did not take the request in time"));
         }
         try
@@ -102,12 +103,12 @@ internal sealed class PipeHelperChannel : IHelperChannel
         catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
         {
             _ = _pending.TryRemove(id, out _);
-            throw new HelperChannelException(new HelperChannelFailure.Connection(error.Message));
+            throw new HelperChannelException(new HelperChannelFailureConnection(error.Message));
         }
         if (await Task.WhenAny(answer.Task, limit).ConfigureAwait(false) == limit)
         {
             _ = _pending.TryRemove(id, out _);
-            throw new HelperChannelException(new HelperChannelFailure.NoReply());
+            throw new HelperChannelException(new HelperChannelFailureNoReply());
         }
         return await answer.Task.ConfigureAwait(false);
     }
@@ -122,11 +123,11 @@ internal sealed class PipeHelperChannel : IHelperChannel
             {
                 switch (MessageFraming.ReadFromHelper(_pipe))
                 {
-                    case HelperPipe.Message.Event message:
-                        _inbound.Pass(new SystemEvent.HelperEvent(message.Json), _id);
+                    case MessageEvent message:
+                        _inbound.Pass(new SystemEventHelperEvent(message.Json), _id);
                         break;
-                    case HelperPipe.Message.Output message:
-                        _inbound.Pass(new SystemEvent.HelperOutput(message.Json), _id);
+                    case MessageOutput message:
+                        _inbound.Pass(new SystemEventHelperOutput(message.Json), _id);
                         break;
                     case var message:
                         Answer(message);
@@ -144,17 +145,17 @@ internal sealed class PipeHelperChannel : IHelperChannel
         _inbound.End(_id);
     }
 
-    private void Answer(HelperPipe.Message message)
+    private void Answer(Message message)
     {
         ulong id = message switch
         {
-            HelperPipe.Message.Build build => build.Id,
-            HelperPipe.Message.Reply reply => reply.Id,
-            HelperPipe.Message.ReplyFlag flag => flag.Id,
+            MessageBuild build => build.Id,
+            MessageReply reply => reply.Id,
+            MessageReplyFlag flag => flag.Id,
             _ => throw new InvalidOperationException($"no request is answered by {message.GetType().Name}"),
         };
         // An answer after the time limit finds no request.
-        if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
+        if (_pending.TryRemove(id, out TaskCompletionSource<Message>? answer))
         {
             _ = answer.TrySetResult(message);
         }
@@ -169,9 +170,9 @@ internal sealed class PipeHelperChannel : IHelperChannel
         _pipe.Dispose();
         foreach (ulong id in _pending.Keys)
         {
-            if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
+            if (_pending.TryRemove(id, out TaskCompletionSource<Message>? answer))
             {
-                _ = answer.TrySetException(new HelperChannelException(new HelperChannelFailure.ConnectionLost()));
+                _ = answer.TrySetException(new HelperChannelException(new HelperChannelFailureConnectionLost()));
             }
         }
     }

@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using FortiVPNManager.Contract;
+using FortiVPNManager.Contract.AppInternal;
 using Microsoft.Win32.SafeHandles;
 
 namespace FortiVPNManager.OsIntegration;
@@ -27,7 +28,7 @@ public sealed class RuntimeLink
     [DllImport("fvm_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     private static extern AppPipes fvm_runtime_start();
 
-    private readonly BlockingCollection<AppInternal.ToRuntime> _outgoing = [];
+    private readonly BlockingCollection<ToRuntime> _outgoing = [];
 
     private RuntimeLink() { }
 
@@ -36,7 +37,7 @@ public sealed class RuntimeLink
     /// message, one at a time in arrival order.
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The runtime pipes stay open for the life of the process; neither side closes its end.")]
-    public static RuntimeLink Start(Action<AppInternal.FromRuntime> onMessage)
+    public static RuntimeLink Start(Action<FromRuntime> onMessage)
     {
         AppPipes pipes = fvm_runtime_start();
         FileStream fromRuntime = Open(pipes.Read, FileAccess.Read);
@@ -46,7 +47,7 @@ public sealed class RuntimeLink
         {
             while (true)
             {
-                AppInternal.FromRuntime message;
+                FromRuntime message;
                 try
                 {
                     message = MessageFraming.ReadFromRuntime(fromRuntime);
@@ -61,7 +62,7 @@ public sealed class RuntimeLink
         });
         StartThread("fvm-runtime-write", () =>
         {
-            foreach (AppInternal.ToRuntime message in link._outgoing.GetConsumingEnumerable())
+            foreach (ToRuntime message in link._outgoing.GetConsumingEnumerable())
             {
                 try
                 {
@@ -77,7 +78,7 @@ public sealed class RuntimeLink
     }
 
     /// <summary>Messages go out in call order, from any thread.</summary>
-    public void Send(AppInternal.ToRuntime message) => _outgoing.Add(message);
+    public void Send(ToRuntime message) => _outgoing.Add(message);
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The runtime pipes stay open for the life of the process; neither side closes its end.")]
     private static FileStream Open(nuint handle, FileAccess access) =>

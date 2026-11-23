@@ -13,7 +13,7 @@ public class HelperPipeTests
     public void RequestsFromTheApp()
     {
         List<HelperPipe.Request> requests = Fixtures.RoundTrip<HelperPipe.Request>("helper-pipe/requests.json");
-        Assert.Equal(new HelperPipe.Request.Build(1, "20261112.1"), requests[0]);
+        Assert.Equal(new HelperPipe.RequestBuild(1, "20261112.1"), requests[0]);
         Assert.Equal(12, requests.Count);
     }
 
@@ -21,15 +21,15 @@ public class HelperPipeTests
     public void MessagesToTheApp()
     {
         List<HelperPipe.Message> messages = Fixtures.RoundTrip<HelperPipe.Message>("helper-pipe/messages.json");
-        Assert.Equal(new HelperPipe.Message.Build(1, "20261112.1"), messages[0]);
-        Assert.Equal(new HelperPipe.Message.Reply(2), messages[1]);
+        Assert.Equal(new HelperPipe.MessageBuild(1, "20261112.1"), messages[0]);
+        Assert.Equal(new HelperPipe.MessageReply(2), messages[1]);
     }
 
     [Fact]
     public void DebugOutputLeavesSecretsOut()
     {
-        string connect = new HelperPipe.Request.Connect(2, """{"password":"vpn-secret"}""").ToString();
-        string otp = new HelperPipe.Request.SubmitOtp(3, "attempt", "123456").ToString();
+        string connect = new HelperPipe.RequestConnect(2, """{"password":"vpn-secret"}""").ToString();
+        string otp = new HelperPipe.RequestSubmitOtp(3, "attempt", "123456").ToString();
         Assert.DoesNotContain("vpn-secret", connect);
         Assert.DoesNotContain("123456", otp);
     }
@@ -39,7 +39,7 @@ public class HelperPipeTests
     {
         using var stream = new MemoryStream();
         // Passed as the case, it is still written inside its type's wrapper.
-        MessageFraming.Write(stream, new HelperPipe.Request.Status(5));
+        MessageFraming.Write(stream, new HelperPipe.RequestStatus(5));
         byte[] bytes = stream.ToArray();
         const string payload = """{"status":{"id":5}}""";
         Assert.Equal(new byte[] { 0, 0, 0, (byte)payload.Length }, bytes[..4]);
@@ -57,8 +57,8 @@ public class HelperPipeTests
             stream.Write(payload);
         }
         stream.Position = 0;
-        Assert.Equal(new HelperPipe.Message.ReplyFlag(6, false), MessageFraming.ReadFromHelper(stream));
-        Assert.Equal(new HelperPipe.Message.Output("[]"), MessageFraming.ReadFromHelper(stream));
+        Assert.Equal(new HelperPipe.MessageReplyFlag(6, false), MessageFraming.ReadFromHelper(stream));
+        Assert.Equal(new HelperPipe.MessageOutput("[]"), MessageFraming.ReadFromHelper(stream));
         _ = Assert.Throws<EndOfStreamException>(() => MessageFraming.ReadFromHelper(stream));
     }
 }

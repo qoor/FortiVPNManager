@@ -1,9 +1,9 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -44,10 +44,10 @@ internal sealed class ConnectionPane : IPane
     public ConnectionPane(AppUi ui, PanePage page)
     {
         this._ui = ui;
-        _awayMinutes = new MinutesBox(this, minutes => new ConnectionOption.AwayMinutes(minutes));
-        _sessionMax = new MinutesBox(this, minutes => new ConnectionOption.SessionMaxMinutes(minutes));
-        _margin = new MinutesBox(this, minutes => new ConnectionOption.ProactiveMarginMinutes(minutes));
-        _minSleep = new MinutesBox(this, minutes => new ConnectionOption.MinSleepMinutes(minutes));
+        _awayMinutes = new MinutesBox(this, minutes => new ConnectionOptionAwayMinutes(minutes));
+        _sessionMax = new MinutesBox(this, minutes => new ConnectionOptionSessionMaxMinutes(minutes));
+        _margin = new MinutesBox(this, minutes => new ConnectionOptionProactiveMarginMinutes(minutes));
+        _minSleep = new MinutesBox(this, minutes => new ConnectionOptionMinSleepMinutes(minutes));
         _outlook = Cards.Card(L("Next"), _outlookValue);
         _marginCard = Cards.Card(L("Margin"), _margin.Row);
         _minSleepCard = Cards.Card(L("Minimum sleep time"), _minSleep.Row);
@@ -59,7 +59,7 @@ internal sealed class ConnectionPane : IPane
     private void AddScheduleRows()
     {
         _body.Children.Add(Cards.SectionHeader(L("Schedule"), first: true));
-        var expander = new SettingsExpander { Header = L("Connect on a schedule"), Content = Switch(_scheduleEnabled, on => new ConnectionOption.ScheduleEnabled(on)), IsExpanded = true };
+        var expander = new SettingsExpander { Header = L("Connect on a schedule"), Content = Switch(_scheduleEnabled, on => new ConnectionOptionScheduleEnabled(on)), IsExpanded = true };
         // Seven equal buttons, 40 px each beside the header and narrower when the card is narrow.
         var dayRow = new Grid { ColumnSpacing = 4 };
         foreach (Weekday day in Enum.GetValues<Weekday>())
@@ -68,7 +68,7 @@ internal sealed class ConnectionPane : IPane
             Grid.SetColumn(button, dayRow.ColumnDefinitions.Count);
             dayRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             // Click comes only from the person, unlike Checked, which the refresh would also raise.
-            button.Click += (_, _) => Send(new ConnectionOption.ScheduleDay(day, button.IsChecked == true));
+            button.Click += (_, _) => Send(new ConnectionOptionScheduleDay(day, button.IsChecked == true));
             _days[day] = button;
             dayRow.Children.Add(button);
         }
@@ -108,12 +108,12 @@ internal sealed class ConnectionPane : IPane
     {
         _body.Children.Add(Cards.SectionHeader(L("Reconnect")));
         _body.Children.Add(_rows["Maximum session length"] = Cards.Card(L("Maximum session length"), _sessionMax.Row));
-        var proactiveRow = new SettingsExpander { Header = L("Proactive reconnect"), Content = Switch(_proactive, on => new ConnectionOption.ProactiveReconnect(on)), IsExpanded = true };
+        var proactiveRow = new SettingsExpander { Header = L("Proactive reconnect"), Content = Switch(_proactive, on => new ConnectionOptionProactiveReconnect(on)), IsExpanded = true };
         proactiveRow.Items.Add(_marginCard);
         _body.Children.Add(_rows["Proactive reconnect"] = proactiveRow);
         _rows["Margin"] = _marginCard;
         _expanders[_marginCard] = proactiveRow;
-        var sleepRow = new SettingsExpander { Header = L("Reconnect after sleep"), Content = Switch(_afterSleep, on => new ConnectionOption.ReconnectAfterSleep(on)), IsExpanded = true };
+        var sleepRow = new SettingsExpander { Header = L("Reconnect after sleep"), Content = Switch(_afterSleep, on => new ConnectionOptionReconnectAfterSleep(on)), IsExpanded = true };
         ToolTipService.SetToolTip(sleepRow, L("Starts a new connection when the PC wakes from sleeping at least the minimum sleep time."));
         sleepRow.Items.Add(_minSleepCard);
         _body.Children.Add(_rows["Reconnect after sleep"] = sleepRow);
@@ -142,7 +142,7 @@ internal sealed class ConnectionPane : IPane
     {
         if (!_refreshing)
         {
-            _ui.Send(new Command.SetConnectionOption(option));
+            _ui.Send(new CommandSetConnectionOption(option));
         }
     }
 
@@ -161,7 +161,7 @@ internal sealed class ConnectionPane : IPane
         var newEnd = new TimeOfDay((byte)endTime.Hours, (byte)endTime.Minutes);
         if (newStart != _schedule.Start || newEnd != _schedule.End || _schedule.HoursError is not null)
         {
-            _ui.Send(new Command.SetScheduleHours(newStart, newEnd));
+            _ui.Send(new CommandSetScheduleHours(newStart, newEnd));
         }
     }
 

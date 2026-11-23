@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
+using FortiVPNManager.Contract.AppInternal;
 using Xunit;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Contract.Tests;
 
@@ -18,11 +18,11 @@ public class AppInternalTests
     public void MessagesFromTheRuntime()
     {
         List<FromRuntime> messages = RoundTrip<FromRuntime>("from_runtime.json");
-        FromRuntime.Section first = Assert.IsType<FromRuntime.Section>(messages[0]);
-        ConnectionSection connection = Assert.IsType<Section.Connection>(first.Value).Value;
-        _ = Assert.IsType<ConnectionStatus.NotConnected>(connection.Status);
+        FromRuntimeSection first = Assert.IsType<FromRuntimeSection>(messages[0]);
+        ConnectionSection connection = Assert.IsType<SectionConnection>(first.Value).Value;
+        _ = Assert.IsType<ConnectionStatusNotConnected>(connection.Status);
         Assert.Equal(ButtonState.Enabled, connection.Connect);
-        Assert.Contains(messages, message => message is FromRuntime.OpenSettings);
+        Assert.Contains(messages, message => message is FromRuntimeOpenSettings);
     }
 
     [Fact]
@@ -89,9 +89,9 @@ public class AppInternalTests
         _ = RoundTrip<ConfigWarning>("config_warnings.json");
         Assert.Equal(
             [
-                new AddressProblem.Malformed(), new AddressProblem.PrefixOutOfRange(4, 8, 32),
-                new AddressProblem.NonContiguousMask(), new AddressProblem.Unroutable(),
-                new AddressProblem.HostBitsSet("10.30.170.0/24"),
+                new AddressProblemMalformed(), new AddressProblemPrefixOutOfRange(4, 8, 32),
+                new AddressProblemNonContiguousMask(), new AddressProblemUnroutable(),
+                new AddressProblemHostBitsSet("10.30.170.0/24"),
             ],
             RoundTrip<AddressProblem>("address_problems.json"));
         _ = RoundTrip<FileProblem>("file_problems.json");
@@ -104,13 +104,13 @@ public class AppInternalTests
     public void PortActions()
     {
         var actions = RoundTrip<FromRuntime>("port_actions.json")
-            .OfType<FromRuntime.PortAction>()
+            .OfType<FromRuntimePortAction>()
             .Select(message => message.Value)
             .ToList();
-        Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.BypassRoutes });
-        Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.LoginItem });
-        Assert.Contains(actions, action => action is PortAction.Log { Category: LogCategory.Update });
-        Assert.Contains(actions, action => action is PortAction.ReleaseUpdateWaiter { InstallerProcessId: 4_294_967_295 });
+        Assert.Contains(actions, action => action is PortActionLog { Category: LogCategory.BypassRoutes });
+        Assert.Contains(actions, action => action is PortActionLog { Category: LogCategory.LoginItem });
+        Assert.Contains(actions, action => action is PortActionLog { Category: LogCategory.Update });
+        Assert.Contains(actions, action => action is PortActionReleaseUpdateWaiter { InstallerProcessId: 4_294_967_295 });
     }
 
     // Sent by the app
@@ -118,7 +118,7 @@ public class AppInternalTests
     [Fact]
     public void Launched()
     {
-        ToRuntime.Launched launched = Assert.IsType<ToRuntime.Launched>(Assert.Single(RoundTrip<ToRuntime>("launched.json")));
+        ToRuntimeLaunched launched = Assert.IsType<ToRuntimeLaunched>(Assert.Single(RoundTrip<ToRuntime>("launched.json")));
         Assert.Equal("Asia/Seoul", launched.Facts.TimeZone);
         Assert.NotNull(launched.Facts.BuiltInOauthClient);
     }
@@ -127,9 +127,9 @@ public class AppInternalTests
     public void Commands()
     {
         var commands = RoundTrip<ToRuntime>("commands.json")
-            .Select(message => Assert.IsType<ToRuntime.Command>(message).Value)
+            .Select(message => Assert.IsType<ToRuntimeCommand>(message).Value)
             .ToList();
-        Command.EditAccount edit = Assert.IsType<Command.EditAccount>(commands.Single(command => command is Command.EditAccount));
+        CommandEditAccount edit = Assert.IsType<CommandEditAccount>(commands.Single(command => command is CommandEditAccount));
         Assert.Equal(4UL, edit.Revision);
         Assert.Equal("vpn.example.com:8443", edit.Form.Server);
     }
@@ -141,10 +141,10 @@ public class AppInternalTests
     public void SystemEvents()
     {
         var events = RoundTrip<ToRuntime>("system_events.json")
-            .Select(message => Assert.IsType<ToRuntime.Event>(message).Value)
+            .Select(message => Assert.IsType<ToRuntimeEvent>(message).Value)
             .ToList();
         // Whole milliseconds since 1970, as the runtime writes them.
-        SystemEvent.WillSleep willSleep = Assert.IsType<SystemEvent.WillSleep>(events[0]);
+        SystemEventWillSleep willSleep = Assert.IsType<SystemEventWillSleep>(events[0]);
         Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1_762_412_345_250), willSleep.At);
     }
 
@@ -173,8 +173,8 @@ public class AppInternalTests
         string[] shown =
         [
             new AccountForm("vpn.example.com", "alice", "", "alice@example.com", "vpn-secret", "app-secret").ToString(),
-            new HelperCall.Connect("""{"password":"vpn-secret"}""").ToString(),
-            new HelperCall.SubmitOtp("attempt", "123456").ToString(),
+            new HelperCallConnect("""{"password":"vpn-secret"}""").ToString(),
+            new HelperCallSubmitOtp("attempt", "123456").ToString(),
             new AppFacts("1", "26.1.0", true, "Asia/Seoul", new SignInPages("a", "b", "c"), "client-secret").ToString(),
         ];
         foreach (string text in shown)

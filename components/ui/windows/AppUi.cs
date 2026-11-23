@@ -1,7 +1,7 @@
-﻿using FortiVPNManager.Ui.Settings;
+﻿using FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Ui.Settings;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Dispatching;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui;
 
@@ -56,7 +56,7 @@ public sealed class AppUi
     /// <summary>Whether the panes show the rows of a setting shown only in some states; the search lists only those it can go to.</summary>
     public bool IsShown(SearchCondition condition) => condition switch
     {
-        SearchCondition.Connected => Connection?.Status is ConnectionStatus.Connected,
+        SearchCondition.Connected => Connection?.Status is ConnectionStatusConnected,
         SearchCondition.GmailApi => Gmail?.Method == OtpMethod.GmailApi,
         SearchCondition.VpnBackendFound => Readiness?.Backend is not null,
         SearchCondition.RegisterHelper => Readiness is { RegisterHelper: not ButtonState.Hidden },
@@ -102,7 +102,7 @@ public sealed class AppUi
             Settings.ShowUpdates();
             if (button)
             {
-                Send(new Command.UpdateNowFromNotification());
+                Send(new CommandUpdateNowFromNotification());
             }
         }
         else
@@ -120,27 +120,27 @@ public sealed class AppUi
     {
         switch (section)
         {
-            case Section.Connection connection:
+            case SectionConnection connection:
                 Connection = connection.Value;
                 RestartClock();
                 break;
-            case Section.Schedule schedule:
+            case SectionSchedule schedule:
                 Schedule = schedule.Value;
                 break;
-            case Section.Readiness readiness:
+            case SectionReadiness readiness:
                 Readiness = readiness.Value;
                 break;
-            case Section.Gmail gmail:
+            case SectionGmail gmail:
                 Gmail = gmail.Value;
                 break;
-            case Section.BypassRules rules:
+            case SectionBypassRules rules:
                 BypassRules = rules.Value;
                 break;
-            case Section.Config config:
+            case SectionConfig config:
                 Config = config.Value;
                 AccountDraft.Replace(config.Value.Account);
                 break;
-            case Section.AutoUpdate update:
+            case SectionAutoUpdate update:
                 AutoUpdate = update.Value;
                 break;
             default:

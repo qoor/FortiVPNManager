@@ -1,5 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -27,7 +27,7 @@ public sealed class AppLifetime
     {
         if (Interlocked.Exchange(ref _requested, 1) == 0)
         {
-            _post(new SystemEvent.QuitRequested());
+            _post(new SystemEventQuitRequested());
         }
     }
 

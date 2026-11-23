@@ -1,12 +1,12 @@
 ﻿using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui;
@@ -104,7 +104,7 @@ public sealed partial class TrayIcon : IDisposable
             TimeStyle time = _ui.Time;
             ScheduleOutlook? outlook = _ui.Schedule?.Outlook;
             entries.Add(Line(connection.StatusLine(outlook, time)));
-            if (connection.Status is ConnectionStatus.Connected connected)
+            if (connection.Status is ConnectionStatusConnected connected)
             {
                 entries.Add(Line(L("Tunnel IP %@ · since %@", connected.TunnelIp ?? L("Unknown"), time.ClockTime(connected.Since))));
             }
@@ -118,28 +118,28 @@ public sealed partial class TrayIcon : IDisposable
             }
             switch (connection.Status)
             {
-                case ConnectionStatus.SetupRequired setup:
+                case ConnectionStatusSetupRequired setup:
                     foreach (SetupItem item in setup.Items)
                     {
                         entries.Add(new Entry(item.ActionTitle(), true, () => _ui.Settings.Show(item.Pane())));
                     }
                     break;
-                case ConnectionStatus.Failed failed:
+                case ConnectionStatusFailed failed:
                     entries.Add(Line(failed.Reason.Guidance(time)));
                     entries.Add(new Entry(failed.Reason.ActionTitle(), true, () => _ui.Settings.Show(failed.Reason.Pane())));
                     break;
-                case ConnectionStatus.NotConnected or ConnectionStatus.Connecting or ConnectionStatus.Connected
-                    or ConnectionStatus.ReconnectOnHold or ConnectionStatus.WaitingToReconnect
-                    or ConnectionStatus.WaitingForNetwork or ConnectionStatus.Disconnecting:
+                case ConnectionStatusNotConnected or ConnectionStatusConnecting or ConnectionStatusConnected
+                    or ConnectionStatusReconnectOnHold or ConnectionStatusWaitingToReconnect
+                    or ConnectionStatusWaitingForNetwork or ConnectionStatusDisconnecting:
                     break;
                 default:
                     throw new InvalidOperationException($"unknown status {connection.Status}");
             }
             // Always listed; the ones that don't apply now are dimmed.
             entries.Add(s_separator);
-            entries.Add(new Entry(L("Connect"), connection.Connect == ButtonState.Enabled, () => _ui.Send(new Command.Connect())));
-            entries.Add(new Entry(L("Disconnect"), connection.Disconnect == ButtonState.Enabled, () => _ui.Send(new Command.Disconnect())));
-            entries.Add(new Entry(L("Reconnect Now"), connection.ReconnectNow == ButtonState.Enabled, () => _ui.Send(new Command.ReconnectNow())));
+            entries.Add(new Entry(L("Connect"), connection.Connect == ButtonState.Enabled, () => _ui.Send(new CommandConnect())));
+            entries.Add(new Entry(L("Disconnect"), connection.Disconnect == ButtonState.Enabled, () => _ui.Send(new CommandDisconnect())));
+            entries.Add(new Entry(L("Reconnect Now"), connection.ReconnectNow == ButtonState.Enabled, () => _ui.Send(new CommandReconnectNow())));
         }
         entries.Add(s_separator);
         entries.Add(new Entry(L("Show Log"), true, () => _ui.Settings.Show(SettingsPane.Log)));

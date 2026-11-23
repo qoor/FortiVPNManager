@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -37,7 +37,7 @@ public sealed class AppRouter
     {
         this._ui = ui;
         this._send = send;
-        void post(SystemEvent systemEvent) => send(new ToRuntime.Event(systemEvent));
+        void post(SystemEvent systemEvent) => send(new ToRuntimeEvent(systemEvent));
         Lifetime = new AppLifetime(post, quit);
         _relay = new HelperRelay(appBuild, new HelperInbound(post), PipeHelperChannel.Open, s_helperRetryDelay);
         _events = new SystemEvents(post, Lifetime);
@@ -48,32 +48,32 @@ public sealed class AppRouter
     /// <summary>Reports the app's facts, which the runtime takes before anything else, then the system's events.</summary>
     public void Start(AppFacts facts)
     {
-        _send(new ToRuntime.Launched(facts));
+        _send(new ToRuntimeLaunched(facts));
         _events.Start();
     }
 
     /// <summary>A command from the UI.</summary>
-    public void Send(Command command) => _send(new ToRuntime.Command(command));
+    public void Send(Command command) => _send(new ToRuntimeCommand(command));
 
     public void Receive(FromRuntime message)
     {
         switch (message)
         {
-            case FromRuntime.Section section:
+            case FromRuntimeSection section:
                 _ui.Apply(section.Value);
                 break;
-            case FromRuntime.LogLines lines:
+            case FromRuntimeLogLines lines:
                 _ui.AppendLog(lines.Lines);
                 break;
-            case FromRuntime.PortRequest request:
-                Answer(request.Request, response => _send(new ToRuntime.PortResponse(request.Id, response)));
+            case FromRuntimePortRequest request:
+                Answer(request.Request, response => _send(new ToRuntimePortResponse(request.Id, response)));
                 break;
-            case FromRuntime.PortAction action:
+            case FromRuntimePortAction action:
                 Perform(action.Value);
                 break;
             // The app starts in the notification area only, even when setup is needed; Settings opens
             // from the icon's double-click or its menu (user decision, 2026-11-13).
-            case FromRuntime.OpenSettings:
+            case FromRuntimeOpenSettings:
                 break;
             default:
                 throw new InvalidOperationException($"unknown message from the runtime {message}");
@@ -84,42 +84,42 @@ public sealed class AppRouter
     {
         switch (request)
         {
-            case PortRequest.HelperRegistration:
+            case PortRequestHelperRegistration:
                 reply(ServiceRegistration.HelperStatus());
                 break;
-            case PortRequest.RegisterHelper:
+            case PortRequestRegisterHelper:
                 reply(ServiceRegistration.RegisterHelper());
                 break;
             // Opening the pipe can take seconds, so a Helper call never runs on the runtime's reader thread.
-            case PortRequest.HelperBuild:
+            case PortRequestHelperBuild:
                 Watch(Task.Run(() => _relay.Build(reply)));
                 break;
-            case PortRequest.CallHelper call:
+            case PortRequestCallHelper call:
                 Watch(Task.Run(() => _relay.Handle(call.Call, reply)));
                 break;
-            case PortRequest.RouteInterface route:
-                reply(new PortResponse.RouteInterface(SystemFacts.RouteInterface(route.Destination)));
+            case PortRequestRouteInterface route:
+                reply(new PortResponseRouteInterface(SystemFacts.RouteInterface(route.Destination)));
                 break;
-            case PortRequest.PrimaryRouter:
-                reply(new PortResponse.PrimaryRouter(SystemFacts.PrimaryRouter()));
+            case PortRequestPrimaryRouter:
+                reply(new PortResponsePrimaryRouter(SystemFacts.PrimaryRouter()));
                 break;
-            case PortRequest.ScreenState:
+            case PortRequestScreenState:
                 // Displays off comes with the UI, which receives that event.
-                reply(new PortResponse.ScreenState(_events.Locked, DisplaysAsleep: false));
+                reply(new PortResponseScreenState(_events.Locked, DisplaysAsleep: false));
                 break;
-            case PortRequest.OpenBrowser browser:
-                reply(new PortResponse.BrowserOpened(OpenBrowser(browser.Url)));
+            case PortRequestOpenBrowser browser:
+                reply(new PortResponseBrowserOpened(OpenBrowser(browser.Url)));
                 break;
-            case PortRequest.LoginItemRegistration:
+            case PortRequestLoginItemRegistration:
                 reply(ServiceRegistration.LoginItemStatus());
                 break;
-            case PortRequest.SetLoginItem login:
+            case PortRequestSetLoginItem login:
                 reply(ServiceRegistration.SetLoginItem(login.Enabled));
                 break;
-            case PortRequest.FortiClientConnections:
-                reply(new PortResponse.FortiClientConnections(FortiClientSettings.Connections()));
+            case PortRequestFortiClientConnections:
+                reply(new PortResponseFortiClientConnections(FortiClientSettings.Connections()));
                 break;
-            case PortRequest.StartUpdateWaiter:
+            case PortRequestStartUpdateWaiter:
                 reply(_waiter.Start());
                 break;
             default:
@@ -131,24 +131,24 @@ public sealed class AppRouter
     {
         switch (action)
         {
-            case PortAction.Log log:
+            case PortActionLog log:
                 SystemLog.Write(log.Level, log.Category, log.Message);
                 break;
-            case PortAction.PostNotification notification:
+            case PortActionPostNotification notification:
                 _ui.PostNotification(notification.Notification);
                 break;
             // Windows neither suspends a desktop app nor asks the user to approve the Helper.
-            case PortAction.HoldActivity or PortAction.OpenHelperApprovalSettings:
+            case PortActionHoldActivity or PortActionOpenHelperApprovalSettings:
                 break;
-            case PortAction.UseHelperTeam:
+            case PortActionUseHelperTeam:
                 break;
-            case PortAction.ReleaseUpdateWaiter release:
+            case PortActionReleaseUpdateWaiter release:
                 _waiter.Release(release.InstallerProcessId);
                 break;
-            case PortAction.StopUpdateWaiter:
+            case PortActionStopUpdateWaiter:
                 _waiter.Stop();
                 break;
-            case PortAction.ApproveQuit:
+            case PortActionApproveQuit:
                 Lifetime.ApproveQuit();
                 break;
             default:

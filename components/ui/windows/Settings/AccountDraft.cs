@@ -1,4 +1,4 @@
-﻿using static FortiVPNManager.Contract.AppInternal;
+﻿using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui.Settings;
 
@@ -50,5 +50,5 @@ public sealed class AccountDraft
     }
 
     /// <summary>The edit to send after any field changed, against the revision it was typed on.</summary>
-    public Command Edit() => new Command.EditAccount(Revision, new AccountForm(Server, Username, Realm, GmailAddress, VpnPassword, AppPassword));
+    public Command Edit() => new CommandEditAccount(Revision, new AccountForm(Server, Username, Realm, GmailAddress, VpnPassword, AppPassword));
 }

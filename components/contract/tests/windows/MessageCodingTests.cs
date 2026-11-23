@@ -13,18 +13,30 @@ public class MessageCodingTests
 {
     private static readonly Type[] s_contractTypes = typeof(MessageCoding).Assembly.GetTypes();
 
-    /// <summary>The abstract records whose nested records are their cases; static classes are abstract too, but sealed.</summary>
+    /// <summary>The abstract records whose sealed records are their cases; static classes are abstract too, but sealed.</summary>
     private static readonly Type[] s_casesTypes = [.. s_contractTypes.Where(type => type.IsAbstract && !type.IsSealed)];
+
+    private static readonly Type[] s_cases = [.. s_contractTypes.Where(type => s_casesTypes.Contains(type.BaseType))];
 
     [Fact]
     public void EveryCaseIsListed()
     {
-        Assert.Contains(typeof(AppInternal.ToRuntime), s_casesTypes);
-        IEnumerable<string?> unlisted = s_casesTypes
-            .SelectMany(type => type.GetNestedTypes().Where(nested => nested.IsSubclassOf(type)))
+        Assert.Contains(typeof(AppInternal.ToRuntimeLaunched), s_cases);
+        IEnumerable<string?> unlisted = s_cases
             .Where(@case => MessageCoding.Default.GetTypeInfo(@case) is null)
             .Select(@case => @case.FullName);
         Assert.Empty(unlisted);
+    }
+
+    [Fact]
+    public void EveryCaseIsNamedByItsTypeOfCases()
+    {
+        IEnumerable<string?> unnamed = s_cases
+            .Where(@case => !@case.BaseType!.GetCustomAttributesData()
+                .Any(attribute => attribute.AttributeType.Name == "JsonCaseAttribute"
+                    && (Type?)attribute.ConstructorArguments[0].Value == @case))
+            .Select(@case => @case.FullName);
+        Assert.Empty(unnamed);
     }
 
     [Fact]

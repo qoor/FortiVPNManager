@@ -1,6 +1,6 @@
-﻿using FortiVPNManager.Contract;
+﻿using FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.HelperPipe;
 using Xunit;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration.Tests;
 
@@ -14,10 +14,10 @@ public class HelperRelayTests
     {
         var helper = new FakeHelper(AppBuild);
         var harness = new Harness(helper);
-        Assert.Equal(new PortResponse.HelperReply(), await harness.Call(new HelperCall.Connect("{}")));
-        Assert.Equal(new PortResponse.HelperReply(), await harness.Call(new HelperCall.Connect("{}")));
+        Assert.Equal(new PortResponseHelperReply(), await harness.Call(new HelperCallConnect("{}")));
+        Assert.Equal(new PortResponseHelperReply(), await harness.Call(new HelperCallConnect("{}")));
         Assert.Equal(
-            [typeof(HelperPipe.Request.Build), typeof(HelperPipe.Request.Connect), typeof(HelperPipe.Request.Connect)],
+            [typeof(RequestBuild), typeof(RequestConnect), typeof(RequestConnect)],
             helper.Received.Select(request => request.GetType()));
     }
 
@@ -27,9 +27,9 @@ public class HelperRelayTests
         var helper = new FakeHelper("another build");
         var harness = new Harness(helper);
         Assert.Equal(
-            new PortResponse.HelperBuildMismatch("another build"),
-            await harness.Call(new HelperCall.SubmitOtp("attempt", "123456")));
-        Assert.Equal([typeof(HelperPipe.Request.Build)], helper.Received.Select(request => request.GetType()));
+            new PortResponseHelperBuildMismatch("another build"),
+            await harness.Call(new HelperCallSubmitOtp("attempt", "123456")));
+        Assert.Equal([typeof(RequestBuild)], helper.Received.Select(request => request.GetType()));
     }
 
     [Fact]
@@ -37,18 +37,18 @@ public class HelperRelayTests
     {
         var gone = new FakeHelper(AppBuild, failing: true);
         var harness = new Harness(gone, new FakeHelper(AppBuild));
-        Assert.Equal(new PortResponse.HelperReply("{}"), await harness.Call(new HelperCall.Status()));
+        Assert.Equal(new PortResponseHelperReply("{}"), await harness.Call(new HelperCallStatus()));
         Assert.Equal(2, harness.Opened);
         Assert.True(gone.Disposed);
         // The first connection carried no run, but its loss is reported before the answer all the same.
-        Assert.Equal(["HelperConnectionLost", "reply"], harness.Seen);
+        Assert.Equal(["SystemEventHelperConnectionLost", "reply"], harness.Seen);
     }
 
     [Fact]
     public async Task TheStatusIsTriedOnceMoreWhenTheFirstConnectionCannotBeOpened()
     {
         var harness = new Harness(null, new FakeHelper(AppBuild));
-        Assert.Equal(new PortResponse.HelperReply("{}"), await harness.Call(new HelperCall.Status()));
+        Assert.Equal(new PortResponseHelperReply("{}"), await harness.Call(new HelperCallStatus()));
         Assert.Equal(2, harness.Opened);
         // No connection was active, so none is reported lost.
         Assert.Equal(["reply"], harness.Seen);
@@ -58,7 +58,7 @@ public class HelperRelayTests
     public async Task TheBuildCheckWaitsForAHelperThatWindowsRestarts()
     {
         var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(8) };
-        Assert.Equal(new PortResponse.HelperBuild(AppBuild), await harness.Build());
+        Assert.Equal(new PortResponseHelperBuild(AppBuild), await harness.Build());
         Assert.Equal(2, harness.Opened);
     }
 
@@ -67,7 +67,7 @@ public class HelperRelayTests
     {
         var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(21) };
         Assert.Equal(
-            new PortResponse.HelperUnreachable(new HelperChannelFailure.Connection("no pipe")),
+            new PortResponseHelperUnreachable(new HelperChannelFailureConnection("no pipe")),
             await harness.Build());
         Assert.Equal(2, harness.Opened);
     }
@@ -77,8 +77,8 @@ public class HelperRelayTests
     {
         var harness = new Harness(new FakeHelper(AppBuild)) { PipeAppearsAfter = TimeSpan.FromSeconds(8) };
         Assert.Equal(
-            new PortResponse.HelperUnreachable(new HelperChannelFailure.Connection("no pipe")),
-            await harness.Call(new HelperCall.Status()));
+            new PortResponseHelperUnreachable(new HelperChannelFailureConnection("no pipe")),
+            await harness.Call(new HelperCallStatus()));
         Assert.Equal(2, harness.Opened);
     }
 
@@ -88,17 +88,17 @@ public class HelperRelayTests
         var helper = new FakeHelper(AppBuild, failing: true);
         var harness = new Harness(helper, new FakeHelper(AppBuild));
         Assert.Equal(
-            new PortResponse.HelperUnreachable(new HelperChannelFailure.ConnectionLost()),
-            await harness.Call(new HelperCall.Connect("{}")));
+            new PortResponseHelperUnreachable(new HelperChannelFailureConnectionLost()),
+            await harness.Call(new HelperCallConnect("{}")));
         Assert.Equal(1, harness.Opened);
     }
 
     private static readonly (HelperCall Call, Type Request)[] s_updateCalls =
     [
-        (new HelperCall.PrepareUpdate("{}"), typeof(HelperPipe.Request.PrepareUpdate)),
-        (new HelperCall.InstallUpdate("{}"), typeof(HelperPipe.Request.InstallUpdate)),
-        (new HelperCall.ReadPreparedUpdate(), typeof(HelperPipe.Request.ReadPreparedUpdate)),
-        (new HelperCall.DiscardPreparedUpdate(), typeof(HelperPipe.Request.DiscardPreparedUpdate)),
+        (new HelperCallPrepareUpdate("{}"), typeof(RequestPrepareUpdate)),
+        (new HelperCallInstallUpdate("{}"), typeof(RequestInstallUpdate)),
+        (new HelperCallReadPreparedUpdate(), typeof(RequestReadPreparedUpdate)),
+        (new HelperCallDiscardPreparedUpdate(), typeof(RequestDiscardPreparedUpdate)),
     ];
 
     [Fact]
@@ -108,8 +108,8 @@ public class HelperRelayTests
         {
             var helper = new FakeHelper(AppBuild);
             var harness = new Harness(helper);
-            Assert.Equal(new PortResponse.HelperReply(FakeHelper.UpdateReply), await harness.Call(call));
-            Assert.Equal([typeof(HelperPipe.Request.Build), request], helper.Received.Select(sent => sent.GetType()));
+            Assert.Equal(new PortResponseHelperReply(FakeHelper.UpdateReply), await harness.Call(call));
+            Assert.Equal([typeof(RequestBuild), request], helper.Received.Select(sent => sent.GetType()));
         }
     }
 
@@ -120,8 +120,8 @@ public class HelperRelayTests
         {
             var helper = new FakeHelper("another build");
             var harness = new Harness(helper);
-            Assert.Equal(new PortResponse.HelperBuildMismatch("another build"), await harness.Call(call));
-            Assert.Equal([typeof(HelperPipe.Request.Build)], helper.Received.Select(sent => sent.GetType()));
+            Assert.Equal(new PortResponseHelperBuildMismatch("another build"), await harness.Call(call));
+            Assert.Equal([typeof(RequestBuild)], helper.Received.Select(sent => sent.GetType()));
         }
     }
 
@@ -131,7 +131,7 @@ public class HelperRelayTests
         foreach ((HelperCall? call, Type _) in s_updateCalls)
         {
             var harness = new Harness(new FakeHelper(AppBuild, failing: true), new FakeHelper(AppBuild));
-            Assert.Equal(new PortResponse.HelperUnreachable(new HelperChannelFailure.ConnectionLost()), await harness.Call(call));
+            Assert.Equal(new PortResponseHelperUnreachable(new HelperChannelFailureConnectionLost()), await harness.Call(call));
             Assert.Equal(1, harness.Opened);
         }
     }
@@ -141,10 +141,10 @@ public class HelperRelayTests
     {
         var helper = new FakeHelper(AppBuild);
         var harness = new Harness(helper, new FakeHelper(AppBuild));
-        Assert.Equal(new PortResponse.HelperReplyFlag(false), await harness.Call(new HelperCall.ExitWhenIdle()));
-        Assert.Equal(["reply", "HelperConnectionLost"], harness.Seen);
+        Assert.Equal(new PortResponseHelperReplyFlag(false), await harness.Call(new HelperCallExitWhenIdle()));
+        Assert.Equal(["reply", "SystemEventHelperConnectionLost"], harness.Seen);
         Assert.True(helper.Disposed);
-        _ = await harness.Call(new HelperCall.Status());
+        _ = await harness.Call(new HelperCallStatus());
         Assert.Equal(2, harness.Opened);
     }
 
@@ -197,7 +197,7 @@ public class HelperRelayTests
             Opened++;
             return PipeAppearsAfter <= limit && _helpers.Dequeue() is { } helper
                 ? helper
-                : throw new HelperChannelException(new HelperChannelFailure.Connection("no pipe"));
+                : throw new HelperChannelException(new HelperChannelFailureConnection("no pipe"));
         }
 
         private void Record(string what)
@@ -216,30 +216,30 @@ public class HelperRelayTests
 
         private ulong _lastRequest;
 
-        public List<HelperPipe.Request> Received { get; } = [];
+        public List<Request> Received { get; } = [];
 
         public bool Disposed { get; private set; }
 
         public void Start() { }
 
-        public Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
+        public Task<Message> Ask(Func<ulong, Request> request)
         {
-            HelperPipe.Request sent = request(++_lastRequest);
+            Request sent = request(++_lastRequest);
             Received.Add(sent);
             if (failing)
             {
-                throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
+                throw new HelperChannelException(new HelperChannelFailureConnectionLost());
             }
-            HelperPipe.Message answer = sent switch
+            Message answer = sent switch
             {
-                HelperPipe.Request.Build check => new HelperPipe.Message.Build(check.Id, build),
-                HelperPipe.Request.ExitWhenIdle exit => new HelperPipe.Message.ReplyFlag(exit.Id, false),
-                HelperPipe.Request.Status status => new HelperPipe.Message.Reply(status.Id, "{}"),
-                HelperPipe.Request.Connect connect => new HelperPipe.Message.Reply(connect.Id),
-                HelperPipe.Request.PrepareUpdate prepare => new HelperPipe.Message.Reply(prepare.Id, UpdateReply),
-                HelperPipe.Request.InstallUpdate install => new HelperPipe.Message.Reply(install.Id, UpdateReply),
-                HelperPipe.Request.ReadPreparedUpdate read => new HelperPipe.Message.Reply(read.Id, UpdateReply),
-                HelperPipe.Request.DiscardPreparedUpdate discard => new HelperPipe.Message.Reply(discard.Id, UpdateReply),
+                RequestBuild check => new MessageBuild(check.Id, build),
+                RequestExitWhenIdle exit => new MessageReplyFlag(exit.Id, false),
+                RequestStatus status => new MessageReply(status.Id, "{}"),
+                RequestConnect connect => new MessageReply(connect.Id),
+                RequestPrepareUpdate prepare => new MessageReply(prepare.Id, UpdateReply),
+                RequestInstallUpdate install => new MessageReply(install.Id, UpdateReply),
+                RequestReadPreparedUpdate read => new MessageReply(read.Id, UpdateReply),
+                RequestDiscardPreparedUpdate discard => new MessageReply(discard.Id, UpdateReply),
                 _ => throw new InvalidOperationException($"unexpected {sent}"),
             };
             return Task.FromResult(answer);

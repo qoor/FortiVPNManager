@@ -2,8 +2,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FortiVPNManager.Contract;
+using FortiVPNManager.Contract.AppInternal;
 using Xunit;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui.Tests;
 
@@ -20,7 +20,7 @@ public class LogLinesTests
         JsonNode fixture = JsonNode.Parse(File.ReadAllText(FixturePath("log_copy_all.json")))!;
         FromRuntime? message = fixture["message"].Deserialize(MessageCoding.Default.FromRuntime);
         var log = new LogLines();
-        log.Append(Assert.IsType<FromRuntime.LogLines>(message).Lines);
+        log.Append(Assert.IsType<FromRuntimeLogLines>(message).Lines);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(fixture["timeZone"]!.GetValue<string>());
         string expected = string.Join("\n", fixture["copyAll"]!.AsArray().Select(line => line!.GetValue<string>()));
         Assert.Equal(expected, log.CopyAllText(zone));

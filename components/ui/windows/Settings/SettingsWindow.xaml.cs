@@ -1,7 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using FortiVPNManager.Contract;
+using FortiVPNManager.Contract.AppInternal;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -96,7 +96,7 @@ public sealed partial class SettingsWindow : Window
         if (!_shown)
         {
             _shown = true;
-            _ui.Send(new AppInternal.Command.SettingsOpened());
+            _ui.Send(new CommandSettingsOpened());
         }
     }
 
@@ -121,7 +121,7 @@ public sealed partial class SettingsWindow : Window
     {
         (ContentFrame.Content as PanePage)?.Leave();
         new Placement(_lastPane, AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height).Save();
-        _ui.Send(new AppInternal.Command.SettingsClosed());
+        _ui.Send(new CommandSettingsClosed());
     }
 
     /// <summary>Sends what the shown pane still has in its fields, as before the window closes or the app quits.</summary>

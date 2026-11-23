@@ -1,9 +1,9 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui.Settings;
 

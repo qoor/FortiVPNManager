@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Net.NetworkInformation;
+using FortiVPNManager.Contract.AppInternal;
 using Xunit;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration.Tests;
 

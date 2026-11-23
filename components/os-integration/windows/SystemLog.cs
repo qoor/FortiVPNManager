@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Security;
 using System.Text.Json;
 using FortiVPNManager.Contract;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 

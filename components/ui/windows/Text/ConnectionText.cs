@@ -1,4 +1,4 @@
-﻿using static FortiVPNManager.Contract.AppInternal;
+﻿using FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
@@ -21,41 +21,41 @@ public static class ConnectionText
         ArgumentNullException.ThrowIfNull(time);
         switch (section.Status)
         {
-            case ConnectionStatus.NotConnected:
+            case ConnectionStatusNotConnected:
                 return L("Not connected");
-            case ConnectionStatus.SetupRequired:
+            case ConnectionStatusSetupRequired:
                 return L("Setup required");
-            case ConnectionStatus.Connecting connecting:
+            case ConnectionStatusConnecting connecting:
                 string verb = connecting.Reconnecting ? L("Reconnecting") : L("Connecting");
                 return verb + " · " + connecting.Progress.Text();
-            case ConnectionStatus.Connected connected:
+            case ConnectionStatusConnected connected:
                 var parts = new List<string> { L("Connected"), TimeStyle.Duration(time.Now - connected.Since) };
-                if (connected.ProactiveReconnect is ProactiveReconnect.At at)
+                if (connected.ProactiveReconnect is ProactiveReconnectAt at)
                 {
                     if (includesPlannedReconnect)
                     {
                         parts.Add(time.PlannedReconnect(at.Time));
                     }
                 }
-                else if (outlook is ScheduleOutlook.Suspended)
+                else if (outlook is ScheduleOutlookSuspended)
                 {
                     parts.Add(L("Won't reconnect"));
                 }
-                else if (outlook is ScheduleOutlook.HoldingWhileAway)
+                else if (outlook is ScheduleOutlookHoldingWhileAway)
                 {
                     parts.Add(L("Reconnect on hold"));
                 }
                 return string.Join(" · ", parts);
-            case ConnectionStatus.ReconnectOnHold:
+            case ConnectionStatusReconnectOnHold:
                 return L("Reconnect on hold");
-            case ConnectionStatus.WaitingToReconnect waiting:
+            case ConnectionStatusWaitingToReconnect waiting:
                 TimeSpan remaining = waiting.Until - time.Now;
                 return remaining > TimeSpan.Zero
                     ? L("Waiting to reconnect (%@)", TimeStyle.Countdown(remaining))
                     : L("Waiting to reconnect");
-            case ConnectionStatus.WaitingForNetwork:
+            case ConnectionStatusWaitingForNetwork:
                 return L("Waiting for network");
-            case ConnectionStatus.Disconnecting disconnecting:
+            case ConnectionStatusDisconnecting disconnecting:
                 return disconnecting.Then switch
                 {
                     AfterDisconnect.Idle => L("Disconnecting"),
@@ -64,7 +64,7 @@ public static class ConnectionText
                     AfterDisconnect.Quit => L("Quitting"),
                     _ => throw new InvalidOperationException($"unknown step after disconnecting {disconnecting.Then}"),
                 };
-            case ConnectionStatus.Failed failed:
+            case ConnectionStatusFailed failed:
                 return L("Error: %@", failed.Reason.Summary());
             default:
                 throw new InvalidOperationException($"unknown status {section.Status}");
@@ -77,8 +77,8 @@ public static class ConnectionText
         ArgumentNullException.ThrowIfNull(section);
         return section.Status switch
         {
-            ConnectionStatus.WaitingToReconnect waiting => waiting.Until,
-            ConnectionStatus.ReconnectOnHold onHold => onHold.Until,
+            ConnectionStatusWaitingToReconnect waiting => waiting.Until,
+            ConnectionStatusReconnectOnHold onHold => onHold.Until,
             _ => null,
         };
     }
@@ -98,35 +98,35 @@ public static class ConnectionText
     /// <summary>Short phrase for the status line: "Error: &lt;summary&gt;".</summary>
     public static string Summary(this FailureReason reason) => reason switch
     {
-        FailureReason.VpnLoginRejected => L("VPN login rejected"),
-        FailureReason.OtpNotReceived { InSpam: true } => L("OTP email is in Spam"),
-        FailureReason.OtpNotReceived => L("OTP email not received"),
-        FailureReason.OtpRejected => L("OTP verification failed"),
-        FailureReason.TunnelSetupFailed => L("Tunnel setup failed"),
-        FailureReason.CertificateChangedAfterLogin => L("Server certificate changed"),
-        FailureReason.GmailRejected { Method: OtpMethod.Imap } => L("Check Gmail app password"),
-        FailureReason.GmailRejected => L("Check Google account connection"),
-        FailureReason.TooManyReconnects => L("Too many reconnects"),
-        FailureReason.Network => L("Network error"),
-        FailureReason.Helper helper => helper.Code.Summary(),
+        FailureReasonVpnLoginRejected => L("VPN login rejected"),
+        FailureReasonOtpNotReceived { InSpam: true } => L("OTP email is in Spam"),
+        FailureReasonOtpNotReceived => L("OTP email not received"),
+        FailureReasonOtpRejected => L("OTP verification failed"),
+        FailureReasonTunnelSetupFailed => L("Tunnel setup failed"),
+        FailureReasonCertificateChangedAfterLogin => L("Server certificate changed"),
+        FailureReasonGmailRejected { Method: OtpMethod.Imap } => L("Check Gmail app password"),
+        FailureReasonGmailRejected => L("Check Google account connection"),
+        FailureReasonTooManyReconnects => L("Too many reconnects"),
+        FailureReasonNetwork => L("Network error"),
+        FailureReasonHelper helper => helper.Code.Summary(),
         _ => throw new InvalidOperationException($"unknown failure {reason}"),
     };
 
     /// <summary>One line on what happened, shown with the button that opens Settings.</summary>
     public static string Guidance(this FailureReason reason, TimeStyle time) => reason switch
     {
-        FailureReason.VpnLoginRejected => L("The server rejected the login. Check the username and password."),
-        FailureReason.OtpNotReceived { InSpam: true } => L("The OTP email is in Spam. Check your Gmail filter."),
-        FailureReason.OtpNotReceived otp => L("No OTP email was found within %@.", TimeStyle.SpelledOut(otp.WaitedSeconds)),
-        FailureReason.OtpRejected => L("The server did not accept the OTP."),
-        FailureReason.TunnelSetupFailed => L("Couldn't open the tunnel after login."),
-        FailureReason.CertificateChangedAfterLogin => L("The server certificate was rejected after login."),
-        FailureReason.GmailRejected { Method: OtpMethod.Imap } => L("Gmail rejected the login. Check the app password and that IMAP is enabled."),
-        FailureReason.GmailRejected => L("Couldn't read Gmail. Connect the Google account again."),
-        FailureReason.TooManyReconnects reconnects => L("Automatic reconnection stopped after too many sign-in attempts within %@.", TimeStyle.SpelledOut(reconnects.WindowSeconds)),
-        FailureReason.Network => L("Couldn't connect to the VPN server."),
-        FailureReason.Helper { Code: HelperErrorCode.InvalidRequest } => L("The connection request was rejected. Check the account and VPN password."),
-        FailureReason.Helper helper => L("Helper error: %@", helper.Code.Summary()),
+        FailureReasonVpnLoginRejected => L("The server rejected the login. Check the username and password."),
+        FailureReasonOtpNotReceived { InSpam: true } => L("The OTP email is in Spam. Check your Gmail filter."),
+        FailureReasonOtpNotReceived otp => L("No OTP email was found within %@.", TimeStyle.SpelledOut(otp.WaitedSeconds)),
+        FailureReasonOtpRejected => L("The server did not accept the OTP."),
+        FailureReasonTunnelSetupFailed => L("Couldn't open the tunnel after login."),
+        FailureReasonCertificateChangedAfterLogin => L("The server certificate was rejected after login."),
+        FailureReasonGmailRejected { Method: OtpMethod.Imap } => L("Gmail rejected the login. Check the app password and that IMAP is enabled."),
+        FailureReasonGmailRejected => L("Couldn't read Gmail. Connect the Google account again."),
+        FailureReasonTooManyReconnects reconnects => L("Automatic reconnection stopped after too many sign-in attempts within %@.", TimeStyle.SpelledOut(reconnects.WindowSeconds)),
+        FailureReasonNetwork => L("Couldn't connect to the VPN server."),
+        FailureReasonHelper { Code: HelperErrorCode.InvalidRequest } => L("The connection request was rejected. Check the account and VPN password."),
+        FailureReasonHelper helper => L("Helper error: %@", helper.Code.Summary()),
         _ => throw new InvalidOperationException($"unknown failure {reason}"),
     };
 
@@ -136,9 +136,9 @@ public static class ConnectionText
     /// </summary>
     public static SettingsPane Pane(this FailureReason reason) => reason switch
     {
-        FailureReason.VpnLoginRejected or FailureReason.OtpNotReceived or FailureReason.GmailRejected
-            or FailureReason.Helper { Code: HelperErrorCode.InvalidRequest } => SettingsPane.Account,
-        FailureReason.Helper => SettingsPane.Advanced,
+        FailureReasonVpnLoginRejected or FailureReasonOtpNotReceived or FailureReasonGmailRejected
+            or FailureReasonHelper { Code: HelperErrorCode.InvalidRequest } => SettingsPane.Account,
+        FailureReasonHelper => SettingsPane.Advanced,
         _ => SettingsPane.Log,
     };
 
@@ -165,35 +165,35 @@ public static class ConnectionText
     /// <summary>Why the connection is waiting, shown under the status line.</summary>
     public static string Summary(this WaitReason reason, TimeStyle time) => reason switch
     {
-        WaitReason.Network => L("Network error"),
-        WaitReason.NetworkSetupFailed => L("VPN network setup failed"),
-        WaitReason.ServerEndedSession => L("Server ended the session"),
-        WaitReason.ForcedTermination => L("Connection was forcibly ended"),
-        WaitReason.AuthFailure failure => L("Authentication failed (%@), retrying once", failure.Reason.Summary()),
-        WaitReason.AuthCooldown cooldown => L("Waiting %@ after authentication failure", TimeStyle.SpelledOut(cooldown.DelaySeconds)),
-        WaitReason.Sleep => L("Resuming after sleep"),
-        WaitReason.UserAway => L("Outside the scheduled hours, reconnects when you're back"),
+        WaitReasonNetwork => L("Network error"),
+        WaitReasonNetworkSetupFailed => L("VPN network setup failed"),
+        WaitReasonServerEndedSession => L("Server ended the session"),
+        WaitReasonForcedTermination => L("Connection was forcibly ended"),
+        WaitReasonAuthFailure failure => L("Authentication failed (%@), retrying once", failure.Reason.Summary()),
+        WaitReasonAuthCooldown cooldown => L("Waiting %@ after authentication failure", TimeStyle.SpelledOut(cooldown.DelaySeconds)),
+        WaitReasonSleep => L("Resuming after sleep"),
+        WaitReasonUserAway => L("Outside the scheduled hours, reconnects when you're back"),
         _ => throw new InvalidOperationException($"unknown wait reason {reason}"),
     };
 
     /// <summary>The action offered for a setup item, one per item so it is clear what to fix and where.</summary>
     public static string ActionTitle(this SetupItem item) => item switch
     {
-        SetupItem.AccountDetails => L("Enter Account Details…"),
-        SetupItem.VpnPassword => L("Enter VPN Password…"),
-        SetupItem.GmailCredential { Method: OtpMethod.Imap } => L("Enter Gmail App Password…"),
-        SetupItem.GmailCredential => L("Connect Google Account…"),
-        SetupItem.ConfigFile => L("Check Settings File Error…"),
+        SetupItemAccountDetails => L("Enter Account Details…"),
+        SetupItemVpnPassword => L("Enter VPN Password…"),
+        SetupItemGmailCredential { Method: OtpMethod.Imap } => L("Enter Gmail App Password…"),
+        SetupItemGmailCredential => L("Connect Google Account…"),
+        SetupItemConfigFile => L("Check Settings File Error…"),
         // Windows has no approval: the installer registers the Helper service.
-        SetupItem.HelperApproval => L("Check Helper Service…"),
-        SetupItem.HelperVersion => L("Check Helper Version…"),
+        SetupItemHelperApproval => L("Check Helper Service…"),
+        SetupItemHelperVersion => L("Check Helper Version…"),
         _ => throw new InvalidOperationException($"unknown setup item {item}"),
     };
 
     /// <summary>The pane where the item is set up.</summary>
     public static SettingsPane Pane(this SetupItem item) => item switch
     {
-        SetupItem.AccountDetails or SetupItem.VpnPassword or SetupItem.GmailCredential => SettingsPane.Account,
+        SetupItemAccountDetails or SetupItemVpnPassword or SetupItemGmailCredential => SettingsPane.Account,
         _ => SettingsPane.Advanced,
     };
 

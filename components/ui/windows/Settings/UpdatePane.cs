@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -6,7 +7,6 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -42,10 +42,10 @@ internal sealed class UpdatePane : IPane
     public UpdatePane(AppUi ui, PanePage page)
     {
         this._ui = ui;
-        _check.Click += (_, _) => ui.Send(new Command.CheckForUpdates());
-        _updateNow.Click += (_, _) => ui.Send(new Command.UpdateNow());
-        _restart.Click += (_, _) => ui.Send(new Command.RestartToUpdate());
-        _cancel.Click += (_, _) => ui.Send(new Command.CancelUpdateDownload());
+        _check.Click += (_, _) => ui.Send(new CommandCheckForUpdates());
+        _updateNow.Click += (_, _) => ui.Send(new CommandUpdateNow());
+        _restart.Click += (_, _) => ui.Send(new CommandRestartToUpdate());
+        _cancel.Click += (_, _) => ui.Send(new CommandCancelUpdateDownload());
         _appIcon.Loaded += (_, _) => ShowIcon();
 
         var icons = new Grid { Width = IconSize, Height = IconSize, VerticalAlignment = VerticalAlignment.Center };
@@ -96,7 +96,7 @@ internal sealed class UpdatePane : IPane
             _body.Children.Add(element);
         }
         page.BodyPanel.Children.Add(_body);
-        ui.Send(new Command.UpdatePageOpened());
+        ui.Send(new CommandUpdatePageOpened());
     }
 
     public void Refresh()
@@ -107,11 +107,11 @@ internal sealed class UpdatePane : IPane
             return;
         }
         UpdateProgress progress = update.Progress;
-        bool settled = progress is UpdateProgress.Idle or UpdateProgress.Failed;
-        var available = update.Status as UpdateStatus.Available;
+        bool settled = progress is UpdateProgressIdle or UpdateProgressFailed;
+        var available = update.Status as UpdateStatusAvailable;
 
-        bool spinning = settled ? update.Status is UpdateStatus.Checking : progress is UpdateProgress.Installing;
-        bool current = settled && update.Status is UpdateStatus.UpToDate;
+        bool spinning = settled ? update.Status is UpdateStatusChecking : progress is UpdateProgressInstalling;
+        bool current = settled && update.Status is UpdateStatusUpToDate;
         _busy.IsActive = spinning;
         _upToDate.Visible(current);
         _appIcon.Visible(!spinning && !current);
@@ -121,14 +121,14 @@ internal sealed class UpdatePane : IPane
         _subtitle.Text = line ?? "";
         Button action = settled
             ? available is not null ? _updateNow : _check
-            : progress is UpdateProgress.Downloading or UpdateProgress.Preparing ? _updateNow : _restart;
+            : progress is UpdateProgressDownloading or UpdateProgressPreparing ? _updateNow : _restart;
         _check.Apply(action == _check ? update.Check : ButtonState.Hidden);
         _updateNow.Apply(action == _updateNow ? update.UpdateNow : ButtonState.Hidden);
         _restart.Apply(action == _restart ? update.Restart : ButtonState.Hidden);
-        _updateNow.Content = progress is UpdateProgress.Failed ? L("Try again") : L("Install now");
+        _updateNow.Content = progress is UpdateProgressFailed ? L("Try again") : L("Install now");
 
         string? failedInstall = update.FailedInstallLine();
-        string? reason = (progress as UpdateProgress.Failed)?.Reason.Message();
+        string? reason = (progress as UpdateProgressFailed)?.Reason.Message();
         _failure.Title = failedInstall ?? "";
         _failure.Message = reason ?? "";
         _failure.Visible(failedInstall is not null || reason is not null);
@@ -138,21 +138,21 @@ internal sealed class UpdatePane : IPane
         _itemStatus.Text = status ?? "";
         _itemName.Text = progress switch
         {
-            UpdateProgress.Downloading or UpdateProgress.Preparing => $"FortiVPNManager {available!.Version}",
-            UpdateProgress.ReadyToRestart ready => $"FortiVPNManager {ready.Version}",
-            UpdateProgress.Installing installing => $"FortiVPNManager {installing.Version}",
+            UpdateProgressDownloading or UpdateProgressPreparing => $"FortiVPNManager {available!.Version}",
+            UpdateProgressReadyToRestart ready => $"FortiVPNManager {ready.Version}",
+            UpdateProgressInstalling installing => $"FortiVPNManager {installing.Version}",
             _ => "",
         };
         _cancel.Apply(update.Cancel);
         byte? percent = progress switch
         {
-            UpdateProgress.Downloading downloading => downloading.Percent,
-            UpdateProgress.Preparing preparing => preparing.Percent,
+            UpdateProgressDownloading downloading => downloading.Percent,
+            UpdateProgressPreparing preparing => preparing.Percent,
             _ => null,
         };
         _bar.Visible(percent is not null);
         _bar.Value = percent ?? 0;
-        var download = progress as UpdateProgress.Downloading;
+        var download = progress as UpdateProgressDownloading;
         _details.Visible(download is not null);
         _details.Text = download is null ? "" : $"{Size(download.ReceivedBytes)} / {Size(download.TotalBytes)} · {download.Remaining.Line()}";
 

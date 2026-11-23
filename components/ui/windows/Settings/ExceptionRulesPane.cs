@@ -1,7 +1,7 @@
-﻿using FortiVPNManager.Ui.Text;
+﻿using FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -38,8 +38,8 @@ internal sealed class ExceptionRulesPane : IPane
         _networks = new AddressList(
             L("Double-click here or click + to add a network."), L("e.g. 10.20.161.0/24"), 44,
             L("Add Network"), L("Add a network"), L("Remove Selected Network"),
-            rows => ui.Send(new Command.SetBypassRows(BypassList.Networks, rows)));
-        _addCurrentNetwork.Click += (_, _) => ui.Send(new Command.AddCurrentNetwork());
+            rows => ui.Send(new CommandSetBypassRows(BypassList.Networks, rows)));
+        _addCurrentNetwork.Click += (_, _) => ui.Send(new CommandAddCurrentNetwork());
         _body.Children.Add(Cards.SectionHeader(L("Networks where the rules apply")));
         _body.Children.Add(_rows["Networks where the rules apply"] = _networks.View);
         _rows["Add Current Network"] = _addCurrentNetwork;
@@ -53,7 +53,7 @@ internal sealed class ExceptionRulesPane : IPane
         _targets = new AddressList(
             L("Double-click here or click + to add a host or network."), L("e.g. 10.30.161.16 or 10.30.170.0/24"), 175,
             L("Add Exception Target"), L("Add a host or network"), L("Remove Selected Exception Target"),
-            rows => ui.Send(new Command.SetBypassRows(BypassList.Targets, rows)));
+            rows => ui.Send(new CommandSetBypassRows(BypassList.Targets, rows)));
         _body.Children.Add(Cards.SectionHeader(L("Exception targets")));
         _body.Children.Add(_rows["Exception targets"] = _targets.View);
         StackPanel targetButtons = Cards.Row(_targets.Add, _targets.Remove);
@@ -88,7 +88,7 @@ internal sealed class ExceptionRulesPane : IPane
             _statusText.Text = text;
             _statusMark.SetStyle(style);
         }
-        _applyFailed.Show(rules.Notice is BypassNotice.ApplyFailed failed ? failed.Error.Message() : null);
+        _applyFailed.Show(rules.Notice is BypassNoticeApplyFailed failed ? failed.Error.Message() : null);
         _stoppedRetrying.Show(rules.StoppedRetryingMessage());
 
         _networks.Show(rules.Networks.Rows, ProblemRows(rules.Networks), RowMessages(rules, BypassList.Networks), rules.Networks.AddRow == ButtonState.Enabled);
@@ -112,7 +112,7 @@ internal sealed class ExceptionRulesPane : IPane
     {
         BypassList explained = rules.Networks.ProblemRows.Count == 0 ? BypassList.Targets : BypassList.Networks;
         RuleList rows = list == BypassList.Networks ? rules.Networks : rules.Targets;
-        if (list != explained || rules.Notice is not BypassNotice.RowProblem notice || rows.ProblemRows.Count == 0)
+        if (list != explained || rules.Notice is not BypassNoticeRowProblem notice || rows.ProblemRows.Count == 0)
         {
             return [];
         }

@@ -1,6 +1,6 @@
 ﻿using System.Net.NetworkInformation;
+using FortiVPNManager.Contract.AppInternal;
 using Microsoft.Win32;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -59,10 +59,10 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
             switch (change.Mode)
             {
                 case PowerModes.Suspend:
-                    post(new SystemEvent.WillSleep(DateTimeOffset.Now));
+                    post(new SystemEventWillSleep(DateTimeOffset.Now));
                     break;
                 case PowerModes.Resume:
-                    post(new SystemEvent.DidWake());
+                    post(new SystemEventDidWake());
                     break;
                 case PowerModes.StatusChange:
                     break;
@@ -78,11 +78,11 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
                 {
                     case SessionSwitchReason.SessionLock:
                         Locked = true;
-                        post(new SystemEvent.ScreenLocked(DateTimeOffset.Now));
+                        post(new SystemEventScreenLocked(DateTimeOffset.Now));
                         break;
                     case SessionSwitchReason.SessionUnlock:
                         Locked = false;
-                        post(new SystemEvent.ScreenUnlocked());
+                        post(new SystemEventScreenUnlocked());
                         break;
                     case SessionSwitchReason.ConsoleConnect or SessionSwitchReason.ConsoleDisconnect
                         or SessionSwitchReason.RemoteConnect or SessionSwitchReason.RemoteDisconnect
@@ -97,7 +97,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         // Windows reports a time zone change as a time change too.
         Microsoft.Win32.SystemEvents.TimeChanged += (_, _) =>
         {
-            post(new SystemEvent.ClockChanged());
+            post(new SystemEventClockChanged());
             TimeZoneInfo.ClearCachedData();
             string current = IanaTimeZone();
             lock (_gate)
@@ -108,7 +108,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
                 }
                 _timeZone = current;
             }
-            post(new SystemEvent.TimeZoneChanged(current));
+            post(new SystemEventTimeZoneChanged(current));
         };
         // Signing out or shutting down quits the app as its menu's Quit does, and waits for the
         // runtime's approval: the session ends right after this returns.
@@ -120,5 +120,5 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
     }
 
     private void PathChanged() =>
-        post(new SystemEvent.NetworkPathChanged(SystemFacts.PathSatisfied(), SystemFacts.PathInterfaces()));
+        post(new SystemEventNetworkPathChanged(SystemFacts.PathSatisfied(), SystemFacts.PathInterfaces()));
 }

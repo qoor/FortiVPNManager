@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using static FortiVPNManager.Contract.AppInternal;
+using FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -21,11 +21,11 @@ internal sealed class UpdateWaiter
                 Environment.ProcessId,
                 Path.Combine(ServiceRegistration.InstallFolder, App),
                 App));
-            return new PortResponse.UpdateWaiterStarted();
+            return new PortResponseUpdateWaiterStarted();
         }
         catch (Win32Exception error)
         {
-            return new PortResponse.UpdateWaiterFailed(error.Message);
+            return new PortResponseUpdateWaiterFailed(error.Message);
         }
     }
 

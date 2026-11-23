@@ -1,8 +1,8 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Contract.AppInternal;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static FortiVPNManager.Contract.AppInternal;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -68,9 +68,9 @@ internal sealed class GeneralPane : IPane
                 ui.Settings.Show(shown.Pane());
             }
         };
-        _connect.Click += (_, _) => ui.Send(new Command.Connect());
-        _disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
-        _reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
+        _connect.Click += (_, _) => ui.Send(new CommandConnect());
+        _disconnect.Click += (_, _) => ui.Send(new CommandDisconnect());
+        _reconnectNow.Click += (_, _) => ui.Send(new CommandReconnectNow());
         _status.Children.Add(Cards.SectionHeader(L("Status")));
         SettingsCard buttons = Cards.ActionCard(Cards.Buttons(_connect, _disconnect, _reconnectNow));
         _rows["Current status"] = _current;
@@ -88,7 +88,7 @@ internal sealed class GeneralPane : IPane
         {
             if (!_refreshing)
             {
-                ui.Send(new Command.SetOpenAtLogin(_openAtLogin.IsOn));
+                ui.Send(new CommandSetOpenAtLogin(_openAtLogin.IsOn));
             }
         };
         _autoConnectCard = Cards.Card(L("Connect automatically at launch"), _autoConnect);
@@ -96,7 +96,7 @@ internal sealed class GeneralPane : IPane
         {
             if (!_refreshing)
             {
-                ui.Send(new Command.SetConnectionOption(new ConnectionOption.AutoConnectOnLaunch(_autoConnect.IsOn)));
+                ui.Send(new CommandSetConnectionOption(new ConnectionOptionAutoConnectOnLaunch(_autoConnect.IsOn)));
             }
         };
         _rows["Open at login"] = _openAtLoginCard;
@@ -122,13 +122,13 @@ internal sealed class GeneralPane : IPane
     private void AddImportRows()
     {
         var importButton = new Button { Content = L("Import Settings") };
-        importButton.Click += (_, _) => _ui.Send(new Command.ImportClientSettings());
+        importButton.Click += (_, _) => _ui.Send(new CommandImportClientSettings());
         _import.Children.Add(Cards.SectionHeader(L("Import Settings")));
         SettingsCard source = Cards.Card(L("FortiClient settings"), importButton);
         source.Describe(L("Brings in the server address from FortiClient."));
         _import.Children.Add(_rows[SettingsSearch.ImportRow] = source);
         var close = new Button { Content = L("Close") };
-        close.Click += (_, _) => _ui.Send(new Command.DismissImportReport());
+        close.Click += (_, _) => _ui.Send(new CommandDismissImportReport());
         _importSource.TextWrapping = TextWrapping.Wrap;
         var report = new StackPanel { Spacing = 4 };
         report.Children.Add(_importSource);
@@ -164,7 +164,7 @@ internal sealed class GeneralPane : IPane
 
     private void ShowImport(ClientSettingsImport? report)
     {
-        ImportReport? imported = (report as ClientSettingsImport.Imported)?.Report;
+        ImportReport? imported = (report as ClientSettingsImportImported)?.Report;
         _importReport.Visible(imported is not null);
         if (imported is not null)
         {
@@ -172,7 +172,7 @@ internal sealed class GeneralPane : IPane
             // Only the server came from FortiClient; the account's other values stay as they were.
             _importServer.Text = L("Server: %@:%@", imported.Host, imported.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
-        _importFailed.Show((report as ClientSettingsImport.Failed)?.Error.Message());
+        _importFailed.Show((report as ClientSettingsImportFailed)?.Error.Message());
         _importClose.Visible(report is not null);
     }
 
@@ -193,7 +193,7 @@ internal sealed class GeneralPane : IPane
         _reason.Visible(connection.WaitReason is not null);
         _reasonValue.Text = connection.WaitReason?.Summary(time) ?? "";
 
-        IReadOnlyList<SetupItem> items = connection.Status is ConnectionStatus.SetupRequired setup ? setup.Items : [];
+        IReadOnlyList<SetupItem> items = connection.Status is ConnectionStatusSetupRequired setup ? setup.Items : [];
         if (!items.SequenceEqual(_shownItems))
         {
             _shownItems = items;
@@ -207,11 +207,11 @@ internal sealed class GeneralPane : IPane
         }
         _setupItems.Visible(items.Count > 0);
 
-        _shownFailure = (connection.Status as ConnectionStatus.Failed)?.Reason;
+        _shownFailure = (connection.Status as ConnectionStatusFailed)?.Reason;
         _failure.Show(_shownFailure?.Guidance(time));
         _failureAction.Content = _shownFailure?.ActionTitle();
 
-        var connected = connection.Status as ConnectionStatus.Connected;
+        var connected = connection.Status as ConnectionStatusConnected;
         foreach (SettingsCard? card in new[] { _connectedAt, _tunnelIp, _proactive })
         {
             card.Visible(connected is not null);
@@ -222,9 +222,9 @@ internal sealed class GeneralPane : IPane
             _tunnelIpValue.Text = connected.TunnelIp ?? L("Unknown");
             _proactiveValue.Text = connected.ProactiveReconnect switch
             {
-                ProactiveReconnect.At at => $"{time.ClockTime(at.Time)} ({time.PlannedReconnect(at.Time)})",
-                ProactiveReconnect.PausedBySchedule => L("Paused by the schedule"),
-                ProactiveReconnect.Off => L("Off"),
+                ProactiveReconnectAt at => $"{time.ClockTime(at.Time)} ({time.PlannedReconnect(at.Time)})",
+                ProactiveReconnectPausedBySchedule => L("Paused by the schedule"),
+                ProactiveReconnectOff => L("Off"),
                 _ => throw new InvalidOperationException($"unknown proactive reconnect {connected.ProactiveReconnect}"),
             };
         }
@@ -246,7 +246,7 @@ internal sealed class GeneralPane : IPane
         _openAtLoginCard.IsEnabled = login.Available;
         _openAtLoginCard.Describe(login.Available ? null : L("Only available for the app installed in Program Files."));
         // The description already gives the reason a copy outside Program Files can't set it.
-        string? error = login.Error is { } failed && (login.Available || failed is not RegistrationError.NotInstalledCopy) ? failed.LoginItemMessage() : null;
+        string? error = login.Error is { } failed && (login.Available || failed is not RegistrationErrorNotInstalledCopy) ? failed.LoginItemMessage() : null;
         _openAtLoginError.Show(error);
 
         _autoConnect.IsOn = config.Options.AutoConnectOnLaunch;

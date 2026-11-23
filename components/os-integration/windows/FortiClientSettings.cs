@@ -1,6 +1,6 @@
 ﻿using System.Security;
+using FortiVPNManager.Contract.AppInternal;
 using Microsoft.Win32;
-using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
