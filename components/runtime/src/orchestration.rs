@@ -102,16 +102,13 @@ pub(crate) struct Paths {
 #[derive(Clone)]
 pub(crate) enum ClientSettings {
     /// openfortivpn's settings file, looked for where openfortivpn looks under `home` (macOS).
-    #[cfg_attr(
-        all(windows, not(test)),
-        expect(dead_code, reason = "only the macOS entry and the tests choose it")
-    )]
+    #[cfg_attr(windows, expect(dead_code, reason = "only the macOS entry chooses it"))]
     OpenFortiVpn { home: PathBuf },
     /// The official `FortiClient`'s SSL VPN connection, which the OS integration reads (Windows):
     /// openconnect has no settings file of its own.
     #[cfg_attr(
-        not(any(windows, test)),
-        expect(dead_code, reason = "only the Windows entry and the tests choose it")
+        not(windows),
+        expect(dead_code, reason = "only the Windows entry chooses it")
     )]
     FortiClient,
 }

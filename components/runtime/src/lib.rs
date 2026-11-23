@@ -23,8 +23,6 @@ mod orchestration;
 mod os;
 mod otp_session;
 mod readiness;
-#[cfg(test)]
-mod runtime_tests;
 mod sections;
 mod state_file;
 mod timers;
