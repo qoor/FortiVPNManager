@@ -69,7 +69,7 @@ git submodule update --init third_party/openconnect
 
 | Command | What it does |
 |---|---|
-| `make test` | Rust and Swift tests |
+| `make test` | Format and lint checks, then Rust and Swift tests |
 | `make build` | Debug build (`.build/xcode`) |
 | `make verify` | Signing and bundle layout check |
 | `make install` | Release build, installed and launched (`/Applications`) |
@@ -97,7 +97,7 @@ git submodule update --init third_party/openconnect
 
 - Windows 11 or later, x64
 - Rust (install with [rustup](https://rustup.rs))
-- .NET 10 SDK
+- .NET 11 SDK
 - [Git for Windows](https://gitforwindows.org)
 - The **Desktop development with C++** workload of Visual Studio Build Tools
 - Build tools for the OpenConnect library: [MSYS2](https://www.msys2.org)

@@ -99,3 +99,8 @@ paths:
   - 기재 금지: 코드를 그대로 옮긴 설명, 바뀔 수 있는 결정·판단
 - C# 외부 공개 메서드의 null 인자 검사: 내부 입력 재검사 금지의 예외
   - 사유: .NET 분석기 CA1062 준수
+- C# 코드 규칙 기준: dotnet/docs `.editorconfig` C# 구역(c023f59), 전 규칙 경고 이상
+  - 사유: 언어 표준 우선
+- WiX WIX1149 예외: MSI ServiceConfig 유지
+  - 사유: 설치본에서 종료 대기 30초·오류 종료 실패 처리 적용 확인
+  - 대체 수단 부재: Util ServiceConfig·sc.exe의 종료 대기 설정 미지원
