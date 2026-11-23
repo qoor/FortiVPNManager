@@ -64,6 +64,10 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
                 case PowerModes.Resume:
                     post(new SystemEvent.DidWake());
                     break;
+                case PowerModes.StatusChange:
+                    break;
+                default:
+                    break;
             }
         };
         Microsoft.Win32.SystemEvents.SessionSwitch += (_, change) =>
@@ -79,6 +83,13 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
                     case SessionSwitchReason.SessionUnlock:
                         Locked = false;
                         post(new SystemEvent.ScreenUnlocked());
+                        break;
+                    case SessionSwitchReason.ConsoleConnect or SessionSwitchReason.ConsoleDisconnect
+                        or SessionSwitchReason.RemoteConnect or SessionSwitchReason.RemoteDisconnect
+                        or SessionSwitchReason.SessionLogon or SessionSwitchReason.SessionLogoff
+                        or SessionSwitchReason.SessionRemoteControl:
+                        break;
+                    default:
                         break;
                 }
             }

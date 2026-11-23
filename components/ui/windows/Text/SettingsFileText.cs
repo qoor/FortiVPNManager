@@ -105,7 +105,8 @@ public static class SettingsFileText
         ValueKind.Sequence => L("It must be a list (e.g. [] or '- value' lines)"),
         ValueKind.String => L("It must be a string"),
         ValueKind.Integer => L("It must be an unquoted integer"),
-        _ => L("It must be an unquoted true or false"),
+        ValueKind.Boolean => L("It must be an unquoted true or false"),
+        _ => throw new InvalidOperationException($"unknown value kind {kind}"),
     };
 
     public static string Message(this ConfigWarningKind kind) => kind switch

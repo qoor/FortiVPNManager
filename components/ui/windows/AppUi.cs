@@ -143,6 +143,8 @@ public sealed class AppUi
             case Section.AutoUpdate update:
                 AutoUpdate = update.Value;
                 break;
+            default:
+                throw new InvalidOperationException($"unknown section {section}");
         }
         Changed?.Invoke();
     });

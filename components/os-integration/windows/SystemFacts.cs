@@ -67,6 +67,14 @@ internal static class SystemFacts
         NetworkInterfaceType.Wireless80211 => InterfaceKind.Wifi,
         NetworkInterfaceType.Wwanpp or NetworkInterfaceType.Wwanpp2 => InterfaceKind.Cellular,
         NetworkInterfaceType.Loopback => InterfaceKind.Loopback,
+        NetworkInterfaceType.Unknown or NetworkInterfaceType.TokenRing or NetworkInterfaceType.Fddi
+            or NetworkInterfaceType.BasicIsdn or NetworkInterfaceType.PrimaryIsdn or NetworkInterfaceType.Ppp
+            or NetworkInterfaceType.Slip or NetworkInterfaceType.Atm or NetworkInterfaceType.GenericModem
+            or NetworkInterfaceType.Isdn or NetworkInterfaceType.AsymmetricDsl
+            or NetworkInterfaceType.RateAdaptDsl or NetworkInterfaceType.SymmetricDsl
+            or NetworkInterfaceType.VeryHighSpeedDsl or NetworkInterfaceType.IPOverAtm
+            or NetworkInterfaceType.Tunnel or NetworkInterfaceType.MultiRateSymmetricDsl
+            or NetworkInterfaceType.HighPerformanceSerialBus or NetworkInterfaceType.Wman => InterfaceKind.Other,
         _ => InterfaceKind.Other,
     };
 

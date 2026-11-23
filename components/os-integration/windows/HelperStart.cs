@@ -167,7 +167,10 @@ public static class HelperStart
                             {
                                 HelperStartFailure.NotInstalled => "the Helper service is not installed",
                                 HelperStartFailure.Disabled => "the Helper service is disabled",
-                                _ => "this account may not start the Helper service",
+                                HelperStartFailure.NoPermission => "this account may not start the Helper service",
+                                HelperStartFailure.TimedOut or HelperStartFailure.ErrorWhileStarting =>
+                                    throw new InvalidOperationException($"a start is never refused for {refused.Reason}"),
+                                _ => throw new InvalidOperationException($"unknown start refusal {refused.Reason}"),
                             });
                         case StartAnswer.TimedOut:
                             failure = (HelperStartFailure.TimedOut, "it did not start in time: Windows gave up waiting for its process");
@@ -175,8 +178,14 @@ public static class HelperStart
                         case StartAnswer.Failed failed:
                             failure = (HelperStartFailure.ErrorWhileStarting, $"Windows could not start its service: error {failed.Error}");
                             break;
+                        default:
+                            throw new InvalidOperationException("unknown start answer");
                     }
                     break;
+                case HelperServiceState.Changing:
+                    break;
+                default:
+                    throw new InvalidOperationException("unknown Helper service state");
             }
             if (failure is { } first && starts < Starts && !announced)
             {

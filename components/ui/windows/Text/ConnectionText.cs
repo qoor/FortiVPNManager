@@ -61,7 +61,8 @@ public static class ConnectionText
                     AfterDisconnect.Idle => L("Disconnecting"),
                     AfterDisconnect.Reconnect => L("Reconnecting · Closing current connection"),
                     AfterDisconnect.Sleep => L("Disconnecting before sleep"),
-                    _ => L("Quitting"),
+                    AfterDisconnect.Quit => L("Quitting"),
+                    _ => throw new InvalidOperationException($"unknown step after disconnecting {disconnecting.Then}"),
                 };
             case ConnectionStatus.Failed failed:
                 return L("Error: %@", failed.Reason.Summary());
@@ -90,7 +91,8 @@ public static class ConnectionText
         ConnectProgress.LoggingIn => L("Logging in"),
         ConnectProgress.WaitingForOtp => L("Waiting for OTP email"),
         ConnectProgress.VerifyingOtp => L("Verifying OTP"),
-        _ => L("Opening tunnel"),
+        ConnectProgress.OpeningTunnel => L("Opening tunnel"),
+        _ => throw new InvalidOperationException($"unknown connect progress {progress}"),
     };
 
     /// <summary>Short phrase for the status line: "Error: &lt;summary&gt;".</summary>
@@ -145,7 +147,10 @@ public static class ConnectionText
     {
         SettingsPane.Account => L("Open Account Settings…"),
         SettingsPane.Advanced => L("Open Advanced Settings…"),
-        _ => L("Show Log"),
+        SettingsPane.Log => L("Show Log"),
+        SettingsPane.General or SettingsPane.Connection or SettingsPane.ExceptionRules =>
+            throw new InvalidOperationException($"no action for pane {reason.Pane()}"),
+        _ => throw new InvalidOperationException($"unknown pane {reason.Pane()}"),
     };
 
     public static string Summary(this HelperErrorCode code) => code switch
@@ -153,7 +158,8 @@ public static class ConnectionText
         HelperErrorCode.Busy => L("Helper is busy with another connection"),
         HelperErrorCode.InvalidRequest => L("Invalid connection request"),
         HelperErrorCode.NotAuthorized => L("Helper refused the request"),
-        _ => L("Helper internal error"),
+        HelperErrorCode.UnknownAttempt or HelperErrorCode.WrongPhase or HelperErrorCode.InternalError => L("Helper internal error"),
+        _ => throw new InvalidOperationException($"unknown Helper error code {code}"),
     };
 
     /// <summary>Why the connection is waiting, shown under the status line.</summary>
@@ -196,6 +202,7 @@ public static class ConnectionText
         ConnectionIcon.Connected => L("Connected"),
         ConnectionIcon.Disconnected => L("Not connected"),
         ConnectionIcon.InProgress => L("Connecting"),
-        _ => L("Error"),
+        ConnectionIcon.Error => L("Error"),
+        _ => throw new InvalidOperationException($"unknown connection icon {icon}"),
     };
 }

@@ -128,6 +128,12 @@ public sealed partial class TrayIcon : IDisposable
                     entries.Add(Line(failed.Reason.Guidance(time)));
                     entries.Add(new Entry(failed.Reason.ActionTitle(), true, () => _ui.Settings.Show(failed.Reason.Pane())));
                     break;
+                case ConnectionStatus.NotConnected or ConnectionStatus.Connecting or ConnectionStatus.Connected
+                    or ConnectionStatus.ReconnectOnHold or ConnectionStatus.WaitingToReconnect
+                    or ConnectionStatus.WaitingForNetwork or ConnectionStatus.Disconnecting:
+                    break;
+                default:
+                    throw new InvalidOperationException($"unknown status {connection.Status}");
             }
             // Always listed; the ones that don't apply now are dimmed.
             entries.Add(s_separator);

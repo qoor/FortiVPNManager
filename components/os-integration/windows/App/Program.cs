@@ -74,6 +74,10 @@ public static class Program
             case HelperStartResult.Failed failed:
                 _ = MessageBoxW(0, Message(failed.Reason), "FortiVPNManager", ErrorBox);
                 return;
+            case HelperStartResult.Running:
+                break;
+            default:
+                throw new InvalidOperationException("unknown Helper start result");
         }
         Application.Start(start =>
         {

@@ -23,7 +23,8 @@ public static class AccountText
     {
         AccountField.Host => L("Server address"),
         AccountField.Username => L("Username"),
-        _ => "realm",
+        AccountField.Realm => "realm",
+        _ => throw new InvalidOperationException($"unknown account field {field}"),
     };
 
     public static string Message(this AccountSaveError error) => error switch

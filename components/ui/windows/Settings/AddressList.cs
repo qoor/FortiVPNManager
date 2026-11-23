@@ -90,16 +90,15 @@ internal sealed class AddressList
             {
                 return;
             }
-            switch (args.Key)
+            if (args.Key == VirtualKey.Delete)
             {
-                case VirtualKey.Delete:
-                    RemoveSelected();
-                    args.Handled = true;
-                    break;
-                case VirtualKey.Enter or VirtualKey.F2 when _list.SelectedItems.Count == 1:
-                    BeginEditing(_list.SelectedIndex);
-                    args.Handled = true;
-                    break;
+                RemoveSelected();
+                args.Handled = true;
+            }
+            else if (args.Key is VirtualKey.Enter or VirtualKey.F2 && _list.SelectedItems.Count == 1)
+            {
+                BeginEditing(_list.SelectedIndex);
+                args.Handled = true;
             }
         };
 

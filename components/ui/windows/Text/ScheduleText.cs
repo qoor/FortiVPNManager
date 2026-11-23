@@ -38,6 +38,7 @@ public static class ScheduleText
         Weekday.Thu => L("Thu"),
         Weekday.Fri => L("Fri"),
         Weekday.Sat => L("Sat"),
-        _ => L("Sun"),
+        Weekday.Sun => L("Sun"),
+        _ => throw new InvalidOperationException($"unknown weekday {day}"),
     };
 }

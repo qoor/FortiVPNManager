@@ -9,6 +9,7 @@ public sealed partial class TrayIcon
         ConnectionIcon.Connected => "AppIcon.ico",
         ConnectionIcon.Disconnected => "TrayDisconnected.ico",
         ConnectionIcon.InProgress => "TrayInProgress.ico",
-        _ => "TrayError.ico",
+        ConnectionIcon.Error => "TrayError.ico",
+        _ => throw new InvalidOperationException($"unknown connection icon {state}"),
     };
 }

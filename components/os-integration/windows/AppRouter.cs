@@ -75,6 +75,8 @@ public sealed class AppRouter
             // from the icon's double-click or its menu (user decision, 2026-11-13).
             case FromRuntime.OpenSettings:
                 break;
+            default:
+                throw new InvalidOperationException($"unknown message from the runtime {message}");
         }
     }
 
@@ -120,6 +122,8 @@ public sealed class AppRouter
             case PortRequest.StartUpdateWaiter:
                 reply(_waiter.Start());
                 break;
+            default:
+                throw new InvalidOperationException($"unknown port request {request}");
         }
     }
 
@@ -147,6 +151,8 @@ public sealed class AppRouter
             case PortAction.ApproveQuit:
                 Lifetime.ApproveQuit();
                 break;
+            default:
+                throw new InvalidOperationException($"unknown port action {action}");
         }
     }
 

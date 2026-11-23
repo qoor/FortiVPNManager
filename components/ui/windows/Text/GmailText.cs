@@ -51,7 +51,8 @@ public static class GmailText
     {
         GoogleConnectBlocker.NoOAuthClient => L("No built-in OAuth client. Import a client JSON."),
         GoogleConnectBlocker.EnterAddress => L("Enter the Gmail address."),
-        _ => L("Save the Gmail address first."),
+        GoogleConnectBlocker.SaveAddressFirst => L("Save the Gmail address first."),
+        _ => throw new InvalidOperationException($"unknown Google connect blocker {blocker}"),
     };
 
     /// <summary>The status line of the OAuth client row.</summary>
