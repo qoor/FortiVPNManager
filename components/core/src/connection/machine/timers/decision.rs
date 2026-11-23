@@ -17,10 +17,7 @@ pub(in crate::connection::machine) enum TimerChange {
 }
 
 impl ConnectionManager {
-    /// The time `input` is judged at. A current timer is never early here. The runtime may sleep
-    /// on a monotonic clock and stamp a slewed or stepped-back wall clock; judged a few
-    /// milliseconds early, a retry bound by the cooldown would enter the very wait whose timer
-    /// already fired, and nothing would move it on.
+    /// The time an input is judged at.
     pub(in crate::connection::machine) fn input_time(
         &self,
         input: &Input,
