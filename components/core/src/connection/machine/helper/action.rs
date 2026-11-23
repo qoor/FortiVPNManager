@@ -23,7 +23,9 @@ impl ConnectionManager {
         if let Some(attempts) = counted {
             self.ledger.recent_auth_attempts = attempts;
         }
-        let attempt = self.attempt_under_way();
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         attempt.milestone = Some(milestone);
         if credentials_sent_at.is_some() {
             attempt.credentials_sent_at = credentials_sent_at;
@@ -45,7 +47,10 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn enter_connected(&mut self, connected: Connected) {
+    pub(in crate::connection::machine) fn enter_connected(
+        &mut self,
+        connected: Connected,
+    ) -> Vec<Step> {
         let Phase::Connecting(mut attempt) = self.take_phase() else {
             unreachable!("a tunnel comes up for an attempt");
         };
@@ -63,6 +68,7 @@ impl ConnectionManager {
             renewal: None,
             replaced: attempt.replacing.map(|replaced| replaced.attempt),
         });
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn end_run(&mut self, exit: RunExit) -> Vec<Step> {
@@ -97,7 +103,10 @@ impl ConnectionManager {
                 }
             }
             RunExit::ReplacedDuringAttempt => {
-                self.attempt_under_way().replacing = None;
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
+                attempt.replacing = None;
                 Vec::new()
             }
             RunExit::ReplacedWhileConnected => {
@@ -179,7 +188,10 @@ impl ConnectionManager {
         match loss {
             ConnectionLoss::Ignore => Vec::new(),
             ConnectionLoss::DropReplaced => {
-                self.attempt_under_way().replacing = None;
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
+                attempt.replacing = None;
                 Vec::new()
             }
             ConnectionLoss::EndRun { otp_close, then } => {

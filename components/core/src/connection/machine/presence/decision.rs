@@ -117,9 +117,11 @@ impl ConnectionManager {
     /// limit, or be given up.
     pub(in crate::connection::machine) fn held_reconnect(&self) -> Vec<Step> {
         if self.phase.is_holding() {
-            vec![Step::begin_attempt(AttemptReason::Retry(
-                RetryReason::UserAway,
-            ))]
+            vec![Step::BeginAttempt {
+                reason: AttemptReason::Retry(RetryReason::UserAway),
+                cert_retry_used: false,
+                readiness_verified: false,
+            }]
         } else {
             Vec::new()
         }

@@ -40,11 +40,13 @@ impl ConnectionManager {
         self.effects.push(effect);
     }
 
-    pub(in crate::connection::machine) fn start_run(&mut self, ready: bool) {
+    pub(in crate::connection::machine) fn start_run(&mut self, ready: bool) -> Vec<Step> {
         if !ready {
-            return;
+            return Vec::new();
         }
-        let attempt = self.attempt_under_way();
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         attempt.stage = Stage::Run;
         let account = attempt.account.clone();
         let start = Effect::StartRun {
@@ -58,6 +60,7 @@ impl ConnectionManager {
         };
         self.run_account = Some(account);
         self.effects.push(start);
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn end_otp_session(
@@ -72,7 +75,9 @@ impl ConnectionManager {
                 vec![Step::StaleOtpWaitOver(Note::StaleOtpSessionEnded)]
             }
             OtpSessionFailure::BeforeRun(then) => {
-                let attempt = self.attempt_under_way();
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
                 attempt.otp_session = OtpSession::Closed;
                 match then {
                     AfterOtpFailure::ReplacementFailed => {
@@ -89,7 +94,9 @@ impl ConnectionManager {
                 }
             }
             OtpSessionFailure::DuringRun { failure, stop } => {
-                let attempt = self.attempt_under_way();
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
                 attempt.otp_session = OtpSession::Closed;
                 attempt.otp_failure = Some(failure);
                 if stop {
@@ -105,11 +112,17 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn submit_otp(&mut self, usable: bool, code: SecretText) {
+    pub(in crate::connection::machine) fn submit_otp(
+        &mut self,
+        usable: bool,
+        code: SecretText,
+    ) -> Vec<Step> {
         if !usable {
-            return;
+            return Vec::new();
         }
-        let attempt = self.attempt_under_way();
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         // The session moves the used emails to the trash and closes itself after the submission.
         attempt.otp_session = OtpSession::Submitted;
         let submit = Effect::SubmitOtp {
@@ -117,13 +130,19 @@ impl ConnectionManager {
             code,
         };
         self.effects.push(submit);
+        Vec::new()
     }
 
-    pub(in crate::connection::machine) fn note_spam(&mut self, finding: SpamFinding) {
+    pub(in crate::connection::machine) fn note_spam(&mut self, finding: SpamFinding) -> Vec<Step> {
         let spam = Failure::OtpNotReceived { in_spam: true };
         match finding {
             SpamFinding::Ignore => {}
-            SpamFinding::Attempt => self.attempt_under_way().otp_in_spam = true,
+            SpamFinding::Attempt => {
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
+                attempt.otp_in_spam = true;
+            }
             SpamFinding::ShownFailure { shown_in, ledger } => {
                 match (shown_in, &mut self.phase) {
                     (ShownIn::Nowhere, _) => {}
@@ -139,10 +158,16 @@ impl ConnectionManager {
                 }
             }
         }
+        Vec::new()
     }
 
-    pub(in crate::connection::machine) fn prepare_otp(&mut self, preparation: OtpPreparation) {
-        let attempt = self.attempt_under_way();
+    pub(in crate::connection::machine) fn prepare_otp(
+        &mut self,
+        preparation: OtpPreparation,
+    ) -> Vec<Step> {
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         let effect = match preparation {
             OtpPreparation::WaitForStaleOtp { since } => {
                 attempt.stage = Stage::WaitingForStaleOtp { since };
@@ -160,6 +185,7 @@ impl ConnectionManager {
             }
         };
         self.effects.push(effect);
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn end_stale_otp_wait(
@@ -192,7 +218,9 @@ impl ConnectionManager {
         let Some(deadline) = deadline else {
             return Vec::new();
         };
-        let attempt = self.attempt_under_way();
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         attempt.deadline = deadline;
         let note = Effect::Note {
             attempt: Some(attempt.id.clone()),
@@ -202,11 +230,16 @@ impl ConnectionManager {
         vec![Step::PrepareOtp]
     }
 
-    pub(in crate::connection::machine) fn stop_at_otp_deadline(&mut self, deadline: OtpDeadline) {
+    pub(in crate::connection::machine) fn stop_at_otp_deadline(
+        &mut self,
+        deadline: OtpDeadline,
+    ) -> Vec<Step> {
         let OtpDeadline::StopRun(otp_close) = deadline else {
-            return;
+            return Vec::new();
         };
-        let attempt = self.attempt_under_way();
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            unreachable!("decided for an attempt under way");
+        };
         attempt.stop_requested = Some(StopReason::OtpTimeout);
         let stop = Effect::StopRun {
             attempt: attempt.id.clone(),
@@ -215,5 +248,6 @@ impl ConnectionManager {
         let close = attempt.otp_closed(otp_close);
         self.effects.push(stop);
         self.push_otp_close(close);
+        Vec::new()
     }
 }

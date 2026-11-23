@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use crate::connection::certs::gateway_change_drops_certs;
 use crate::connection::ledger::{Failure, FailureLedger};
-use crate::connection::machine::{AfterStop, AttemptReason, ConnectionManager, Phase, Quit};
+use crate::connection::machine::{AfterStop, AttemptReason, ConnectionManager, Phase, Quit, Step};
 use crate::connection::{Launch, Settings, policy};
 
 /// The launch, with the ledger it keeps.
@@ -105,8 +105,17 @@ impl ConnectionManager {
     }
 
     /// Connect, Disconnect and Reconnect Now are ignored while the update stops the connection.
-    pub(in crate::connection::machine) fn takes_user_requests(&self) -> bool {
+    fn takes_user_requests(&self) -> bool {
         self.update_stop.is_none()
+    }
+
+    /// The user's Connect, unless it is ignored.
+    pub(in crate::connection::machine) fn user_connect(&self) -> Vec<Step> {
+        if self.takes_user_requests() {
+            vec![Step::ConnectRequested(AttemptReason::User)]
+        } else {
+            Vec::new()
+        }
     }
 
     pub(in crate::connection::machine) fn launched(
@@ -201,8 +210,12 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn disconnect_request(&self) -> DisconnectRequest {
-        match &self.phase {
+    /// What Disconnect stops; `None` while it is ignored.
+    pub(in crate::connection::machine) fn disconnect_request(&self) -> Option<DisconnectRequest> {
+        if !self.takes_user_requests() {
+            return None;
+        }
+        Some(match &self.phase {
             Phase::Failed(_) | Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } => {
                 DisconnectRequest::EndWait
             }
@@ -212,10 +225,13 @@ impl ConnectionManager {
                 DisconnectRequest::StayIdle(stop.after != AfterStop::Quit)
             }
             Phase::Idle | Phase::SetupRequired(_) => DisconnectRequest::Nothing,
-        }
+        })
     }
 
     pub(in crate::connection::machine) fn reconnect_now_request(&self) -> ReconnectNowRequest {
+        if !self.takes_user_requests() {
+            return ReconnectNowRequest::Nothing;
+        }
         match &self.phase {
             Phase::Connected(_) => ReconnectNowRequest::Renew,
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } | Phase::Failed(_) => {

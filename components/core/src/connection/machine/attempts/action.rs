@@ -131,7 +131,11 @@ impl ConnectionManager {
                 until,
             } => {
                 self.ledger.recent_auth_attempts = kept;
-                renewal_of(&mut session).next_try = Some(until);
+                session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal")
+                    .next_try = Some(until);
                 self.phase = Phase::Connected(session);
             }
             ReplacementStart::Begin {
@@ -140,7 +144,11 @@ impl ConnectionManager {
                 attempt,
             } => {
                 self.ledger.recent_auth_attempts = kept;
-                renewal_of(&mut session).next_try = None;
+                session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal")
+                    .next_try = None;
                 let attempt = self.issue_attempt(attempt, Some(session));
                 self.phase = Phase::Connecting(Box::new(attempt));
                 return vec![Step::CheckReadiness];
@@ -169,7 +177,11 @@ impl ConnectionManager {
                 then,
             } => {
                 self.ledger.record_auth_failure(failure, at);
-                renewal_of(&mut session).tries = tries;
+                session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal")
+                    .tries = tries;
                 match then {
                     AfterAuthFailure::PrepareAgain => vec![Step::PrepareReplacement {
                         session,
@@ -191,7 +203,11 @@ impl ConnectionManager {
     ) -> Vec<Step> {
         match failure {
             ReplacementFailure::TryAgain { mut session, tries } => {
-                renewal_of(&mut session).tries = tries;
+                session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal")
+                    .tries = tries;
                 vec![Step::PrepareReplacement {
                     session,
                     cert_retry_used: false,
@@ -203,7 +219,10 @@ impl ConnectionManager {
                 later_failures,
                 next_try,
             } => {
-                let renewal = renewal_of(&mut session);
+                let renewal = session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal");
                 renewal.tries = tries;
                 renewal.later_failures = later_failures;
                 renewal.next_try = Some(next_try);
@@ -220,7 +239,13 @@ impl ConnectionManager {
     ) {
         match keep {
             KeepRenewal::End => session.renewal = None,
-            KeepRenewal::Pause => renewal_of(&mut session).next_try = None,
+            KeepRenewal::Pause => {
+                session
+                    .renewal
+                    .as_mut()
+                    .expect("a replacement is prepared for a renewal")
+                    .next_try = None;
+            }
         }
         self.phase = Phase::Connected(session);
     }
@@ -279,9 +304,19 @@ impl ConnectionManager {
     pub(in crate::connection::machine) fn settle(&mut self, after: AfterStop) -> Vec<Step> {
         match after {
             AfterStop::Idle => self.phase = Phase::Idle,
-            AfterStop::Reconnect(reason) => return vec![Step::begin_attempt(reason)],
+            AfterStop::Reconnect(reason) => {
+                return vec![Step::BeginAttempt {
+                    reason,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }];
+            }
             AfterStop::ResumeAfterSleep => {
-                return vec![Step::begin_attempt(AttemptReason::AfterSleep)];
+                return vec![Step::BeginAttempt {
+                    reason: AttemptReason::AfterSleep,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }];
             }
             AfterStop::Quit => {
                 self.phase = Phase::Idle;
@@ -305,7 +340,9 @@ impl ConnectionManager {
                 otp_close,
                 replacement,
             } => {
-                let attempt = self.attempt_under_way();
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
                 let close = attempt.otp_closed(otp_close);
                 let replacing = replacement.then(|| {
                     attempt
@@ -320,7 +357,9 @@ impl ConnectionManager {
                 }]
             }
             AttemptDeadline::StopRun { otp_close } => {
-                let attempt = self.attempt_under_way();
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
                 attempt.stop_requested = Some(StopReason::AttemptTimeout);
                 let stop = Effect::StopRun {
                     attempt: attempt.id.clone(),
@@ -334,20 +373,16 @@ impl ConnectionManager {
         }
     }
 
-    /// The attempt a decision was made for.
-    pub(in crate::connection::machine) fn attempt_under_way(&mut self) -> &mut Attempt {
-        let Phase::Connecting(attempt) = &mut self.phase else {
-            unreachable!("decided for an attempt under way");
-        };
-        attempt
-    }
-
     pub(in crate::connection::machine) fn start_due_retry(&mut self, due: RetryDue) -> Vec<Step> {
         match due {
             RetryDue::Ignore => Vec::new(),
             RetryDue::Attempt(reason) => {
                 self.phase = Phase::Idle;
-                vec![Step::begin_attempt(AttemptReason::Retry(reason))]
+                vec![Step::BeginAttempt {
+                    reason: AttemptReason::Retry(reason),
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }]
             }
             RetryDue::Replacement => {
                 let Phase::Connected(session) = self.take_phase() else {
@@ -399,11 +434,4 @@ pub(in crate::connection::machine) fn renew(
         session,
         cert_retry_used: false,
     }]
-}
-
-fn renewal_of(session: &mut Session) -> &mut Renewal {
-    session
-        .renewal
-        .as_mut()
-        .expect("a replacement is prepared for a renewal")
 }

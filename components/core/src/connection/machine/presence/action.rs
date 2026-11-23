@@ -91,9 +91,10 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn poll_lock(&mut self, next: SystemTime) {
+    pub(in crate::connection::machine) fn poll_lock(&mut self, next: SystemTime) -> Vec<Step> {
         self.system.lock_poll_at = Some(next);
         self.effects.push(Effect::ReadScreenState);
+        Vec::new()
     }
 
     /// Records what the OS reported of the screen and the displays; presence follows, as of `at`

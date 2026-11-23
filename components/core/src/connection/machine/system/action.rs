@@ -89,12 +89,20 @@ impl ConnectionManager {
         match look {
             WakeLook::Ignore => Vec::new(),
             WakeLook::ReadRouter => {
-                self.wake_settle_step(SettleStep::ReadingRouter);
+                self.system
+                    .wake_settle
+                    .as_mut()
+                    .expect("a wake waits for the network")
+                    .step = SettleStep::ReadingRouter;
                 self.effects.push(Effect::ReadRouter);
                 Vec::new()
             }
             WakeLook::LookAgain { at } => {
-                self.wake_settle_step(SettleStep::Waiting(at));
+                self.system
+                    .wake_settle
+                    .as_mut()
+                    .expect("a wake waits for the network")
+                    .step = SettleStep::Waiting(at);
                 Vec::new()
             }
             WakeLook::JudgeWithoutNetwork => {
@@ -114,18 +122,14 @@ impl ConnectionManager {
             }
             WakeLook::Observe(plan) => {
                 let (id, host) = self.probe(plan);
-                self.wake_settle_step(SettleStep::Observing(id, host));
+                self.system
+                    .wake_settle
+                    .as_mut()
+                    .expect("a wake waits for the network")
+                    .step = SettleStep::Observing(id, host);
                 Vec::new()
             }
         }
-    }
-
-    fn wake_settle_step(&mut self, step: SettleStep) {
-        self.system
-            .wake_settle
-            .as_mut()
-            .expect("a wake waits for the network")
-            .step = step;
     }
 
     /// Asks for the route to the gateway; returns the probe's ID and the host it looks up.
@@ -250,7 +254,11 @@ impl ConnectionManager {
                 self.phase = Phase::WaitingRetry { until, reason };
                 Vec::new()
             }
-            Resume::Attempt(reason) => vec![Step::begin_attempt(reason)],
+            Resume::Attempt(reason) => vec![Step::BeginAttempt {
+                reason,
+                cert_retry_used: false,
+                readiness_verified: false,
+            }],
         }
     }
 

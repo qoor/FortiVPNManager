@@ -14,25 +14,32 @@ impl ConnectionManager {
             return vec![Step::NetworkFailure(RetryReason::Network)];
         }
         self.reconnect_limits.forced_retry_used = true;
-        vec![Step::begin_attempt(AttemptReason::Retry(
-            RetryReason::ForcedTermination,
-        ))]
+        vec![Step::BeginAttempt {
+            reason: AttemptReason::Retry(RetryReason::ForcedTermination),
+            cert_retry_used: false,
+            readiness_verified: false,
+        }]
     }
 
     pub(in crate::connection::machine) fn count_network_failure(
         &mut self,
         failure: NetworkFailure,
-    ) {
+    ) -> Vec<Step> {
         self.reconnect_limits.network_failure_streak = failure.streak;
         self.wait_to_retry(failure.wait);
+        Vec::new()
     }
 
-    pub(in crate::connection::machine) fn count_auth_failure(&mut self, failure: AuthFailure) {
+    pub(in crate::connection::machine) fn count_auth_failure(
+        &mut self,
+        failure: AuthFailure,
+    ) -> Vec<Step> {
         self.ledger.record_auth_failure(failure.failure, failure.at);
         match failure.retry {
             Some(wait) => self.wait_to_retry(wait),
             None => self.fail(failure.failure),
         }
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn wait_to_retry(&mut self, wait: RetryWait) {

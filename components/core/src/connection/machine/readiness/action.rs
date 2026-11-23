@@ -5,10 +5,11 @@ use crate::connection::readiness::FollowApproval;
 use super::decision::{AfterReadiness, ReadinessChecked, Registration};
 
 impl ConnectionManager {
-    pub(in crate::connection::machine) fn ask_readiness(&mut self, asked: bool) {
+    pub(in crate::connection::machine) fn ask_readiness(&mut self, asked: bool) -> Vec<Step> {
         if !asked {
             self.effects.push(Effect::CheckReadiness);
         }
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn take_readiness(
@@ -27,8 +28,10 @@ impl ConnectionManager {
             AfterReadiness::Nothing => Vec::new(),
             AfterReadiness::PrepareOtp => vec![Step::PrepareOtp],
             AfterReadiness::ReplacementFailed => {
-                let session = self
-                    .attempt_under_way()
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
+                let session = attempt
                     .replacing
                     .take()
                     .expect("decided with a session to replace");
@@ -50,7 +53,10 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn register(&mut self, registration: Registration) {
+    pub(in crate::connection::machine) fn register(
+        &mut self,
+        registration: Registration,
+    ) -> Vec<Step> {
         match registration {
             Registration::Registered(follow) => {
                 self.readiness.register_error = None;
@@ -58,6 +64,7 @@ impl ConnectionManager {
             }
             Registration::Failed(error) => self.readiness.register_error = Some(error),
         }
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn follow_approval(&mut self, follow: FollowApproval) {

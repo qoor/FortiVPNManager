@@ -38,7 +38,11 @@ impl ConnectionManager {
             }
             LaunchStart::Attempt => {
                 self.wants_connection = true;
-                vec![Step::begin_attempt(AttemptReason::Launch)]
+                vec![Step::BeginAttempt {
+                    reason: AttemptReason::Launch,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }]
             }
         };
         if launched.reconnect {
@@ -101,20 +105,31 @@ impl ConnectionManager {
                 self.phase = Phase::Idle;
                 self.wants_connection = true;
                 self.reset_for_user_action();
-                vec![Step::begin_attempt(reason)]
+                vec![Step::BeginAttempt {
+                    reason,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }]
             }
             ConnectRequest::AfterStop { reset } => {
                 self.wants_connection = true;
                 if reset {
                     self.reset_for_user_action();
-                    self.stop_under_way().after = AfterStop::Reconnect(reason);
+                    let Phase::Disconnecting(stop) = &mut self.phase else {
+                        unreachable!("decided for a stop under way");
+                    };
+                    stop.after = AfterStop::Reconnect(reason);
                 }
                 Vec::new()
             }
             ConnectRequest::ResumeHeld => {
                 self.phase = Phase::Idle;
                 self.reconnect_limits.reconnect_suspended = false;
-                vec![Step::begin_attempt(reason)]
+                vec![Step::BeginAttempt {
+                    reason,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }]
             }
             ConnectRequest::Unsuspend => {
                 self.reconnect_limits.reconnect_suspended = false;
@@ -125,20 +140,36 @@ impl ConnectionManager {
 
     pub(in crate::connection::machine) fn disconnect(
         &mut self,
-        request: DisconnectRequest,
+        request: Option<DisconnectRequest>,
     ) -> Vec<Step> {
+        let Some(request) = request else {
+            return Vec::new();
+        };
         self.wants_connection = false;
         match request {
             DisconnectRequest::EndWait => self.phase = Phase::Idle,
             DisconnectRequest::AbortAttempt => {
-                return vec![self.abort_attempt_step(StopReason::UserDisconnect, AfterStop::Idle)];
+                let Phase::Connecting(attempt) = self.take_phase() else {
+                    unreachable!("decided for an attempt under way");
+                };
+                return vec![Step::AbortAttempt {
+                    attempt,
+                    stop: StopReason::UserDisconnect,
+                    after: AfterStop::Idle,
+                }];
             }
             DisconnectRequest::StopSession => {
-                self.stop_connected_session(StopReason::UserDisconnect, AfterStop::Idle);
+                let Phase::Connected(session) = self.take_phase() else {
+                    unreachable!("decided for the connected session");
+                };
+                self.stop_session(session, StopReason::UserDisconnect, AfterStop::Idle, None);
             }
             DisconnectRequest::StayIdle(stays) => {
                 if stays {
-                    self.stop_under_way().after = AfterStop::Idle;
+                    let Phase::Disconnecting(stop) = &mut self.phase else {
+                        unreachable!("decided for a stop under way");
+                    };
+                    stop.after = AfterStop::Idle;
                 }
             }
             DisconnectRequest::Nothing => {}
@@ -165,10 +196,16 @@ impl ConnectionManager {
                 self.phase = Phase::Idle;
                 self.wants_connection = true;
                 self.reset_for_user_action();
-                vec![Step::begin_attempt(AttemptReason::ReconnectNow)]
+                vec![Step::BeginAttempt {
+                    reason: AttemptReason::ReconnectNow,
+                    cert_retry_used: false,
+                    readiness_verified: false,
+                }]
             }
             ReconnectNowRequest::Retarget => {
-                let attempt = self.attempt_under_way();
+                let Phase::Connecting(attempt) = &mut self.phase else {
+                    unreachable!("decided for an attempt under way");
+                };
                 attempt.reason = AttemptReason::ReconnectNow;
                 let renewal = attempt
                     .replacing
@@ -195,12 +232,27 @@ impl ConnectionManager {
         }
         match request {
             StopRequest::AbortAttempt => {
-                return vec![self.abort_attempt_step(StopReason::AppQuit, AfterStop::Quit)];
+                let Phase::Connecting(attempt) = self.take_phase() else {
+                    unreachable!("decided for an attempt under way");
+                };
+                return vec![Step::AbortAttempt {
+                    attempt,
+                    stop: StopReason::AppQuit,
+                    after: AfterStop::Quit,
+                }];
             }
             StopRequest::StopSession => {
-                self.stop_connected_session(StopReason::AppQuit, AfterStop::Quit);
+                let Phase::Connected(session) = self.take_phase() else {
+                    unreachable!("decided for the connected session");
+                };
+                self.stop_session(session, StopReason::AppQuit, AfterStop::Quit, None);
             }
-            StopRequest::AfterStop => self.stop_under_way().after = AfterStop::Quit,
+            StopRequest::AfterStop => {
+                let Phase::Disconnecting(stop) = &mut self.phase else {
+                    unreachable!("decided for a stop under way");
+                };
+                stop.after = AfterStop::Quit;
+            }
             StopRequest::EndWait | StopRequest::Done => self.quit = Quit::Terminated,
         }
         Vec::new()
@@ -220,14 +272,27 @@ impl ConnectionManager {
         });
         match request {
             StopRequest::AbortAttempt => {
-                vec![self.abort_attempt_step(StopReason::AppQuit, AfterStop::Update)]
+                let Phase::Connecting(attempt) = self.take_phase() else {
+                    unreachable!("decided for an attempt under way");
+                };
+                vec![Step::AbortAttempt {
+                    attempt,
+                    stop: StopReason::AppQuit,
+                    after: AfterStop::Update,
+                }]
             }
             StopRequest::StopSession => {
-                self.stop_connected_session(StopReason::AppQuit, AfterStop::Update);
+                let Phase::Connected(session) = self.take_phase() else {
+                    unreachable!("decided for the connected session");
+                };
+                self.stop_session(session, StopReason::AppQuit, AfterStop::Update, None);
                 Vec::new()
             }
             StopRequest::AfterStop => {
-                self.stop_under_way().after = AfterStop::Update;
+                let Phase::Disconnecting(stop) = &mut self.phase else {
+                    unreachable!("decided for a stop under way");
+                };
+                stop.after = AfterStop::Update;
                 Vec::new()
             }
             StopRequest::EndWait => {
@@ -238,15 +303,19 @@ impl ConnectionManager {
         }
     }
 
-    pub(in crate::connection::machine) fn report_stopped_for_update(&mut self, complete: bool) {
+    pub(in crate::connection::machine) fn report_stopped_for_update(
+        &mut self,
+        complete: bool,
+    ) -> Vec<Step> {
         if !complete {
-            return;
+            return Vec::new();
         }
         self.update_stop
             .as_mut()
             .expect("decided for the stop for an update")
             .stopped = true;
         self.effects.push(Effect::StoppedForUpdate);
+        Vec::new()
     }
 
     pub(in crate::connection::machine) fn fail_update(
@@ -259,7 +328,10 @@ impl ConnectionManager {
         };
         self.update_stop = None;
         if stop_stays_idle {
-            self.stop_under_way().after = AfterStop::Idle;
+            let Phase::Disconnecting(stop) = &mut self.phase else {
+                unreachable!("decided for a stop under way");
+            };
+            stop.after = AfterStop::Idle;
         }
         if reconnect {
             vec![Step::ConnectRequested(AttemptReason::User)]
@@ -291,30 +363,5 @@ impl ConnectionManager {
         self.reconnect_limits.network_failure_streak = 0;
         self.reconnect_limits.forced_retry_used = false;
         self.reconnect_limits.reconnect_suspended = false;
-    }
-
-    fn abort_attempt_step(&mut self, stop: StopReason, after: AfterStop) -> Step {
-        let Phase::Connecting(attempt) = self.take_phase() else {
-            unreachable!("decided for an attempt under way");
-        };
-        Step::AbortAttempt {
-            attempt,
-            stop,
-            after,
-        }
-    }
-
-    fn stop_connected_session(&mut self, stop: StopReason, after: AfterStop) {
-        let Phase::Connected(session) = self.take_phase() else {
-            unreachable!("decided for the connected session");
-        };
-        self.stop_session(session, stop, after, None);
-    }
-
-    fn stop_under_way(&mut self) -> &mut crate::connection::machine::Stop {
-        let Phase::Disconnecting(stop) = &mut self.phase else {
-            unreachable!("decided for a stop under way");
-        };
-        stop
     }
 }

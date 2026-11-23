@@ -377,16 +377,6 @@ pub(super) enum Step {
     },
 }
 
-impl Step {
-    fn begin_attempt(reason: AttemptReason) -> Self {
-        Self::BeginAttempt {
-            reason,
-            cert_retry_used: false,
-            readiness_verified: false,
-        }
-    }
-}
-
 impl ConnectionManager {
     #[must_use]
     pub fn new(startup: Startup) -> Self {
@@ -422,7 +412,6 @@ impl ConnectionManager {
             readiness: Readiness::default(),
             shown: Shown::default(),
         };
-        // What the sections show before the first input, as of the start of the clock.
         manager.shown = manager.judge_shown(SystemTime::UNIX_EPOCH);
         manager
     }
@@ -453,134 +442,135 @@ impl ConnectionManager {
         match step {
             Step::Input(input) => self.run_input(input, now),
             Step::TimerDue(kind) => self.run_timer(kind, now),
-            step => self.run_transition(step, now),
+            Step::BeginAttempt {
+                reason,
+                cert_retry_used,
+                readiness_verified,
+            } => self.start_attempt(self.attempt_start(
+                reason,
+                cert_retry_used,
+                readiness_verified,
+                now,
+            )),
+            Step::PrepareReplacement {
+                session,
+                cert_retry_used,
+            } => self.start_replacement(self.replacement_start(session, cert_retry_used, now)),
+            Step::ReplacementEnded { session, outcome } => {
+                self.end_replacement(self.replacement_end(session, outcome, now))
+            }
+            Step::ReplacementFailed(session) => {
+                self.fail_replacement(replacement_failure(session, now))
+            }
+            Step::AbortAttempt {
+                attempt,
+                stop,
+                after,
+            } => self.abort(attempt_abort(*attempt, stop, after, now)),
+            Step::ApplyOutcome(outcome) => self.outcome_steps(outcome),
+            Step::ForcedTermination => self.forced_termination(self.forced_retry_left()),
+            Step::NetworkFailure(reason) => {
+                self.count_network_failure(self.network_failure(reason, now))
+            }
+            Step::AuthFailure(failure) => self.count_auth_failure(self.auth_failure(failure, now)),
+            Step::ScheduleRetry { reason, delay } => {
+                self.wait_to_retry(self.retry_wait(reason, delay, now));
+                Vec::new()
+            }
+            Step::Fail(failure) => {
+                self.fail(failure);
+                Vec::new()
+            }
+            Step::EnterConnected { tunnel_ip } => {
+                self.enter_connected(self.connected(tunnel_ip, now))
+            }
+            Step::StaleOtpWaitOver(note) => {
+                self.go_on_after_stale_otp(self.stale_otp_wait_over(now), note)
+            }
+            Step::PrepareOtp => self.prepare_otp(self.otp_preparation(now)),
+            Step::CheckReadiness => self.ask_readiness(self.readiness_check_asked()),
+            Step::ConnectRequested(reason) => self.connect(self.connect_request(), reason),
+            Step::StoppedForUpdate => self.report_stopped_for_update(self.update_stop_complete()),
+            Step::UpdatePresence(at) => self.update_presence(self.presence_update(at, now)),
+            Step::PresenceChanged { away, at } => {
+                self.change_presence(self.presence_change(away, at, now))
+            }
+            Step::RejudgeHeldReconnect => self.held_reconnect(),
+            Step::ScheduleChanged => self.change_schedule(self.schedule_change(now)),
+            Step::ResetScheduleBoundary => {
+                self.reset_schedule_boundary(self.schedule_boundary_at(now));
+                Vec::new()
+            }
+            Step::WillSleep => self.go_to_sleep(self.sleep(now)),
+            Step::WakeLookDue => self.look_after_wake(self.wake_look(now)),
+            Step::WakeSettled(observation) => {
+                self.settle_wake(self.wake_settled(&observation, now))
+            }
+            Step::ReportPath => self.look_at_path(self.path_look()),
+            Step::PathChanged {
+                snapshot,
+                routing_incomplete,
+            } => {
+                let after = self.after_path(&snapshot, routing_incomplete, now);
+                self.change_path(snapshot, after)
+            }
         }
     }
 
+    /// Where each input goes: its decision, then its action.
     fn run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
         match input {
-            Input::Launched(launch) => {
-                let launched = self.launched(launch, now);
-                self.launch(launched)
-            }
+            Input::Launched(launch) => self.launch(self.launched(launch, now)),
             Input::SettingsChanged(settings) => {
-                let change = self.settings_change(settings, now);
-                self.change_settings(change)
+                self.change_settings(self.settings_change(settings, now))
             }
             Input::TimeZoneChanged(time_zone) => self.change_time_zone(time_zone),
-            Input::Connect => {
-                if !self.takes_user_requests() {
-                    return Vec::new();
-                }
-                vec![Step::ConnectRequested(AttemptReason::User)]
-            }
-            Input::Disconnect => {
-                if !self.takes_user_requests() {
-                    return Vec::new();
-                }
-                let request = self.disconnect_request();
-                self.disconnect(request)
-            }
-            Input::ReconnectNow => {
-                if !self.takes_user_requests() {
-                    return Vec::new();
-                }
-                let request = self.reconnect_now_request();
-                self.reconnect_now(request)
-            }
-            Input::QuitRequested => {
-                let request = self.quit_request(now);
-                self.quit(request)
-            }
-            Input::StopForUpdate => {
-                let request = self.update_stop_request(now);
-                self.stop_for_update(request)
-            }
-            Input::UpdateFailed { reconnect } => {
-                let failure = self.update_failure();
-                self.fail_update(failure, reconnect)
-            }
+            Input::Connect => self.user_connect(),
+            Input::Disconnect => self.disconnect(self.disconnect_request()),
+            Input::ReconnectNow => self.reconnect_now(self.reconnect_now_request()),
+            Input::QuitRequested => self.quit(self.quit_request(now)),
+            Input::StopForUpdate => self.stop_for_update(self.update_stop_request(now)),
+            Input::UpdateFailed { reconnect } => self.fail_update(self.update_failure(), reconnect),
             Input::SettingsOpened | Input::RecheckReadiness => vec![Step::CheckReadiness],
             Input::AppActivated => self.app_activated(),
-            Input::HelperRegistered(result) => {
-                self.register(registration(result, now));
-                Vec::new()
-            }
+            Input::HelperRegistered(result) => self.register(registration(result, now)),
             Input::HelperApprovalSettingsOpened => {
                 self.follow_approval(follow_approval(now));
                 Vec::new()
             }
-            Input::ReadinessChecked(facts) => {
-                let checked = self.readiness_checked(facts);
-                self.take_readiness(checked)
+            Input::ReadinessChecked(facts) => self.take_readiness(self.readiness_checked(facts)),
+            Input::OtpSessionReady(attempt) => self.start_run(self.otp_session_ready(&attempt)),
+            Input::OtpSessionFailed(attempt, failure) => {
+                self.end_otp_session(self.otp_session_failure(&attempt, failure))
             }
-            input => self.run_run_input(input, now),
-        }
-    }
-
-    /// The inputs about the runs and their OTP sessions.
-    fn run_run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
-        match input {
+            Input::OtpCodeFound(attempt, code) => {
+                self.submit_otp(self.otp_code_usable(&attempt), code)
+            }
+            Input::OtpFoundInSpam(attempt) => self.note_spam(self.spam_finding(&attempt)),
+            Input::StaleOtpTrashed(attempt) => {
+                self.end_stale_otp_wait(self.stale_otp_session(&attempt))
+            }
             Input::Helper(HelperEvent { attempt_id, kind }) => match kind {
                 HelperEventKind::Milestone {
                     milestone,
                     tunnel_ip,
-                } => {
-                    let reached = self.milestone_reached(&attempt_id, milestone, tunnel_ip, now);
-                    self.reach_milestone(reached)
-                }
+                } => self.reach_milestone(self.milestone_reached(
+                    &attempt_id,
+                    milestone,
+                    tunnel_ip,
+                    now,
+                )),
                 HelperEventKind::Exited { facts } => {
-                    let exit = self.run_exit(&attempt_id, &facts, now);
-                    self.end_run(exit)
+                    self.end_run(self.run_exit(&attempt_id, &facts, now))
                 }
             },
             Input::RunRejected(attempt, code) => {
-                let rejection = self.run_rejection(&attempt, code, now);
-                self.reject_run(rejection)
+                self.reject_run(self.run_rejection(&attempt, code, now))
             }
-            Input::HelperConnectionLost => {
-                let loss = self.connection_loss(now);
-                self.lose_connection(loss)
-            }
-            Input::OtpSessionReady(attempt) => {
-                let ready = self.otp_session_ready(&attempt);
-                self.start_run(ready);
-                Vec::new()
-            }
-            Input::OtpSessionFailed(attempt, failure) => {
-                let failure = self.otp_session_failure(&attempt, failure);
-                self.end_otp_session(failure)
-            }
-            Input::OtpCodeFound(attempt, code) => {
-                let usable = self.otp_code_usable(&attempt);
-                self.submit_otp(usable, code);
-                Vec::new()
-            }
-            Input::OtpFoundInSpam(attempt) => {
-                let finding = self.spam_finding(&attempt);
-                self.note_spam(finding);
-                Vec::new()
-            }
-            Input::StaleOtpTrashed(attempt) => {
-                let trashed = self.stale_otp_session(&attempt);
-                self.end_stale_otp_wait(trashed)
-            }
-            input => self.run_system_input(input, now),
-        }
-    }
-
-    /// The inputs from the OS and the timers.
-    fn run_system_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
-        match input {
-            Input::TimerFired(timer) => {
-                let due = self.due_timer(timer);
-                self.fire_timer(due)
-            }
+            Input::HelperConnectionLost => self.lose_connection(self.connection_loss(now)),
+            Input::TimerFired(timer) => self.fire_timer(self.due_timer(timer)),
             Input::WillSleep { at } => self.sleep_reported(at),
-            Input::DidWake => {
-                let wake = self.wake(now);
-                self.wake_up(wake)
-            }
+            Input::DidWake => self.wake_up(self.wake(now)),
             Input::ScreenLocked { at } => self.screen_reported(Some(true), None, Some(at)),
             Input::ScreenUnlocked => self.screen_reported(Some(false), None, None),
             Input::DisplaysSlept { at } => self.screen_reported(None, Some(true), Some(at)),
@@ -592,201 +582,29 @@ impl ConnectionManager {
             Input::NetworkPathChanged {
                 satisfied,
                 interfaces,
-            } => {
-                let report = self.path_report(satisfied, now);
-                self.record_path(satisfied, interfaces, report)
-            }
-            Input::RouterRead { present } => {
-                let look = self.router_answer(present, now);
-                self.look_after_wake(look)
-            }
-            Input::NetworkProbed(result) => {
-                let answer = self.probe_answer(&result);
-                self.take_probe_answer(answer)
-            }
-            _ => unreachable!("routed by run_input and run_run_input"),
+            } => self.record_path(satisfied, interfaces, self.path_report(satisfied, now)),
+            Input::RouterRead { present } => self.look_after_wake(self.router_answer(present, now)),
+            Input::NetworkProbed(result) => self.take_probe_answer(self.probe_answer(&result)),
         }
     }
 
     fn run_timer(&mut self, kind: TimerKind, now: SystemTime) -> Vec<Step> {
         match kind {
-            TimerKind::AttemptDeadline => {
-                let deadline = self.attempt_deadline(now);
-                self.end_attempt_at_deadline(deadline)
-            }
-            TimerKind::OtpDeadline => {
-                let deadline = self.otp_deadline(now);
-                self.stop_at_otp_deadline(deadline);
-                Vec::new()
-            }
+            TimerKind::AttemptDeadline => self.end_attempt_at_deadline(self.attempt_deadline(now)),
+            TimerKind::OtpDeadline => self.stop_at_otp_deadline(self.otp_deadline(now)),
             TimerKind::StaleOtp => self.stop_stale_otp_search(),
-            TimerKind::Retry => {
-                let due = self.retry_due();
-                self.start_due_retry(due)
-            }
-            TimerKind::ProactiveReconnect => {
-                let due = self.proactive_reconnect_due(now);
-                self.renew_when_due(due)
-            }
-            TimerKind::QuitDeadline => {
-                let ends_quit = self.quit_deadline_ends_quit();
-                self.end_at_quit_deadline(ends_quit)
-            }
-            TimerKind::Schedule => {
-                let due = self.boundary_due(now);
-                self.pass_boundary(due)
-            }
+            TimerKind::Retry => self.start_due_retry(self.retry_due()),
+            TimerKind::ProactiveReconnect => self.renew_when_due(self.proactive_reconnect_due(now)),
+            TimerKind::QuitDeadline => self.end_at_quit_deadline(self.quit_deadline_ends_quit()),
+            TimerKind::Schedule => self.pass_boundary(self.boundary_due(now)),
             TimerKind::AwayLimit => {
-                let limit = self.away_limit(now);
-                self.apply_away_limit(limit);
+                self.apply_away_limit(self.away_limit(now));
                 Vec::new()
             }
             TimerKind::PathSettle => self.path_settled(),
             TimerKind::WakeSettle => vec![Step::WakeLookDue],
-            TimerKind::LockPoll => {
-                self.poll_lock(next_lock_poll(now));
-                Vec::new()
-            }
-            TimerKind::ApprovalFollow => {
-                let follow = self.approval_follow(now);
-                self.approval_follow_due(follow)
-            }
-        }
-    }
-
-    fn run_transition(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
-        match step {
-            Step::BeginAttempt {
-                reason,
-                cert_retry_used,
-                readiness_verified,
-            } => {
-                let start = self.attempt_start(reason, cert_retry_used, readiness_verified, now);
-                self.start_attempt(start)
-            }
-            Step::PrepareReplacement {
-                session,
-                cert_retry_used,
-            } => {
-                let start = self.replacement_start(session, cert_retry_used, now);
-                self.start_replacement(start)
-            }
-            Step::ReplacementEnded { session, outcome } => {
-                let end = self.replacement_end(session, outcome, now);
-                self.end_replacement(end)
-            }
-            Step::ReplacementFailed(session) => {
-                let failure = replacement_failure(session, now);
-                self.fail_replacement(failure)
-            }
-            Step::AbortAttempt {
-                attempt,
-                stop,
-                after,
-            } => {
-                let abort = attempt_abort(*attempt, stop, after, now);
-                self.abort(abort)
-            }
-            Step::ApplyOutcome(outcome) => self.outcome_steps(outcome),
-            Step::ForcedTermination => {
-                let retry_left = self.forced_retry_left();
-                self.forced_termination(retry_left)
-            }
-            Step::NetworkFailure(reason) => {
-                let failure = self.network_failure(reason, now);
-                self.count_network_failure(failure);
-                Vec::new()
-            }
-            Step::AuthFailure(failure) => {
-                let failure = self.auth_failure(failure, now);
-                self.count_auth_failure(failure);
-                Vec::new()
-            }
-            Step::ScheduleRetry { reason, delay } => {
-                let wait = self.retry_wait(reason, delay, now);
-                self.wait_to_retry(wait);
-                Vec::new()
-            }
-            Step::Fail(failure) => {
-                self.fail(failure);
-                Vec::new()
-            }
-            Step::EnterConnected { tunnel_ip } => {
-                let connected = self.connected(tunnel_ip, now);
-                self.enter_connected(connected);
-                Vec::new()
-            }
-            Step::StaleOtpWaitOver(note) => {
-                let deadline = self.stale_otp_wait_over(now);
-                self.go_on_after_stale_otp(deadline, note)
-            }
-            Step::PrepareOtp => {
-                let preparation = self.otp_preparation(now);
-                self.prepare_otp(preparation);
-                Vec::new()
-            }
-            step => self.run_later_transition(step, now),
-        }
-    }
-
-    fn run_later_transition(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
-        match step {
-            Step::CheckReadiness => {
-                let asked = self.readiness_check_asked();
-                self.ask_readiness(asked);
-                Vec::new()
-            }
-            Step::ConnectRequested(reason) => {
-                let request = self.connect_request();
-                self.connect(request, reason)
-            }
-            Step::StoppedForUpdate => {
-                let complete = self.update_stop_complete();
-                self.report_stopped_for_update(complete);
-                Vec::new()
-            }
-            Step::UpdatePresence(at) => {
-                let update = self.presence_update(at, now);
-                self.update_presence(update)
-            }
-            Step::PresenceChanged { away, at } => {
-                let change = self.presence_change(away, at, now);
-                self.change_presence(change)
-            }
-            Step::RejudgeHeldReconnect => self.held_reconnect(),
-            Step::ScheduleChanged => {
-                let change = self.schedule_change(now);
-                self.change_schedule(change)
-            }
-            Step::ResetScheduleBoundary => {
-                let boundary = self.schedule_boundary_at(now);
-                self.reset_schedule_boundary(boundary);
-                Vec::new()
-            }
-            Step::WillSleep => {
-                let sleep = self.sleep(now);
-                self.go_to_sleep(sleep)
-            }
-            Step::WakeLookDue => {
-                let look = self.wake_look(now);
-                self.look_after_wake(look)
-            }
-            Step::WakeSettled(observation) => {
-                let settled = self.wake_settled(&observation, now);
-                self.settle_wake(settled)
-            }
-            Step::ReportPath => {
-                let look = self.path_look();
-                self.look_at_path(look)
-            }
-            Step::PathChanged {
-                snapshot,
-                routing_incomplete,
-            } => {
-                let after = self.after_path(&snapshot, routing_incomplete, now);
-                self.change_path(snapshot, after)
-            }
-            _ => unreachable!("routed by run_step and run_transition"),
+            TimerKind::LockPoll => self.poll_lock(next_lock_poll(now)),
+            TimerKind::ApprovalFollow => self.approval_follow_due(self.approval_follow(now)),
         }
     }
 
