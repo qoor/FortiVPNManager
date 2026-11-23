@@ -32,7 +32,7 @@ public static class Program
     /// </summary>
     private const string RunningName = @"Local\FortiVPNManager.Running";
 
-    private static readonly object s_launchGate = new();
+    private static readonly Lock s_launchGate = new();
     private static AppInstance? s_instance;
     private static Mutex? s_running;
     private static App? s_launched;

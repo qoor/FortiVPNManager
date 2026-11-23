@@ -18,7 +18,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
     /// </summary>
     private static readonly TimeSpan s_quitWait = TimeSpan.FromSeconds(5);
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private string _timeZone = "";
 
     /// <summary>Whether the session is locked, from the lock and unlock events since the start.</summary>

@@ -11,11 +11,14 @@ using static FortiVPNManager.Ui.Text.Strings;
 namespace FortiVPNManager.Ui.Tests;
 
 /// <summary>The sentences: every key the UI uses is in a catalog, and they come out as macOS writes them.</summary>
-public class StringsTests
+public partial class StringsTests
 {
     internal static readonly string s_repository = FindRepository();
 
     public StringsTests() => Language = "en";
+
+    [GeneratedRegex(@"\bL\(""((?:[^""\\]|\\.)*)""")]
+    private static partial Regex LocalizedKey();
 
     [Fact]
     public void EveryKeyTheUiUsesIsInACatalog()
@@ -25,7 +28,7 @@ public class StringsTests
         var missing = new List<string>();
         foreach (string source in sources)
         {
-            foreach (Match match in Regex.Matches(File.ReadAllText(source), @"\bL\(""((?:[^""\\]|\\.)*)"""))
+            foreach (Match match in LocalizedKey().Matches(File.ReadAllText(source)))
             {
                 string key = Regex.Unescape(match.Groups[1].Value);
                 if (!Has(key))

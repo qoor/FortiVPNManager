@@ -52,7 +52,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
     private readonly HelperInbound _inbound = inbound;
     private readonly OpenHelperChannel _open = open;
     private readonly TimeSpan _retryDelay = retryDelay;
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private Link? _link;
     private ulong _lastLinkId;
 
@@ -260,7 +260,7 @@ internal sealed class HelperRelay(string appBuild, HelperInbound inbound, OpenHe
 /// </summary>
 internal sealed class HelperInbound(Action<SystemEvent> post)
 {
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private ulong? _activeId;
 
     public void Activate(ulong id)

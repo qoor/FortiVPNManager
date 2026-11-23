@@ -173,7 +173,9 @@ public sealed class AppRouter
     private static void Watch(Task call) =>
         call.ContinueWith(
             failed => Environment.FailFast("a Helper call failed", failed.Exception),
-            TaskContinuationOptions.OnlyOnFaulted);
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
 }
 
 /// <summary>The running app's facts for the runtime.</summary>

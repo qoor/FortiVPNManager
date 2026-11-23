@@ -23,7 +23,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
     private readonly NamedPipeClientStream _pipe;
     private readonly ulong _id;
     private readonly HelperInbound _inbound;
-    private readonly object _writeGate = new();
+    private readonly Lock _writeGate = new();
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource<HelperPipe.Message>> _pending = new();
     private ulong _lastRequest;
     private int _closed;
