@@ -1,4 +1,5 @@
-﻿using FortiVPNManager.OsIntegration;
+﻿using System.Diagnostics.CodeAnalysis;
+using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Dispatching;
@@ -14,6 +15,7 @@ namespace FortiVPNManager.App;
 /// The app lives in the notification area; quitting goes through the runtime, which ends the tunnel
 /// and the log before it approves.
 /// </summary>
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "The XAML compiler generates the other part of App as public.")]
 public sealed partial class App : Application, IDisposable
 {
     private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
