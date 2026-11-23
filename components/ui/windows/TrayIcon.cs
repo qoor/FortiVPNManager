@@ -51,18 +51,20 @@ public sealed partial class TrayIcon : IDisposable
         };
         Update();
         _icon.ForceCreate(false);
-        ui.Changed += Update;
+        ui.Changed += OnChanged;
     }
 
     public void Dispose()
     {
-        _ui.Changed -= Update;
+        _ui.Changed -= OnChanged;
         _icon.Dispose();
         foreach (Icon stateIcon in _stateIcons.Values)
         {
             stateIcon.Dispose();
         }
     }
+
+    private void OnChanged(object? sender, EventArgs e) => Update();
 
     private void Update()
     {

@@ -39,10 +39,10 @@ public class SettingsSearchTests
     public void MatchesLikeSystemSettings(string term, string name, bool matches) =>
         Assert.Equal(matches, SettingsSearchMatch.Matches(term, name));
 
-    private static List<SearchResult> Search(string text, Func<SearchCondition, bool>? isShown = null) =>
+    private static IReadOnlyList<SearchResult> Search(string text, Func<SearchCondition, bool>? isShown = null) =>
         SettingsSearch.Results(text, isShown ?? (_ => true));
 
-    private static List<string> Keys(List<SearchResult> results, SettingsPane pane) =>
+    private static List<string> Keys(IReadOnlyList<SearchResult> results, SettingsPane pane) =>
         [.. results.Where(result => result.Pane == pane && result.Item is not null).Select(result => result.Item!.Key)];
 
     [Fact]
@@ -56,7 +56,7 @@ public class SettingsSearchTests
     [Fact]
     public void APaneMatchedByItsNameIsTheResultItself()
     {
-        List<SearchResult> results = Search("exception rules");
+        IReadOnlyList<SearchResult> results = Search("exception rules");
         Assert.Contains(new SearchResult(SettingsPane.ExceptionRules, null), results);
         Assert.Empty(Keys(results, SettingsPane.ExceptionRules));
     }

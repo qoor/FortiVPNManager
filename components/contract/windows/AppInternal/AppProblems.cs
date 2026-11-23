@@ -133,8 +133,10 @@ public enum ValueKind
 {
     Mapping,
     Sequence,
-    String,
-    Integer,
+    [JsonStringEnumMemberName("string")]
+    Text,
+    [JsonStringEnumMemberName("integer")]
+    WholeNumber,
     Boolean,
 }
 

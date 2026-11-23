@@ -126,7 +126,7 @@ public partial class StringsTests
     private static readonly UpdateProgressFailed s_downloadFailed = new(new InstallFailureDownloadFailed("timed out"));
 
     private static UpdateStatusAvailable Available(Dictionary<string, IReadOnlyList<string>>? titles = null) =>
-        new("26.2.0", "https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0", 30_800_000, titles ?? []);
+        new("26.2.0", new Uri("https://github.com/qoor/FortiVPNManager/releases/tag/v26.2.0"), 30_800_000, titles ?? []);
 
     private static AutoUpdateSection Section(UpdateStatus status, UpdateProgress? progress = null) =>
         s_updateSection with { Status = status, Progress = progress ?? new UpdateProgressIdle() };

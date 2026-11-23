@@ -843,7 +843,7 @@ public sealed record UpdateStatusUpToDate : UpdateStatus;
 
 public sealed record UpdateStatusAvailable(
     string Version,
-    string ReleasePageUrl,
+    Uri ReleasePageUrl,
     ulong InstallerBytes,
     IReadOnlyDictionary<string, IReadOnlyList<string>> ReleaseNoteTitles) : UpdateStatus;
 

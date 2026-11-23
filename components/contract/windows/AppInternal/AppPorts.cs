@@ -39,7 +39,7 @@ public sealed record PortRequestPrimaryRouter : PortRequest;
 
 public sealed record PortRequestScreenState : PortRequest;
 
-public sealed record PortRequestOpenBrowser(string Url) : PortRequest;
+public sealed record PortRequestOpenBrowser(Uri Url) : PortRequest;
 
 public sealed record PortRequestLoginItemRegistration : PortRequest;
 

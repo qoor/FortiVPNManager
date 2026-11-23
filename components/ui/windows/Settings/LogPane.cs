@@ -155,8 +155,9 @@ internal sealed class LogPane : IPane, IDisposable
         return true;
     }
 
-    private void Appended(IReadOnlyList<LogLine> lines)
+    private void Appended(object? sender, LogAppendedEventArgs e)
     {
+        IReadOnlyList<LogLine> lines = e.Lines;
         if (!_drawn)
         {
             // Loaded draws every line.

@@ -157,10 +157,9 @@ public sealed class AppRouter
     }
 
     /// <summary>The default browser, for web addresses only.</summary>
-    private static bool OpenBrowser(string url)
+    private static bool OpenBrowser(Uri uri)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
-            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        if (!uri.IsAbsoluteUri || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
             return false;
         }

@@ -103,8 +103,8 @@ public static class SettingsFileText
     {
         ValueKind.Mapping => L("It must be nested entries in 'key: value' form"),
         ValueKind.Sequence => L("It must be a list (e.g. [] or '- value' lines)"),
-        ValueKind.String => L("It must be a string"),
-        ValueKind.Integer => L("It must be an unquoted integer"),
+        ValueKind.Text => L("It must be a string"),
+        ValueKind.WholeNumber => L("It must be an unquoted integer"),
         ValueKind.Boolean => L("It must be an unquoted true or false"),
         _ => throw new InvalidOperationException($"unknown value kind {kind}"),
     };

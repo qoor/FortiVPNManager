@@ -73,10 +73,10 @@ public sealed class AppUi
     public TimeStyle Time => TimeStyle.Current(Now);
 
     /// <summary>A section changed or the clock ticked.</summary>
-    public event Action? Changed;
+    public event EventHandler? Changed;
 
     /// <summary>Lines were added to the log.</summary>
-    public event Action<IReadOnlyList<LogLine>>? LogAppended;
+    public event EventHandler<LogAppendedEventArgs>? LogAppended;
 
     /// <summary>The settings window, made when it is needed while none is open; closing releases it.</summary>
     public SettingsWindow Settings
@@ -146,13 +146,13 @@ public sealed class AppUi
             default:
                 throw new InvalidOperationException($"unknown section {section}");
         }
-        Changed?.Invoke();
+        Changed?.Invoke(this, EventArgs.Empty);
     });
 
     public void AppendLog(IReadOnlyList<LogLine> lines) => _dispatcher.TryEnqueue(() =>
     {
         Log.Append(lines);
-        LogAppended?.Invoke(lines);
+        LogAppended?.Invoke(this, new LogAppendedEventArgs(lines));
     });
 
     public void PostNotification(UserNotification notification) => _dispatcher.TryEnqueue(() =>
@@ -175,6 +175,11 @@ public sealed class AppUi
         {
             _ticker.Interval = TimeSpan.FromSeconds(30);
         }
-        Changed?.Invoke();
+        Changed?.Invoke(this, EventArgs.Empty);
     }
+}
+
+public sealed class LogAppendedEventArgs(IReadOnlyList<LogLine> lines) : EventArgs
+{
+    public IReadOnlyList<LogLine> Lines { get; } = lines;
 }

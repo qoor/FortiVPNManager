@@ -160,7 +160,7 @@ internal sealed class UpdatePane : IPane
         _footnote.Visible(settled && available is not null);
         if (settled && available is not null)
         {
-            _releasePage.NavigateUri = new Uri(available.ReleasePageUrl);
+            _releasePage.NavigateUri = available.ReleasePageUrl;
             ShowNotes(available.ReleaseNotes() ?? []);
         }
     }

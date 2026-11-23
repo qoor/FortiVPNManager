@@ -148,7 +148,7 @@ public sealed partial class PanePage : Page
         this._ui = ui;
         Pane = pane;
         Refresh();
-        ui.Changed += Refresh;
+        ui.Changed += OnChanged;
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -164,12 +164,14 @@ public sealed partial class PanePage : Page
     internal void Leave()
     {
         FinishTyping();
-        _ui?.Changed -= Refresh;
+        _ui?.Changed -= OnChanged;
         (_content as IDisposable)?.Dispose();
         _content = null;
     }
 
     private void Refresh() => _content?.Refresh();
+
+    private void OnChanged(object? sender, EventArgs e) => Refresh();
 
     /// <summary>
     /// Below 560 px, about the narrow window's width, the buttons move under the title, where the Log

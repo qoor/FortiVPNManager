@@ -57,7 +57,7 @@ public static class SettingsSearch
     public static IReadOnlyList<SearchItem> ItemsIn(SettingsPane pane) => s_index[pane];
 
     /// <summary>The results for <paramref name="text"/>, in the panes' order; none for an empty search.</summary>
-    public static List<SearchResult> Results(string text, Func<SearchCondition, bool> isShown)
+    public static IReadOnlyList<SearchResult> Results(string text, Func<SearchCondition, bool> isShown)
     {
         ArgumentNullException.ThrowIfNull(text);
         var terms = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(term => new SettingsSearchMatch.Term(term)).ToList();

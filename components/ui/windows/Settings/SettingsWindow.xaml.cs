@@ -192,7 +192,7 @@ public sealed partial class SettingsWindow : Window
             sender.ItemsSource = null;
             return;
         }
-        List<SearchResult> results = SettingsSearch.Results(sender.Text, _ui.IsShown);
+        IReadOnlyList<SearchResult> results = SettingsSearch.Results(sender.Text, _ui.IsShown);
         // The input method finishes the syllable being composed when Down moves into the list, which
         // reports the text again; the same results stay as they are, so the line just chosen stays chosen.
         var shown = (sender.ItemsSource as List<object>)?.Select(line => (line as FrameworkElement)?.Tag as SearchResult).ToList();
@@ -226,8 +226,9 @@ public sealed partial class SettingsWindow : Window
     /// <summary>A chosen result, or Enter for the first one; the keyboard stays in the box after Enter.</summary>
     private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
+        IReadOnlyList<SearchResult> results = SettingsSearch.Results(sender.Text, _ui.IsShown);
         SearchResult? result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
-            ?? SettingsSearch.Results(sender.Text, _ui.IsShown).FirstOrDefault();
+            ?? (results.Count > 0 ? results[0] : null);
         if (result is null)
         {
             return;
