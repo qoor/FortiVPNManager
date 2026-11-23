@@ -6,9 +6,6 @@ use std::time::SystemTime;
 use fvm_contract::app_helper::HelperStatus;
 use fvm_contract::app_internal::port::{HelperChannelFailure, RegistrationError};
 
-use super::machine::{AttemptReason, ConnectionManager, Phase, Stage, Step};
-use super::{Effect, policy};
-
 /// What the runtime gathered for a readiness check. Secrets are only asked about, never read,
 /// so the OS asks the user for nothing.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -62,127 +59,16 @@ pub(super) enum SetupNeed {
 /// approval settings opened, so the approval shows without the user doing anything.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) struct FollowApproval {
-    until: SystemTime,
+    pub(super) until: SystemTime,
     pub(super) next: SystemTime,
 }
 
 #[derive(Default)]
 pub(super) struct Readiness {
     /// The setup the last readiness check found missing; `None` before the first check.
-    setup_needed: Option<Vec<SetupNeed>>,
+    pub(super) setup_needed: Option<Vec<SetupNeed>>,
     pub(super) helper: Option<HelperFacts>,
     pub(super) register_error: Option<RegistrationError>,
     pub(super) follow_approval: Option<FollowApproval>,
     pub(super) settings_open_decided: bool,
-}
-
-impl ReadinessFacts {
-    fn missing(&self, app_build: &str) -> Vec<SetupNeed> {
-        let checks = [
-            (self.config_valid, SetupNeed::ConfigFile),
-            (self.account_complete, SetupNeed::AccountDetails),
-            (self.secrets.vpn_password, SetupNeed::VpnPassword),
-            (self.secrets.gmail_credential, SetupNeed::GmailCredential),
-        ];
-        let mut missing: Vec<SetupNeed> = checks
-            .into_iter()
-            .filter(|(present, _)| !present)
-            .map(|(_, need)| need)
-            .collect();
-        match &self.helper {
-            HelperFacts::NotRegistered | HelperFacts::RequiresApproval => {
-                missing.push(SetupNeed::HelperApproval);
-            }
-            HelperFacts::Unreachable(_) => missing.push(SetupNeed::HelperVersion),
-            HelperFacts::Answered { build, .. } if build != app_build => {
-                missing.push(SetupNeed::HelperVersion);
-            }
-            HelperFacts::Answered { .. } => {}
-        }
-        missing
-    }
-}
-
-impl ConnectionManager {
-    /// Asks once per input however many reasons came together.
-    pub(super) fn check_readiness(&mut self) {
-        if !self.effects.contains(&Effect::CheckReadiness) {
-            self.effects.push(Effect::CheckReadiness);
-        }
-    }
-
-    pub(super) fn readiness_checked(&mut self, facts: ReadinessFacts) {
-        let missing = facts.missing(&self.app_build);
-        self.readiness.helper = Some(facts.helper);
-        let first = self.readiness.setup_needed.is_none();
-        self.readiness.setup_needed = Some(missing.clone());
-        // Settings open by themselves once per launch, for the first check only: setup that
-        // becomes required later in the run opens nothing.
-        if first && !self.readiness.settings_open_decided {
-            self.readiness.settings_open_decided = true;
-            if !missing.is_empty() {
-                self.effects.push(Effect::OpenSettings);
-            }
-        }
-
-        match &mut self.phase {
-            Phase::Connecting(attempt) if attempt.stage == Stage::CheckingReadiness => {
-                if missing.is_empty() {
-                    self.run_now(Step::PrepareOtp);
-                } else if let Some(session) = attempt.replacing.take() {
-                    self.replacement_failed(session);
-                } else {
-                    self.phase = Phase::SetupRequired(missing);
-                }
-            }
-            Phase::Idle
-            | Phase::SetupRequired(_)
-            | Phase::WaitingRetry { .. }
-            | Phase::WaitingNetwork { .. } => {
-                if !missing.is_empty() {
-                    self.phase = Phase::SetupRequired(missing);
-                } else if matches!(self.phase, Phase::SetupRequired(_)) {
-                    if self.wants_connection {
-                        self.begin_attempt(AttemptReason::SetupCompleted, false, true);
-                    } else {
-                        self.phase = Phase::Idle;
-                    }
-                }
-            }
-            // Applies to the next attempt; a failure is cleared only by the user.
-            Phase::Connecting(_)
-            | Phase::Connected(_)
-            | Phase::Disconnecting(_)
-            | Phase::Failed(_) => {}
-        }
-    }
-
-    pub(super) fn helper_registered(&mut self, result: Result<(), RegistrationError>) {
-        match result {
-            Ok(()) => {
-                self.readiness.register_error = None;
-                self.follow_helper_approval();
-            }
-            Err(error) => self.readiness.register_error = Some(error),
-        }
-    }
-
-    pub(super) fn follow_helper_approval(&mut self) {
-        self.readiness.follow_approval = Some(FollowApproval {
-            until: self.now + policy::APPROVAL_FOLLOW,
-            next: self.now + policy::APPROVAL_FOLLOW_POLL,
-        });
-    }
-
-    pub(super) fn approval_follow_due(&mut self) {
-        self.check_readiness();
-        self.readiness.follow_approval = self
-            .readiness
-            .follow_approval
-            .filter(|follow| self.now < follow.until)
-            .map(|follow| FollowApproval {
-                next: self.now + policy::APPROVAL_FOLLOW_POLL,
-                ..follow
-            });
-    }
 }

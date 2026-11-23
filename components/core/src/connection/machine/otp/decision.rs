@@ -11,7 +11,7 @@ use crate::connection::{Effect, OtpFailure};
 
 /// How an attempt's open OTP session closes.
 pub(in crate::connection::machine) struct OtpClose {
-    effect: Effect,
+    effect: Box<Effect>,
     /// The next login waits for the unused code email the session goes on looking for.
     stale: Option<StaleOtp>,
 }
@@ -91,20 +91,20 @@ impl Attempt {
         }
         Some(match self.credentials_sent_at {
             Some(sent_at) if search && self.milestone <= Some(Milestone::OtpPrompted) => OtpClose {
-                effect: Effect::TrashStaleOtp {
+                effect: Box::new(Effect::TrashStaleOtp {
                     attempt: self.id.clone(),
                     since: self.otp_prompted_at.unwrap_or(sent_at),
-                },
+                }),
                 stale: Some(StaleOtp {
                     attempt: self.id.clone(),
                     until: now + policy::STALE_OTP_WAIT,
                 }),
             },
             _ => OtpClose {
-                effect: Effect::CloseOtpSession {
+                effect: Box::new(Effect::CloseOtpSession {
                     attempt: self.id.clone(),
                     check_spam,
-                },
+                }),
                 stale: None,
             },
         })
@@ -113,7 +113,7 @@ impl Attempt {
 
 impl OtpClose {
     pub(super) fn into_parts(self) -> (Effect, Option<StaleOtp>) {
-        (self.effect, self.stale)
+        (*self.effect, self.stale)
     }
 }
 

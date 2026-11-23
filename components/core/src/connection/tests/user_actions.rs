@@ -675,7 +675,7 @@ fn the_vpn_is_wanted_while_connecting_connected_or_about_to_retry() {
     assert_eq!(after(&h), Some(AfterStop::Idle));
     assert!(!h.cm.wants_vpn());
 
-    let until = h.cm.now + secs(60.0);
+    let until = h.now + secs(60.0);
     let phases = [
         (
             Phase::WaitingRetry {

@@ -4,24 +4,50 @@
 //! Timers, the activity hold and saving the ledger follow from the state after each input, so no
 //! transition can forget to cancel a timer or save the ledger.
 
-mod attempts;
+mod attempts {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
 mod finish {
     pub(super) mod action;
     pub(super) mod decision;
 }
-mod helper;
+mod helper {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
 mod ledger {
     pub(super) mod action;
     pub(super) mod decision;
 }
-mod otp;
-mod outcomes;
-mod presence;
+mod otp {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
+mod outcomes {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
+mod presence {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
+mod readiness {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
+mod requests {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
+mod system {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
 mod timers {
     pub(super) mod action;
-    pub(in crate::connection::machine) mod decision;
+    pub(super) mod decision;
 }
-mod wake;
 
 use std::collections::BTreeMap;
 use std::mem;
@@ -35,14 +61,14 @@ use jiff::tz::TimeZone;
 
 use super::classify::Outcome;
 use super::ledger::{Failure, FailureLedger};
-use super::policy;
 use super::readiness::{Readiness, SetupNeed};
-use super::system::{PathSnapshot, SystemObservation, Underlay};
+use super::system::{PathSnapshot, SystemObservation, Underlay, WakeObservation};
 use super::view::Shown;
-use super::{
-    ConnectionSettings, Effect, Input, Launch, Note, OtpFailure, Settings, Startup, TimerKind,
-    VpnAccount,
-};
+use super::{Effect, Input, Note, OtpFailure, Settings, Startup, TimerKind, VpnAccount};
+
+use attempts::decision::{attempt_abort, replacement_failure};
+use presence::decision::next_lock_poll;
+use readiness::decision::{follow_approval, registration};
 
 const SECONDS_FROM_1970_TO_2026: u64 = 1_767_225_600;
 
@@ -53,8 +79,6 @@ pub struct ConnectionManager {
     last_session: Option<SessionId>,
     pub(super) settings: Settings,
     pub(super) time_zone: TimeZone,
-    /// The time of the input being handled, or of the last one.
-    pub(super) now: SystemTime,
     /// The effects of the input being handled.
     pub(super) effects: Vec<Effect>,
 
@@ -332,7 +356,25 @@ pub(super) enum Step {
     StaleOtpWaitOver(Note),
     PrepareOtp,
     CheckReadiness,
+    ConnectRequested(AttemptReason),
     StoppedForUpdate,
+    /// A report of the screen, the displays or the sleep, as of `at` or else the input's time.
+    UpdatePresence(Option<SystemTime>),
+    PresenceChanged {
+        away: bool,
+        at: SystemTime,
+    },
+    RejudgeHeldReconnect,
+    ScheduleChanged,
+    ResetScheduleBoundary,
+    WillSleep,
+    WakeLookDue,
+    WakeSettled(WakeObservation),
+    ReportPath,
+    PathChanged {
+        snapshot: PathSnapshot,
+        routing_incomplete: bool,
+    },
 }
 
 impl Step {
@@ -356,7 +398,6 @@ impl ConnectionManager {
             last_session: None,
             settings: startup.settings,
             time_zone: startup.time_zone,
-            now: SystemTime::UNIX_EPOCH,
             effects: Vec::new(),
             wants_connection: false,
             phase: Phase::Idle,
@@ -388,11 +429,10 @@ impl ConnectionManager {
 
     /// Handles one input taken at `now` and returns what to carry out, in order.
     pub fn handle(&mut self, input: Input, now: SystemTime) -> Vec<Effect> {
-        if self.quit == Quit::Terminated {
+        if !self.takes_inputs() {
             return Vec::new();
         }
         let now = self.input_time(&input, now);
-        self.now = now;
         let marks = self.note_marks();
         let mut steps = vec![Step::Input(input)];
         while let Some(step) = steps.pop() {
@@ -403,7 +443,7 @@ impl ConnectionManager {
         self.finish(finish)
     }
 
-    /// Judges one step, then carries it out.
+    /// Judges one step at `now`, then carries it out; returns the steps that follow, in order.
     fn run_step(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
         match step {
             Step::Input(input) => self.run_input(input, now),
@@ -414,10 +454,68 @@ impl ConnectionManager {
 
     fn run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
         match input {
-            Input::TimerFired(timer) => {
-                let due = self.due_timer(timer);
-                self.fire_timer(due)
+            Input::Launched(launch) => {
+                let launched = self.launched(launch, now);
+                self.launch(launched)
             }
+            Input::SettingsChanged(settings) => {
+                let change = self.settings_change(settings, now);
+                self.change_settings(change)
+            }
+            Input::TimeZoneChanged(time_zone) => self.change_time_zone(time_zone),
+            Input::Connect => {
+                if !self.takes_user_requests() {
+                    return Vec::new();
+                }
+                vec![Step::ConnectRequested(AttemptReason::User)]
+            }
+            Input::Disconnect => {
+                if !self.takes_user_requests() {
+                    return Vec::new();
+                }
+                let request = self.disconnect_request();
+                self.disconnect(request)
+            }
+            Input::ReconnectNow => {
+                if !self.takes_user_requests() {
+                    return Vec::new();
+                }
+                let request = self.reconnect_now_request();
+                self.reconnect_now(request)
+            }
+            Input::QuitRequested => {
+                let request = self.quit_request(now);
+                self.quit(request)
+            }
+            Input::StopForUpdate => {
+                let request = self.update_stop_request(now);
+                self.stop_for_update(request)
+            }
+            Input::UpdateFailed { reconnect } => {
+                let failure = self.update_failure();
+                self.fail_update(failure, reconnect)
+            }
+            Input::SettingsOpened | Input::RecheckReadiness => vec![Step::CheckReadiness],
+            Input::AppActivated => self.app_activated(),
+            Input::HelperRegistered(result) => {
+                self.register(registration(result, now));
+                Vec::new()
+            }
+            Input::HelperApprovalSettingsOpened => {
+                self.follow_approval(follow_approval(now));
+                Vec::new()
+            }
+            Input::ReadinessChecked(facts) => {
+                let checked = self.readiness_checked(facts);
+                self.take_readiness(checked)
+            }
+            input => self.run_run_input(input, now),
+        }
+    }
+
+    /// The inputs about the runs and their OTP sessions.
+    fn run_run_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
+        match input {
             Input::Helper(HelperEvent { attempt_id, kind }) => match kind {
                 HelperEventKind::Milestone {
                     milestone,
@@ -462,10 +560,46 @@ impl ConnectionManager {
                 let trashed = self.stale_otp_session(&attempt);
                 self.end_stale_otp_wait(trashed)
             }
-            input => {
-                self.dispatch(input);
-                Vec::new()
+            input => self.run_system_input(input, now),
+        }
+    }
+
+    /// The inputs from the OS and the timers.
+    fn run_system_input(&mut self, input: Input, now: SystemTime) -> Vec<Step> {
+        match input {
+            Input::TimerFired(timer) => {
+                let due = self.due_timer(timer);
+                self.fire_timer(due)
             }
+            Input::WillSleep { at } => self.sleep_reported(at),
+            Input::DidWake => {
+                let wake = self.wake(now);
+                self.wake_up(wake)
+            }
+            Input::ScreenLocked { at } => self.screen_reported(Some(true), None, Some(at)),
+            Input::ScreenUnlocked => self.screen_reported(Some(false), None, None),
+            Input::DisplaysSlept { at } => self.screen_reported(None, Some(true), Some(at)),
+            Input::DisplaysWoke => self.displays_woke(),
+            Input::ScreenState {
+                locked,
+                displays_asleep,
+            } => self.screen_reported(Some(locked), Some(displays_asleep), None),
+            Input::NetworkPathChanged {
+                satisfied,
+                interfaces,
+            } => {
+                let report = self.path_report(satisfied, now);
+                self.record_path(satisfied, interfaces, report)
+            }
+            Input::RouterRead { present } => {
+                let look = self.router_answer(present, now);
+                self.look_after_wake(look)
+            }
+            Input::NetworkProbed(result) => {
+                let answer = self.probe_answer(&result);
+                self.take_probe_answer(answer)
+            }
+            _ => unreachable!("routed by run_input and run_run_input"),
         }
     }
 
@@ -489,16 +623,34 @@ impl ConnectionManager {
                 let due = self.proactive_reconnect_due(now);
                 self.renew_when_due(due)
             }
-            kind => {
-                self.timer_due(kind);
+            TimerKind::QuitDeadline => {
+                let ends_quit = self.quit_deadline_ends_quit();
+                self.end_at_quit_deadline(ends_quit)
+            }
+            TimerKind::Schedule => {
+                let due = self.boundary_due(now);
+                self.pass_boundary(due)
+            }
+            TimerKind::AwayLimit => {
+                let limit = self.away_limit(now);
+                self.apply_away_limit(limit);
                 Vec::new()
+            }
+            TimerKind::PathSettle => self.path_settled(),
+            TimerKind::WakeSettle => vec![Step::WakeLookDue],
+            TimerKind::LockPoll => {
+                self.poll_lock(next_lock_poll(now));
+                Vec::new()
+            }
+            TimerKind::ApprovalFollow => {
+                let follow = self.approval_follow(now);
+                self.approval_follow_due(follow)
             }
         }
     }
 
     fn run_transition(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
         match step {
-            Step::Input(_) | Step::TimerDue(_) => unreachable!("run by run_step"),
             Step::BeginAttempt {
                 reason,
                 cert_retry_used,
@@ -519,7 +671,7 @@ impl ConnectionManager {
                 self.end_replacement(end)
             }
             Step::ReplacementFailed(session) => {
-                let failure = attempts::decision::replacement_failure(session, now);
+                let failure = replacement_failure(session, now);
                 self.fail_replacement(failure)
             }
             Step::AbortAttempt {
@@ -527,7 +679,7 @@ impl ConnectionManager {
                 stop,
                 after,
             } => {
-                let abort = attempts::decision::attempt_abort(*attempt, stop, after, now);
+                let abort = attempt_abort(*attempt, stop, after, now);
                 self.abort(abort)
             }
             Step::ApplyOutcome(outcome) => self.outcome_steps(outcome),
@@ -568,383 +720,73 @@ impl ConnectionManager {
                 self.prepare_otp(preparation);
                 Vec::new()
             }
+            step => self.run_later_transition(step, now),
+        }
+    }
+
+    fn run_later_transition(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
+        match step {
             Step::CheckReadiness => {
-                self.check_readiness();
+                let asked = self.readiness_check_asked();
+                self.ask_readiness(asked);
                 Vec::new()
+            }
+            Step::ConnectRequested(reason) => {
+                let request = self.connect_request();
+                self.connect(request, reason)
             }
             Step::StoppedForUpdate => {
-                self.stopped_for_update();
+                let complete = self.update_stop_complete();
+                self.report_stopped_for_update(complete);
                 Vec::new()
             }
-        }
-    }
-
-    /// Runs `step` and what follows from it at once, for transitions not split yet.
-    pub(in crate::connection) fn run_now(&mut self, step: Step) {
-        self.run_all(vec![step]);
-    }
-
-    fn run_all(&mut self, steps: Vec<Step>) {
-        let mut steps: Vec<Step> = steps.into_iter().rev().collect();
-        while let Some(step) = steps.pop() {
-            let next = self.run_step(step, self.now);
-            steps.extend(next.into_iter().rev());
-        }
-    }
-
-    fn dispatch(&mut self, input: Input) {
-        match input {
-            Input::Launched(launch) => self.launched(launch),
-            Input::SettingsChanged(settings) => self.settings_changed(settings),
-            Input::TimeZoneChanged(time_zone) => self.time_zone_changed(time_zone),
-            Input::Connect | Input::Disconnect | Input::ReconnectNow
-                if self.update_stop.is_some() => {}
-            Input::Connect => self.connect_requested(AttemptReason::User),
-            Input::Disconnect => self.disconnect_requested(),
-            Input::ReconnectNow => self.reconnect_now_requested(),
-            Input::QuitRequested => self.quit_requested(),
-            Input::StopForUpdate => self.stop_for_update(),
-            Input::UpdateFailed { reconnect } => self.update_failed(reconnect),
-            Input::SettingsOpened | Input::RecheckReadiness => self.check_readiness(),
-            Input::AppActivated => {
-                self.effects.push(Effect::ReadScreenState);
-                self.check_readiness();
+            Step::UpdatePresence(at) => {
+                let update = self.presence_update(at, now);
+                self.update_presence(update)
             }
-            Input::HelperRegistered(result) => self.helper_registered(result),
-            Input::HelperApprovalSettingsOpened => self.follow_helper_approval(),
-            Input::ReadinessChecked(facts) => self.readiness_checked(facts),
-            Input::OtpSessionReady(_)
-            | Input::OtpSessionFailed(..)
-            | Input::OtpCodeFound(..)
-            | Input::OtpFoundInSpam(_)
-            | Input::StaleOtpTrashed(_)
-            | Input::Helper(_)
-            | Input::RunRejected(..)
-            | Input::HelperConnectionLost
-            | Input::TimerFired(_) => unreachable!("runs as its own step"),
-            Input::WillSleep { at } => self.will_sleep_reported(at),
-            Input::DidWake => self.did_wake_reported(),
-            Input::ScreenLocked { at } => {
-                self.system.screen_locked = true;
-                self.update_presence(at);
+            Step::PresenceChanged { away, at } => {
+                let change = self.presence_change(away, at, now);
+                self.change_presence(change)
             }
-            Input::ScreenUnlocked => {
-                self.system.screen_locked = false;
-                self.update_presence(self.now);
+            Step::RejudgeHeldReconnect => self.held_reconnect(),
+            Step::ScheduleChanged => {
+                let change = self.schedule_change(now);
+                self.change_schedule(change)
             }
-            Input::DisplaysSlept { at } => {
-                self.system.displays_asleep = true;
-                self.update_presence(at);
+            Step::ResetScheduleBoundary => {
+                let boundary = self.schedule_boundary_at(now);
+                self.reset_schedule_boundary(boundary);
+                Vec::new()
             }
-            Input::DisplaysWoke => {
-                // Whether the screen is locked behind the displays decides; the answer judges.
-                self.system.displays_asleep = false;
-                self.effects.push(Effect::ReadScreenState);
+            Step::WillSleep => {
+                let sleep = self.sleep(now);
+                self.go_to_sleep(sleep)
             }
-            Input::ScreenState {
-                locked,
-                displays_asleep,
+            Step::WakeLookDue => {
+                let look = self.wake_look(now);
+                self.look_after_wake(look)
+            }
+            Step::WakeSettled(observation) => {
+                let settled = self.wake_settled(&observation, now);
+                self.settle_wake(settled)
+            }
+            Step::ReportPath => {
+                let look = self.path_look();
+                self.look_at_path(look)
+            }
+            Step::PathChanged {
+                snapshot,
+                routing_incomplete,
             } => {
-                self.system.screen_locked = locked;
-                self.system.displays_asleep = displays_asleep;
-                self.update_presence(self.now);
+                let after = self.after_path(&snapshot, routing_incomplete, now);
+                self.change_path(snapshot, after)
             }
-            Input::NetworkPathChanged {
-                satisfied,
-                interfaces,
-            } => self.network_path_changed(satisfied, interfaces),
-            Input::RouterRead { present } => self.router_read(present),
-            Input::NetworkProbed(result) => self.network_probed(&result),
+            _ => unreachable!("routed by run_step and run_transition"),
         }
     }
 
     fn take_phase(&mut self) -> Phase {
         mem::replace(&mut self.phase, Phase::Idle)
-    }
-
-    // MARK: Launch and settings
-
-    fn launched(&mut self, launch: Launch) {
-        if let Some(restored) = launch.restored_ledger
-            && restored.account_key == self.ledger.account_key
-        {
-            self.saved_ledger = restored.clone();
-            self.ledger = restored;
-        }
-        self.ledger.recent_auth_attempts = self.ledger.kept_attempts(self.now);
-        self.reset_schedule_boundary();
-        self.effects.push(Effect::ReadScreenState);
-        if launch.import_report_shown {
-            self.readiness.settings_open_decided = true;
-            self.effects.push(Effect::OpenSettings);
-        }
-
-        if !launch.auto_connect || !self.within_schedule(self.now) {
-            self.wants_connection = false;
-            self.check_readiness();
-        } else {
-            self.wants_connection = true;
-            if self.ledger.consecutive_auth_failures >= policy::MAX_CONSECUTIVE_AUTH_FAILURES {
-                // The retries had stopped before the relaunch; only the user clears that.
-                let failure = self
-                    .ledger
-                    .last_auth_failure
-                    .unwrap_or(Failure::AuthenticationRejected);
-                self.fail(failure);
-            } else {
-                self.begin_attempt(AttemptReason::Launch, false, false);
-            }
-        }
-        if launch.connected_before_update {
-            self.connect_requested(AttemptReason::User);
-        }
-    }
-
-    fn settings_changed(&mut self, settings: Settings) {
-        let old = mem::replace(&mut self.settings, settings);
-        if self.settings.account != old.account {
-            self.account_changed(&old.account);
-        }
-        if self.settings.connection != old.connection {
-            self.connection_settings_changed(&old.connection);
-        }
-        if self.settings.otp_method != old.otp_method {
-            self.check_readiness();
-        }
-    }
-
-    fn account_changed(&mut self, old: &VpnAccount) {
-        let account = &mut self.settings.account;
-        if super::certs::gateway_change_drops_certs(old, account) {
-            // The next connection learns the new gateway's certificate.
-            account.trusted_certs.clear();
-            self.effects.push(Effect::ClearTrustedCerts);
-        }
-        if account.host != old.host {
-            self.system.gateway_ip = None;
-        }
-        let key = account.ledger_key();
-        if key != self.ledger.account_key {
-            self.ledger = FailureLedger::new(key);
-        }
-        if !self.settings.account.same_identity(old) {
-            self.check_readiness();
-        }
-    }
-
-    fn connection_settings_changed(&mut self, old: &ConnectionSettings) {
-        let new = &self.settings.connection;
-        let replans = new.session_max_minutes != old.session_max_minutes
-            || new.proactive_reconnect != old.proactive_reconnect
-            || new.proactive_margin_minutes != old.proactive_margin_minutes;
-        if new.schedule != old.schedule {
-            self.schedule_changed();
-        }
-        if replans && let Phase::Connected(session) = &mut self.phase {
-            session.planned_reconnect =
-                policy::planned_reconnect(session.since, &self.settings.connection, self.now);
-            if session
-                .renewal
-                .is_some_and(|renewal| renewal.next_try.is_none())
-            {
-                session.renewal = None;
-            }
-        }
-    }
-
-    fn time_zone_changed(&mut self, time_zone: TimeZone) {
-        self.time_zone = time_zone;
-        self.reset_schedule_boundary();
-        self.rejudge_held_reconnect();
-    }
-
-    // MARK: User requests
-
-    /// Connect, or the start of the scheduled hours, which acts the same.
-    fn connect_requested(&mut self, reason: AttemptReason) {
-        match self.take_phase() {
-            Phase::Idle | Phase::SetupRequired(_) | Phase::Failed(_) => {
-                self.wants_connection = true;
-                self.reset_for_user_action();
-                self.begin_attempt(reason, false, false);
-            }
-            Phase::Disconnecting(mut stop) => {
-                self.wants_connection = true;
-                if stop.after == AfterStop::Idle {
-                    self.reset_for_user_action();
-                    stop.after = AfterStop::Reconnect(reason);
-                }
-                self.phase = Phase::Disconnecting(stop);
-            }
-            Phase::WaitingRetry {
-                reason: RetryReason::UserAway,
-                ..
-            } => {
-                self.reconnect_limits.reconnect_suspended = false;
-                self.begin_attempt(reason, false, false);
-            }
-            phase => {
-                self.reconnect_limits.reconnect_suspended = false;
-                self.phase = phase;
-            }
-        }
-    }
-
-    fn disconnect_requested(&mut self) {
-        self.wants_connection = false;
-        match self.take_phase() {
-            Phase::Failed(_) | Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } => {}
-            Phase::Connecting(attempt) => {
-                self.abort_attempt(*attempt, StopReason::UserDisconnect, AfterStop::Idle);
-            }
-            Phase::Connected(session) => {
-                self.stop_session(session, StopReason::UserDisconnect, AfterStop::Idle, None);
-            }
-            Phase::Disconnecting(mut stop) => {
-                if stop.after != AfterStop::Quit {
-                    stop.after = AfterStop::Idle;
-                }
-                self.phase = Phase::Disconnecting(stop);
-            }
-            phase @ (Phase::Idle | Phase::SetupRequired(_)) => self.phase = phase,
-        }
-    }
-
-    fn reconnect_now_requested(&mut self) {
-        match self.take_phase() {
-            Phase::Connected(session) => {
-                self.reset_for_user_action();
-                self.renew_now(session, AttemptReason::ReconnectNow);
-            }
-            Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } | Phase::Failed(_) => {
-                self.wants_connection = true;
-                self.reset_for_user_action();
-                self.begin_attempt(AttemptReason::ReconnectNow, false, false);
-            }
-            Phase::Connecting(mut attempt)
-                if attempt.replacing.is_some() && attempt.reason != AttemptReason::ReconnectNow =>
-            {
-                attempt.reason = AttemptReason::ReconnectNow;
-                let renewal = attempt
-                    .replacing
-                    .as_mut()
-                    .and_then(|session| session.renewal.as_mut())
-                    .expect("a replacement is prepared for a renewal");
-                renewal.reason = AttemptReason::ReconnectNow;
-                renewal.tries = 0;
-                renewal.later_failures = 0;
-                self.reset_for_user_action();
-                self.phase = Phase::Connecting(attempt);
-            }
-            // Restarting an attempt under way could waste an OTP or a login.
-            phase => self.phase = phase,
-        }
-    }
-
-    fn quit_requested(&mut self) {
-        self.wants_connection = false;
-        if self.quit == Quit::NotRequested {
-            self.quit = Quit::Requested { at: self.now };
-        }
-        match self.take_phase() {
-            Phase::Connecting(attempt) => {
-                self.abort_attempt(*attempt, StopReason::AppQuit, AfterStop::Quit);
-            }
-            Phase::Connected(session) => {
-                self.stop_session(session, StopReason::AppQuit, AfterStop::Quit, None);
-            }
-            Phase::Disconnecting(mut stop) => {
-                stop.after = AfterStop::Quit;
-                self.phase = Phase::Disconnecting(stop);
-            }
-            phase => {
-                self.phase = phase;
-                self.quit = Quit::Terminated;
-            }
-        }
-    }
-
-    fn stop_for_update(&mut self) {
-        if self.quit != Quit::NotRequested {
-            return;
-        }
-        self.wants_connection = false;
-        self.update_stop = Some(UpdateStop {
-            requested_at: self.now,
-            stopped: false,
-        });
-        match self.take_phase() {
-            Phase::Connecting(attempt) => {
-                self.abort_attempt(*attempt, StopReason::AppQuit, AfterStop::Update);
-            }
-            Phase::Connected(session) => {
-                self.stop_session(session, StopReason::AppQuit, AfterStop::Update, None);
-            }
-            Phase::Disconnecting(mut stop) => {
-                stop.after = AfterStop::Update;
-                self.phase = Phase::Disconnecting(stop);
-            }
-            Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } => {
-                self.settle_now(AfterStop::Update);
-            }
-            phase @ (Phase::Idle | Phase::SetupRequired(_) | Phase::Failed(_)) => {
-                self.phase = phase;
-                self.stopped_for_update();
-            }
-        }
-    }
-
-    fn stopped_for_update(&mut self) {
-        if let Some(stop) = &mut self.update_stop
-            && !stop.stopped
-        {
-            stop.stopped = true;
-            self.effects.push(Effect::StoppedForUpdate);
-        }
-    }
-
-    fn update_failed(&mut self, reconnect: bool) {
-        if self.quit != Quit::NotRequested {
-            return;
-        }
-        self.update_stop = None;
-        if let Phase::Disconnecting(stop) = &mut self.phase
-            && stop.after == AfterStop::Update
-        {
-            stop.after = AfterStop::Idle;
-        }
-        if reconnect {
-            self.connect_requested(AttemptReason::User);
-        }
-    }
-
-    fn reset_for_user_action(&mut self) {
-        self.ledger.reset_for_user_action();
-        self.reconnect_limits.network_failure_streak = 0;
-        self.reconnect_limits.forced_retry_used = false;
-        self.reconnect_limits.reconnect_suspended = false;
-    }
-
-    // MARK: Timers
-
-    fn timer_due(&mut self, kind: TimerKind) {
-        match kind {
-            TimerKind::AttemptDeadline
-            | TimerKind::Retry
-            | TimerKind::ProactiveReconnect
-            | TimerKind::OtpDeadline
-            | TimerKind::StaleOtp => unreachable!("run as their own steps"),
-            TimerKind::QuitDeadline if self.quit != Quit::NotRequested => {
-                self.quit = Quit::Terminated;
-            }
-            TimerKind::QuitDeadline => self.stopped_for_update(),
-            TimerKind::Schedule => self.schedule_boundary_due(),
-            TimerKind::AwayLimit => self.check_away_limit(),
-            TimerKind::PathSettle => self.path_settled(),
-            TimerKind::WakeSettle => self.wake_look_due(),
-            TimerKind::LockPoll => self.lock_poll_due(),
-            TimerKind::ApprovalFollow => self.approval_follow_due(),
-        }
     }
 }
 
