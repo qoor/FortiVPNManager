@@ -48,6 +48,10 @@ pub(super) fn network_backoff(failures: u32) -> Duration {
 
 /// When to replace a session that came up at `connected_at`: the session's maximum less the
 /// margin, never sooner than a minute from `now`. `None` when proactive reconnects are off.
+///
+/// # Panics
+///
+/// Panics if the margin is longer than the session, which the settings file never holds.
 pub(super) fn planned_reconnect(
     connected_at: SystemTime,
     settings: &ConnectionSettings,
@@ -56,15 +60,12 @@ pub(super) fn planned_reconnect(
     if !settings.proactive_reconnect {
         return None;
     }
-    let lifetime_minutes =
-        i64::from(settings.session_max_minutes) - i64::from(settings.proactive_margin_minutes);
-    let lifetime = Duration::from_secs(lifetime_minutes.unsigned_abs() * 60);
-    let planned = if lifetime_minutes >= 0 {
-        connected_at + lifetime
-    } else {
-        connected_at - lifetime
-    };
-    Some(planned.max(now + MINIMUM_PLANNED_LEAD))
+    let lifetime_minutes = settings
+        .session_max_minutes
+        .checked_sub(settings.proactive_margin_minutes)
+        .expect("the settings file keeps the margin under the session");
+    let lifetime = Duration::from_secs(u64::from(lifetime_minutes) * 60);
+    Some((connected_at + lifetime).max(now + MINIMUM_PLANNED_LEAD))
 }
 
 /// From `from` to `to`, nothing when `to` is earlier.

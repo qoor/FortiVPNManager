@@ -322,16 +322,6 @@ fn the_planned_reconnect_is_the_session_maximum_less_the_margin() {
     };
     let now = t0() + secs(20.0 * 60.0);
     assert_eq!(planned_reconnect(t0(), &short, now), Some(now + secs(60.0)));
-    // A margin longer than the session cannot give a time in the past either.
-    let silly = super::super::ConnectionSettings {
-        session_max_minutes: 5,
-        proactive_margin_minutes: 10,
-        ..connection_settings()
-    };
-    assert_eq!(
-        planned_reconnect(t0(), &silly, t0()),
-        Some(t0() + secs(60.0))
-    );
 }
 
 #[test]
