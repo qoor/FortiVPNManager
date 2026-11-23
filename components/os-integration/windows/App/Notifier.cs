@@ -1,4 +1,4 @@
-using Microsoft.Windows.AppNotifications;
+﻿using Microsoft.Windows.AppNotifications;
 using Microsoft.Windows.AppNotifications.Builder;
 
 namespace FortiVPNManager.App;

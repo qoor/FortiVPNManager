@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui.Text;

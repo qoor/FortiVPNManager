@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows.Input;
 using FortiVPNManager.Ui.Text;
 using H.NotifyIcon;

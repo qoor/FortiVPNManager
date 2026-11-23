@@ -1,4 +1,4 @@
-using static FortiVPNManager.Contract.AppInternal;
+﻿using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui;
 

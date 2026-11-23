@@ -1,4 +1,4 @@
-using FortiVPNManager.Contract;
+﻿using FortiVPNManager.Contract;
 using FortiVPNManager.OsIntegration;
 using FortiVPNManager.Ui;
 using FortiVPNManager.Ui.Text;

@@ -1,4 +1,4 @@
-using static FortiVPNManager.Ui.Text.Strings;
+﻿using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;
 

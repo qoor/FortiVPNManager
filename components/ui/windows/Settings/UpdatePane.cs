@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

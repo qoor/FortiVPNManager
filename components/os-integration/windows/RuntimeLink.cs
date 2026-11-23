@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using FortiVPNManager.Contract;
 using Microsoft.Win32.SafeHandles;

@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui.Tests;

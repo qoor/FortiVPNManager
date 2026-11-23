@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using FortiVPNManager.Contract;
 using static FortiVPNManager.Contract.AppInternal;
 

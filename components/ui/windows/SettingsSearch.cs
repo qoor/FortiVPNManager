@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using static FortiVPNManager.Ui.Text.Strings;
 
@@ -251,8 +251,24 @@ public static class SettingsSearchMatch
     private static readonly string[] Finals = ["", "ㄱ", "ㄲ", "ㄱㅅ", "ㄴ", "ㄴㅈ", "ㄴㅎ", "ㄷ", "ㄹ", "ㄹㄱ", "ㄹㅁ", "ㄹㅂ", "ㄹㅅ", "ㄹㅌ", "ㄹㅍ", "ㄹㅎ", "ㅁ", "ㅂ", "ㅂㅅ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
     private static readonly Dictionary<string, string> Compounds = new()
     {
-        ["ㄳ"] = "ㄱㅅ", ["ㄵ"] = "ㄴㅈ", ["ㄶ"] = "ㄴㅎ", ["ㄺ"] = "ㄹㄱ", ["ㄻ"] = "ㄹㅁ", ["ㄼ"] = "ㄹㅂ", ["ㄽ"] = "ㄹㅅ", ["ㄾ"] = "ㄹㅌ", ["ㄿ"] = "ㄹㅍ", ["ㅀ"] = "ㄹㅎ", ["ㅄ"] = "ㅂㅅ",
-        ["ㅘ"] = "ㅗㅏ", ["ㅙ"] = "ㅗㅐ", ["ㅚ"] = "ㅗㅣ", ["ㅝ"] = "ㅜㅓ", ["ㅞ"] = "ㅜㅔ", ["ㅟ"] = "ㅜㅣ", ["ㅢ"] = "ㅡㅣ",
+        ["ㄳ"] = "ㄱㅅ",
+        ["ㄵ"] = "ㄴㅈ",
+        ["ㄶ"] = "ㄴㅎ",
+        ["ㄺ"] = "ㄹㄱ",
+        ["ㄻ"] = "ㄹㅁ",
+        ["ㄼ"] = "ㄹㅂ",
+        ["ㄽ"] = "ㄹㅅ",
+        ["ㄾ"] = "ㄹㅌ",
+        ["ㄿ"] = "ㄹㅍ",
+        ["ㅀ"] = "ㄹㅎ",
+        ["ㅄ"] = "ㅂㅅ",
+        ["ㅘ"] = "ㅗㅏ",
+        ["ㅙ"] = "ㅗㅐ",
+        ["ㅚ"] = "ㅗㅣ",
+        ["ㅝ"] = "ㅜㅓ",
+        ["ㅞ"] = "ㅜㅔ",
+        ["ㅟ"] = "ㅜㅣ",
+        ["ㅢ"] = "ㅡㅣ",
     };
 
     /// <summary>The text's characters as the reader sees them (as Swift's Character), composed and lowercased.</summary>

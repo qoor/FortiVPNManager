@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.NetworkInformation;
 using Xunit;
 using static FortiVPNManager.Contract.AppInternal;

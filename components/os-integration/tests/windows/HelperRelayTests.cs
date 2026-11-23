@@ -1,4 +1,4 @@
-using FortiVPNManager.Contract;
+﻿using FortiVPNManager.Contract;
 using Xunit;
 using static FortiVPNManager.Contract.AppInternal;
 

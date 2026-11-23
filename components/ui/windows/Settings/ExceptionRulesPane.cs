@@ -1,4 +1,4 @@
-using FortiVPNManager.Ui.Text;
+﻿using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static FortiVPNManager.Contract.AppInternal;

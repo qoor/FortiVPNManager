@@ -1,4 +1,4 @@
-using CommunityToolkit.WinUI.Controls;
+﻿using CommunityToolkit.WinUI.Controls;
 using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

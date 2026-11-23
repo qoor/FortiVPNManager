@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using static FortiVPNManager.Ui.Text.Strings;
 
 namespace FortiVPNManager.Ui.Text;

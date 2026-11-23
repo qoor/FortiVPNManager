@@ -1,4 +1,4 @@
-namespace FortiVPNManager.Ui;
+﻿namespace FortiVPNManager.Ui;
 
 /// <summary>The settings window's panes, in the order of the navigation.</summary>
 public enum SettingsPane

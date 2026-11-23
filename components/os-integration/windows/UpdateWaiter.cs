@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using static FortiVPNManager.Contract.AppInternal;
