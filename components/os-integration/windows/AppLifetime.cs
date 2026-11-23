@@ -1,4 +1,5 @@
-﻿using static FortiVPNManager.Contract.AppInternal;
+﻿using System.Diagnostics.CodeAnalysis;
+using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.OsIntegration;
 
@@ -6,6 +7,7 @@ namespace FortiVPNManager.OsIntegration;
 /// The app's lifetime as the runtime sees it: a quit, the user's or the system's, is reported once
 /// and waits for the runtime's approval, which ends the tunnel and the log first.
 /// </summary>
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The approval wait lives as long as the process; a session ending during a quit still waits on it.")]
 public sealed class AppLifetime
 {
     private readonly Action<SystemEvent> _post;

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using FortiVPNManager.Contract;
@@ -34,6 +35,7 @@ public sealed class RuntimeLink
     /// Starts the runtime; call once. <paramref name="onMessage"/> runs on the reader thread for each
     /// message, one at a time in arrival order.
     /// </summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The runtime pipes stay open for the life of the process; neither side closes its end.")]
     public static RuntimeLink Start(Action<AppInternal.FromRuntime> onMessage)
     {
         AppPipes pipes = fvm_runtime_start();
@@ -77,6 +79,7 @@ public sealed class RuntimeLink
     /// <summary>Messages go out in call order, from any thread.</summary>
     public void Send(AppInternal.ToRuntime message) => _outgoing.Add(message);
 
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The runtime pipes stay open for the life of the process; neither side closes its end.")]
     private static FileStream Open(nuint handle, FileAccess access) =>
         new(new SafeFileHandle((nint)handle, ownsHandle: true), access, bufferSize: 0);
 
