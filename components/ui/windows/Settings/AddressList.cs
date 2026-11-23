@@ -58,7 +58,7 @@ internal sealed class AddressList
         {
             if (args.Handled && Ancestor<ScrollViewer>(VisualTreeHelper.GetParent(View)) is { } pane)
             {
-                pane.ChangeView(null, pane.VerticalOffset - args.GetCurrentPoint(_list).Properties.MouseWheelDelta, null);
+                _ = pane.ChangeView(null, pane.VerticalOffset - args.GetCurrentPoint(_list).Properties.MouseWheelDelta, null);
             }
         }), handledEventsToo: true);
         _list.SelectionChanged += (_, _) => UpdateButtons();
@@ -258,14 +258,14 @@ internal sealed class AddressList
             {
                 args.Handled = true;
                 EndEditing();
-                _list.Focus(FocusState.Keyboard);
+                _ = _list.Focus(FocusState.Keyboard);
             }
             else if (args.Key == VirtualKey.Escape)
             {
                 args.Handled = true;
                 _cancelsEdit = true;
                 EndEditing();
-                _list.Focus(FocusState.Keyboard);
+                _ = _list.Focus(FocusState.Keyboard);
             }
         };
         // The box's own menu (Paste and the like) takes the focus for a moment; the edit goes on.
@@ -280,7 +280,7 @@ internal sealed class AddressList
         grid.Children.Add(_editor);
         _editor.Loaded += (_, _) =>
         {
-            _editor?.Focus(FocusState.Programmatic);
+            _ = (_editor?.Focus(FocusState.Programmatic));
             _editor?.SelectAll();
         };
         UpdateButtons();

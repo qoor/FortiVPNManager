@@ -266,7 +266,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         }
         finally
         {
-            CloseServiceHandle(service);
+            _ = CloseServiceHandle(service);
         }
     }
 
@@ -300,7 +300,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         }
         finally
         {
-            CloseServiceHandle(service);
+            _ = CloseServiceHandle(service);
         }
     }
 

@@ -58,7 +58,7 @@ public static class Program
         s_running = new Mutex(false, RunningName);
         try
         {
-            s_running.WaitOne();
+            _ = s_running.WaitOne();
         }
         catch (AbandonedMutexException)
         {

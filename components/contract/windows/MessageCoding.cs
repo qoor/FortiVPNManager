@@ -483,18 +483,18 @@ internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAcce
     public override T Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
     {
         Expect(reader.TokenType == JsonTokenType.StartObject, "an object");
-        reader.Read();
+        _ = reader.Read();
         Expect(reader.TokenType == JsonTokenType.PropertyName, "a case name");
         string name = reader.GetString()!;
         if (!_byName.TryGetValue(name, out Type? caseType))
         {
             throw new JsonException($"{typeof(T).Name} has no case {name}");
         }
-        reader.Read();
+        _ = reader.Read();
         // A case's values are an object, `{}` without any; null is no value of any case.
         Expect(reader.TokenType == JsonTokenType.StartObject, $"the values of {name}");
         var value = (T)JsonSerializer.Deserialize(ref reader, options.GetTypeInfo(caseType))!;
-        reader.Read();
+        _ = reader.Read();
         Expect(reader.TokenType == JsonTokenType.EndObject, "one case only");
         return value;
     }

@@ -160,7 +160,7 @@ internal sealed class AccountPane : IPane
 
         // IMAP: the app password is required.
         _imapPasswordCard.Content = Field(_imapPassword, draft => draft.AppPassword, (draft, text) => draft.AppPassword = text);
-        _imapPasswordCard.Fit(_imapPassword, FieldWidth);
+        _ = _imapPasswordCard.Fit(_imapPassword, FieldWidth);
         _body.Children.Add(_imapPasswordCard);
     }
 
@@ -215,14 +215,14 @@ internal sealed class AccountPane : IPane
         {
             if (!_refreshing)
             {
-                _ui.OpenDisclosures.Add(key);
+                _ = _ui.OpenDisclosures.Add(key);
             }
         };
         expander.Collapsed += (_, _) =>
         {
             if (!_refreshing)
             {
-                _ui.OpenDisclosures.Remove(key);
+                _ = _ui.OpenDisclosures.Remove(key);
             }
         };
         return expander;

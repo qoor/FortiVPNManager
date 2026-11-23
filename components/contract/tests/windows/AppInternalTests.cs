@@ -20,7 +20,7 @@ public class AppInternalTests
         List<FromRuntime> messages = RoundTrip<FromRuntime>("from_runtime.json");
         FromRuntime.Section first = Assert.IsType<FromRuntime.Section>(messages[0]);
         ConnectionSection connection = Assert.IsType<Section.Connection>(first.Value).Value;
-        Assert.IsType<ConnectionStatus.NotConnected>(connection.Status);
+        _ = Assert.IsType<ConnectionStatus.NotConnected>(connection.Status);
         Assert.Equal(ButtonState.Enabled, connection.Connect);
         Assert.Contains(messages, message => message is FromRuntime.OpenSettings);
     }
@@ -41,9 +41,9 @@ public class AppInternalTests
         Assert.Equal(
             [AfterDisconnect.Idle, AfterDisconnect.Reconnect, AfterDisconnect.Sleep, AfterDisconnect.Quit],
             RoundTrip<AfterDisconnect>("after_disconnect.json"));
-        RoundTrip<FailureReason>("failure_reasons.json");
-        RoundTrip<WaitReason>("wait_reasons.json");
-        RoundTrip<SetupItem>("setup_items.json");
+        _ = RoundTrip<FailureReason>("failure_reasons.json");
+        _ = RoundTrip<WaitReason>("wait_reasons.json");
+        _ = RoundTrip<SetupItem>("setup_items.json");
     }
 
     [Fact]
@@ -52,19 +52,19 @@ public class AppInternalTests
     [Fact]
     public void ReadinessSections()
     {
-        RoundTrip<ReadinessSection>("readiness_sections.json");
-        RoundTrip<HelperChannelFailure>("helper_channel_failures.json");
+        _ = RoundTrip<ReadinessSection>("readiness_sections.json");
+        _ = RoundTrip<HelperChannelFailure>("helper_channel_failures.json");
     }
 
     [Fact]
     public void GmailSections()
     {
-        RoundTrip<GmailSection>("gmail_sections.json");
+        _ = RoundTrip<GmailSection>("gmail_sections.json");
         Assert.Equal(
             [GoogleConnectBlocker.NoOAuthClient, GoogleConnectBlocker.EnterAddress, GoogleConnectBlocker.SaveAddressFirst],
             RoundTrip<GoogleConnectBlocker>("google_connect_blockers.json"));
-        RoundTrip<GoogleError>("google_errors.json");
-        RoundTrip<GmailTest>("gmail_tests.json");
+        _ = RoundTrip<GoogleError>("google_errors.json");
+        _ = RoundTrip<GmailTest>("gmail_tests.json");
     }
 
     [Fact]
@@ -76,17 +76,17 @@ public class AppInternalTests
     [Fact]
     public void AutoUpdateSections()
     {
-        RoundTrip<AutoUpdateSection>("auto_update_sections.json");
-        RoundTrip<InstallFailure>("install_failures.json");
-        RoundTrip<UpdateCheckFailure>("update_check_failures.json");
+        _ = RoundTrip<AutoUpdateSection>("auto_update_sections.json");
+        _ = RoundTrip<InstallFailure>("install_failures.json");
+        _ = RoundTrip<UpdateCheckFailure>("update_check_failures.json");
     }
 
     [Fact]
     public void SettingsFileProblems()
     {
-        RoundTrip<ConfigFileError>("config_file_errors.json");
-        RoundTrip<ConfigProblem>("config_problems.json");
-        RoundTrip<ConfigWarning>("config_warnings.json");
+        _ = RoundTrip<ConfigFileError>("config_file_errors.json");
+        _ = RoundTrip<ConfigProblem>("config_problems.json");
+        _ = RoundTrip<ConfigWarning>("config_warnings.json");
         Assert.Equal(
             [
                 new AddressProblem.Malformed(), new AddressProblem.PrefixOutOfRange(4, 8, 32),
@@ -94,7 +94,7 @@ public class AppInternalTests
                 new AddressProblem.HostBitsSet("10.30.170.0/24"),
             ],
             RoundTrip<AddressProblem>("address_problems.json"));
-        RoundTrip<FileProblem>("file_problems.json");
+        _ = RoundTrip<FileProblem>("file_problems.json");
     }
 
     [Fact]
@@ -153,17 +153,17 @@ public class AppInternalTests
     [Fact]
     public void DecodingIsStrict()
     {
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"fly": {}}""", MessageCoding.Default.Command));
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"setOpenAtLogin": {"enabled": true, "extra": 1}}""", MessageCoding.Default.Command));
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"setOpenAtLogin": {}}""", MessageCoding.Default.Command));
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"connect": {}, "disconnect": {}}""", MessageCoding.Default.Command));
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"connect": null}""", MessageCoding.Default.Command));
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize("""{"command": {"_0": {"connect": null}}}""", MessageCoding.Default.ToRuntime));
     }
 

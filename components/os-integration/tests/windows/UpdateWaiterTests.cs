@@ -53,7 +53,7 @@ public class UpdateWaiterTests
 
             installer.Kill();
             Assert.True(waiter.WaitForExit(TimeSpan.FromSeconds(5)), "the waiter did not end after the installer");
-            Assert.Single(Until(() => CharMaps().Except(before).ToList(), started => started.Count > 0));
+            _ = Assert.Single(Until(() => CharMaps().Except(before).ToList(), started => started.Count > 0));
         }
         finally
         {
@@ -75,7 +75,7 @@ public class UpdateWaiterTests
             Assert.True(waiter.WaitForExit(TimeSpan.FromSeconds(5)), "the waiter waited for programs that are not the app or the installer");
             Assert.False(notApp.HasExited);
             Assert.False(notInstaller.HasExited);
-            Assert.Single(Until(() => CharMaps().Except(before).ToList(), started => started.Count > 0));
+            _ = Assert.Single(Until(() => CharMaps().Except(before).ToList(), started => started.Count > 0));
         }
         finally
         {

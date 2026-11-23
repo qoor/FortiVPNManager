@@ -59,6 +59,6 @@ public class HelperPipeTests
         stream.Position = 0;
         Assert.Equal(new HelperPipe.Message.ReplyFlag(6, false), MessageFraming.ReadFromHelper(stream));
         Assert.Equal(new HelperPipe.Message.Output("[]"), MessageFraming.ReadFromHelper(stream));
-        Assert.Throws<EndOfStreamException>(() => MessageFraming.ReadFromHelper(stream));
+        _ = Assert.Throws<EndOfStreamException>(() => MessageFraming.ReadFromHelper(stream));
     }
 }

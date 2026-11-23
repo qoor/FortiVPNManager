@@ -100,7 +100,7 @@ internal sealed class LogPane : IPane, IDisposable
             {
                 args.Handled = true;
                 _findBar.Visibility = Visibility.Collapsed;
-                _view.Focus(FocusState.Keyboard);
+                _ = _view.Focus(FocusState.Keyboard);
             }
         };
         _findBox.TextChanged += (_, _) => _noMatch.Visibility = Visibility.Collapsed;
@@ -150,7 +150,7 @@ internal sealed class LogPane : IPane, IDisposable
     public bool ShowFind()
     {
         _findBar.Visibility = Visibility.Visible;
-        _findBox.Focus(FocusState.Keyboard);
+        _ = _findBox.Focus(FocusState.Keyboard);
         _findBox.SelectAll();
         return true;
     }
@@ -239,9 +239,9 @@ internal sealed class LogPane : IPane, IDisposable
     {
         _view.IsReadOnly = false;
         // The view lays out once for the whole change, not once per piece of text.
-        _view.Document.BatchDisplayUpdates();
+        _ = _view.Document.BatchDisplayUpdates();
         change();
-        _view.Document.ApplyDisplayUpdates();
+        _ = _view.Document.ApplyDisplayUpdates();
         _view.IsReadOnly = true;
     }
 
@@ -263,7 +263,7 @@ internal sealed class LogPane : IPane, IDisposable
         (int start, int end) = (_view.Document.Selection.StartPosition, _view.Document.Selection.EndPosition);
         Redraw(toEnd: false);
         _view.Document.Selection.SetRange(start, end);
-        _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _scroller?.ChangeView(null, offset, null, disableAnimation: true));
+        _ = _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _scroller?.ChangeView(null, offset, null, disableAnimation: true));
     }
 
     /// <summary>Every line again, in the current theme's colours, then the end when <paramref name="toEnd"/>.</summary>
@@ -277,7 +277,7 @@ internal sealed class LogPane : IPane, IDisposable
         if (toEnd)
         {
             // After the new text is laid out, or the scroll lands short of the end.
-            _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ScrollToEnd);
+            _ = _view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ScrollToEnd);
         }
     }
 

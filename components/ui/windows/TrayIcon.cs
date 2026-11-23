@@ -70,7 +70,7 @@ public sealed partial class TrayIcon : IDisposable
         if (state != _shownIcon)
         {
             _shownIcon = state;
-            _icon.UpdateIcon(_stateIcons[state]);
+            _ = _icon.UpdateIcon(_stateIcons[state]);
         }
         ShowMenu(Entries());
     }

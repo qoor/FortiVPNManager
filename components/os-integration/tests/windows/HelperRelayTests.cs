@@ -144,7 +144,7 @@ public class HelperRelayTests
         Assert.Equal(new PortResponse.HelperReplyFlag(false), await harness.Call(new HelperCall.ExitWhenIdle()));
         Assert.Equal(["reply", "HelperConnectionLost"], harness.Seen);
         Assert.True(helper.Disposed);
-        await harness.Call(new HelperCall.Status());
+        _ = await harness.Call(new HelperCall.Status());
         Assert.Equal(2, harness.Opened);
     }
 

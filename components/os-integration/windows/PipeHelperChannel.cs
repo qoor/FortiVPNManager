@@ -75,7 +75,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
         // Closing fails what is pending; a request added after it would wait for nothing.
         if (Volatile.Read(ref _closed) == 1)
         {
-            _pending.TryRemove(id, out _);
+            _ = _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
         }
         var sending = Task.Run(() =>
@@ -102,12 +102,12 @@ internal sealed class PipeHelperChannel : IHelperChannel
         // Closing the connection cancels a write still under way.
         catch (Exception error) when (error is IOException or ObjectDisposedException or OperationCanceledException)
         {
-            _pending.TryRemove(id, out _);
+            _ = _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.Connection(error.Message));
         }
         if (await Task.WhenAny(answer.Task, limit) == limit)
         {
-            _pending.TryRemove(id, out _);
+            _ = _pending.TryRemove(id, out _);
             throw new HelperChannelException(new HelperChannelFailure.NoReply());
         }
         return await answer.Task;
@@ -157,7 +157,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
         // An answer after the time limit finds no request.
         if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
         {
-            answer.TrySetResult(message);
+            _ = answer.TrySetResult(message);
         }
     }
 
@@ -172,7 +172,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
         {
             if (_pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
             {
-                answer.TrySetException(new HelperChannelException(new HelperChannelFailure.ConnectionLost()));
+                _ = answer.TrySetException(new HelperChannelException(new HelperChannelFailure.ConnectionLost()));
             }
         }
     }

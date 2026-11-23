@@ -107,7 +107,7 @@ public sealed partial class PanePage : Page
         {
             element.ClearValue(brush);
             element.ClearValue(thickness);
-            s_highlighted.Remove(element);
+            _ = s_highlighted.Remove(element);
         };
         s_highlighted[element] = timer;
         timer.Start();

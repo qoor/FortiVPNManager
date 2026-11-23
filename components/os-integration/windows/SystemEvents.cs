@@ -103,7 +103,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         Microsoft.Win32.SystemEvents.SessionEnding += (_, _) =>
         {
             lifetime.RequestQuit();
-            lifetime.WaitForApproval(s_quitWait);
+            _ = lifetime.WaitForApproval(s_quitWait);
         };
     }
 

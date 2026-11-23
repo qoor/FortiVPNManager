@@ -149,10 +149,10 @@ public static class SettingsFileText
         {
             if (count == limit)
             {
-                text.Append('…');
+                _ = text.Append('…');
                 break;
             }
-            text.Append(IsDisallowedInText(rune) ? "�" : rune.ToString());
+            _ = text.Append(IsDisallowedInText(rune) ? "�" : rune.ToString());
             count++;
         }
         return text.ToString();

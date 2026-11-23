@@ -9,7 +9,7 @@ public class HelperStartTests
     public void ARunningServiceNeedsNothing()
     {
         var harness = new Harness { Before = HelperServiceState.Running };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Empty(harness.Starts);
         Assert.Equal(TimeSpan.Zero, harness.Now);
     }
@@ -18,7 +18,7 @@ public class HelperStartTests
     public void AStoppedServiceIsStartedAndItsStartWaitedForHoweverLong()
     {
         var harness = new Harness { After = (_, since) => since < TimeSpan.FromHours(2) ? HelperServiceState.Changing : HelperServiceState.Running };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero], harness.Starts);
         Assert.Equal(TimeSpan.FromHours(2), harness.Now);
         Assert.Empty(harness.Notes);
@@ -33,7 +33,7 @@ public class HelperStartTests
             BeforeUntil = TimeSpan.FromSeconds(20),
             ThenBefore = HelperServiceState.Running,
         };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Empty(harness.Starts);
         Assert.Equal(TimeSpan.FromSeconds(20), harness.Now);
     }
@@ -47,7 +47,7 @@ public class HelperStartTests
             BeforeUntil = TimeSpan.FromSeconds(10),
             ThenBefore = HelperServiceState.Stopped,
         };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.FromSeconds(10)], harness.Starts);
         Assert.Empty(harness.Notes);
     }
@@ -93,7 +93,7 @@ public class HelperStartTests
             ProcessLeftAt = now => now >= TimeSpan.FromSeconds(30) && now < TimeSpan.FromSeconds(90),
             After = (_, since) => since < TimeSpan.FromSeconds(10) ? HelperServiceState.Changing : HelperServiceState.Running,
         };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(90)], harness.Starts);
         (string? line, TimeSpan at) = Assert.Single(harness.Notes);
         Assert.Contains("did not start in time", line);
@@ -114,7 +114,7 @@ public class HelperStartTests
             StartTakes = _ => TimeSpan.FromSeconds(30),
             ProcessLeftAt = now => now >= TimeSpan.FromSeconds(30) && now < TimeSpan.FromSeconds(90),
         };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero], harness.Starts);
         Assert.EndsWith("(attempt 1/2)", Assert.Single(harness.Notes).Line);
     }
@@ -140,7 +140,7 @@ public class HelperStartTests
                 : HelperServiceState.Running,
             ProcessLeftAt = now => now >= TimeSpan.FromSeconds(20) && now < TimeSpan.FromSeconds(35),
         };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(35)], harness.Starts);
         (string? line, TimeSpan at) = Assert.Single(harness.Notes);
         Assert.Contains("stopped with an error while starting", line);
@@ -171,7 +171,7 @@ public class HelperStartTests
     public void AProcessLeftFromAnEarlierStartIsWaitedForBeforeTheFirstStart()
     {
         var harness = new Harness { ProcessLeftAt = now => now < TimeSpan.FromSeconds(45) };
-        Assert.IsType<HelperStartResult.Running>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.FromSeconds(45)], harness.Starts);
         Assert.Empty(harness.Notes);
     }
@@ -180,7 +180,7 @@ public class HelperStartTests
     public void TheSessionEndingEndsTheWaitQuietly()
     {
         var harness = new Harness { After = (_, _) => HelperServiceState.Changing, SessionEndsAt = TimeSpan.FromSeconds(30) };
-        Assert.IsType<HelperStartResult.SessionEnding>(harness.Wait());
+        _ = Assert.IsType<HelperStartResult.SessionEnding>(harness.Wait());
         Assert.Equal(TimeSpan.FromSeconds(30), harness.Now);
     }
 

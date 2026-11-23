@@ -411,7 +411,7 @@ public sealed partial class SettingsWindow : Window
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(s_placementFile)!);
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(s_placementFile)!);
                 File.WriteAllText(s_placementFile, JsonSerializer.Serialize(this, PlacementCoding.Default.Placement));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)

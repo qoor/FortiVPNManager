@@ -35,7 +35,7 @@ internal sealed class Notifier : IDisposable
             .AddText(body);
         if (button is not null)
         {
-            builder.AddButton(new AppNotificationButton(button)
+            _ = builder.AddButton(new AppNotificationButton(button)
                 .AddArgument(IdentifierArgument, identifier)
                 .AddArgument(ButtonArgument, ButtonArgument));
         }

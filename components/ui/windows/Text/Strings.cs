@@ -41,12 +41,12 @@ public static class Strings
         {
             if (template[i] != '%' || i + 1 == template.Length)
             {
-                text.Append(template[i]);
+                _ = text.Append(template[i]);
                 continue;
             }
             if (template[i + 1] == '%')
             {
-                text.Append('%');
+                _ = text.Append('%');
                 i++;
                 continue;
             }
@@ -72,11 +72,11 @@ public static class Strings
             }
             if (end == template.Length || !(template[end] is '@' or 'd' or 'i' or 'u'))
             {
-                text.Append(template[i]);
+                _ = text.Append(template[i]);
                 continue;
             }
             int index = position >= 0 ? position : next++;
-            text.Append(index < arguments.Length ? Display(arguments[index]) : string.Empty);
+            _ = text.Append(index < arguments.Length ? Display(arguments[index]) : string.Empty);
             i = end;
         }
         return text.ToString();
