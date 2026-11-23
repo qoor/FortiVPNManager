@@ -4,8 +4,6 @@ use std::time::SystemTime;
 
 use fvm_contract::app_helper::HelperErrorCode;
 
-use super::policy;
-
 /// Why the connection stopped, or the counted authentication failure it waits after.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Failure {
@@ -56,41 +54,5 @@ impl FailureLedger {
             last_auth_failure: None,
             recent_auth_attempts: Vec::new(),
         }
-    }
-
-    /// No attempt may start before it.
-    pub(super) fn cooldown_end(&self) -> Option<SystemTime> {
-        self.last_auth_failure_at
-            .map(|at| at + policy::AUTH_FAILURE_RETRY_DELAY)
-    }
-
-    /// Drops the attempts that fell out of the window.
-    pub(super) fn prune(&mut self, now: SystemTime) {
-        if let Some(start) = now.checked_sub(policy::AUTH_ATTEMPT_WINDOW) {
-            self.recent_auth_attempts.retain(|at| *at > start);
-        }
-    }
-
-    pub(super) fn record_auth_attempt(&mut self, at: SystemTime) {
-        self.prune(at);
-        self.recent_auth_attempts.push(at);
-    }
-
-    pub(super) fn record_auth_failure(&mut self, failure: Failure, at: SystemTime) {
-        self.consecutive_auth_failures += 1;
-        self.last_auth_failure_at = Some(at);
-        self.last_auth_failure = Some(failure);
-    }
-
-    /// A tunnel up proves the credentials work.
-    pub(super) fn reset_consecutive_failures(&mut self) {
-        self.consecutive_auth_failures = 0;
-    }
-
-    /// The user's Connect or Reconnect Now starts the count and the window over. The time of the
-    /// last failure stays, so its cooldown still holds.
-    pub(super) fn reset_for_user_action(&mut self) {
-        self.consecutive_auth_failures = 0;
-        self.recent_auth_attempts.clear();
     }
 }

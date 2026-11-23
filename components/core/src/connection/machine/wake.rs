@@ -19,7 +19,7 @@ impl ConnectionManager {
                         reason: StopReason::Sleep,
                     });
                 }
-                self.push_otp_close(attempt.close_otp_session(false, false));
+                self.push_otp_close(attempt.otp_closed(attempt.otp_close(false, false, self.now)));
                 let renewal = session
                     .renewal
                     .as_mut()
@@ -139,7 +139,7 @@ impl ConnectionManager {
             (true, Some(_)) => self.restart_session(session, AttemptReason::Proactive),
             (false, Some(reason)) => self.restart_session(session, reason),
             (true, None) if session.renewal.is_none() => {
-                self.renew(session, AttemptReason::Proactive);
+                self.renew_now(session, AttemptReason::Proactive);
             }
             (_, None) => {
                 if session.underlay.is_none() {

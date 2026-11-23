@@ -544,7 +544,7 @@ fn the_rolling_cap_stops_a_reconnect_loop() {
     }
     assert_eq!(h.cm.phase, Phase::Failed(Failure::TooManyReconnects));
     let mut ledger = h.cm.ledger.clone();
-    ledger.prune(h.now);
+    ledger.recent_auth_attempts = ledger.kept_attempts(h.now);
     assert_eq!(ledger.recent_auth_attempts.len(), 12);
     // A manual action clears the history and is let through.
     let effects = h.send(Input::Connect);
@@ -564,7 +564,7 @@ fn the_rolling_cap_window_slides() {
         assert!(h.attempt().is_some());
     }
     let mut ledger = h.cm.ledger.clone();
-    ledger.prune(h.now);
+    ledger.recent_auth_attempts = ledger.kept_attempts(h.now);
     assert!(ledger.recent_auth_attempts.len() < 12);
 }
 

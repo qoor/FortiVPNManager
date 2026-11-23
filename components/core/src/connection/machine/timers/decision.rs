@@ -8,8 +8,12 @@ use crate::connection::{Input, TimerId, TimerKind, policy};
 /// How one kind of timer changes after an input.
 pub(in crate::connection::machine) enum TimerChange {
     /// No longer wanted; the runtime is told to cancel it unless it fired already.
-    Remove { cancel: bool },
-    Set { at: SystemTime },
+    Remove {
+        cancel: bool,
+    },
+    Set {
+        at: SystemTime,
+    },
 }
 
 impl ConnectionManager {
@@ -53,7 +57,9 @@ impl ConnectionManager {
             .filter_map(|kind| {
                 let change = match (self.timers.get(&kind), wanted.get(&kind)) {
                     (None, None) => None,
-                    (Some(slot), None) => Some(TimerChange::Remove { cancel: !slot.fired }),
+                    (Some(slot), None) => Some(TimerChange::Remove {
+                        cancel: !slot.fired,
+                    }),
                     // A fired timer still wanted at the same time stays fired: no firing loop.
                     (Some(slot), Some(at)) if slot.at == *at && !self.rearms(kind) => None,
                     (_, Some(at)) => Some(TimerChange::Set { at: *at }),

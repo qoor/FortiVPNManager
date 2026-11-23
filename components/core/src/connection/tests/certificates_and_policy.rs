@@ -341,7 +341,7 @@ fn the_rolling_window_leaves_out_attempts_an_hour_old() {
         recent_auth_attempts: vec![now - secs(3_600.0), now - secs(3_599.0), now - secs(10.0)],
         ..FailureLedger::new("k".into())
     };
-    ledger.prune(now);
+    ledger.recent_auth_attempts = ledger.kept_attempts(now);
     assert_eq!(
         ledger.recent_auth_attempts,
         [now - secs(3_599.0), now - secs(10.0)]

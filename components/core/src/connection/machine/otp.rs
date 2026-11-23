@@ -1,11 +1,14 @@
+pub(super) mod action;
+pub(super) mod decision;
+
 use fvm_contract::app_helper::{AttemptId, StopReason};
 use fvm_contract::app_internal::SecretText;
 
 use crate::connection::ledger::Failure;
-use crate::connection::policy::{self, elapsed};
+use crate::connection::policy::elapsed;
 use crate::connection::{Effect, Note, OtpFailure};
 
-use super::{ConnectionManager, OtpSession, Phase, RetryReason, Stage, StaleOtp};
+use super::{ConnectionManager, OtpSession, Phase, RetryReason, Stage};
 
 impl ConnectionManager {
     pub(super) fn otp_session_ready(&mut self, id: &AttemptId) {
@@ -51,7 +54,7 @@ impl ConnectionManager {
             Stage::PreparingOtp => match (attempt.replacing.take(), failure) {
                 (Some(session), _) => self.replacement_failed(session),
                 (None, OtpFailure::Authentication) => self.fail(Failure::GmailRejected),
-                (None, OtpFailure::Network) => self.network_failure(RetryReason::Network),
+                (None, OtpFailure::Network) => self.network_failure_now(RetryReason::Network),
             },
             // No OTP can arrive any more: stop now instead of at the deadline; the exit classifies.
             Stage::Run => {
@@ -179,15 +182,25 @@ impl ConnectionManager {
         self.prepare_otp();
     }
 
-    /// Hands over the close of an ended attempt's OTP session. A search for its unused code holds
-    /// the next login, which [`Self::prepare_otp`] decides, until it ends or its time limit.
-    pub(super) fn push_otp_close(&mut self, close: Option<Effect>) {
-        if let Some(Effect::TrashStaleOtp { attempt, .. }) = &close {
-            self.stale_otp = Some(StaleOtp {
-                attempt: attempt.clone(),
-                until: self.now + policy::STALE_OTP_WAIT,
-            });
+    pub(super) fn otp_deadline_passed(&mut self) {
+        let Phase::Connecting(attempt) = &mut self.phase else {
+            return;
+        };
+        if attempt.stage != Stage::Run
+            || attempt.otp_prompted_at.is_none()
+            || attempt.otp_session == OtpSession::Submitted
+            || attempt.stop_requested.is_some()
+        {
+            return;
         }
-        self.effects.extend(close);
+        attempt.stop_requested = Some(StopReason::OtpTimeout);
+        self.effects.push(Effect::StopRun {
+            attempt: attempt.id.clone(),
+            reason: StopReason::OtpTimeout,
+        });
+        // The spam check tells at once whether the code went there; no search for it.
+        let close = attempt.otp_close(true, false, self.now);
+        let close = attempt.otp_closed(close);
+        self.push_otp_close(close);
     }
 }

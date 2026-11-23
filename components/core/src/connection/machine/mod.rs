@@ -10,6 +10,10 @@ mod finish {
     pub(super) mod decision;
 }
 mod helper;
+mod ledger {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
 mod otp;
 mod outcomes;
 mod presence;
@@ -27,6 +31,7 @@ use std::time::{Duration, SystemTime};
 use fvm_contract::app_helper::{AttemptId, Milestone, SessionId, StopReason};
 use jiff::tz::TimeZone;
 
+use super::classify::Outcome;
 use super::ledger::{Failure, FailureLedger};
 use super::policy;
 use super::readiness::{Readiness, SetupNeed};
@@ -168,33 +173,6 @@ enum OtpSession {
     Submitted,
 }
 
-impl Attempt {
-    /// Closes the session if it is open. Once the credentials went out and no code was used, the
-    /// gateway may have sent a code email that arrives late, within the next prompt's arrival
-    /// tolerance. With `search`, the session goes on looking for that email to trash it, from the
-    /// prompt or else from when the credentials went out (user decision 2026-11-16). The callers
-    /// turn it off on the app's quit and the Mac's sleep, at the OTP time limit and after a
-    /// rejected login.
-    fn close_otp_session(&mut self, check_spam: bool, search: bool) -> Option<Effect> {
-        if self.otp_session != OtpSession::Open {
-            return None;
-        }
-        self.otp_session = OtpSession::Closed;
-        Some(match self.credentials_sent_at {
-            Some(sent_at) if search && self.milestone <= Some(Milestone::OtpPrompted) => {
-                Effect::TrashStaleOtp {
-                    attempt: self.id.clone(),
-                    since: self.otp_prompted_at.unwrap_or(sent_at),
-                }
-            }
-            _ => Effect::CloseOtpSession {
-                attempt: self.id.clone(),
-                check_spam,
-            },
-        })
-    }
-}
-
 /// The code email the gateway may have sent for an attempt that ended with no code submitted.
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct StaleOtp {
@@ -317,6 +295,47 @@ struct TimerSlot {
 pub(super) enum Step {
     Input(Input),
     TimerDue(TimerKind),
+    BeginAttempt {
+        reason: AttemptReason,
+        cert_retry_used: bool,
+        readiness_verified: bool,
+    },
+    PrepareReplacement {
+        session: Session,
+        cert_retry_used: bool,
+    },
+    ReplacementEnded {
+        session: Session,
+        outcome: Outcome,
+    },
+    ReplacementFailed(Session),
+    AbortAttempt {
+        attempt: Box<Attempt>,
+        stop: StopReason,
+        after: AfterStop,
+    },
+    ApplyOutcome(Outcome),
+    ForcedTermination,
+    NetworkFailure(RetryReason),
+    AuthFailure(Failure),
+    ScheduleRetry {
+        reason: RetryReason,
+        delay: Duration,
+    },
+    Fail(Failure),
+    PrepareOtp,
+    CheckReadiness,
+    StoppedForUpdate,
+}
+
+impl Step {
+    fn begin_attempt(reason: AttemptReason) -> Self {
+        Self::BeginAttempt {
+            reason,
+            cert_retry_used: false,
+            readiness_verified: false,
+        }
+    }
 }
 
 impl ConnectionManager {
@@ -370,14 +389,15 @@ impl ConnectionManager {
         let marks = self.note_marks();
         let mut steps = vec![Step::Input(input)];
         while let Some(step) = steps.pop() {
-            let next = self.run_step(step);
+            let next = self.run_step(step, now);
             steps.extend(next.into_iter().rev());
         }
         let finish = self.finish_plan(&marks, now);
         self.finish(finish)
     }
 
-    fn run_step(&mut self, step: Step) -> Vec<Step> {
+    /// Judges one step, then carries it out.
+    fn run_step(&mut self, step: Step, now: SystemTime) -> Vec<Step> {
         match step {
             Step::Input(Input::TimerFired(timer)) => {
                 let due = self.due_timer(timer);
@@ -387,10 +407,102 @@ impl ConnectionManager {
                 self.dispatch(input);
                 Vec::new()
             }
+            Step::TimerDue(TimerKind::AttemptDeadline) => {
+                let deadline = self.attempt_deadline(now);
+                self.end_attempt_at_deadline(deadline)
+            }
+            Step::TimerDue(TimerKind::Retry) => {
+                let due = self.retry_due();
+                self.start_due_retry(due)
+            }
+            Step::TimerDue(TimerKind::ProactiveReconnect) => {
+                let due = self.proactive_reconnect_due(now);
+                self.renew_when_due(due)
+            }
             Step::TimerDue(kind) => {
                 self.timer_due(kind);
                 Vec::new()
             }
+            Step::BeginAttempt {
+                reason,
+                cert_retry_used,
+                readiness_verified,
+            } => {
+                let start = self.attempt_start(reason, cert_retry_used, readiness_verified, now);
+                self.start_attempt(start)
+            }
+            Step::PrepareReplacement {
+                session,
+                cert_retry_used,
+            } => {
+                let start = self.replacement_start(session, cert_retry_used, now);
+                self.start_replacement(start)
+            }
+            Step::ReplacementEnded { session, outcome } => {
+                let end = self.replacement_end(session, outcome, now);
+                self.end_replacement(end)
+            }
+            Step::ReplacementFailed(session) => {
+                let failure = attempts::decision::replacement_failure(session, now);
+                self.fail_replacement(failure)
+            }
+            Step::AbortAttempt {
+                attempt,
+                stop,
+                after,
+            } => {
+                let abort = attempts::decision::attempt_abort(*attempt, stop, after, now);
+                self.abort(abort)
+            }
+            Step::ApplyOutcome(outcome) => self.outcome_steps(outcome),
+            Step::ForcedTermination => {
+                let retry_left = self.forced_retry_left();
+                self.forced_termination(retry_left)
+            }
+            Step::NetworkFailure(reason) => {
+                let failure = self.network_failure(reason, now);
+                self.count_network_failure(failure);
+                Vec::new()
+            }
+            Step::AuthFailure(failure) => {
+                let failure = self.auth_failure(failure, now);
+                self.count_auth_failure(failure);
+                Vec::new()
+            }
+            Step::ScheduleRetry { reason, delay } => {
+                let wait = self.retry_wait(reason, delay, now);
+                self.wait_to_retry(wait);
+                Vec::new()
+            }
+            Step::Fail(failure) => {
+                self.fail(failure);
+                Vec::new()
+            }
+            Step::PrepareOtp => {
+                self.prepare_otp();
+                Vec::new()
+            }
+            Step::CheckReadiness => {
+                self.check_readiness();
+                Vec::new()
+            }
+            Step::StoppedForUpdate => {
+                self.stopped_for_update();
+                Vec::new()
+            }
+        }
+    }
+
+    /// Runs `step` and what follows from it at once, for transitions not split yet.
+    fn run_now(&mut self, step: Step) {
+        self.run_all(vec![step]);
+    }
+
+    fn run_all(&mut self, steps: Vec<Step>) {
+        let mut steps: Vec<Step> = steps.into_iter().rev().collect();
+        while let Some(step) = steps.pop() {
+            let next = self.run_step(step, self.now);
+            steps.extend(next.into_iter().rev());
         }
     }
 
@@ -473,7 +585,7 @@ impl ConnectionManager {
             self.saved_ledger = restored.clone();
             self.ledger = restored;
         }
-        self.ledger.prune(self.now);
+        self.ledger.recent_auth_attempts = self.ledger.kept_attempts(self.now);
         self.reset_schedule_boundary();
         self.effects.push(Effect::ReadScreenState);
         if launch.import_report_shown {
@@ -616,7 +728,7 @@ impl ConnectionManager {
         match self.take_phase() {
             Phase::Connected(session) => {
                 self.reset_for_user_action();
-                self.renew(session, AttemptReason::ReconnectNow);
+                self.renew_now(session, AttemptReason::ReconnectNow);
             }
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } | Phase::Failed(_) => {
                 self.wants_connection = true;
@@ -687,7 +799,7 @@ impl ConnectionManager {
                 self.phase = Phase::Disconnecting(stop);
             }
             Phase::WaitingRetry { .. } | Phase::WaitingNetwork { .. } => {
-                self.settle(AfterStop::Update);
+                self.settle_now(AfterStop::Update);
             }
             phase @ (Phase::Idle | Phase::SetupRequired(_) | Phase::Failed(_)) => {
                 self.phase = phase;
@@ -731,17 +843,11 @@ impl ConnectionManager {
 
     fn timer_due(&mut self, kind: TimerKind) {
         match kind {
-            TimerKind::AttemptDeadline => self.attempt_deadline_passed(),
+            TimerKind::AttemptDeadline | TimerKind::Retry | TimerKind::ProactiveReconnect => {
+                unreachable!("run as their own steps")
+            }
             TimerKind::OtpDeadline => self.otp_deadline_passed(),
             TimerKind::StaleOtp => self.stale_otp_wait_ran_out(),
-            TimerKind::Retry => match self.take_phase() {
-                Phase::WaitingRetry { reason, .. } => {
-                    self.begin_attempt(AttemptReason::Retry(reason), false, false);
-                }
-                Phase::Connected(session) => self.prepare_replacement(session, false),
-                phase => self.phase = phase,
-            },
-            TimerKind::ProactiveReconnect => self.proactive_reconnect_due(),
             TimerKind::QuitDeadline if self.quit != Quit::NotRequested => {
                 self.quit = Quit::Terminated;
             }
@@ -753,64 +859,6 @@ impl ConnectionManager {
             TimerKind::LockPoll => self.lock_poll_due(),
             TimerKind::ApprovalFollow => self.approval_follow_due(),
         }
-    }
-
-    fn attempt_deadline_passed(&mut self) {
-        let Phase::Connecting(attempt) = &mut self.phase else {
-            return;
-        };
-        if attempt.stop_requested.is_some() {
-            return;
-        }
-        if attempt.stage != Stage::Run {
-            // The readiness check or the Gmail login hung; nothing runs yet.
-            let close = attempt.close_otp_session(false, true);
-            let replacing = attempt.replacing.take();
-            self.push_otp_close(close);
-            match replacing {
-                Some(session) => self.replacement_failed(session),
-                None => self.network_failure(RetryReason::Network),
-            }
-            return;
-        }
-        attempt.stop_requested = Some(StopReason::AttemptTimeout);
-        self.effects.push(Effect::StopRun {
-            attempt: attempt.id.clone(),
-            reason: StopReason::AttemptTimeout,
-        });
-        let close = attempt.close_otp_session(false, true);
-        self.push_otp_close(close);
-    }
-
-    fn otp_deadline_passed(&mut self) {
-        let Phase::Connecting(attempt) = &mut self.phase else {
-            return;
-        };
-        if attempt.stage != Stage::Run
-            || attempt.otp_prompted_at.is_none()
-            || attempt.otp_session == OtpSession::Submitted
-            || attempt.stop_requested.is_some()
-        {
-            return;
-        }
-        attempt.stop_requested = Some(StopReason::OtpTimeout);
-        self.effects.push(Effect::StopRun {
-            attempt: attempt.id.clone(),
-            reason: StopReason::OtpTimeout,
-        });
-        // The spam check tells at once whether the code went there; no search for it.
-        let close = attempt.close_otp_session(true, false);
-        self.push_otp_close(close);
-    }
-
-    fn proactive_reconnect_due(&mut self) {
-        if !matches!(self.phase, Phase::Connected(_)) || !self.automatic_reconnect_allowed(self.now) {
-            return;
-        }
-        let Phase::Connected(session) = self.take_phase() else {
-            unreachable!("matched above");
-        };
-        self.renew(session, AttemptReason::Proactive);
     }
 }
 

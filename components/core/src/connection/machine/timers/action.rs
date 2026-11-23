@@ -5,7 +5,10 @@ use super::decision::TimerChange;
 
 impl ConnectionManager {
     /// Marks the due timer fired; what it is due for follows.
-    pub(in crate::connection::machine) fn fire_timer(&mut self, due: Option<TimerKind>) -> Vec<Step> {
+    pub(in crate::connection::machine) fn fire_timer(
+        &mut self,
+        due: Option<TimerKind>,
+    ) -> Vec<Step> {
         let Some(kind) = due else {
             return Vec::new();
         };

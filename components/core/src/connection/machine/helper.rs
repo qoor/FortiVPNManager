@@ -52,7 +52,7 @@ impl ConnectionManager {
                 .and_then(|session| session.renewal)
                 .is_none_or(|renewal| renewal.tries < policy::MAX_COUNTED_PREPARATIONS);
             if counted {
-                self.ledger.record_auth_attempt(self.now);
+                self.ledger.recent_auth_attempts = self.ledger.attempts_with(self.now);
             }
             attempt.credentials_sent_at = Some(self.now);
         }
@@ -79,7 +79,7 @@ impl ConnectionManager {
 
     pub(super) fn enter_connected(&mut self, mut attempt: Attempt, tunnel_ip: Option<Ipv4Addr>) {
         // Still open only when the gateway asked for no OTP.
-        self.push_otp_close(attempt.close_otp_session(false, true));
+        self.push_otp_close(attempt.otp_closed(attempt.otp_close(false, true, self.now)));
         self.reconnect_limits.network_failure_streak = 0;
         self.ledger.reset_consecutive_failures();
         self.reconnect_limits.forced_retry_used = false;
@@ -101,7 +101,7 @@ impl ConnectionManager {
     pub(super) fn exited(&mut self, id: &AttemptId, facts: &EndFacts) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
-                self.learn_certificates(facts);
+                self.learn_now(facts);
                 let outcome = classify(&ExitContext {
                     facts,
                     seen_milestone: attempt.milestone,
@@ -113,7 +113,7 @@ impl ConnectionManager {
                 // No code email follows a login the gateway rejected, and its counted failure keeps
                 // the next login 90 s away, past the prompt's arrival tolerance.
                 let search = outcome != Outcome::AuthFailure(Failure::AuthenticationRejected);
-                self.push_otp_close(attempt.close_otp_session(false, search));
+                self.push_otp_close(attempt.otp_closed(attempt.otp_close(false, search, self.now)));
                 match attempt.replacing.take() {
                     Some(session) if facts.tunnel_address_in_use => {
                         self.restart_session(session, attempt.reason);
@@ -139,7 +139,7 @@ impl ConnectionManager {
                 self.phase = Phase::Connected(session);
             }
             Phase::Connected(session) if session.attempt == *id => {
-                self.learn_certificates(facts);
+                self.learn_now(facts);
                 self.last_failure_attempt = Some(id.clone());
                 let outcome = classify(&ExitContext {
                     facts,
@@ -154,7 +154,7 @@ impl ConnectionManager {
             Phase::Disconnecting(mut stop)
                 if stop.attempt == *id || stop.replacement.as_ref() == Some(id) =>
             {
-                self.learn_certificates(facts);
+                self.learn_now(facts);
                 match stop.replacement.take() {
                     Some(replacement) => {
                         if replacement != *id {
@@ -162,7 +162,7 @@ impl ConnectionManager {
                         }
                         self.phase = Phase::Disconnecting(stop);
                     }
-                    None => self.settle(stop.after),
+                    None => self.settle_now(stop.after),
                 }
             }
             // An attempt already finished with.
@@ -173,7 +173,7 @@ impl ConnectionManager {
     pub(super) fn run_rejected(&mut self, id: &AttemptId, code: HelperErrorCode) {
         match self.take_phase() {
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run && attempt.id == *id => {
-                self.push_otp_close(attempt.close_otp_session(false, true));
+                self.push_otp_close(attempt.otp_closed(attempt.otp_close(false, true, self.now)));
                 if let Some(session) = attempt.replacing.take() {
                     self.replacement_failed(session);
                     return;
@@ -190,7 +190,7 @@ impl ConnectionManager {
                         | HelperErrorCode::WrongPhase
                         | HelperErrorCode::UnknownAttempt
                         | HelperErrorCode::InternalError,
-                    ) => self.network_failure(RetryReason::Network),
+                    ) => self.network_failure_now(RetryReason::Network),
                 }
             }
             Phase::Disconnecting(mut stop)
@@ -203,7 +203,7 @@ impl ConnectionManager {
                         }
                         self.phase = Phase::Disconnecting(stop);
                     }
-                    None => self.settle(stop.after),
+                    None => self.settle_now(stop.after),
                 }
             }
             phase => self.phase = phase,
@@ -217,22 +217,24 @@ impl ConnectionManager {
             Phase::Connecting(mut attempt) if attempt.replacing.is_some() => {
                 attempt.replacing = None;
                 if attempt.stage == Stage::Run {
-                    self.push_otp_close(attempt.close_otp_session(false, true));
-                    self.forced_termination();
+                    self.push_otp_close(
+                        attempt.otp_closed(attempt.otp_close(false, true, self.now)),
+                    );
+                    self.forced_termination_now();
                 } else {
                     self.phase = Phase::Connecting(attempt);
                 }
             }
             Phase::Connecting(mut attempt) if attempt.stage == Stage::Run => {
-                self.push_otp_close(attempt.close_otp_session(false, true));
+                self.push_otp_close(attempt.otp_closed(attempt.otp_close(false, true, self.now)));
                 if attempt.otp_failure == Some(OtpFailure::Authentication) {
                     self.fail(Failure::GmailRejected);
                 } else {
-                    self.forced_termination();
+                    self.forced_termination_now();
                 }
             }
-            Phase::Connected(_) => self.forced_termination(),
-            Phase::Disconnecting(stop) => self.settle(stop.after),
+            Phase::Connected(_) => self.forced_termination_now(),
+            Phase::Disconnecting(stop) => self.settle_now(stop.after),
             phase => self.phase = phase,
         }
     }
