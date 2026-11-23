@@ -202,10 +202,7 @@ async fn end_session(
     match ending {
         Some(Control::Finish) => {
             let mut not_trashed = None;
-            for id in selection
-                .map(|found| found.all_candidate_ids)
-                .unwrap_or_default()
-            {
+            for id in selection.map_or_default(|found| found.all_candidate_ids) {
                 let trashed = match gmail_api::trash(&id) {
                     Some(request) => {
                         api_call(queue, address, &request, gmail_api::trash_from_response)

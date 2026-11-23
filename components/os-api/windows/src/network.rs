@@ -172,9 +172,7 @@ pub fn interface(luid: Luid) -> Result<Interface, Error> {
     let code = unsafe { GetIfEntry2(&raw mut row) };
     check("GetIfEntry2", code)?;
     Ok(Interface {
-        alias: U16CStr::from_slice_truncate(&row.Alias)
-            .map(U16CStr::to_string_lossy)
-            .unwrap_or_default(),
+        alias: U16CStr::from_slice_truncate(&row.Alias).map_or_default(U16CStr::to_string_lossy),
         guid: guid_text(row.InterfaceGuid),
         medium: match row.Type {
             IF_TYPE_ETHERNET_CSMACD => Medium::Ethernet,

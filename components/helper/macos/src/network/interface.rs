@@ -80,8 +80,7 @@ pub(crate) fn parse(output: &str) -> Option<Interface> {
     }
     let flags: Vec<&str> = first[1]
         .split_once('<')
-        .map(|(_, rest)| rest.split('>').next().unwrap_or_default())
-        .unwrap_or_default()
+        .map_or_default(|(_, rest)| rest.split('>').next().unwrap_or_default())
         .split(',')
         .collect();
     let mut interface = Interface {

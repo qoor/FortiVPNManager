@@ -303,8 +303,7 @@ impl Entry {
                 let look_up = routes
                     .wanted
                     .get(&app)
-                    .map(|wanted| wanted.routes.clone())
-                    .unwrap_or_default();
+                    .map_or_default(|wanted| wanted.routes.clone());
                 let change = BypassRoutesChange {
                     network: NetworkCheck::Read {},
                     remove: Vec::new(),

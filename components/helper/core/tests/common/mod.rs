@@ -80,13 +80,11 @@ impl RunDirectory {
     }
 
     pub fn names(&self) -> Vec<String> {
-        let mut names: Vec<String> = fs::read_dir(&self.path)
-            .map(|entries| {
-                entries
-                    .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut names: Vec<String> = fs::read_dir(&self.path).map_or_default(|entries| {
+            entries
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect()
+        });
         names.sort();
         names
     }

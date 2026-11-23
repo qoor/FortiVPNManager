@@ -60,8 +60,7 @@ pub(crate) fn create_temporary(path: &Path) -> io::Result<(PathBuf, File)> {
     let directory = path.parent().unwrap_or_else(|| Path::new("."));
     let name = path
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     let mut random = [0u8; 6];
     for attempt in 0.. {
         getrandom::fill(&mut random).expect("random bytes from the OS");

@@ -125,14 +125,12 @@ fn apply(
     } else {
         vec![]
     };
-    let stale: Vec<Route> = previous
-        .map(|previous| {
-            tunnel_routes(previous)
-                .into_iter()
-                .filter(|route| !wanted.contains(route))
-                .collect()
-        })
-        .unwrap_or_default();
+    let stale: Vec<Route> = previous.map_or_default(|previous| {
+        tunnel_routes(previous)
+            .into_iter()
+            .filter(|route| !wanted.contains(route))
+            .collect()
+    });
     let families: HashSet<Family> = wanted
         .iter()
         .chain(&stale)
