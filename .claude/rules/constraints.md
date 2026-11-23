@@ -90,6 +90,11 @@ paths:
 
 # 빌드
 
+## macOS
+- Xcode 스크립트 환경의 SYSROOT: macOS SDK 경로
+  - clippy: Rust sysroot로 해석, 표준 라이브러리 미발견
+  - 대응: 검사 단계 실행 시 SYSROOT 제거
+
 ## Windows
 - MSYS2 UCRT64 환경 값: MSYS2 셸 설정(/etc/profile)이 지정
   - 빈 환경(env -i)에서 빌드 시 직접 지정 필요
