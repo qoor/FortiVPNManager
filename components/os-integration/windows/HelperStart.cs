@@ -25,16 +25,16 @@ public enum HelperStartFailure
 /// <summary>How the wait for the Helper at launch ended.</summary>
 public abstract record HelperStartResult
 {
-    private HelperStartResult() { }
-
-    public sealed record Running : HelperStartResult;
-
-    /// <summary>Windows signs out or shuts down; the app quits without a word.</summary>
-    public sealed record SessionEnding : HelperStartResult;
-
-    /// <param name="Detail">What happened, in English for the event log.</param>
-    public sealed record Failed(HelperStartFailure Reason, string Detail) : HelperStartResult;
+    private protected HelperStartResult() { }
 }
+
+public sealed record HelperStartResultRunning : HelperStartResult;
+
+/// <summary>Windows signs out or shuts down; the app quits without a word.</summary>
+public sealed record HelperStartResultSessionEnding : HelperStartResult;
+
+/// <param name="Detail">What happened, in English for the event log.</param>
+public sealed record HelperStartResultFailed(HelperStartFailure Reason, string Detail) : HelperStartResult;
 
 /// <summary>The Helper's service as the app sees it, with the rights every account has.</summary>
 internal interface IHelperService
@@ -105,7 +105,7 @@ public static class HelperStart
                 service,
                 interval => !ending.Wait(interval),
                 line => SystemLog.Write(LogLevel.Notice, LogCategory.Readiness, line));
-            if (result is HelperStartResult.Failed failed)
+            if (result is HelperStartResultFailed failed)
             {
                 SystemLog.Write(LogLevel.Error, LogCategory.Readiness, failed.Detail);
             }
@@ -133,7 +133,7 @@ public static class HelperStart
             switch (service.State())
             {
                 case HelperServiceState.Running:
-                    return new HelperStartResult.Running();
+                    return new HelperStartResultRunning();
                 case HelperServiceState.NotInstalled:
                     return Refused(HelperStartFailure.NotInstalled, "the Helper service is not installed");
                 case HelperServiceState.NoPermission:
@@ -146,7 +146,7 @@ public static class HelperStart
                     }
                     if (failure is { } last && starts == Starts)
                     {
-                        return new HelperStartResult.Failed(
+                        return new HelperStartResultFailed(
                             last.Reason,
                             $"An error occurred while the Helper was starting ({last.Why}); FortiVPNManager quits (attempt {starts}/{Starts})");
                     }
@@ -194,13 +194,13 @@ public static class HelperStart
             }
             if (!pause(s_poll))
             {
-                return new HelperStartResult.SessionEnding();
+                return new HelperStartResultSessionEnding();
             }
         }
     }
 
     /// <summary>A failure no second start can help.</summary>
-    private static HelperStartResult.Failed Refused(HelperStartFailure reason, string why) =>
+    private static HelperStartResultFailed Refused(HelperStartFailure reason, string why) =>
         new(reason, $"The Helper failed to start ({why}); FortiVPNManager quits");
 }
 

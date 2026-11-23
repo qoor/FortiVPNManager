@@ -175,7 +175,7 @@ public static class SettingsSearch
 public static class SettingsSearchMatch
 {
     /// <summary>A name prepared once for matching: normalized, with each character's jamo.</summary>
-    public sealed class Name
+    internal sealed class Name
     {
         internal Name(string text)
         {
@@ -189,9 +189,9 @@ public static class SettingsSearchMatch
     }
 
     /// <summary>A term prepared once per search: normalized, with the jamo of its last character.</summary>
-    public sealed class Term
+    internal sealed class Term
     {
-        public Term(string term)
+        internal Term(string term)
         {
             ArgumentNullException.ThrowIfNull(term);
             Characters = Elements(term);
@@ -205,7 +205,7 @@ public static class SettingsSearchMatch
 
     public static bool Matches(string term, string text) => Matches(new Term(term), new Name(text));
 
-    public static bool Matches(Term prepared, Name name)
+    internal static bool Matches(Term prepared, Name name)
     {
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(name);

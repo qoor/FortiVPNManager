@@ -69,12 +69,12 @@ internal static class Program
         main.Activated += (_, args) => Reopened(args);
         switch (HelperStart.Run())
         {
-            case HelperStartResult.SessionEnding:
+            case HelperStartResultSessionEnding:
                 return;
-            case HelperStartResult.Failed failed:
+            case HelperStartResultFailed failed:
                 _ = MessageBoxW(0, Message(failed.Reason), "FortiVPNManager", ErrorBox);
                 return;
-            case HelperStartResult.Running:
+            case HelperStartResultRunning:
                 break;
             default:
                 throw new InvalidOperationException("unknown Helper start result");
