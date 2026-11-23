@@ -14,7 +14,7 @@
 mod fake;
 
 use std::env;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::process::{self, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,6 +38,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 const ABORTING_WRITER_PIPE: &str = "FVM_ABORTING_WRITER_PIPE";
+const WRITER_LISTENING: &str = "the aborting writer listens";
 
 struct Test {
     helper: Helper,
@@ -405,22 +406,23 @@ fn a_termination_request_without_a_run_exits_after_draining() {
 fn a_message_written_before_the_writer_aborts_still_reaches_the_reader() {
     let pipe = format!(r"\\.\pipe\fvm-helper-abort-{}", process::id());
     let mut writer = Command::new(env::current_exe().unwrap())
-        .args(["--exact", "write_then_abort", "--ignored"])
+        .args(["--exact", "write_then_abort", "--ignored", "--nocapture"])
         .env(ABORTING_WRITER_PIPE, &pipe)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let connection = loop {
-        match DuplexPipeStream::<pipe_mode::Bytes>::connect_by_path(pipe.as_str()) {
-            Ok(connection) => break connection,
-            Err(error) => {
-                assert!(Instant::now() < deadline, "{error}");
-                thread::sleep(Duration::from_millis(50));
-            }
-        }
-    };
+    let mut lines = BufReader::new(writer.stderr.take().unwrap()).lines();
+    let listening = lines
+        .by_ref()
+        .map(Result::unwrap)
+        .any(|line| line == WRITER_LISTENING);
+    assert!(
+        listening,
+        "the writer ended before it listened: {}",
+        writer.wait().unwrap()
+    );
+    let connection = DuplexPipeStream::<pipe_mode::Bytes>::connect_by_path(pipe.as_str()).unwrap();
     let status = writer.wait().unwrap();
     assert_eq!(
         status.code(),
@@ -443,6 +445,7 @@ fn write_then_abort() {
         .mode(PipeMode::Bytes)
         .create_duplex::<pipe_mode::Bytes>()
         .unwrap();
+    eprintln!("{WRITER_LISTENING}");
     let connection = listener.accept().unwrap();
     let mut frame = Vec::new();
     stream::send(

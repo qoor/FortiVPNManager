@@ -63,13 +63,10 @@ cat >"$work/run.ps1" <<EOF
 $runs
 '@ -split "\`n" | Where-Object { \$_.Trim() } | ForEach-Object {
     \$exe, \$package = \$_.Trim() -split '\|'
-    \$skip = \$exe -like 'pipe-*' -and \$package -eq 'components\\helper\\windows'
-    \$arguments = @(if (\$skip) { '--skip', 'a_message_written_before_the_writer_aborts_still_reaches_the_reader' })
-    [pscustomobject]@{ Name = \$exe; Exe = Join-Path \$root ".windows-tests\\\$exe"; Dir = Join-Path \$root \$package; Args = \$arguments }
+    [pscustomobject]@{ Name = \$exe; Exe = Join-Path \$root ".windows-tests\\\$exe"; Dir = Join-Path \$root \$package }
 })
 \$started = foreach (\$test in \$tests | Where-Object { \$new -contains \$_.Name }) {
     \$start = New-Object System.Diagnostics.ProcessStartInfo \$test.Exe
-    \$start.Arguments = \$test.Args -join ' '
     \$start.WorkingDirectory = \$test.Dir
     \$start.EnvironmentVariables['RUST_TEST_THREADS'] = '0'
     \$start.UseShellExecute = \$false
@@ -81,7 +78,7 @@ foreach (\$process in \$started) { \$process.WaitForExit() }
 \$failed = 0
 foreach (\$test in \$tests) {
     Push-Location \$test.Dir
-    \$output = & \$test.Exe \$test.Args 2>&1
+    \$output = & \$test.Exe 2>&1
     \$code = \$LASTEXITCODE
     \$result = \$output | Select-String 'test result:'
     if (\$code -ne 0 -or -not \$result) { \$failed++; \$output }
