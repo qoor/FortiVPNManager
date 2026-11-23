@@ -100,7 +100,7 @@ impl ConnectionManager {
         observation: &WakeObservation,
         slept_for: Duration,
     ) {
-        let may_reconnect = self.automatic_reconnect_allowed();
+        let may_reconnect = self.automatic_reconnect_allowed(self.now);
         let WakeObservation::NetworkBack {
             underlay,
             session_running,

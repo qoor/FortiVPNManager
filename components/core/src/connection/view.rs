@@ -2,6 +2,8 @@
 //! of the state as of the last input: every time-bound change, such as a schedule boundary, comes
 //! with a timer input.
 
+use std::time::SystemTime;
+
 use fvm_contract::app_helper::Milestone;
 use fvm_contract::app_internal::section::{
     AfterDisconnect, ConnectProgress, ConnectionIcon, ConnectionSection, ConnectionStatus,
@@ -14,6 +16,14 @@ use super::ledger::Failure;
 use super::machine::{AfterStop, AttemptReason, ConnectionManager, Phase, RetryReason, Stage};
 use super::policy;
 use super::readiness::{HelperFacts, SetupNeed};
+
+/// What the sections show of rules bound to the time.
+#[derive(Default)]
+pub(super) struct Shown {
+    schedule_outlook: Option<ScheduleOutlook>,
+    /// The proactive reconnect shows as planned rather than paused by the schedule.
+    proactive_reconnect_allowed: bool,
+}
 
 impl ConnectionManager {
     pub fn connection_section(&self) -> ConnectionSection {
@@ -51,18 +61,29 @@ impl ConnectionManager {
     /// What the schedule does next; `None` while it is off.
     #[must_use]
     pub fn schedule_outlook(&self) -> Option<ScheduleOutlook> {
+        self.shown.schedule_outlook.clone()
+    }
+
+    pub(super) fn judge_shown(&self, now: SystemTime) -> Shown {
+        Shown {
+            schedule_outlook: self.judge_schedule_outlook(now),
+            proactive_reconnect_allowed: self.automatic_reconnect_allowed(now),
+        }
+    }
+
+    fn judge_schedule_outlook(&self, now: SystemTime) -> Option<ScheduleOutlook> {
         let schedule = self.settings.connection.schedule.as_ref()?;
         let wants_connection = self.wants_connection && !matches!(self.phase, Phase::Failed(_));
         if !wants_connection {
-            return Some(schedule.next_start(self.now, &self.time_zone).map_or(
+            return Some(schedule.next_start(now, &self.time_zone).map_or(
                 ScheduleOutlook::NoDays {},
                 |at| ScheduleOutlook::Connects {
                     at: EpochMillis(at),
                 },
             ));
         }
-        if schedule.is_active(self.now, &self.time_zone)
-            && let Some(next) = schedule.next_boundary(self.now, &self.time_zone)
+        if schedule.is_active(now, &self.time_zone)
+            && let Some(next) = schedule.next_boundary(now, &self.time_zone)
             && next.edge == super::schedule::Edge::End
         {
             return Some(ScheduleOutlook::WithinHours {
@@ -171,7 +192,7 @@ impl ConnectionManager {
                 tunnel_ip: session.tunnel_ip,
                 proactive_reconnect: match session.planned_reconnect {
                     None => ProactiveReconnect::Off {},
-                    Some(at) if self.automatic_reconnect_allowed() => ProactiveReconnect::At {
+                    Some(at) if self.shown.proactive_reconnect_allowed => ProactiveReconnect::At {
                         at: EpochMillis(at),
                     },
                     Some(_) => ProactiveReconnect::PausedBySchedule {},

@@ -36,7 +36,7 @@ impl ConnectionManager {
                 .filter(|schedule| !schedule.is_active(self.now, &self.time_zone))
                 .map(crate::connection::Schedule::away_limit)
         {
-            if self.reconnect_limits.reconnect_suspended || self.away_limit_reached() {
+            if self.reconnect_limits.reconnect_suspended || self.away_limit_reached(self.now) {
                 self.give_up_reconnecting();
                 return;
             }

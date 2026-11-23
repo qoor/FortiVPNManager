@@ -75,7 +75,7 @@ impl ConnectionManager {
 
     /// Stops automatic reconnects once the away limit is reached; a waiting one is dropped.
     pub(super) fn check_away_limit(&mut self) {
-        if self.reconnect_limits.reconnect_suspended || !self.away_limit_reached() {
+        if self.reconnect_limits.reconnect_suspended || !self.away_limit_reached(self.now) {
             return;
         }
         self.reconnect_limits.reconnect_suspended = true;
@@ -95,29 +95,28 @@ impl ConnectionManager {
         self.phase = Phase::Idle;
     }
 
-    pub(in crate::connection) fn within_schedule(&self) -> bool {
+    pub(in crate::connection) fn within_schedule(&self, now: SystemTime) -> bool {
         self.settings
             .connection
             .schedule
             .as_ref()
-            .is_none_or(|schedule| schedule.is_active(self.now, &self.time_zone))
+            .is_none_or(|schedule| schedule.is_active(now, &self.time_zone))
     }
 
     /// Always inside the scheduled hours; outside them only while the user is present and
     /// reconnects were not suspended.
-    pub(in crate::connection) fn automatic_reconnect_allowed(&self) -> bool {
-        self.within_schedule()
+    pub(in crate::connection) fn automatic_reconnect_allowed(&self, now: SystemTime) -> bool {
+        self.within_schedule(now)
             || (!self.reconnect_limits.reconnect_suspended && self.away_since.is_none())
     }
 
     /// Outside the scheduled hours, the user has been away for the schedule's away time.
-    pub(super) fn away_limit_reached(&self) -> bool {
+    pub(super) fn away_limit_reached(&self, now: SystemTime) -> bool {
         let (Some(schedule), Some(away_since)) =
             (&self.settings.connection.schedule, self.away_since)
         else {
             return false;
         };
-        !schedule.is_active(self.now, &self.time_zone)
-            && self.now >= away_since + schedule.away_limit()
+        !schedule.is_active(now, &self.time_zone) && now >= away_since + schedule.away_limit()
     }
 }

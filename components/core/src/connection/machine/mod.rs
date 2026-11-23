@@ -5,10 +5,18 @@
 //! transition can forget to cancel a timer or save the ledger.
 
 mod attempts;
+mod finish {
+    pub(super) mod action;
+    pub(super) mod decision;
+}
 mod helper;
 mod otp;
 mod outcomes;
 mod presence;
+mod timers {
+    pub(super) mod action;
+    pub(in crate::connection::machine) mod decision;
+}
 mod wake;
 
 use std::collections::BTreeMap;
@@ -22,10 +30,10 @@ use jiff::tz::TimeZone;
 use super::ledger::{Failure, FailureLedger};
 use super::policy;
 use super::readiness::{Readiness, SetupNeed};
-use super::system::{PathSnapshot, SystemObservation, Underlay, WakeSettle};
+use super::system::{PathSnapshot, SystemObservation, Underlay};
+use super::view::Shown;
 use super::{
-    ConnectionSettings, Effect, Input, Launch, Note, OtpFailure, Settings, Startup, TimerId,
-    TimerKind, VpnAccount,
+    ConnectionSettings, Effect, Input, Launch, OtpFailure, Settings, Startup, TimerKind, VpnAccount,
 };
 
 const SECONDS_FROM_1970_TO_2026: u64 = 1_767_225_600;
@@ -68,9 +76,13 @@ pub struct ConnectionManager {
     pub(super) run_account: Option<VpnAccount>,
     timers: BTreeMap<TimerKind, TimerSlot>,
     next_timer_generation: u64,
+    /// The proactive timer is set again at the end of the input even at an unchanged time.
+    proactive_timer_rearm: bool,
     activity_held: bool,
     pub(super) system: SystemObservation,
     pub(super) readiness: Readiness,
+    /// What the sections show of time-bound rules, as judged at the end of the last input.
+    pub(super) shown: Shown,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -304,22 +316,14 @@ struct TimerSlot {
 /// One transition of an input: judged, then carried out, which may lead to further steps.
 pub(super) enum Step {
     Input(Input),
-}
-
-/// What the attempt announcement and the schedule notes compare before and after an input.
-struct NoteMarks {
-    /// The attempt under way.
-    attempt: Option<AttemptId>,
-    scheduled_attempt: Option<AttemptId>,
-    holding: bool,
-    suspended: bool,
+    TimerDue(TimerKind),
 }
 
 impl ConnectionManager {
     #[must_use]
     pub fn new(startup: Startup) -> Self {
         let ledger = FailureLedger::new(startup.settings.account.ledger_key());
-        Self {
+        let mut manager = Self {
             app_build: startup.app_build,
             attempt_seed: startup.attempt_seed,
             attempts_issued: 0,
@@ -345,10 +349,15 @@ impl ConnectionManager {
             run_account: None,
             timers: BTreeMap::new(),
             next_timer_generation: 0,
+            proactive_timer_rearm: false,
             activity_held: false,
             system: SystemObservation::default(),
             readiness: Readiness::default(),
-        }
+            shown: Shown::default(),
+        };
+        // What the sections show before the first input, as of the start of the clock.
+        manager.shown = manager.judge_shown(SystemTime::UNIX_EPOCH);
+        manager
     }
 
     /// Handles one input taken at `now` and returns what to carry out, in order.
@@ -356,33 +365,33 @@ impl ConnectionManager {
         if self.quit == Quit::Terminated {
             return Vec::new();
         }
-        self.now = match &input {
-            // A current timer is never early here. The runtime may sleep on a monotonic clock and
-            // stamp a slewed or stepped-back wall clock; judged a few milliseconds early, a retry
-            // bound by the cooldown would enter the very wait whose timer already fired, and
-            // nothing would move it on.
-            Input::TimerFired(timer) => match self.timers.get(&timer.kind) {
-                Some(slot) if slot.generation == timer.generation && !slot.fired => {
-                    now.max(slot.at)
-                }
-                _ => now,
-            },
-            _ => now,
-        };
+        let now = self.input_time(&input, now);
+        self.now = now;
         let marks = self.note_marks();
         let mut steps = vec![Step::Input(input)];
         while let Some(step) = steps.pop() {
             let next = self.run_step(step);
             steps.extend(next.into_iter().rev());
         }
-        self.finish(&marks)
+        let finish = self.finish_plan(&marks, now);
+        self.finish(finish)
     }
 
     fn run_step(&mut self, step: Step) -> Vec<Step> {
         match step {
-            Step::Input(input) => self.dispatch(input),
+            Step::Input(Input::TimerFired(timer)) => {
+                let due = self.due_timer(timer);
+                self.fire_timer(due)
+            }
+            Step::Input(input) => {
+                self.dispatch(input);
+                Vec::new()
+            }
+            Step::TimerDue(kind) => {
+                self.timer_due(kind);
+                Vec::new()
+            }
         }
-        Vec::new()
     }
 
     fn dispatch(&mut self, input: Input) {
@@ -414,7 +423,7 @@ impl ConnectionManager {
             Input::Helper(event) => self.helper_event(event),
             Input::RunRejected(attempt, code) => self.run_rejected(&attempt, code),
             Input::HelperConnectionLost => self.helper_connection_lost(),
-            Input::TimerFired(timer) => self.timer_fired(timer),
+            Input::TimerFired(_) => unreachable!("a timer input runs as its own step"),
             Input::WillSleep { at } => self.will_sleep_reported(at),
             Input::DidWake => self.did_wake_reported(),
             Input::ScreenLocked { at } => {
@@ -451,214 +460,6 @@ impl ConnectionManager {
         }
     }
 
-    fn finish(&mut self, marks: &NoteMarks) -> Vec<Effect> {
-        self.reconcile_timers();
-        // A pending stale-code search keeps its polling and its time limit on time.
-        let hold = self.quit != Quit::Terminated
-            && (self.phase.holds_activity() || self.stale_otp.is_some());
-        if hold != self.activity_held {
-            self.activity_held = hold;
-            self.effects.push(Effect::HoldActivity(hold));
-        }
-        if self.ledger != self.saved_ledger {
-            self.saved_ledger = self.ledger.clone();
-            self.effects.push(Effect::SaveLedger(self.ledger.clone()));
-        }
-        if self.quit == Quit::Terminated {
-            self.effects.push(Effect::ApproveQuit);
-        }
-        let mut effects = match &self.phase {
-            Phase::Connecting(attempt) if marks.attempt.as_ref() != Some(&attempt.id) => {
-                vec![Effect::AttemptBegun {
-                    attempt: attempt.id.clone(),
-                    session: attempt.session,
-                }]
-            }
-            _ => Vec::new(),
-        };
-        effects.append(&mut self.notes(marks));
-        effects.append(&mut self.effects);
-        effects
-    }
-
-    fn note_marks(&self) -> NoteMarks {
-        NoteMarks {
-            attempt: match &self.phase {
-                Phase::Connecting(attempt) => Some(attempt.id.clone()),
-                _ => None,
-            },
-            scheduled_attempt: match &self.phase {
-                Phase::Connecting(attempt) if attempt.reason == AttemptReason::Scheduled => {
-                    Some(attempt.id.clone())
-                }
-                _ => None,
-            },
-            holding: self.phase.is_holding(),
-            suspended: self.reconnect_limits.reconnect_suspended,
-        }
-    }
-
-    fn notes(&self, before: &NoteMarks) -> Vec<Effect> {
-        let Some(schedule) = &self.settings.connection.schedule else {
-            return Vec::new();
-        };
-        let after = self.note_marks();
-        let mut notes = Vec::new();
-        if after.scheduled_attempt.is_some() && after.scheduled_attempt != before.scheduled_attempt
-        {
-            notes.push(Effect::Note {
-                attempt: after.scheduled_attempt,
-                note: Note::ScheduledHoursStarted,
-            });
-        }
-        if after.holding && !before.holding {
-            notes.push(Effect::Note {
-                attempt: None,
-                note: Note::ReconnectHeldWhileAway,
-            });
-        }
-        if after.suspended && !before.suspended {
-            notes.push(Effect::Note {
-                attempt: None,
-                note: Note::ReconnectsSuspended {
-                    away_minutes: schedule.away_minutes,
-                },
-            });
-        }
-        notes
-    }
-
-    fn wanted_timers(&self) -> BTreeMap<TimerKind, SystemTime> {
-        let mut wanted = BTreeMap::new();
-        if self.quit == Quit::Terminated {
-            return wanted;
-        }
-        match &self.phase {
-            Phase::Connecting(attempt) if attempt.stop_requested.is_none() => {
-                wanted.insert(TimerKind::AttemptDeadline, attempt.deadline);
-                if attempt.stage == Stage::Run
-                    && attempt.otp_session != OtpSession::Submitted
-                    && let Some(prompted) = attempt.otp_prompted_at
-                {
-                    wanted.insert(TimerKind::OtpDeadline, prompted + policy::OTP_DEADLINE);
-                }
-            }
-            Phase::Connected(session) if !self.system.sleeping && self.pending_wake.is_none() => {
-                let next = match &session.renewal {
-                    None if self.automatic_reconnect_allowed() => session
-                        .planned_reconnect
-                        .map(|planned| (TimerKind::ProactiveReconnect, planned)),
-                    Some(renewal)
-                        if !renewal.reason.is_automatic_reconnect()
-                            || self.automatic_reconnect_allowed() =>
-                    {
-                        renewal.next_try.map(|at| (TimerKind::Retry, at))
-                    }
-                    _ => None,
-                };
-                wanted.extend(next);
-            }
-            Phase::WaitingRetry { until, .. } => {
-                wanted.insert(TimerKind::Retry, *until);
-            }
-            _ => {}
-        }
-        if let Some(stale) = &self.stale_otp {
-            wanted.insert(TimerKind::StaleOtp, stale.until);
-        }
-        let stopping_for_update = self
-            .update_stop
-            .filter(|stop| !stop.stopped)
-            .map(|stop| stop.requested_at);
-        let quit_requested_at = match self.quit {
-            Quit::Requested { at } => Some(at),
-            Quit::NotRequested | Quit::Terminated => None,
-        };
-        if let Some(requested) = quit_requested_at.or(stopping_for_update) {
-            wanted.insert(TimerKind::QuitDeadline, requested + policy::QUIT_TIMEOUT);
-        }
-        if let Some(schedule) = &self.settings.connection.schedule
-            && self.quit == Quit::NotRequested
-            && self.update_stop.is_none()
-        {
-            if let Some(handled) = self.schedule_boundary
-                && let Some(next) = schedule.next_boundary(handled, &self.time_zone)
-            {
-                wanted.insert(TimerKind::Schedule, next.at);
-            }
-            if let Some(away_since) = self.away_since
-                && !self.reconnect_limits.reconnect_suspended
-            {
-                wanted.insert(TimerKind::AwayLimit, away_since + schedule.away_limit());
-            }
-        }
-        let observation = [
-            (TimerKind::PathSettle, self.system.path_settle_at),
-            (
-                TimerKind::WakeSettle,
-                self.system
-                    .wake_settle
-                    .as_ref()
-                    .and_then(WakeSettle::next_look),
-            ),
-            (TimerKind::LockPoll, self.system.lock_poll_at),
-            (
-                TimerKind::ApprovalFollow,
-                self.readiness
-                    .follow_approval
-                    .as_ref()
-                    .map(|follow| follow.next),
-            ),
-        ];
-        for (kind, at) in observation {
-            if let Some(at) = at {
-                wanted.insert(kind, at);
-            }
-        }
-        wanted
-    }
-
-    fn reconcile_timers(&mut self) {
-        let wanted = self.wanted_timers();
-        for kind in TimerKind::ALL {
-            match (self.timers.get(&kind).copied(), wanted.get(&kind).copied()) {
-                (None, None) => {}
-                (Some(slot), None) => {
-                    self.timers.remove(&kind);
-                    if !slot.fired {
-                        self.effects.push(Effect::CancelTimer(kind));
-                    }
-                }
-                // A fired timer still wanted at the same time stays fired: no firing loop.
-                (Some(slot), Some(at)) if slot.at == at => {}
-                (_, Some(at)) => {
-                    self.next_timer_generation += 1;
-                    let timer = TimerId {
-                        kind,
-                        generation: self.next_timer_generation,
-                    };
-                    self.timers.insert(
-                        kind,
-                        TimerSlot {
-                            at,
-                            generation: timer.generation,
-                            fired: false,
-                        },
-                    );
-                    self.effects.push(Effect::SetTimer { timer, at });
-                }
-            }
-        }
-    }
-
-    /// Asks the runtime for a fresh timer even at an unchanged time: a timer may not survive the
-    /// sleep reliably.
-    fn rearm_proactive_timer(&mut self) {
-        if let Some(slot) = self.timers.get_mut(&TimerKind::ProactiveReconnect) {
-            slot.at = SystemTime::UNIX_EPOCH;
-        }
-    }
-
     fn take_phase(&mut self) -> Phase {
         mem::replace(&mut self.phase, Phase::Idle)
     }
@@ -680,7 +481,7 @@ impl ConnectionManager {
             self.effects.push(Effect::OpenSettings);
         }
 
-        if !launch.auto_connect || !self.within_schedule() {
+        if !launch.auto_connect || !self.within_schedule(self.now) {
             self.wants_connection = false;
             self.check_readiness();
         } else {
@@ -928,15 +729,8 @@ impl ConnectionManager {
 
     // MARK: Timers
 
-    fn timer_fired(&mut self, timer: TimerId) {
-        let Some(slot) = self.timers.get_mut(&timer.kind) else {
-            return;
-        };
-        if slot.generation != timer.generation || slot.fired {
-            return;
-        }
-        slot.fired = true;
-        match timer.kind {
+    fn timer_due(&mut self, kind: TimerKind) {
+        match kind {
             TimerKind::AttemptDeadline => self.attempt_deadline_passed(),
             TimerKind::OtpDeadline => self.otp_deadline_passed(),
             TimerKind::StaleOtp => self.stale_otp_wait_ran_out(),
@@ -1010,7 +804,7 @@ impl ConnectionManager {
     }
 
     fn proactive_reconnect_due(&mut self) {
-        if !matches!(self.phase, Phase::Connected(_)) || !self.automatic_reconnect_allowed() {
+        if !matches!(self.phase, Phase::Connected(_)) || !self.automatic_reconnect_allowed(self.now) {
             return;
         }
         let Phase::Connected(session) = self.take_phase() else {
