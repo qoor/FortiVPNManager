@@ -301,6 +301,11 @@ struct TimerSlot {
     fired: bool,
 }
 
+/// One transition of an input: judged, then carried out, which may lead to further steps.
+pub(super) enum Step {
+    Input(Input),
+}
+
 /// What the attempt announcement and the schedule notes compare before and after an input.
 struct NoteMarks {
     /// The attempt under way.
@@ -365,8 +370,19 @@ impl ConnectionManager {
             _ => now,
         };
         let marks = self.note_marks();
-        self.dispatch(input);
+        let mut steps = vec![Step::Input(input)];
+        while let Some(step) = steps.pop() {
+            let next = self.run_step(step);
+            steps.extend(next.into_iter().rev());
+        }
         self.finish(&marks)
+    }
+
+    fn run_step(&mut self, step: Step) -> Vec<Step> {
+        match step {
+            Step::Input(input) => self.dispatch(input),
+        }
+        Vec::new()
     }
 
     fn dispatch(&mut self, input: Input) {
