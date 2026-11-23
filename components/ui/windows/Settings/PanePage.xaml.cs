@@ -82,13 +82,13 @@ public sealed partial class PanePage : Page
     /// </summary>
     private static void Highlight(FrameworkElement element)
     {
-        if (Highlighted.TryGetValue(element, out var running))
+        if (Highlighted.TryGetValue(element, out DispatcherQueueTimer? running))
         {
             running.Stop();
             running.Start();
             return;
         }
-        var (brush, thickness) = element switch
+        (DependencyProperty? brush, DependencyProperty? thickness) = element switch
         {
             Control => (Control.BorderBrushProperty, Control.BorderThicknessProperty),
             Border => (Border.BorderBrushProperty, Border.BorderThicknessProperty),
@@ -100,7 +100,7 @@ public sealed partial class PanePage : Page
         }
         element.SetValue(brush, Application.Current.Resources["AccentFillColorDefaultBrush"]);
         element.SetValue(thickness, new Thickness(2));
-        var timer = element.DispatcherQueue.CreateTimer();
+        DispatcherQueueTimer timer = element.DispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromSeconds(2);
         timer.IsRepeating = false;
         timer.Tick += (_, _) =>
@@ -180,7 +180,7 @@ public sealed partial class PanePage : Page
     /// </summary>
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var stacked = e.NewSize.Width < 560;
+        bool stacked = e.NewSize.Width < 560;
         Grid.SetRow(Actions, stacked ? 1 : 0);
         Grid.SetColumn(Actions, stacked ? 0 : 1);
     }

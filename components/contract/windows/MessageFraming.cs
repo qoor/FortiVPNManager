@@ -30,8 +30,8 @@ public static class MessageFraming
 
     private static void WriteFrame<T>(Stream stream, T message, JsonTypeInfo<T> coding)
     {
-        var payload = JsonSerializer.SerializeToUtf8Bytes(message, coding);
-        var frame = new byte[4 + payload.Length];
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(message, coding);
+        byte[] frame = new byte[4 + payload.Length];
         BinaryPrimitives.WriteUInt32BigEndian(frame, (uint)payload.Length);
         payload.CopyTo(frame, 4);
         stream.Write(frame);
@@ -46,7 +46,7 @@ public static class MessageFraming
     {
         Span<byte> header = stackalloc byte[4];
         stream.ReadExactly(header);
-        var payload = new byte[BinaryPrimitives.ReadUInt32BigEndian(header)];
+        byte[] payload = new byte[BinaryPrimitives.ReadUInt32BigEndian(header)];
         stream.ReadExactly(payload);
         return JsonSerializer.Deserialize(payload, coding)
             ?? throw new JsonException("a message is never null");

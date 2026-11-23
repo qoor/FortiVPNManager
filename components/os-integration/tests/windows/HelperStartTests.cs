@@ -95,7 +95,7 @@ public class HelperStartTests
         };
         Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(90)], harness.Starts);
-        var (line, at) = Assert.Single(harness.Notes);
+        (string? line, TimeSpan at) = Assert.Single(harness.Notes);
         Assert.Contains("did not start in time", line);
         Assert.EndsWith("(attempt 1/2)", line);
         // Written when the first start failed, not when the second was made.
@@ -123,7 +123,7 @@ public class HelperStartTests
     public void ASecondTimedOutStartFails()
     {
         var harness = new Harness { Answer = _ => new StartAnswer.TimedOut(), StartTakes = _ => TimeSpan.FromSeconds(30) };
-        var failed = Assert.IsType<HelperStartResult.Failed>(harness.Wait());
+        HelperStartResult.Failed failed = Assert.IsType<HelperStartResult.Failed>(harness.Wait());
         Assert.Equal(HelperStartFailure.TimedOut, failed.Reason);
         Assert.EndsWith("(attempt 2/2)", failed.Detail);
         Assert.Equal(2, harness.Starts.Count);
@@ -142,7 +142,7 @@ public class HelperStartTests
         };
         Assert.IsType<HelperStartResult.Running>(harness.Wait());
         Assert.Equal([TimeSpan.Zero, TimeSpan.FromSeconds(35)], harness.Starts);
-        var (line, at) = Assert.Single(harness.Notes);
+        (string? line, TimeSpan at) = Assert.Single(harness.Notes);
         Assert.Contains("stopped with an error while starting", line);
         Assert.Equal(TimeSpan.FromSeconds(20), at);
     }
@@ -160,7 +160,7 @@ public class HelperStartTests
     public void AStartWindowsCannotMakeIsMadeOnceMoreThenFails()
     {
         var harness = new Harness { Answer = _ => new StartAnswer.Failed(1069) };
-        var failed = Assert.IsType<HelperStartResult.Failed>(harness.Wait());
+        HelperStartResult.Failed failed = Assert.IsType<HelperStartResult.Failed>(harness.Wait());
         Assert.Equal(HelperStartFailure.ErrorWhileStarting, failed.Reason);
         Assert.Contains("1069", failed.Detail);
         Assert.Equal(2, harness.Starts.Count);
@@ -233,8 +233,8 @@ public class HelperStartTests
         public StartAnswer Start()
         {
             Starts.Add(Now);
-            var number = Starts.Count;
-            var answer = Answer(number);
+            int number = Starts.Count;
+            StartAnswer answer = Answer(number);
             Now += StartTakes(number);
             if (answer is StartAnswer.Requested)
             {

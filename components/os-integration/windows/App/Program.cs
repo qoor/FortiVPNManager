@@ -49,7 +49,7 @@ public static class Program
         var main = AppInstance.FindOrRegisterForKey(InstanceKey);
         if (!main.IsCurrent)
         {
-            var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
+            AppActivationArguments activation = AppInstance.GetCurrent().GetActivatedEventArgs();
             // The handover is a call to the other process, made off this single-threaded thread.
             Task.Run(() => main.RedirectActivationToAsync(activation).AsTask()).Wait();
             return;

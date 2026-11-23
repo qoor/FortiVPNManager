@@ -56,10 +56,10 @@ internal sealed class ExceptionRulesPane : IPane
             rows => ui.Send(new Command.SetBypassRows(BypassList.Targets, rows)));
         body.Children.Add(Cards.SectionHeader(L("Exception targets")));
         body.Children.Add(rows["Exception targets"] = targets.View);
-        var targetButtons = Cards.Row(targets.Add, targets.Remove);
+        StackPanel targetButtons = Cards.Row(targets.Add, targets.Remove);
         targetButtons.Margin = new Thickness(0, 4, 0, 0);
         body.Children.Add(targetButtons);
-        var footer = Cards.Footer(L("While this PC is on one of the networks above, the exception targets skip the VPN and go out directly through that network's router."));
+        TextBlock footer = Cards.Footer(L("While this PC is on one of the networks above, the exception targets skip the VPN and go out directly through that network's router."));
         ToolTipService.SetToolTip(footer, L("Elsewhere, everything goes through the VPN. Routes are saved in Windows network settings and survive restarts."));
         body.Children.Add(footer);
         page.BodyPanel.Children.Add(body);
@@ -84,7 +84,7 @@ internal sealed class ExceptionRulesPane : IPane
         }
         else
         {
-            var (text, style) = rules.Status.Line(ui.Time);
+            (string? text, NoticeStyle style) = rules.Status.Line(ui.Time);
             statusText.Text = text;
             statusMark.SetStyle(style);
         }
@@ -110,13 +110,13 @@ internal sealed class ExceptionRulesPane : IPane
     /// </summary>
     private static Dictionary<int, (string Text, string Help)> RowMessages(BypassRulesSection rules, BypassList list)
     {
-        var explained = rules.Networks.ProblemRows.Count == 0 ? BypassList.Targets : BypassList.Networks;
-        var rows = list == BypassList.Networks ? rules.Networks : rules.Targets;
+        BypassList explained = rules.Networks.ProblemRows.Count == 0 ? BypassList.Targets : BypassList.Networks;
+        RuleList rows = list == BypassList.Networks ? rules.Networks : rules.Targets;
         if (list != explained || rules.Notice is not BypassNotice.RowProblem notice || rows.ProblemRows.Count == 0)
         {
             return [];
         }
-        var index = (int)rows.ProblemRows[0];
+        int index = (int)rows.ProblemRows[0];
         if (index >= rows.Rows.Count || rows.Rows[index] != notice.Row)
         {
             return [];

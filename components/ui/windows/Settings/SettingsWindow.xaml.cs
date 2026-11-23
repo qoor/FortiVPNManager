@@ -59,7 +59,7 @@ public sealed partial class SettingsWindow : Window
         FlyoutSearch.PlaceholderText = L("Search");
         ToolTipService.SetToolTip(NarrowSearchButton, L("Search"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NarrowSearchButton, L("Search"));
-        foreach (var (pane, glyph) in Panes)
+        foreach ((SettingsPane pane, string? glyph) in Panes)
         {
             Navigation.MenuItems.Add(new NavigationViewItem { Content = L(pane.TitleKey()), Tag = pane, Icon = new FontIcon { Glyph = glyph } });
         }
@@ -192,7 +192,7 @@ public sealed partial class SettingsWindow : Window
             sender.ItemsSource = null;
             return;
         }
-        var results = SettingsSearch.Results(sender.Text, ui.IsShown);
+        List<SearchResult> results = SettingsSearch.Results(sender.Text, ui.IsShown);
         // The input method finishes the syllable being composed when Down moves into the list, which
         // reports the text again; the same results stay as they are, so the line just chosen stays chosen.
         var shown = (sender.ItemsSource as List<object>)?.Select(line => (line as FrameworkElement)?.Tag as SearchResult).ToList();
@@ -226,7 +226,7 @@ public sealed partial class SettingsWindow : Window
     /// <summary>A chosen result, or Enter for the first one; the keyboard stays in the box after Enter.</summary>
     private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        var result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
+        SearchResult? result = (args.ChosenSuggestion as FrameworkElement)?.Tag as SearchResult
             ?? SettingsSearch.Results(sender.Text, ui.IsShown).FirstOrDefault();
         if (result is null)
         {
@@ -370,12 +370,12 @@ public sealed partial class SettingsWindow : Window
     /// </summary>
     private void Place(Placement? placement)
     {
-        var scale = Scale;
-        var rect = placement is { } saved ? new RectInt32(saved.X, saved.Y, saved.Width, saved.Height) : default;
+        double scale = Scale;
+        RectInt32 rect = placement is { } saved ? new RectInt32(saved.X, saved.Y, saved.Width, saved.Height) : default;
         var area = DisplayArea.GetFromRect(rect, DisplayAreaFallback.None);
         if (placement is null || area is null)
         {
-            var work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            RectInt32 work = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
             var size = new SizeInt32((int)(1040 * scale), (int)(720 * scale));
             rect = new RectInt32(work.X + (work.Width - size.Width) / 2, work.Y + (work.Height - size.Height) / 2, size.Width, size.Height);
         }
@@ -397,7 +397,7 @@ public sealed partial class SettingsWindow : Window
         {
             try
             {
-                var placement = JsonSerializer.Deserialize(File.ReadAllText(PlacementFile), PlacementCoding.Default.Placement);
+                Placement? placement = JsonSerializer.Deserialize(File.ReadAllText(PlacementFile), PlacementCoding.Default.Placement);
                 // A pane number this build doesn't have, from an edited or older file, opens General.
                 return placement is { } read && !Enum.IsDefined(read.Pane) ? read with { Pane = SettingsPane.General } : placement;
             }

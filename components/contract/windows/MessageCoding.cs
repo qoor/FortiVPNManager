@@ -473,7 +473,7 @@ internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAcce
 
     public CasesConverter()
     {
-        var cases = typeof(T)
+        IEnumerable<Type> cases = typeof(T)
             .GetNestedTypes(BindingFlags.Public)
             .Where(nested => nested.IsSubclassOf(typeof(T)));
         byName = cases.ToDictionary(nested => JsonNamingPolicy.CamelCase.ConvertName(nested.Name));
@@ -485,8 +485,8 @@ internal sealed class CasesConverter<[DynamicallyAccessedMembers(DynamicallyAcce
         Expect(reader.TokenType == JsonTokenType.StartObject, "an object");
         reader.Read();
         Expect(reader.TokenType == JsonTokenType.PropertyName, "a case name");
-        var name = reader.GetString()!;
-        if (!byName.TryGetValue(name, out var caseType))
+        string name = reader.GetString()!;
+        if (!byName.TryGetValue(name, out Type? caseType))
         {
             throw new JsonException($"{typeof(T).Name} has no case {name}");
         }

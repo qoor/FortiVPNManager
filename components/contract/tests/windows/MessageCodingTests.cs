@@ -20,7 +20,7 @@ public class MessageCodingTests
     public void EveryCaseIsListed()
     {
         Assert.Contains(typeof(AppInternal.ToRuntime), CasesTypes);
-        var unlisted = CasesTypes
+        IEnumerable<string?> unlisted = CasesTypes
             .SelectMany(type => type.GetNestedTypes().Where(nested => nested.IsSubclassOf(type)))
             .Where(@case => MessageCoding.Default.GetTypeInfo(@case) is null)
             .Select(@case => @case.FullName);
@@ -30,7 +30,7 @@ public class MessageCodingTests
     [Fact]
     public void EveryTypeOfCasesOrEnumHasItsConverter()
     {
-        var unconverted = CasesTypes
+        IEnumerable<string?> unconverted = CasesTypes
             .Concat(ContractTypes.Where(type => type.IsEnum))
             .Where(type => type.GetCustomAttribute<JsonConverterAttribute>() is null)
             .Select(type => type.FullName);

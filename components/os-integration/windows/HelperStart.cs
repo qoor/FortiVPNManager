@@ -101,7 +101,7 @@ public static class HelperStart
         try
         {
             using var service = new WindowsHelperService();
-            var result = Wait(
+            HelperStartResult result = Wait(
                 service,
                 interval => !ending.Wait(interval),
                 line => SystemLog.Write(LogLevel.Notice, LogCategory.Readiness, line));
@@ -124,9 +124,9 @@ public static class HelperStart
     /// </param>
     internal static HelperStartResult Wait(IHelperService service, Func<TimeSpan, bool> pause, Action<string> retrying)
     {
-        var starts = 0;
-        var watching = false;
-        var announced = false;
+        int starts = 0;
+        bool watching = false;
+        bool announced = false;
         (HelperStartFailure Reason, string Why)? failure = null;
         while (true)
         {
@@ -241,7 +241,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
 
     public HelperServiceState State()
     {
-        var service = OpenServiceW(manager, ServiceRegistration.HelperService, QueryStatusAccess);
+        nint service = OpenServiceW(manager, ServiceRegistration.HelperService, QueryStatusAccess);
         if (service == 0)
         {
             return Marshal.GetLastWin32Error() switch
@@ -253,7 +253,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
         }
         try
         {
-            if (!QueryServiceStatus(service, out var status))
+            if (!QueryServiceStatus(service, out ServiceStatus status))
             {
                 throw new Win32Exception();
             }
@@ -272,7 +272,7 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
 
     public StartAnswer Start()
     {
-        var service = OpenServiceW(manager, ServiceRegistration.HelperService, StartAccess);
+        nint service = OpenServiceW(manager, ServiceRegistration.HelperService, StartAccess);
         if (service == 0)
         {
             return Marshal.GetLastWin32Error() switch
@@ -310,8 +310,8 @@ internal sealed class WindowsHelperService : IHelperService, IDisposable
     /// </summary>
     public bool ProcessLeft()
     {
-        var processes = Process.GetProcessesByName(HelperProcess);
-        foreach (var process in processes)
+        Process[] processes = Process.GetProcessesByName(HelperProcess);
+        foreach (Process process in processes)
         {
             process.Dispose();
         }

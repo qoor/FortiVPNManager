@@ -56,7 +56,7 @@ public class SettingsSearchTests
     [Fact]
     public void APaneMatchedByItsNameIsTheResultItself()
     {
-        var results = Search("exception rules");
+        List<SearchResult> results = Search("exception rules");
         Assert.Contains(new SearchResult(SettingsPane.ExceptionRules, null), results);
         Assert.Empty(Keys(results, SettingsPane.ExceptionRules));
     }
@@ -75,17 +75,17 @@ public class SettingsSearchTests
     [Fact]
     public void SettingsSharingARowGoToIt()
     {
-        var reconnect = Assert.Single(Search("reconnect now"), result => result.Item?.Key == "Reconnect Now");
+        SearchResult reconnect = Assert.Single(Search("reconnect now"), result => result.Item?.Key == "Reconnect Now");
         Assert.Equal(SettingsSearch.ConnectionButtons, reconnect.Item!.Row);
         // A command at the top of a pane has no row; choosing it only opens the pane.
-        var find = Assert.Single(Search("find"), result => result.Pane == SettingsPane.Log);
+        SearchResult find = Assert.Single(Search("find"), result => result.Pane == SettingsPane.Log);
         Assert.Null(find.Item!.Row);
     }
 
     [Fact]
     public void TheSoftwareUpdateCardIsFoundByItsName()
     {
-        var update = Assert.Single(Search("software update"), result => result.Item?.Key == "Software Update");
+        SearchResult update = Assert.Single(Search("software update"), result => result.Item?.Key == "Software Update");
         Assert.Equal(SettingsPane.General, update.Pane);
         Assert.Equal("Software Update", update.Item!.Row);
     }
@@ -93,7 +93,7 @@ public class SettingsSearchTests
     [Fact]
     public void TheSoftwareUpdateCardLeadsTheGeneralResults()
     {
-        var keys = Keys(Search("at"), SettingsPane.General);
+        List<string> keys = Keys(Search("at"), SettingsPane.General);
         Assert.True(keys.Count > 1);
         Assert.Equal("Software Update", keys[0]);
     }

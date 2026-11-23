@@ -66,7 +66,7 @@ public static class GmailText
     private static string Tail(string clientId)
     {
         const string suffix = ".apps.googleusercontent.com";
-        var stem = clientId.EndsWith(suffix, StringComparison.Ordinal) ? clientId[..^suffix.Length] : clientId;
+        string stem = clientId.EndsWith(suffix, StringComparison.Ordinal) ? clientId[..^suffix.Length] : clientId;
         return stem.Length > 10 ? "…" + stem[^10..] : stem;
     }
 

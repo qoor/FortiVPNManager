@@ -17,9 +17,9 @@ public class AppInternalTests
     [Fact]
     public void MessagesFromTheRuntime()
     {
-        var messages = RoundTrip<FromRuntime>("from_runtime.json");
-        var first = Assert.IsType<FromRuntime.Section>(messages[0]);
-        var connection = Assert.IsType<Section.Connection>(first.Value).Value;
+        List<FromRuntime> messages = RoundTrip<FromRuntime>("from_runtime.json");
+        FromRuntime.Section first = Assert.IsType<FromRuntime.Section>(messages[0]);
+        ConnectionSection connection = Assert.IsType<Section.Connection>(first.Value).Value;
         Assert.IsType<ConnectionStatus.NotConnected>(connection.Status);
         Assert.Equal(ButtonState.Enabled, connection.Connect);
         Assert.Contains(messages, message => message is FromRuntime.OpenSettings);
@@ -118,7 +118,7 @@ public class AppInternalTests
     [Fact]
     public void Launched()
     {
-        var launched = Assert.IsType<ToRuntime.Launched>(Assert.Single(RoundTrip<ToRuntime>("launched.json")));
+        ToRuntime.Launched launched = Assert.IsType<ToRuntime.Launched>(Assert.Single(RoundTrip<ToRuntime>("launched.json")));
         Assert.Equal("Asia/Seoul", launched.Facts.TimeZone);
         Assert.NotNull(launched.Facts.BuiltInOauthClient);
     }
@@ -129,7 +129,7 @@ public class AppInternalTests
         var commands = RoundTrip<ToRuntime>("commands.json")
             .Select(message => Assert.IsType<ToRuntime.Command>(message).Value)
             .ToList();
-        var edit = Assert.IsType<Command.EditAccount>(commands.Single(command => command is Command.EditAccount));
+        Command.EditAccount edit = Assert.IsType<Command.EditAccount>(commands.Single(command => command is Command.EditAccount));
         Assert.Equal(4UL, edit.Revision);
         Assert.Equal("vpn.example.com:8443", edit.Form.Server);
     }
@@ -144,7 +144,7 @@ public class AppInternalTests
             .Select(message => Assert.IsType<ToRuntime.Event>(message).Value)
             .ToList();
         // Whole milliseconds since 1970, as the runtime writes them.
-        var willSleep = Assert.IsType<SystemEvent.WillSleep>(events[0]);
+        SystemEvent.WillSleep willSleep = Assert.IsType<SystemEvent.WillSleep>(events[0]);
         Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1_762_412_345_250), willSleep.At);
     }
 
@@ -177,7 +177,7 @@ public class AppInternalTests
             new HelperCall.SubmitOtp("attempt", "123456").ToString(),
             new AppFacts("1", "26.1.0", true, "Asia/Seoul", new SignInPages("a", "b", "c"), "client-secret").ToString(),
         ];
-        foreach (var text in shown)
+        foreach (string text in shown)
         {
             Assert.DoesNotContain("vpn-secret", text);
             Assert.DoesNotContain("app-secret", text);

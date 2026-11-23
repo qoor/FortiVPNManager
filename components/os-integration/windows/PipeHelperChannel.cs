@@ -67,8 +67,8 @@ internal sealed class PipeHelperChannel : IHelperChannel
     /// <summary>The time limit covers sending too: a Helper that stops reading holds the write.</summary>
     public async Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
     {
-        var id = Interlocked.Increment(ref lastRequest);
-        var message = request(id);
+        ulong id = Interlocked.Increment(ref lastRequest);
+        HelperPipe.Request message = request(id);
         var limit = Task.Delay(ReplyLimit);
         var answer = new TaskCompletionSource<HelperPipe.Message>(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = answer;
@@ -147,7 +147,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
 
     private void Answer(HelperPipe.Message message)
     {
-        var id = message switch
+        ulong id = message switch
         {
             HelperPipe.Message.Build build => build.Id,
             HelperPipe.Message.Reply reply => reply.Id,
@@ -155,7 +155,7 @@ internal sealed class PipeHelperChannel : IHelperChannel
             _ => throw new InvalidOperationException($"no request is answered by {message.GetType().Name}"),
         };
         // An answer after the time limit finds no request.
-        if (pending.TryRemove(id, out var answer))
+        if (pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
         {
             answer.TrySetResult(message);
         }
@@ -168,9 +168,9 @@ internal sealed class PipeHelperChannel : IHelperChannel
             return;
         }
         pipe.Dispose();
-        foreach (var id in pending.Keys)
+        foreach (ulong id in pending.Keys)
         {
-            if (pending.TryRemove(id, out var answer))
+            if (pending.TryRemove(id, out TaskCompletionSource<HelperPipe.Message>? answer))
             {
                 answer.TrySetException(new HelperChannelException(new HelperChannelFailure.ConnectionLost()));
             }

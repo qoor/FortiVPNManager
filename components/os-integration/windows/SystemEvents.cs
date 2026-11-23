@@ -49,7 +49,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
 
     /// <summary>The system time zone's IANA name, which the runtime computes with.</summary>
     public static string IanaTimeZone() =>
-        TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var iana) ? iana : TimeZoneInfo.Local.Id;
+        TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out string? iana) ? iana : TimeZoneInfo.Local.Id;
 
     private void Subscribe()
     {
@@ -87,7 +87,7 @@ internal sealed class SystemEvents(Action<SystemEvent> post, AppLifetime lifetim
         {
             post(new SystemEvent.ClockChanged());
             TimeZoneInfo.ClearCachedData();
-            var current = IanaTimeZone();
+            string current = IanaTimeZone();
             lock (gate)
             {
                 if (current == timeZone)

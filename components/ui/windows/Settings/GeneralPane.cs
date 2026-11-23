@@ -53,7 +53,7 @@ internal sealed class GeneralPane : IPane
     public GeneralPane(AppUi ui, PanePage page)
     {
         this.ui = ui;
-        (var currentLine, currentMark, currentText) = Cards.StatusLine();
+        (Grid? currentLine, currentMark, currentText) = Cards.StatusLine();
         current.Content = currentLine;
         reason = Cards.Card(L("Reason"), reasonValue);
         connectedAt = Cards.Card(L("Connected at"), connectedAtValue);
@@ -72,13 +72,13 @@ internal sealed class GeneralPane : IPane
         disconnect.Click += (_, _) => ui.Send(new Command.Disconnect());
         reconnectNow.Click += (_, _) => ui.Send(new Command.ReconnectNow());
         status.Children.Add(Cards.SectionHeader(L("Status")));
-        var buttons = Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow));
+        SettingsCard buttons = Cards.ActionCard(Cards.Buttons(connect, disconnect, reconnectNow));
         rows["Current status"] = current;
         rows["Connected at"] = connectedAt;
         rows["Tunnel IP"] = tunnelIp;
         rows["Next proactive reconnect"] = proactive;
         rows[SettingsSearch.ConnectionButtons] = buttons;
-        foreach (var element in new UIElement[] { current, reason, setupItems, failure, connectedAt, tunnelIp, proactive, nextAttempt, buttons })
+        foreach (UIElement element in new UIElement[] { current, reason, setupItems, failure, connectedAt, tunnelIp, proactive, nextAttempt, buttons })
         {
             status.Children.Add(element);
         }
@@ -124,7 +124,7 @@ internal sealed class GeneralPane : IPane
         var importButton = new Button { Content = L("Import Settings") };
         importButton.Click += (_, _) => ui.Send(new Command.ImportClientSettings());
         import.Children.Add(Cards.SectionHeader(L("Import Settings")));
-        var source = Cards.Card(L("FortiClient settings"), importButton);
+        SettingsCard source = Cards.Card(L("FortiClient settings"), importButton);
         source.Describe(L("Brings in the server address from FortiClient."));
         import.Children.Add(rows[SettingsSearch.ImportRow] = source);
         var close = new Button { Content = L("Close") };
@@ -164,7 +164,7 @@ internal sealed class GeneralPane : IPane
 
     private void ShowImport(ClientSettingsImport? report)
     {
-        var imported = (report as ClientSettingsImport.Imported)?.Report;
+        ImportReport? imported = (report as ClientSettingsImport.Imported)?.Report;
         importReport.Visible(imported is not null);
         if (imported is not null)
         {
@@ -193,12 +193,12 @@ internal sealed class GeneralPane : IPane
         reason.Visible(connection.WaitReason is not null);
         reasonValue.Text = connection.WaitReason?.Summary(time) ?? "";
 
-        var items = connection.Status is ConnectionStatus.SetupRequired setup ? setup.Items : [];
+        IReadOnlyList<SetupItem> items = connection.Status is ConnectionStatus.SetupRequired setup ? setup.Items : [];
         if (!items.SequenceEqual(shownItems))
         {
             shownItems = items;
             setupItems.Children.Clear();
-            foreach (var item in items)
+            foreach (SetupItem item in items)
             {
                 var card = new SettingsCard { Header = item.ActionTitle(), IsClickEnabled = true };
                 card.Click += (_, _) => ui.Settings.Show(item.Pane());
@@ -212,7 +212,7 @@ internal sealed class GeneralPane : IPane
         failureAction.Content = shownFailure?.ActionTitle();
 
         var connected = connection.Status as ConnectionStatus.Connected;
-        foreach (var card in new[] { connectedAt, tunnelIp, proactive })
+        foreach (SettingsCard? card in new[] { connectedAt, tunnelIp, proactive })
         {
             card.Visible(connected is not null);
         }
@@ -229,7 +229,7 @@ internal sealed class GeneralPane : IPane
             };
         }
 
-        var next = connection.NextAttempt();
+        DateTimeOffset? next = connection.NextAttempt();
         nextAttempt.Visible(next is not null);
         nextAttemptValue.Text = next is { } nextAt ? time.ClockTime(nextAt) : "";
 
@@ -241,12 +241,12 @@ internal sealed class GeneralPane : IPane
 
     private void ShowStartup(ConfigSection config)
     {
-        var login = config.OpenAtLogin;
+        OpenAtLogin login = config.OpenAtLogin;
         openAtLogin.IsOn = login.Enabled;
         openAtLoginCard.IsEnabled = login.Available;
         openAtLoginCard.Describe(login.Available ? null : L("Only available for the app installed in Program Files."));
         // The description already gives the reason a copy outside Program Files can't set it.
-        var error = login.Error is { } failed && (login.Available || failed is not RegistrationError.NotInstalledCopy) ? failed.LoginItemMessage() : null;
+        string? error = login.Error is { } failed && (login.Available || failed is not RegistrationError.NotInstalledCopy) ? failed.LoginItemMessage() : null;
         openAtLoginError.Show(error);
 
         autoConnect.IsOn = config.Options.AutoConnectOnLaunch;

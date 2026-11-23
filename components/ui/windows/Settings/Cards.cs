@@ -1,8 +1,8 @@
 ﻿using CommunityToolkit.WinUI.Controls;
+using FortiVPNManager.Ui.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using FortiVPNManager.Ui.Text;
 using static FortiVPNManager.Contract.AppInternal;
 
 namespace FortiVPNManager.Ui.Settings;
@@ -33,7 +33,7 @@ internal static class Cards
     public static WrapPanel Buttons(params UIElement[] children)
     {
         var row = new WrapPanel { HorizontalSpacing = 8, VerticalSpacing = 8 };
-        foreach (var child in children)
+        foreach (UIElement child in children)
         {
             row.Children.Add(child);
         }
@@ -51,7 +51,7 @@ internal static class Cards
         field.Width = width;
         card.SizeChanged += (_, args) =>
         {
-            var inner = args.NewSize.Width - card.Padding.Left - card.Padding.Right;
+            double inner = args.NewSize.Width - card.Padding.Left - card.Padding.Right;
             field.Width = args.NewSize.Width < wrapThreshold ? Math.Max(0, Math.Min(width, inner)) : width;
         };
         return card;
@@ -60,7 +60,7 @@ internal static class Cards
     public static StackPanel Row(params UIElement[] children)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        foreach (var child in children)
+        foreach (UIElement child in children)
         {
             row.Children.Add(child);
         }
@@ -136,9 +136,9 @@ internal static class Cards
     /// <summary>A named part inside a control's template, to adjust what the control offers no setting for.</summary>
     public static DependencyObject? FindDescendant(DependencyObject parent, string name)
     {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
-            var child = VisualTreeHelper.GetChild(parent, i);
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
             if (child is FrameworkElement { Name: var childName } && childName == name)
             {
                 return child;

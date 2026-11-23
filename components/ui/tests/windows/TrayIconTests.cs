@@ -8,7 +8,7 @@ public class TrayIconTests
     [Fact]
     public void EveryStateHasItsIconFile()
     {
-        var missing = Enum.GetValues<ConnectionIcon>()
+        IEnumerable<string> missing = Enum.GetValues<ConnectionIcon>()
             .Select(TrayIcon.IconFile)
             .Where(file => !File.Exists(Path.Combine(StringsTests.Repository, "packaging", "windows", file)));
         Assert.Empty(missing);

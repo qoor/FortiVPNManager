@@ -65,7 +65,7 @@ internal sealed class LogPane : IPane, IDisposable
             OverflowButtonVisibility = CommandBarOverflowButtonVisibility.Collapsed,
         };
         commands.PrimaryCommands.Add(Command("\uE721", L("Find"), L("Find in log (Ctrl+F)"), () => ShowFind()));
-        var clear = Command("\uE74D", L("Clear"), L("Clear the log view (Ctrl+L) — the log file is kept"), Clear);
+        AppBarButton clear = Command("\uE74D", L("Clear"), L("Clear the log view (Ctrl+L) — the log file is kept"), Clear);
         clear.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = VirtualKey.L, Modifiers = VirtualKeyModifiers.Control });
         clear.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         commands.PrimaryCommands.Add(clear);
@@ -104,15 +104,15 @@ internal sealed class LogPane : IPane, IDisposable
             }
         };
         findBox.TextChanged += (_, _) => noMatch.Visibility = Visibility.Collapsed;
-        var previous = IconButton("\uE70E", L("Previous match (Shift+Enter)"), () => FindNext(forward: false));
-        var next = IconButton("\uE70D", L("Next match (Enter)"), () => FindNext(forward: true));
+        Button previous = IconButton("\uE70E", L("Previous match (Shift+Enter)"), () => FindNext(forward: false));
+        Button next = IconButton("\uE70D", L("Next match (Enter)"), () => FindNext(forward: true));
         findBar.Children.Add(noMatch);
         findBar.Children.Add(findBox);
         findBar.Children.Add(previous);
         findBar.Children.Add(next);
 
         // On the pane's card, as the other panes' groups, and the found text stays marked while typing in the find box.
-        foreach (var key in new[] { "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused", "TextControlBorderBrush", "TextControlBorderBrushPointerOver", "TextControlBorderBrushFocused" })
+        foreach (string? key in new[] { "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused", "TextControlBorderBrush", "TextControlBorderBrushPointerOver", "TextControlBorderBrushFocused" })
         {
             view.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
@@ -126,7 +126,7 @@ internal sealed class LogPane : IPane, IDisposable
         };
         view.ActualThemeChanged += (_, _) => Recolor();
 
-        var fill = page.UseFill();
+        Grid fill = page.UseFill();
         fill.RowSpacing = 8;
         fill.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         fill.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -162,14 +162,14 @@ internal sealed class LogPane : IPane, IDisposable
             // Loaded draws every line.
             return;
         }
-        var wasAtBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
-        var entries = ui.Log.Entries;
+        bool wasAtBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
+        IReadOnlyList<LogEntry> entries = ui.Log.Entries;
         // Lines the app's log dropped leave the view once there are enough of them, and only while the
         // view is at the end: while the person reads further up, nothing above them moves.
-        var stale = entries.Count == 0 ? shown.Count : shown.TakeWhile(entry => entry.Id < entries[0].Id).Count();
+        int stale = entries.Count == 0 ? shown.Count : shown.TakeWhile(entry => entry.Id < entries[0].Id).Count();
         if (stale >= TrimChunk && wasAtBottom)
         {
-            var removed = shown.Take(stale).Sum(entry => entry.Length);
+            int removed = shown.Take(stale).Sum(entry => entry.Length);
             Edit(() => view.Document.GetRange(0, removed).SetText(TextSetOptions.None, ""));
             shown.RemoveRange(0, stale);
             length -= removed;
@@ -189,19 +189,19 @@ internal sealed class LogPane : IPane, IDisposable
         var colors = Palette.For(view.ActualTheme);
         Edit(() =>
         {
-            foreach (var entry in entries)
+            foreach (LogEntry entry in entries)
             {
-                var line = entry.Line;
+                LogLine line = entry.Line;
                 // The view's line break is \r.
-                var gap = LogLines.Gap(line, afterAnother: shown.Count > 0).ReplaceLineEndings("\r");
+                string gap = LogLines.Gap(line, afterAnother: shown.Count > 0).ReplaceLineEndings("\r");
                 if (gap.Length > 0)
                 {
                     Run(gap, colors.Tertiary);
                     shown[^1] = (shown[^1].Id, shown[^1].Length + gap.Length);
                 }
-                var start = length;
+                int start = length;
                 Run(line.Time.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " ", colors.Tertiary);
-                var text = colors.Primary;
+                Color text = colors.Primary;
                 switch (line.Source)
                 {
                     case LogSource.Note:
@@ -227,7 +227,7 @@ internal sealed class LogPane : IPane, IDisposable
     /// <summary>Adds <paramref name="text"/> at the end; each run sets its own look, as text added there takes the look before it.</summary>
     private void Run(string text, Color color, float size = 12)
     {
-        var range = view.Document.GetRange(length, length);
+        ITextRange range = view.Document.GetRange(length, length);
         range.SetText(TextSetOptions.None, text);
         range.CharacterFormat.ForegroundColor = color;
         range.CharacterFormat.Size = size;
@@ -253,14 +253,14 @@ internal sealed class LogPane : IPane, IDisposable
     /// </summary>
     private void Recolor()
     {
-        var atBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
+        bool atBottom = scroller is null || scroller.VerticalOffset >= scroller.ScrollableHeight - 8;
         if (ui.LogAutoScroll && atBottom)
         {
             Redraw(toEnd: true);
             return;
         }
-        var offset = scroller?.VerticalOffset ?? 0;
-        var (start, end) = (view.Document.Selection.StartPosition, view.Document.Selection.EndPosition);
+        double offset = scroller?.VerticalOffset ?? 0;
+        (int start, int end) = (view.Document.Selection.StartPosition, view.Document.Selection.EndPosition);
         Redraw(toEnd: false);
         view.Document.Selection.SetRange(start, end);
         view.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => scroller?.ChangeView(null, offset, null, disableAnimation: true));
@@ -299,18 +299,18 @@ internal sealed class LogPane : IPane, IDisposable
     /// <summary>The next match after the selection, or the one before it, starting over at the other end.</summary>
     private void FindNext(bool forward)
     {
-        var query = findBox.Text;
+        string query = findBox.Text;
         if (query.Length == 0)
         {
             return;
         }
-        var document = view.Document;
-        var from = forward ? document.Selection.EndPosition : document.Selection.StartPosition;
-        var scope = forward ? TextConstants.MaxUnitCount : -TextConstants.MaxUnitCount;
-        var range = document.GetRange(from, from);
+        RichEditTextDocument document = view.Document;
+        int from = forward ? document.Selection.EndPosition : document.Selection.StartPosition;
+        int scope = forward ? TextConstants.MaxUnitCount : -TextConstants.MaxUnitCount;
+        ITextRange range = document.GetRange(from, from);
         if (range.FindText(query, scope, FindOptions.None) == 0)
         {
-            var wrap = forward ? 0 : length;
+            int wrap = forward ? 0 : length;
             range = document.GetRange(wrap, wrap);
             if (range.FindText(query, scope, FindOptions.None) == 0)
             {

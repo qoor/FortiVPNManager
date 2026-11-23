@@ -24,8 +24,8 @@ public static class Strings
     /// <summary>The sentence <paramref name="key"/> with <paramref name="arguments"/> in its specifiers' places.</summary>
     public static string L(string key, params object[] arguments)
     {
-        var unit = Windows.Value.Find(key, Language) ?? Shared.Value.Find(key, Language);
-        var template = unit is null ? key : unit.Choose(arguments);
+        Unit? unit = Windows.Value.Find(key, Language) ?? Shared.Value.Find(key, Language);
+        string template = unit is null ? key : unit.Choose(arguments);
         return Format(template, arguments);
     }
 
@@ -36,8 +36,8 @@ public static class Strings
     internal static string Format(string template, object[] arguments)
     {
         var text = new StringBuilder();
-        var next = 0;
-        for (var i = 0; i < template.Length; i++)
+        int next = 0;
+        for (int i = 0; i < template.Length; i++)
         {
             if (template[i] != '%' || i + 1 == template.Length)
             {
@@ -50,8 +50,8 @@ public static class Strings
                 i++;
                 continue;
             }
-            var end = i + 1;
-            var position = -1;
+            int end = i + 1;
+            int position = -1;
             while (end < template.Length && char.IsAsciiDigit(template[end]))
             {
                 end++;
@@ -75,7 +75,7 @@ public static class Strings
                 text.Append(template[i]);
                 continue;
             }
-            var index = position >= 0 ? position : next++;
+            int index = position >= 0 ? position : next++;
             text.Append(index < arguments.Length ? Display(arguments[index]) : string.Empty);
             i = end;
         }
@@ -94,16 +94,16 @@ public static class Strings
     {
         public static Catalog Load(string name)
         {
-            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
+            using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
                 ?? throw new InvalidOperationException($"the string catalog {name} is missing from the build");
             using var document = JsonDocument.Parse(stream);
             var entries = new Dictionary<string, Dictionary<string, Unit>>(StringComparer.Ordinal);
-            foreach (var entry in document.RootElement.GetProperty("strings").EnumerateObject())
+            foreach (JsonProperty entry in document.RootElement.GetProperty("strings").EnumerateObject())
             {
                 var languages = new Dictionary<string, Unit>(StringComparer.Ordinal);
-                if (entry.Value.TryGetProperty("localizations", out var localizations))
+                if (entry.Value.TryGetProperty("localizations", out JsonElement localizations))
                 {
-                    foreach (var language in localizations.EnumerateObject())
+                    foreach (JsonProperty language in localizations.EnumerateObject())
                     {
                         if (Unit.Read(language.Value) is { } unit)
                         {
@@ -120,7 +120,7 @@ public static class Strings
 
         /// <summary>The sentence in <paramref name="language"/>, or null to use the key itself.</summary>
         public Unit? Find(string key, string language) =>
-            entries.TryGetValue(key, out var languages) && languages.TryGetValue(language, out var unit) ? unit : null;
+            entries.TryGetValue(key, out Dictionary<string, Unit>? languages) && languages.TryGetValue(language, out Unit? unit) ? unit : null;
     }
 
     /// <summary>A sentence, or its plural forms keyed one, other and so on.</summary>
@@ -128,15 +128,15 @@ public static class Strings
     {
         public static Unit? Read(JsonElement localization)
         {
-            if (localization.TryGetProperty("stringUnit", out var stringUnit))
+            if (localization.TryGetProperty("stringUnit", out JsonElement stringUnit))
             {
                 return new Unit(stringUnit.GetProperty("value").GetString(), null);
             }
-            if (localization.TryGetProperty("variations", out var variations)
-                && variations.TryGetProperty("plural", out var plural))
+            if (localization.TryGetProperty("variations", out JsonElement variations)
+                && variations.TryGetProperty("plural", out JsonElement plural))
             {
                 var forms = new Dictionary<string, string>(StringComparer.Ordinal);
-                foreach (var form in plural.EnumerateObject())
+                foreach (JsonProperty form in plural.EnumerateObject())
                 {
                     forms[form.Name] = form.Value.GetProperty("stringUnit").GetProperty("value").GetString() ?? string.Empty;
                 }
@@ -152,9 +152,9 @@ public static class Strings
             {
                 return Value ?? string.Empty;
             }
-            var count = arguments.FirstOrDefault(argument => argument is long or int or ulong or uint);
-            var form = count is not null && Convert.ToDecimal(count, CultureInfo.InvariantCulture) == 1 ? "one" : "other";
-            return Plural.TryGetValue(form, out var chosen) ? chosen : Plural.GetValueOrDefault("other", string.Empty);
+            object? count = arguments.FirstOrDefault(argument => argument is long or int or ulong or uint);
+            string form = count is not null && Convert.ToDecimal(count, CultureInfo.InvariantCulture) == 1 ? "one" : "other";
+            return Plural.TryGetValue(form, out string? chosen) ? chosen : Plural.GetValueOrDefault("other", string.Empty);
         }
     }
 }

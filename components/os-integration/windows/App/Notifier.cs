@@ -22,14 +22,14 @@ internal sealed class Notifier : IDisposable
     }
 
     public static string? Identifier(AppNotificationActivatedEventArgs args) =>
-        args.Arguments.TryGetValue(IdentifierArgument, out var identifier) ? identifier : null;
+        args.Arguments.TryGetValue(IdentifierArgument, out string? identifier) ? identifier : null;
 
     public static bool FromButton(AppNotificationActivatedEventArgs args) => args.Arguments.ContainsKey(ButtonArgument);
 
     /// <summary>Replaces an earlier notification with the same <paramref name="identifier"/>.</summary>
     public void Post(string identifier, string title, string body, string? button)
     {
-        var builder = new AppNotificationBuilder()
+        AppNotificationBuilder builder = new AppNotificationBuilder()
             .AddArgument(IdentifierArgument, identifier)
             .AddText(title)
             .AddText(body);
@@ -39,7 +39,7 @@ internal sealed class Notifier : IDisposable
                 .AddArgument(IdentifierArgument, identifier)
                 .AddArgument(ButtonArgument, ButtonArgument));
         }
-        var notification = builder.BuildNotification();
+        AppNotification notification = builder.BuildNotification();
         notification.Tag = identifier;
         notification.Group = Group;
         AppNotificationManager.Default.Show(notification);

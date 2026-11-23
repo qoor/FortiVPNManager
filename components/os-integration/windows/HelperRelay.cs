@@ -114,7 +114,7 @@ internal sealed class HelperRelay
             {
                 if (verified && VerifiedLinkId != current.Id)
                 {
-                    var build = await Version(current);
+                    string build = await Version(current);
                     if (build != appBuild)
                     {
                         return new PortResponse.HelperBuildMismatch(build);
@@ -124,8 +124,8 @@ internal sealed class HelperRelay
                 {
                     throw new HelperChannelException(new HelperChannelFailure.ConnectionLost());
                 }
-                var answer = await current.Channel.Ask(request);
-                var replied = answer as HelperPipe.Message.Reply ?? throw Unreadable(answer);
+                HelperPipe.Message answer = await current.Channel.Ask(request);
+                HelperPipe.Message.Reply replied = answer as HelperPipe.Message.Reply ?? throw Unreadable(answer);
                 return new PortResponse.HelperReply(replied.Json);
             }));
         }
@@ -145,8 +145,8 @@ internal sealed class HelperRelay
         try
         {
             current = CurrentLink(ConnectLimit);
-            var answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id));
-            var flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
+            HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.ExitWhenIdle(id));
+            HelperPipe.Message.ReplyFlag flag = answer as HelperPipe.Message.ReplyFlag ?? throw Unreadable(answer);
             reply(new PortResponse.HelperReplyFlag(flag.Value));
         }
         catch (HelperChannelException error)
@@ -160,8 +160,8 @@ internal sealed class HelperRelay
     /// <summary>The Helper's build on <paramref name="current"/>, which is verified when the build is the app's.</summary>
     private async Task<string> Version(Link current)
     {
-        var answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, appBuild));
-        var build = (answer as HelperPipe.Message.Build ?? throw Unreadable(answer)).HelperBuild;
+        HelperPipe.Message answer = await current.Channel.Ask(id => new HelperPipe.Request.Build(id, appBuild));
+        string build = (answer as HelperPipe.Message.Build ?? throw Unreadable(answer)).HelperBuild;
         lock (gate)
         {
             if (build == appBuild && inbound.IsActive(current.Id))
@@ -220,8 +220,8 @@ internal sealed class HelperRelay
                 }
                 InvalidateLocked(current);
             }
-            var id = ++lastLinkId;
-            var channel = open(id, inbound, limit);
+            ulong id = ++lastLinkId;
+            IHelperChannel channel = open(id, inbound, limit);
             // Active before anything is read, so a connection that ends at once is reported and dropped.
             inbound.Activate(id);
             channel.Start();

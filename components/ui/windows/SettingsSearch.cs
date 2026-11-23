@@ -64,7 +64,7 @@ public static class SettingsSearch
         {
             return results;
         }
-        foreach (var pane in Enum.GetValues<SettingsPane>())
+        foreach (SettingsPane pane in Enum.GetValues<SettingsPane>())
         {
             if (terms.All(term => SettingsSearchMatch.Matches(term, PaneName(pane))))
             {
@@ -204,22 +204,22 @@ public static class SettingsSearchMatch
 
     public static bool Matches(Term prepared, Name name)
     {
-        var term = prepared.Characters;
-        var text = name.Characters;
+        string[] term = prepared.Characters;
+        string[] text = name.Characters;
         if (term.Length == 0)
         {
             return true;
         }
-        var last = term[^1];
-        var head = term[..^1];
-        var partial = IsHangul(last);
-        for (var start = 0; start + term.Length <= text.Length; start++)
+        string last = term[^1];
+        string[] head = term[..^1];
+        bool partial = IsHangul(last);
+        for (int start = 0; start + term.Length <= text.Length; start++)
         {
             if (!head.AsSpan().SequenceEqual(text.AsSpan(start, head.Length)))
             {
                 continue;
             }
-            var end = start + head.Length;
+            int end = start + head.Length;
             if (text[end] == last || (partial && name.Jamo[end].StartsWith(prepared.LastJamo, StringComparison.Ordinal)))
             {
                 return true;
@@ -230,9 +230,9 @@ public static class SettingsSearchMatch
         {
             return false;
         }
-        var baseJamo = prepared.LastJamo[..^1];
-        var next = prepared.LastJamo[^1..];
-        for (var start = 0; start < text.Length - 1; start++)
+        string baseJamo = prepared.LastJamo[..^1];
+        string next = prepared.LastJamo[^1..];
+        for (int start = 0; start < text.Length - 1; start++)
         {
             if (start > 0 && char.IsLetterOrDigit(text[start - 1][0]))
             {
@@ -274,9 +274,9 @@ public static class SettingsSearchMatch
     /// <summary>The text's characters as the reader sees them (as Swift's Character), composed and lowercased.</summary>
     private static string[] Elements(string text)
     {
-        var normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();
+        string normalized = text.Normalize(NormalizationForm.FormC).ToLowerInvariant();
         var elements = new List<string>();
-        var enumerator = StringInfo.GetTextElementEnumerator(normalized);
+        TextElementEnumerator enumerator = StringInfo.GetTextElementEnumerator(normalized);
         while (enumerator.MoveNext())
         {
             elements.Add(enumerator.GetTextElement());

@@ -19,7 +19,7 @@ internal static class Fixtures
     /// <remarks>The coding knows the messages' types, not lists of them, so the items are coded one by one.</remarks>
     public static List<T> RoundTrip<T>(string name)
     {
-        var json = JsonNode.Parse(Read(name))!.AsArray();
+        JsonArray json = JsonNode.Parse(Read(name))!.AsArray();
         var coding = (JsonTypeInfo<T>)MessageCoding.Default.Options.GetTypeInfo(typeof(T));
         var values = json.Select(item => item.Deserialize(coding)!).ToList();
         var encoded = new JsonArray([.. values.Select(value => JsonSerializer.SerializeToNode(value, coding))]);

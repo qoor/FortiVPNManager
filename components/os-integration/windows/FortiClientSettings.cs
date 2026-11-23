@@ -20,15 +20,15 @@ internal static class FortiClientSettings
     {
         try
         {
-            using var tunnels = Registry.LocalMachine.OpenSubKey(Tunnels);
+            using RegistryKey? tunnels = Registry.LocalMachine.OpenSubKey(Tunnels);
             if (tunnels is null)
             {
                 return [];
             }
             var connections = new List<FortiClientConnection>();
-            foreach (var name in tunnels.GetSubKeyNames())
+            foreach (string name in tunnels.GetSubKeyNames())
             {
-                using var tunnel = tunnels.OpenSubKey(name);
+                using RegistryKey? tunnel = tunnels.OpenSubKey(name);
                 connections.Add(new FortiClientConnection(name, tunnel?.GetValue("Server") as string ?? ""));
             }
             return connections;

@@ -85,7 +85,7 @@ internal sealed class AdvancedPane : IPane
             backendVersion.Text = info.Version ?? L("Unknown");
         }
 
-        var file = config.File;
+        ConfigFileState file = config.File;
         settingsPath = file.Path;
         filePath.Text = file.Path;
         ToolTipService.SetToolTip(filePath, file.Path);
@@ -96,9 +96,9 @@ internal sealed class AdvancedPane : IPane
         {
             shownWarnings = file.Warnings;
             warnings.Children.Clear();
-            foreach (var warning in file.Warnings)
+            foreach (ConfigWarning warning in file.Warnings)
             {
-                var notice = Cards.Notice(InfoBarSeverity.Warning);
+                InfoBar notice = Cards.Notice(InfoBarSeverity.Warning);
                 notice.Show(warning.DisplayMessage());
                 warnings.Children.Add(notice);
             }

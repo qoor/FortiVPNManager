@@ -17,12 +17,12 @@ public class LogLinesTests
     [Fact]
     public void CopyAllWritesTheLogFileFormat()
     {
-        var fixture = JsonNode.Parse(File.ReadAllText(FixturePath("log_copy_all.json")))!;
-        var message = fixture["message"].Deserialize(MessageCoding.Default.FromRuntime);
+        JsonNode fixture = JsonNode.Parse(File.ReadAllText(FixturePath("log_copy_all.json")))!;
+        FromRuntime? message = fixture["message"].Deserialize(MessageCoding.Default.FromRuntime);
         var log = new LogLines();
         log.Append(Assert.IsType<FromRuntime.LogLines>(message).Lines);
         var zone = TimeZoneInfo.FindSystemTimeZoneById(fixture["timeZone"]!.GetValue<string>());
-        var expected = string.Join("\n", fixture["copyAll"]!.AsArray().Select(line => line!.GetValue<string>()));
+        string expected = string.Join("\n", fixture["copyAll"]!.AsArray().Select(line => line!.GetValue<string>()));
         Assert.Equal(expected, log.CopyAllText(zone));
     }
 
@@ -41,7 +41,7 @@ public class LogLinesTests
     {
         var log = new LogLines();
         // Each line costs its UTF-8 length plus one for its line break: 1 KiB.
-        var text = new string('x', 1023);
+        string text = new string('x', 1023);
         log.Append(Enumerable.Range(0, (2 * 1024) + 2).Select(_ => Line(text)).ToList());
         Assert.Equal(2 * 1024, log.Entries.Count);
     }
@@ -51,7 +51,7 @@ public class LogLinesTests
     {
         var log = new LogLines();
         log.Append([Line("a"), Line("b")]);
-        var lastId = log.Entries[^1].Id;
+        ulong lastId = log.Entries[^1].Id;
         log.Clear();
         Assert.Empty(log.Entries);
         Assert.Equal("", log.CopyAllText(TimeZoneInfo.Utc));

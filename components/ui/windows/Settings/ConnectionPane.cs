@@ -62,7 +62,7 @@ internal sealed class ConnectionPane : IPane
         var expander = new SettingsExpander { Header = L("Connect on a schedule"), Content = Switch(scheduleEnabled, on => new ConnectionOption.ScheduleEnabled(on)), IsExpanded = true };
         // Seven equal buttons, 40 px each beside the header and narrower when the card is narrow.
         var dayRow = new Grid { ColumnSpacing = 4 };
-        foreach (var day in Enum.GetValues<Weekday>())
+        foreach (Weekday day in Enum.GetValues<Weekday>())
         {
             var button = new ToggleButton { Content = day.ShortName(), HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(0, 5, 0, 5) };
             Grid.SetColumn(button, dayRow.ColumnDefinitions.Count);
@@ -76,7 +76,7 @@ internal sealed class ConnectionPane : IPane
         start.SelectedTimeChanged += (_, _) => HoursPicked();
         end.SelectedTimeChanged += (_, _) => HoursPicked();
         // The picker and the button inside it keep 242 px, which would run past a narrow card.
-        foreach (var picker in new[] { start, end })
+        foreach (TimePicker? picker in new[] { start, end })
         {
             picker.MinWidth = 0;
             picker.Loaded += (_, _) =>
@@ -89,12 +89,12 @@ internal sealed class ConnectionPane : IPane
         }
         scheduleRows.Add((SettingsCard)(rows["Start time"] = Cards.Card(L("Start time"), start).Fit(start, 242)));
         scheduleRows.Add((SettingsCard)(rows["End time"] = Cards.Card(L("End time"), end).Fit(end, 242)));
-        var away = Cards.Card(L("Stop reconnecting after being away"), awayMinutes.Row);
+        SettingsCard away = Cards.Card(L("Stop reconnecting after being away"), awayMinutes.Row);
         ToolTipService.SetToolTip(away, L("After the end time, reconnects wait while you're away (screen locked or off, PC asleep) and stop after this long."));
         scheduleRows.Add(away);
         rows["Stop reconnecting after being away"] = away;
         scheduleRows.Add(outlook);
-        foreach (var row in scheduleRows)
+        foreach (SettingsCard row in scheduleRows)
         {
             expander.Items.Add(row);
             expanders[row] = expander;
@@ -125,7 +125,7 @@ internal sealed class ConnectionPane : IPane
 
     public void FinishTyping()
     {
-        foreach (var minutes in new[] { awayMinutes, sessionMax, margin, minSleep })
+        foreach (MinutesBox? minutes in new[] { awayMinutes, sessionMax, margin, minSleep })
         {
             minutes.Commit();
         }
@@ -167,8 +167,8 @@ internal sealed class ConnectionPane : IPane
 
     public FrameworkElement? OpenRow(string key)
     {
-        var row = rows.GetValueOrDefault(key);
-        if (row is not null && expanders.TryGetValue(row, out var expander))
+        FrameworkElement? row = rows.GetValueOrDefault(key);
+        if (row is not null && expanders.TryGetValue(row, out SettingsExpander? expander))
         {
             expander.IsExpanded = true;
         }
@@ -183,10 +183,10 @@ internal sealed class ConnectionPane : IPane
             return;
         }
         refreshing = true;
-        var hoursChanged = schedule is null || schedule.Start != current.Start || schedule.End != current.End;
+        bool hoursChanged = schedule is null || schedule.Start != current.Start || schedule.End != current.End;
         schedule = current;
         scheduleEnabled.IsOn = current.Enabled;
-        foreach (var (day, button) in days)
+        foreach ((Weekday day, ToggleButton? button) in days)
         {
             button.IsChecked = current.Days.Contains(day);
         }
@@ -200,12 +200,12 @@ internal sealed class ConnectionPane : IPane
         awayMinutes.Show(current.AwayMinutes);
         outlook.Visible(current.Enabled && current.Outlook is not null);
         outlookValue.Text = current.Outlook?.Summary(ui.Time) ?? "";
-        foreach (var row in scheduleRows)
+        foreach (SettingsCard row in scheduleRows)
         {
             row.IsEnabled = current.Enabled;
         }
 
-        var options = config.Options;
+        ConnectionOptions options = config.Options;
         sessionMax.Show(options.SessionMaxMinutes);
         proactive.IsOn = options.ProactiveReconnect;
         margin.Show(options.MarginMinutes);
@@ -252,7 +252,7 @@ internal sealed class ConnectionPane : IPane
                     box.Value = setting.Value;
                     return;
                 }
-                var minutes = (long)Math.Round(args.NewValue);
+                long minutes = (long)Math.Round(args.NewValue);
                 if (minutes != setting.Value)
                 {
                     pane.Send(change(minutes));
@@ -282,9 +282,9 @@ internal sealed class ConnectionPane : IPane
         /// <summary>Sends a number still being typed, kept within the range as the box keeps it.</summary>
         public void Commit()
         {
-            if (setting is not null && long.TryParse(box.Text.Trim(), out var typed))
+            if (setting is not null && long.TryParse(box.Text.Trim(), out long typed))
             {
-                var minutes = Math.Clamp(typed, setting.Minimum, setting.Maximum);
+                long minutes = Math.Clamp(typed, setting.Minimum, setting.Maximum);
                 if (minutes != setting.Value)
                 {
                     pane.Send(change(minutes));

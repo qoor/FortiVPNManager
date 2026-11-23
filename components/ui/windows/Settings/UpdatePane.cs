@@ -91,7 +91,7 @@ internal sealed class UpdatePane : IPane
         notesBody.Children.Add(releasePage);
         notes.Child = notesBody;
 
-        foreach (var element in new UIElement[] { hero, failure, item, notes, footnote })
+        foreach (UIElement element in new UIElement[] { hero, failure, item, notes, footnote })
         {
             body.Children.Add(element);
         }
@@ -106,20 +106,20 @@ internal sealed class UpdatePane : IPane
         {
             return;
         }
-        var progress = update.Progress;
-        var settled = progress is UpdateProgress.Idle or UpdateProgress.Failed;
+        UpdateProgress progress = update.Progress;
+        bool settled = progress is UpdateProgress.Idle or UpdateProgress.Failed;
         var available = update.Status as UpdateStatus.Available;
 
-        var spinning = settled ? update.Status is UpdateStatus.Checking : progress is UpdateProgress.Installing;
-        var current = settled && update.Status is UpdateStatus.UpToDate;
+        bool spinning = settled ? update.Status is UpdateStatus.Checking : progress is UpdateProgress.Installing;
+        bool current = settled && update.Status is UpdateStatus.UpToDate;
         busy.IsActive = spinning;
         upToDate.Visible(current);
         appIcon.Visible(!spinning && !current);
         headline.Text = update.Headline();
-        var line = update.Subtitle();
+        string? line = update.Subtitle();
         subtitle.Visible(line is not null);
         subtitle.Text = line ?? "";
-        var action = settled
+        Button action = settled
             ? available is not null ? updateNow : check
             : progress is UpdateProgress.Downloading or UpdateProgress.Preparing ? updateNow : restart;
         check.Apply(action == check ? update.Check : ButtonState.Hidden);
@@ -127,13 +127,13 @@ internal sealed class UpdatePane : IPane
         restart.Apply(action == restart ? update.Restart : ButtonState.Hidden);
         updateNow.Content = progress is UpdateProgress.Failed ? L("Try again") : L("Install now");
 
-        var failedInstall = update.FailedInstallLine();
-        var reason = (progress as UpdateProgress.Failed)?.Reason.Message();
+        string? failedInstall = update.FailedInstallLine();
+        string? reason = (progress as UpdateProgress.Failed)?.Reason.Message();
         failure.Title = failedInstall ?? "";
         failure.Message = reason ?? "";
         failure.Visible(failedInstall is not null || reason is not null);
 
-        var status = progress.ItemStatus();
+        string? status = progress.ItemStatus();
         item.Visible(status is not null);
         itemStatus.Text = status ?? "";
         itemName.Text = progress switch
@@ -144,7 +144,7 @@ internal sealed class UpdatePane : IPane
             _ => "",
         };
         cancel.Apply(update.Cancel);
-        var percent = progress switch
+        byte? percent = progress switch
         {
             UpdateProgress.Downloading downloading => downloading.Percent,
             UpdateProgress.Preparing preparing => preparing.Percent,
@@ -174,7 +174,7 @@ internal sealed class UpdatePane : IPane
         }
         shownNotes = titles;
         noteTitles.Children.Clear();
-        foreach (var title in titles)
+        foreach (string title in titles)
         {
             var line = new Grid { ColumnSpacing = 8 };
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -189,17 +189,17 @@ internal sealed class UpdatePane : IPane
 
     private async void ShowIcon()
     {
-        var size = (uint)Math.Round(IconSize * appIcon.XamlRoot.RasterizationScale);
-        using var stream = await FileRandomAccessStream.OpenAsync(Path.Combine(AppContext.BaseDirectory, "AppIcon.ico"), FileAccessMode.Read);
-        var decoder = await BitmapDecoder.CreateAsync(stream);
+        uint size = (uint)Math.Round(IconSize * appIcon.XamlRoot.RasterizationScale);
+        using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(Path.Combine(AppContext.BaseDirectory, "AppIcon.ico"), FileAccessMode.Read);
+        BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
         var frames = new List<BitmapFrame>();
         for (uint i = 0; i < decoder.FrameCount; i++)
         {
             frames.Add(await decoder.GetFrameAsync(i));
         }
-        var frame = frames.Where(f => f.PixelWidth >= size).MinBy(f => f.PixelWidth) ?? frames.MaxBy(f => f.PixelWidth)!;
+        BitmapFrame frame = frames.Where(f => f.PixelWidth >= size).MinBy(f => f.PixelWidth) ?? frames.MaxBy(f => f.PixelWidth)!;
         var transform = new BitmapTransform { ScaledWidth = size, ScaledHeight = size, InterpolationMode = BitmapInterpolationMode.Fant };
-        var bitmap = await frame.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, transform, ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
+        SoftwareBitmap bitmap = await frame.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, transform, ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
         var source = new SoftwareBitmapSource();
         await source.SetBitmapAsync(bitmap);
         appIcon.Source = source;
@@ -207,7 +207,7 @@ internal sealed class UpdatePane : IPane
 
     private static string Size(ulong bytes)
     {
-        var buffer = new char[32];
+        char[] buffer = new char[32];
         Marshal.ThrowExceptionForHR(StrFormatByteSizeEx(bytes, RoundToNearestDisplayedDigit, buffer, (uint)buffer.Length));
         return new string(buffer, 0, Array.IndexOf(buffer, '\0'));
     }

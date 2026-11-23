@@ -49,21 +49,21 @@ internal static class ServiceRegistration
 
     public static PortResponse LoginItemStatus()
     {
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-        var registered = key?.GetValue(RunValue) is string;
+        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey);
+        bool registered = key?.GetValue(RunValue) is string;
         return new PortResponse.Registration(registered ? RegistrationStatus.Enabled : RegistrationStatus.NotRegistered);
     }
 
     public static PortResponse SetLoginItem(bool enabled)
     {
-        var executable = Environment.ProcessPath ?? "";
+        string executable = Environment.ProcessPath ?? "";
         if (!IsInstalledCopy(executable))
         {
             return new PortResponse.RegistrationFailed(new RegistrationError.NotInstalledCopy());
         }
         try
         {
-            using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+            using RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey);
             if (enabled)
             {
                 key.SetValue(RunValue, $"\"{executable}\"");

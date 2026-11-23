@@ -24,12 +24,12 @@ public sealed class LogLines
 
     public void Append(IReadOnlyList<LogLine> lines)
     {
-        foreach (var line in lines)
+        foreach (LogLine line in lines)
         {
             entries.Add(new LogEntry(nextId++, line));
             byteCount += Cost(line);
         }
-        var drop = 0;
+        int drop = 0;
         while (entries.Count - drop > MaxLines || (byteCount > MaxBytes && drop < entries.Count))
         {
             byteCount -= Cost(entries[drop].Line);
@@ -59,8 +59,8 @@ public sealed class LogLines
     /// </summary>
     public static string FileLine(LogLine line, TimeZoneInfo zone, bool afterAnother)
     {
-        var local = TimeZoneInfo.ConvertTime(line.Time, zone);
-        var offset = local.Offset == TimeSpan.Zero
+        DateTimeOffset local = TimeZoneInfo.ConvertTime(line.Time, zone);
+        string offset = local.Offset == TimeSpan.Zero
             ? "Z"
             : (local.Offset < TimeSpan.Zero ? "-" : "+") + local.Offset.ToString("hh\\:mm", CultureInfo.InvariantCulture);
         return $"{Gap(line, afterAnother)}{local.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture)}{offset} [{Tag(line.Source)}] {line.Text}";

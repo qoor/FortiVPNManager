@@ -16,8 +16,8 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     public string SpelledOut(ulong seconds)
     {
         var parts = new List<string>();
-        var (hours, rest) = Math.DivRem(seconds, 3600UL);
-        var (minutes, remaining) = Math.DivRem(rest, 60UL);
+        (ulong hours, ulong rest) = Math.DivRem(seconds, 3600UL);
+        (ulong minutes, ulong remaining) = Math.DivRem(rest, 60UL);
         if (hours > 0)
         {
             parts.Add(L("%lld hours", hours));
@@ -36,12 +36,12 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     /// <summary>Whole minutes: "1 hr 23 min", "45 min", "2 hr", or "less than a minute".</summary>
     public string Duration(TimeSpan interval)
     {
-        var minutes = (long)Math.Floor(interval.TotalMinutes);
+        long minutes = (long)Math.Floor(interval.TotalMinutes);
         if (minutes < 1)
         {
             return L("less than a minute");
         }
-        var (hours, rest) = Math.DivRem(minutes, 60L);
+        (long hours, long rest) = Math.DivRem(minutes, 60L);
         if (hours == 0)
         {
             return L("%lld min", rest);
@@ -52,7 +52,7 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     /// <summary>"Reconnects in about 1 hr 32 min", or "Reconnects soon" within the last minute.</summary>
     public string PlannedReconnect(DateTimeOffset at)
     {
-        var remaining = at - Now;
+        TimeSpan remaining = at - Now;
         return remaining < TimeSpan.FromMinutes(1)
             ? L("Reconnects soon")
             : L("Reconnects in about %@", Duration(remaining));
@@ -61,29 +61,29 @@ public sealed record TimeStyle(DateTimeOffset Now, CultureInfo Culture)
     /// <summary>"1:12" (minutes:seconds, rounded up).</summary>
     public static string Countdown(TimeSpan interval)
     {
-        var seconds = Math.Max(0L, (long)Math.Ceiling(interval.TotalSeconds));
-        var (minutes, rest) = Math.DivRem(seconds, 60L);
+        long seconds = Math.Max(0L, (long)Math.Ceiling(interval.TotalSeconds));
+        (long minutes, long rest) = Math.DivRem(seconds, 60L);
         return string.Create(CultureInfo.InvariantCulture, $"{minutes}:{rest:00}");
     }
 
     /// <summary>The time today, otherwise with the weekday; for times within a week.</summary>
     public string DayTime(DateTimeOffset instant)
     {
-        var local = instant.ToLocalTime();
-        var time = local.ToString(Culture.DateTimeFormat.ShortTimePattern, Culture);
+        DateTimeOffset local = instant.ToLocalTime();
+        string time = local.ToString(Culture.DateTimeFormat.ShortTimePattern, Culture);
         return SameDay(local) ? time : local.ToString("ddd", Culture) + " " + time;
     }
 
     /// <summary>The time, with the month and day when it is not today and the year when not this year.</summary>
     public string ClockTime(DateTimeOffset instant)
     {
-        var local = instant.ToLocalTime();
-        var time = local.ToString(Culture.DateTimeFormat.ShortTimePattern, Culture);
+        DateTimeOffset local = instant.ToLocalTime();
+        string time = local.ToString(Culture.DateTimeFormat.ShortTimePattern, Culture);
         if (SameDay(local))
         {
             return time;
         }
-        var date = local.Year == Now.ToLocalTime().Year
+        string date = local.Year == Now.ToLocalTime().Year
             ? local.ToString(Culture.DateTimeFormat.MonthDayPattern, Culture)
             : local.ToString(Culture.DateTimeFormat.ShortDatePattern, Culture);
         return date + " " + time;

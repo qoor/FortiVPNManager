@@ -11,7 +11,7 @@ public class SystemFactsTests
     [Fact]
     public void TheRouteToAnAddressNamesTheInterfaceThatHasIt()
     {
-        var loopback = SystemFacts.RouteInterface("127.0.0.1");
+        string? loopback = SystemFacts.RouteInterface("127.0.0.1");
         Assert.NotNull(loopback);
         Assert.Contains(
             NetworkInterface.GetAllNetworkInterfaces(),
@@ -28,9 +28,9 @@ public class SystemFactsTests
     [Fact]
     public void TheDefaultRouterIsReachedThroughAnInterfaceThatIsUp()
     {
-        var router = SystemFacts.PrimaryRouter();
+        string? router = SystemFacts.PrimaryRouter();
         Assert.True(IPAddress.TryParse(router, out _), router);
-        var name = SystemFacts.RouteInterface(router!);
+        string? name = SystemFacts.RouteInterface(router!);
         Assert.Contains(SystemFacts.PathInterfaces(), path => path.Name == name);
         Assert.True(SystemFacts.PathSatisfied());
     }

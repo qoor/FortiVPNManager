@@ -12,7 +12,7 @@ public class HelperPipeTests
     [Fact]
     public void RequestsFromTheApp()
     {
-        var requests = Fixtures.RoundTrip<HelperPipe.Request>("helper-pipe/requests.json");
+        List<HelperPipe.Request> requests = Fixtures.RoundTrip<HelperPipe.Request>("helper-pipe/requests.json");
         Assert.Equal(new HelperPipe.Request.Build(1, "20261112.1"), requests[0]);
         Assert.Equal(12, requests.Count);
     }
@@ -20,7 +20,7 @@ public class HelperPipeTests
     [Fact]
     public void MessagesToTheApp()
     {
-        var messages = Fixtures.RoundTrip<HelperPipe.Message>("helper-pipe/messages.json");
+        List<HelperPipe.Message> messages = Fixtures.RoundTrip<HelperPipe.Message>("helper-pipe/messages.json");
         Assert.Equal(new HelperPipe.Message.Build(1, "20261112.1"), messages[0]);
         Assert.Equal(new HelperPipe.Message.Reply(2), messages[1]);
     }
@@ -28,8 +28,8 @@ public class HelperPipeTests
     [Fact]
     public void DebugOutputLeavesSecretsOut()
     {
-        var connect = new HelperPipe.Request.Connect(2, """{"password":"vpn-secret"}""").ToString();
-        var otp = new HelperPipe.Request.SubmitOtp(3, "attempt", "123456").ToString();
+        string connect = new HelperPipe.Request.Connect(2, """{"password":"vpn-secret"}""").ToString();
+        string otp = new HelperPipe.Request.SubmitOtp(3, "attempt", "123456").ToString();
         Assert.DoesNotContain("vpn-secret", connect);
         Assert.DoesNotContain("123456", otp);
     }
@@ -40,7 +40,7 @@ public class HelperPipeTests
         using var stream = new MemoryStream();
         // Passed as the case, it is still written inside its type's wrapper.
         MessageFraming.Write(stream, new HelperPipe.Request.Status(5));
-        var bytes = stream.ToArray();
+        byte[] bytes = stream.ToArray();
         const string payload = """{"status":{"id":5}}""";
         Assert.Equal(new byte[] { 0, 0, 0, (byte)payload.Length }, bytes[..4]);
         Assert.Equal(payload, Encoding.UTF8.GetString(bytes, 4, bytes.Length - 4));
@@ -50,9 +50,9 @@ public class HelperPipeTests
     public void MessagesAreReadOneFrameAtATime()
     {
         using var stream = new MemoryStream();
-        foreach (var json in new[] { """{"replyFlag":{"id":6,"value":false}}""", """{"output":{"json":"[]"}}""" })
+        foreach (string? json in new[] { """{"replyFlag":{"id":6,"value":false}}""", """{"output":{"json":"[]"}}""" })
         {
-            var payload = Encoding.UTF8.GetBytes(json);
+            byte[] payload = Encoding.UTF8.GetBytes(json);
             stream.Write([0, 0, (byte)(payload.Length >> 8), (byte)payload.Length]);
             stream.Write(payload);
         }

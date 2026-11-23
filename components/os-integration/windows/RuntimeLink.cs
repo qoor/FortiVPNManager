@@ -35,9 +35,9 @@ public sealed class RuntimeLink
     /// </summary>
     public static RuntimeLink Start(Action<AppInternal.FromRuntime> onMessage)
     {
-        var pipes = fvm_runtime_start();
-        var fromRuntime = Open(pipes.Read, FileAccess.Read);
-        var toRuntime = Open(pipes.Write, FileAccess.Write);
+        AppPipes pipes = fvm_runtime_start();
+        FileStream fromRuntime = Open(pipes.Read, FileAccess.Read);
+        FileStream toRuntime = Open(pipes.Write, FileAccess.Write);
         var link = new RuntimeLink();
         StartThread("fvm-runtime-read", () =>
         {
@@ -58,7 +58,7 @@ public sealed class RuntimeLink
         });
         StartThread("fvm-runtime-write", () =>
         {
-            foreach (var message in link.outgoing.GetConsumingEnumerable())
+            foreach (AppInternal.ToRuntime message in link.outgoing.GetConsumingEnumerable())
             {
                 try
                 {

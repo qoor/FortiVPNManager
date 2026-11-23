@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Input;
 using FortiVPNManager.Ui.Text;
 using H.NotifyIcon;
@@ -37,7 +38,7 @@ public sealed partial class TrayIcon : IDisposable
     {
         this.ui = ui;
         this.quit = quit;
-        var size = (int)Math.Round(16 * GetDpiForSystem() / 96.0);
+        int size = (int)Math.Round(16 * GetDpiForSystem() / 96.0);
         stateIcons = Enum.GetValues<ConnectionIcon>().ToDictionary(state => state, state => new System.Drawing.Icon(Path.Combine(AppContext.BaseDirectory, IconFile(state)), size, size));
         icon = new TaskbarIcon
         {
@@ -56,7 +57,7 @@ public sealed partial class TrayIcon : IDisposable
     {
         ui.Changed -= Update;
         icon.Dispose();
-        foreach (var stateIcon in stateIcons.Values)
+        foreach (Icon stateIcon in stateIcons.Values)
         {
             stateIcon.Dispose();
         }
@@ -64,7 +65,7 @@ public sealed partial class TrayIcon : IDisposable
 
     private void Update()
     {
-        var state = ui.Connection?.Icon ?? ConnectionIcon.Disconnected;
+        ConnectionIcon state = ui.Connection?.Icon ?? ConnectionIcon.Disconnected;
         icon.ToolTipText = "FortiVPNManager: " + state.AccessibilityText();
         if (state != shownIcon)
         {
@@ -84,7 +85,7 @@ public sealed partial class TrayIcon : IDisposable
         }
         shownMenu = content;
         menu.Items.Clear();
-        foreach (var entry in entries)
+        foreach (Entry entry in entries)
         {
             // The standard menu takes "&" as the mark of a shortcut key; "&&" shows the "&" itself.
             menu.Items.Add(entry.Text is null
@@ -99,8 +100,8 @@ public sealed partial class TrayIcon : IDisposable
         var entries = new List<Entry>();
         if (ui.Connection is { } connection)
         {
-            var time = ui.Time;
-            var outlook = ui.Schedule?.Outlook;
+            TimeStyle time = ui.Time;
+            ScheduleOutlook? outlook = ui.Schedule?.Outlook;
             entries.Add(Line(connection.StatusLine(outlook, time)));
             if (connection.Status is ConnectionStatus.Connected connected)
             {
@@ -117,7 +118,7 @@ public sealed partial class TrayIcon : IDisposable
             switch (connection.Status)
             {
                 case ConnectionStatus.SetupRequired setup:
-                    foreach (var item in setup.Items)
+                    foreach (SetupItem item in setup.Items)
                     {
                         entries.Add(new Entry(item.ActionTitle(), true, () => ui.Settings.Show(item.Pane())));
                     }

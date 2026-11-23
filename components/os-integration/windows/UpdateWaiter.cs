@@ -31,7 +31,7 @@ internal sealed class UpdateWaiter
 
     public void Release(uint installerProcessId)
     {
-        using var waiter = running;
+        using Process? waiter = running;
         running = null;
         if (waiter is null || waiter.HasExited)
         {
@@ -51,7 +51,7 @@ internal sealed class UpdateWaiter
 
     public void Stop()
     {
-        using var waiter = running;
+        using Process? waiter = running;
         running = null;
         if (waiter is null || waiter.HasExited)
         {

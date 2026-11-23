@@ -37,7 +37,7 @@ public partial class App : Application
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         notifier = new Notifier((identifier, button) => dispatcher.TryEnqueue(() => ui?.OpenNotification(identifier, button)));
-        var facts = CurrentAppFacts.Read(GmailText.SignInPages());
+        AppFacts facts = CurrentAppFacts.Read(GmailText.SignInPages());
         RuntimeLink? link = null;
         ui = new AppUi(dispatcher, command => router!.Send(command), notifier.Post);
         // The runtime sends nothing before the launch message, which Start sends; the link exists by then.
@@ -56,7 +56,7 @@ public partial class App : Application
             router.Lifetime.RequestQuit();
         });
         router.Start(facts);
-        var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
+        AppActivationArguments activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         if (activation.Kind == ExtendedActivationKind.AppNotification)
         {
             var notification = (AppNotificationActivatedEventArgs)activation.Data;

@@ -104,7 +104,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AnUpdateCallChecksTheBuildAndPassesTheReplyOnUnread()
     {
-        foreach (var (call, request) in UpdateCalls)
+        foreach ((HelperCall? call, Type? request) in UpdateCalls)
         {
             var helper = new FakeHelper(AppBuild);
             var harness = new Harness(helper);
@@ -116,7 +116,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AHelperOfAnotherBuildGetsNoUpdateCall()
     {
-        foreach (var (call, _) in UpdateCalls)
+        foreach ((HelperCall? call, Type _) in UpdateCalls)
         {
             var helper = new FakeHelper("another build");
             var harness = new Harness(helper);
@@ -128,7 +128,7 @@ public class HelperRelayTests
     [Fact]
     public async Task AnUpdateCallIsNeverRepeated()
     {
-        foreach (var (call, _) in UpdateCalls)
+        foreach ((HelperCall? call, Type _) in UpdateCalls)
         {
             var harness = new Harness(new FakeHelper(AppBuild, failing: true), new FakeHelper(AppBuild));
             Assert.Equal(new PortResponse.HelperUnreachable(new HelperChannelFailure.ConnectionLost()), await harness.Call(call));
@@ -224,7 +224,7 @@ public class HelperRelayTests
 
         public Task<HelperPipe.Message> Ask(Func<ulong, HelperPipe.Request> request)
         {
-            var sent = request(++lastRequest);
+            HelperPipe.Request sent = request(++lastRequest);
             Received.Add(sent);
             if (failing)
             {

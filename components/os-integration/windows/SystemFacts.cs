@@ -40,11 +40,11 @@ internal static class SystemFacts
     /// <summary>The interface the routing table uses for <paramref name="destination"/>, an IPv4 address.</summary>
     public static string? RouteInterface(string destination)
     {
-        if (!IPAddress.TryParse(destination, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
+        if (!IPAddress.TryParse(destination, out IPAddress? address) || address.AddressFamily != AddressFamily.InterNetwork)
         {
             return null;
         }
-        if (GetBestInterface(NetworkOrder(address), out var index) != 0)
+        if (GetBestInterface(NetworkOrder(address), out uint index) != 0)
         {
             return null;
         }
@@ -53,7 +53,7 @@ internal static class SystemFacts
 
     /// <summary>The next hop of the default route the routing table picks.</summary>
     public static string? PrimaryRouter() =>
-        GetBestRoute(0, 0, out var route) == 0 && route.NextHop != 0
+        GetBestRoute(0, 0, out ForwardRow route) == 0 && route.NextHop != 0
             ? new IPAddress(route.NextHop).ToString()
             : null;
 

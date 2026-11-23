@@ -120,7 +120,7 @@ public static class SettingsFileText
     /// <summary>The explanation for the entry <paramref name="raw"/>, as typed or written in the file.</summary>
     public static string Message(this AddressProblem problem, string raw)
     {
-        var text = Preview(raw);
+        string text = Preview(raw);
         return problem switch
         {
             AddressProblem.Malformed => L("'%@' is not an IPv4 address or network. Write it like 10.30.161.16 or 10.30.170.0/24.", text),
@@ -144,8 +144,8 @@ public static class SettingsFileText
     {
         const int limit = 40;
         var text = new StringBuilder();
-        var count = 0;
-        foreach (var rune in raw.EnumerateRunes())
+        int count = 0;
+        foreach (Rune rune in raw.EnumerateRunes())
         {
             if (count == limit)
             {

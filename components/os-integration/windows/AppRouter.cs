@@ -153,7 +153,7 @@ public sealed class AppRouter
     /// <summary>The default browser, for web addresses only.</summary>
     private static bool OpenBrowser(string url)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
             || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
             return false;
@@ -188,11 +188,11 @@ public static class CurrentAppFacts
     /// <param name="signInPages">The pages the Google sign-in listener shows, in the UI's language.</param>
     public static AppFacts Read(SignInPages signInPages)
     {
-        var executable = Environment.ProcessPath ?? "";
-        var build = Assembly.GetEntryAssembly()
+        string executable = Environment.ProcessPath ?? "";
+        string build = Assembly.GetEntryAssembly()
             ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion ?? "unknown";
-        var client = Path.Combine(Path.GetDirectoryName(executable) ?? "", "GoogleOAuthClient.json");
+        string client = Path.Combine(Path.GetDirectoryName(executable) ?? "", "GoogleOAuthClient.json");
         return new AppFacts(
             build,
             Assembly.GetEntryAssembly()!.GetName().Version!.ToString(3),

@@ -25,7 +25,7 @@ public static class ConnectionText
             case ConnectionStatus.SetupRequired:
                 return L("Setup required");
             case ConnectionStatus.Connecting connecting:
-                var verb = connecting.Reconnecting ? L("Reconnecting") : L("Connecting");
+                string verb = connecting.Reconnecting ? L("Reconnecting") : L("Connecting");
                 return verb + " · " + connecting.Progress.Text();
             case ConnectionStatus.Connected connected:
                 var parts = new List<string> { L("Connected"), time.Duration(time.Now - connected.Since) };
@@ -48,7 +48,7 @@ public static class ConnectionText
             case ConnectionStatus.ReconnectOnHold:
                 return L("Reconnect on hold");
             case ConnectionStatus.WaitingToReconnect waiting:
-                var remaining = waiting.Until - time.Now;
+                TimeSpan remaining = waiting.Until - time.Now;
                 return remaining > TimeSpan.Zero
                     ? L("Waiting to reconnect (%@)", TimeStyle.Countdown(remaining))
                     : L("Waiting to reconnect");

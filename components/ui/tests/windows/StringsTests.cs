@@ -23,14 +23,14 @@ public class StringsTests
     [Fact]
     public void EveryKeyTheUiUsesIsInACatalog()
     {
-        var sources = Directory.GetFiles(Path.Combine(Repository, "components", "ui", "windows"), "*.cs", SearchOption.AllDirectories)
+        IEnumerable<string> sources = Directory.GetFiles(Path.Combine(Repository, "components", "ui", "windows"), "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
         var missing = new List<string>();
-        foreach (var source in sources)
+        foreach (string source in sources)
         {
             foreach (Match match in Regex.Matches(File.ReadAllText(source), @"\bL\(""((?:[^""\\]|\\.)*)"""))
             {
-                var key = Regex.Unescape(match.Groups[1].Value);
+                string key = Regex.Unescape(match.Groups[1].Value);
                 if (!Has(key))
                 {
                     missing.Add($"{Path.GetFileName(source)}: {key}");
@@ -73,7 +73,7 @@ public class StringsTests
     [Fact]
     public void TimesAreWrittenAsOnMacOs()
     {
-        var now = DateTimeOffset.Now;
+        DateTimeOffset now = DateTimeOffset.Now;
         var time = new TimeStyle(now, CultureInfo.GetCultureInfo("en-US"));
         Assert.Equal("1 hr 23 min", time.Duration(TimeSpan.FromMinutes(83)));
         Assert.Equal("2 hr", time.Duration(TimeSpan.FromMinutes(120)));
@@ -88,7 +88,7 @@ public class StringsTests
     [Fact]
     public void TheStatusLineDescribesTheConnection()
     {
-        var now = DateTimeOffset.Now;
+        DateTimeOffset now = DateTimeOffset.Now;
         var time = new TimeStyle(now, CultureInfo.GetCultureInfo("en-US"));
         var connected = new ConnectionSection(
             ConnectionIcon.Connected,
@@ -96,9 +96,9 @@ public class StringsTests
             ButtonState.Disabled, ButtonState.Enabled, ButtonState.Enabled, false);
         Assert.Equal("Connected · 1 hr 23 min · Reconnects in about 1 hr 32 min", connected.StatusLine(null, time));
         Assert.Equal("Connected · 1 hr 23 min", connected.StatusLine(null, time, includesPlannedReconnect: false));
-        var waiting = connected with { Status = new ConnectionStatus.WaitingToReconnect(now.AddSeconds(72)) };
+        ConnectionSection waiting = connected with { Status = new ConnectionStatus.WaitingToReconnect(now.AddSeconds(72)) };
         Assert.Equal("Waiting to reconnect (1:12)", waiting.StatusLine(null, time));
-        var refused = connected with
+        ConnectionSection refused = connected with
         {
             Status = new ConnectionStatus.Failed(new FailureReason.Helper(HelperErrorCode.InvalidRequest)),
         };
@@ -138,10 +138,10 @@ public class StringsTests
     {
         Assert.Equal("Checking for updates…", UpdateSection.Headline());
         Assert.Null(UpdateSection.Subtitle());
-        var upToDate = Section(new UpdateStatus.UpToDate());
+        AutoUpdateSection upToDate = Section(new UpdateStatus.UpToDate());
         Assert.Equal("You're up to date", upToDate.Headline());
         Assert.Equal("FortiVPNManager 26.1.0", upToDate.Subtitle());
-        foreach (var progress in new UpdateProgress[] { new UpdateProgress.Idle(), Downloading, Preparing, DownloadFailed })
+        foreach (UpdateProgress progress in new UpdateProgress[] { new UpdateProgress.Idle(), Downloading, Preparing, DownloadFailed })
         {
             Assert.Equal("Updates available", Section(Available(), progress).Headline());
             Assert.Equal("Current version: 26.1.0", Section(Available(), progress).Subtitle());
@@ -150,10 +150,10 @@ public class StringsTests
         Assert.Equal(
             "The update installs when you restart the app. The VPN disconnects briefly during the install.",
             Section(Available(), Ready).Subtitle());
-        var installing = Section(Available(), new UpdateProgress.Installing("26.2.0"));
+        AutoUpdateSection installing = Section(Available(), new UpdateProgress.Installing("26.2.0"));
         Assert.Equal("Installing…", installing.Headline());
         Assert.Equal("The app quits to install the update and opens again when it's done.", installing.Subtitle());
-        var checkFailed = CheckFailed(new UpdateCheckFailure.HttpStatus(403));
+        AutoUpdateSection checkFailed = CheckFailed(new UpdateCheckFailure.HttpStatus(403));
         Assert.Equal("Couldn't check for updates (HTTP 403).", checkFailed.Headline());
         Assert.Equal("Current version: 26.1.0", checkFailed.Subtitle());
     }
@@ -188,14 +188,14 @@ public class StringsTests
         Assert.Null(UpdateSection.FailedInstallLine());
         Assert.Equal("Couldn't install version 26.2.0.", (UpdateSection with { FailedInstallVersion = "26.2.0" }).FailedInstallLine());
         Assert.Equal("Couldn't download the update. Check the network connection.", new InstallFailure.DownloadFailed("timed out").Message());
-        var prepare = "Couldn't prepare the install. Try installing again.";
+        string prepare = "Couldn't prepare the install. Try installing again.";
         Assert.Equal(prepare, new InstallFailure.WaiterFailed("access denied").Message());
         Assert.Equal(prepare, new InstallFailure.HelperRefused(UpdateRefusal.NothingPrepared, "").Message());
-        var helper = "Couldn't reach the Helper, so the update wasn't installed.";
+        string helper = "Couldn't reach the Helper, so the update wasn't installed.";
         Assert.Equal(helper, new InstallFailure.HelperUnreachable(new HelperChannelFailure.NoReply()).Message());
         Assert.Equal(helper, new InstallFailure.HelperBuildMismatch("1", "2").Message());
         Assert.Equal(helper, new InstallFailure.HelperFailed("failed").Message());
-        var verify = "Couldn't verify the update file. Try installing again.";
+        string verify = "Couldn't verify the update file. Try installing again.";
         Assert.Equal(verify, new InstallFailure.HelperRefused(UpdateRefusal.SignatureInvalid, "").Message());
         Assert.Equal(verify, new InstallFailure.HelperRefused(UpdateRefusal.ChecksumMismatch, "").Message());
         Assert.Equal(verify, new InstallFailure.HelperRefused(UpdateRefusal.FilesUnreadable, "").Message());
@@ -206,9 +206,9 @@ public class StringsTests
     [Fact]
     public void ReleaseNotesFollowTheAppsLanguageThenEnglish()
     {
-        var both = Available(new() { ["ko"] = ["한국어 제목"], ["en"] = ["English title"] });
-        var english = Available(new() { ["en"] = ["English title"] });
-        var korean = Available(new() { ["ko"] = ["한국어 제목"] });
+        UpdateStatus.Available both = Available(new() { ["ko"] = ["한국어 제목"], ["en"] = ["English title"] });
+        UpdateStatus.Available english = Available(new() { ["en"] = ["English title"] });
+        UpdateStatus.Available korean = Available(new() { ["ko"] = ["한국어 제목"] });
         Assert.Equal(["English title"], both.ReleaseNotes()!);
         Assert.Null(korean.ReleaseNotes());
         Assert.Null(Available().ReleaseNotes());

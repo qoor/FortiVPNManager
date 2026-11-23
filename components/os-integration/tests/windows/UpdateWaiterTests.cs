@@ -12,7 +12,7 @@ public class UpdateWaiterTests
     [Fact]
     public void TheWaiterIsAHiddenCmdThatReadsTheInstallerFromItsInput()
     {
-        var start = UpdateWaiter.StartInfo(1111, App, "FortiVPNManager.exe");
+        ProcessStartInfo start = UpdateWaiter.StartInfo(1111, App, "FortiVPNManager.exe");
         Assert.Equal(@"C:\Windows\System32\cmd.exe", start.FileName);
         Assert.Empty(start.ArgumentList);
         Assert.False(start.UseShellExecute);
@@ -25,7 +25,7 @@ public class UpdateWaiterTests
     [Fact]
     public void TheWaiterChecksEachProcessByIdAndProgramThenStartsTheApp()
     {
-        var arguments = UpdateWaiter.StartInfo(1111, App, "FortiVPNManager.exe").Arguments;
+        string arguments = UpdateWaiter.StartInfo(1111, App, "FortiVPNManager.exe").Arguments;
         Assert.Equal(
             """"/d /q /v:on /c set "fvm_installer=" & (set /p fvm_installer=)& if defined fvm_installer for /l %i in (0,0,1) do @((tasklist /nh /fo csv /fi "PID eq 1111" /fi "IMAGENAME eq FortiVPNManager.exe" | find """1111""" >nul || tasklist /nh /fo csv /fi "PID eq !fvm_installer!" /fi "IMAGENAME eq msiexec.exe" | find """!fvm_installer!""" >nul || (start "" "C:\Program Files\FortiVPNManager\FortiVPNManager.exe" & exit)) & ping -n 2 127.0.0.1 >nul)"""",
             arguments);
@@ -35,10 +35,10 @@ public class UpdateWaiterTests
     [Fact]
     public void TheAppStartsOnlyAfterItAndTheInstallerEnded()
     {
-        using var app = Process.Start(CharMap)!;
-        using var installer = Process.Start(new ProcessStartInfo(@"C:\Windows\System32\msiexec.exe", "/?"))!;
-        var before = CharMaps();
-        using var waiter = Process.Start(UpdateWaiter.StartInfo(app.Id, CharMap, "charmap.exe"))!;
+        using Process app = Process.Start(CharMap)!;
+        using Process installer = Process.Start(new ProcessStartInfo(@"C:\Windows\System32\msiexec.exe", "/?"))!;
+        List<int> before = CharMaps();
+        using Process waiter = Process.Start(UpdateWaiter.StartInfo(app.Id, CharMap, "charmap.exe"))!;
         try
         {
             Give(waiter, installer.Id);
@@ -65,10 +65,10 @@ public class UpdateWaiterTests
     [Fact]
     public void AnotherProgramUnderTheIdsCountsAsEnded()
     {
-        using var notApp = Ping();
-        using var notInstaller = Ping();
-        var before = CharMaps();
-        using var waiter = Process.Start(UpdateWaiter.StartInfo(notApp.Id, CharMap, "charmap.exe"))!;
+        using Process notApp = Ping();
+        using Process notInstaller = Ping();
+        List<int> before = CharMaps();
+        using Process waiter = Process.Start(UpdateWaiter.StartInfo(notApp.Id, CharMap, "charmap.exe"))!;
         try
         {
             Give(waiter, notInstaller.Id);
@@ -87,8 +87,8 @@ public class UpdateWaiterTests
     [Fact]
     public void AWaiterGivenNoInstallerEndsWithoutStartingTheApp()
     {
-        var before = CharMaps();
-        using var waiter = Process.Start(UpdateWaiter.StartInfo(Environment.ProcessId, CharMap, "charmap.exe"))!;
+        List<int> before = CharMaps();
+        using Process waiter = Process.Start(UpdateWaiter.StartInfo(Environment.ProcessId, CharMap, "charmap.exe"))!;
         try
         {
             waiter.StandardInput.Close();
@@ -114,9 +114,9 @@ public class UpdateWaiterTests
 
     private static List<int> CharMaps()
     {
-        var processes = Process.GetProcessesByName("charmap");
+        Process[] processes = Process.GetProcessesByName("charmap");
         var ids = processes.Select(process => process.Id).ToList();
-        foreach (var process in processes)
+        foreach (Process process in processes)
         {
             process.Dispose();
         }
@@ -125,10 +125,10 @@ public class UpdateWaiterTests
 
     private static T Until<T>(Func<T> read, Func<T, bool> done)
     {
-        var deadline = DateTime.UtcNow + Limit;
+        DateTime deadline = DateTime.UtcNow + Limit;
         while (true)
         {
-            var value = read();
+            T? value = read();
             if (done(value))
             {
                 return value;
@@ -140,7 +140,7 @@ public class UpdateWaiterTests
 
     private static void End(params Process[] processes)
     {
-        foreach (var process in processes)
+        foreach (Process process in processes)
         {
             if (!process.HasExited)
             {
@@ -151,7 +151,7 @@ public class UpdateWaiterTests
 
     private static void EndNewCharMaps(List<int> before)
     {
-        foreach (var id in CharMaps().Except(before))
+        foreach (int id in CharMaps().Except(before))
         {
             try
             {

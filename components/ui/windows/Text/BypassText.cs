@@ -13,7 +13,7 @@ public static class BypassText
         {
             return L("Unknown");
         }
-        var prefix = network.PrefixLength is { } length ? $"/{length}" : "";
+        string prefix = network.PrefixLength is { } length ? $"/{length}" : "";
         return $"{network.ServiceName} · {network.Address}{prefix}";
     }
 
@@ -49,7 +49,7 @@ public static class BypassText
             case BypassStatus.NoNetwork:
                 return (L("No network with an IPv4 router. Applies once one connects."), NoticeStyle.Warning);
             case BypassStatus.Failed failed:
-                var message = failed.Failure.Message();
+                string message = failed.Failure.Message();
                 return failed.RetryInSeconds is { } seconds
                     ? (message + " " + L("Trying again in %@.", time.SpelledOut(seconds)), NoticeStyle.Error)
                     : (message, NoticeStyle.Error);

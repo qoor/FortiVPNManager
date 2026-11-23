@@ -40,7 +40,7 @@ internal static class SystemLog
 
     private static void Write(EventLogEntryType type, string name, string message)
     {
-        var parts = Parts(message);
+        List<string> parts = Parts(message);
         try
         {
             if (parts.Count == 1)
@@ -48,7 +48,7 @@ internal static class SystemLog
                 EventLog.WriteEntry(Source, $"{name}: {message}", type);
                 return;
             }
-            for (var index = 0; index < parts.Count; index++)
+            for (int index = 0; index < parts.Count; index++)
             {
                 EventLog.WriteEntry(Source, $"{name} ({index + 1}/{parts.Count}): {parts[index]}", type);
             }
@@ -66,10 +66,10 @@ internal static class SystemLog
     internal static List<string> Parts(string message)
     {
         var parts = new List<string>();
-        var start = 0;
+        int start = 0;
         do
         {
-            var end = Math.Min(start + MaxPart, message.Length);
+            int end = Math.Min(start + MaxPart, message.Length);
             if (end < message.Length && char.IsHighSurrogate(message[end - 1]))
             {
                 end--;

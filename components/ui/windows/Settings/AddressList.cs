@@ -72,8 +72,8 @@ internal sealed class AddressList
                 return;
             }
             // Elsewhere it ends that edit first, then edits the row clicked or adds one below the rows.
-            var item = Ancestor<ListViewItem>(source);
-            var index = item is null ? -1 : list.IndexFromContainer(item);
+            ListViewItem? item = Ancestor<ListViewItem>(source);
+            int index = item is null ? -1 : list.IndexFromContainer(item);
             CommitEdit();
             if (index >= 0 && index < rows.Count)
             {
@@ -159,17 +159,17 @@ internal sealed class AddressList
     }
 
     private bool SameMessages(IReadOnlyDictionary<int, (string Text, string Help)> other) =>
-        other.Count == messages.Count && other.All(pair => messages.TryGetValue(pair.Key, out var message) && message == pair.Value);
+        other.Count == messages.Count && other.All(pair => messages.TryGetValue(pair.Key, out (string Text, string Help) message) && message == pair.Value);
 
     private void Reload()
     {
         var selected = list.SelectedItems.Select(item => list.Items.IndexOf(item)).Where(index => index < rows.Count).ToList();
         list.Items.Clear();
-        for (var index = 0; index < rows.Count; index++)
+        for (int index = 0; index < rows.Count; index++)
         {
-            list.Items.Add(Row(rows[index], problemRows.Contains(index), messages.TryGetValue(index, out var message) ? message : null));
+            list.Items.Add(Row(rows[index], problemRows.Contains(index), messages.TryGetValue(index, out (string Text, string Help) message) ? message : null));
         }
-        foreach (var index in selected)
+        foreach (int index in selected)
         {
             list.SelectRange(new Microsoft.UI.Xaml.Data.ItemIndexRange(index, 1));
         }
@@ -187,7 +187,7 @@ internal sealed class AddressList
         {
             var mark = new FontIcon { FontSize = 14 };
             mark.SetSucceeded(false);
-            var note = Cards.Row(mark);
+            StackPanel note = Cards.Row(mark);
             note.Spacing = 6;
             if (message is { } shown)
             {
@@ -292,15 +292,15 @@ internal sealed class AddressList
         {
             return;
         }
-        var text = editor.Text.Trim();
-        var original = editingOriginal;
-        var cancelled = cancelsEdit;
+        string text = editor.Text.Trim();
+        string? original = editingOriginal;
+        bool cancelled = cancelsEdit;
         editingRow = null;
         editingOriginal = null;
         editor = null;
         cancelsEdit = false;
         // Rows that changed meanwhile may have moved the edited row; then it is found by its text.
-        var rowMoved = false;
+        bool rowMoved = false;
         if (pending is { } waiting)
         {
             rowMoved = !waiting.Rows.SequenceEqual(rows);
@@ -351,7 +351,7 @@ internal sealed class AddressList
 
     private static bool IsWithin(DependencyObject? element, DependencyObject container)
     {
-        for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
         {
             if (current == container)
             {
