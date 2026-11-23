@@ -87,7 +87,15 @@ if ($PSCmdlet.ParameterSetName -eq 'Build') {
     Push-Location $root
     $encoding = [Console]::OutputEncoding
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    $rustflags = $env:RUSTFLAGS
     try {
+        $env:RUSTFLAGS = '-D warnings'
+        $ErrorActionPreference = 'Continue'
+        & cargo fmt --all --check
+        if ($LASTEXITCODE -ne 0) { throw "cargo fmt failed with exit code $LASTEXITCODE" }
+        & cargo clippy --release --workspace --exclude fvm-helper-macos --all-targets
+        if ($LASTEXITCODE -ne 0) { throw "cargo clippy failed with exit code $LASTEXITCODE" }
+        $ErrorActionPreference = 'Stop'
         $env:FVM_BUILD = $Build
         $messages = Invoke-Cargo @('build', '--release', '--package', 'fvm-helper-windows')
         Remove-Item Env:FVM_BUILD
@@ -95,6 +103,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Build') {
         $metadata = & cargo metadata --format-version 1 --no-deps
         if ($LASTEXITCODE -ne 0) { throw "cargo metadata failed with exit code $LASTEXITCODE" }
     } finally {
+        $env:RUSTFLAGS = $rustflags
         [Console]::OutputEncoding = $encoding
         Pop-Location
     }

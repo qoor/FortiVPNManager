@@ -4,6 +4,7 @@ fn main() {
     cc::Build::new()
         .file("src/protocols.m")
         .include("../../contract/macos/xpc")
+        .warnings_into_errors(true)
         .cargo_metadata(false)
         .compile("fvm_helper_protocols");
     println!(

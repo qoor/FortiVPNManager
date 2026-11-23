@@ -20,6 +20,8 @@ export PATH="$(brew --prefix)/opt/llvm/bin:$(brew --prefix)/opt/lld/bin:$PATH" X
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+cargo fmt --all --check
+cargo xwin clippy --workspace --exclude fvm-helper-macos --all-targets --target "$target" -- -D warnings
 scripts/sync-windows.sh
 cargo xwin test --no-run --target "$target" --message-format=json-render-diagnostics "$@" >"$work/build.json"
 python3 -I - "$PWD" "$work/build.json" >"$work/tests" <<'EOF'

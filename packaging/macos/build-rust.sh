@@ -10,6 +10,7 @@ lib="lib$(echo "$package" | tr - _).a"
 root=$(cd "$(dirname "$0")/../.." && pwd)
 # Xcode does not run scripts with the login shell's PATH.
 export PATH="$HOME/.cargo/bin:$PATH"
+export RUSTFLAGS="-D warnings"
 # Under DerivedData rather than ./target: `make clean` removes it, and Xcode builds do not wait on
 # the build-directory lock held by terminal cargo or rust-analyzer.
 target_dir="$OBJROOT/cargo"

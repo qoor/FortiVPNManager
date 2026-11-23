@@ -3,5 +3,8 @@ fn main() {
         return;
     }
     println!("cargo:rerun-if-changed=src/log.m");
-    cc::Build::new().file("src/log.m").compile("fvm_os_api_log");
+    cc::Build::new()
+        .file("src/log.m")
+        .warnings_into_errors(true)
+        .compile("fvm_os_api_log");
 }

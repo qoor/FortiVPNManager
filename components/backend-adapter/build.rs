@@ -10,6 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/openconnect/progress.c");
     cc::Build::new()
         .file("src/openconnect/progress.c")
+        .warnings_into_errors(true)
         .compile("fvm_oc_progress");
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     if os != "macos" && os != "windows" {

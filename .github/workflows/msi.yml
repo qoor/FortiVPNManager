@@ -41,7 +41,7 @@ jobs:
         with:
           path: ${{ steps.openconnect.outputs.zip }}
           key: openconnect-${{ steps.openconnect.outputs.key }}
-      - run: rustup update --no-self-update stable && rustup default stable
+      - run: rustup update --no-self-update stable && rustup default stable && rustup component add clippy rustfmt
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-dotnet@v5
         with:

@@ -79,6 +79,10 @@ zeroize = "1"
 [workspace.lints.rust]
 unsafe_code = "deny"
 
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
 [profile.dev]
 panic = "abort"
 
