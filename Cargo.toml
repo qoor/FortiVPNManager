@@ -1,16 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "components/backend-adapter",
-    "components/contract",
-    "components/core",
-    "components/helper/core",
-    "components/helper/macos",
-    "components/helper/windows",
-    "components/os-api/macos",
-    "components/os-api/windows",
-    "components/runtime",
-]
+members = []
 
 [workspace.package]
 edition = "2024"
@@ -24,12 +14,6 @@ core-foundation = "0.10.1"
 encoding_rs = "0.8"
 # Writes the Windows Helper's log to the Windows event log.
 eventlog = "0.3"
-fvm-backend-adapter = { path = "components/backend-adapter" }
-fvm-contract = { path = "components/contract" }
-fvm-core = { path = "components/core" }
-fvm-helper-core = { path = "components/helper/core" }
-fvm-os-api-macos = { path = "components/os-api/macos" }
-fvm-os-api-windows = { path = "components/os-api/windows" }
 # Civil time in a time zone the runtime resolved; nothing that reads the system database.
 jiff = { version = "0.2.41", default-features = false, features = ["std"] }
 getrandom = "0.3"

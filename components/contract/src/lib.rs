@@ -1,9 +1,0 @@
-//! Shared contract: what the app and the Helper exchange, and how Swift and Rust talk inside each
-//! process.
-
-pub mod app_helper;
-pub mod app_internal;
-pub mod helper_internal;
-pub mod helper_pipe;
-pub mod stream;
-pub mod validation;

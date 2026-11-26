@@ -1,1 +1,0 @@
-[{"started":{"installerProcessID":4294967295}},{"started":{}},{"refused":{"reason":"nothingPrepared","message":"no update is prepared"}},{"refused":{"reason":"alreadyInstalling","message":"an update is already being installed"}},{"failure":{"_0":{"code":"notAuthorized","message":"the connection has not passed the build check"}}}]
