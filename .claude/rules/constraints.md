@@ -1,6 +1,8 @@
 ---
 paths:
-  - "components/**"
+  - "system/**"
+  - "user/**"
+  - "common/**"
   - "packaging/**"
   - "docs/SPEC.md"
 ---
@@ -57,7 +59,6 @@ paths:
   - 보낸 프로세스 종료 뒤 도착한 메시지 거부(오류 4102)
   - 영향: 앱의 응답 수신 전 Helper 종료 시 응답 유실
 - XPC 응답과 Helper→앱 메시지(event·output) 사이 순서 미보장
-  - 대응: 실행 종료 판단은 exited 이벤트 기준
 
 # 예외 규칙
 

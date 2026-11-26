@@ -1,6 +1,7 @@
 ---
 paths:
-  - "components/ui/**"
+  - "user/ui/**"
+  - "user/resources/**"
   - "packaging/macos/pkg/Distribution.xml"
   - "packaging/macos/pkg/Resources/**"
   - "packaging/windows/InstallerUi.wxs"
@@ -15,9 +16,8 @@ paths:
   - 화면 모양
   - 컨트롤
 - UI에서 판단 로직 금지
-  - 버튼 활성 여부와 값의 유효성은 런타임이 보낸 값 그대로 사용
+  - 버튼 활성 여부와 값의 유효성은 UI 외 기능이 보낸 값 그대로 사용
 - 대상 OS에 없는 기능의 항목은 표시 금지
-  - 예: Windows UI의 백그라운드 실행 승인 행
 
 ## macOS
 - Apple HIG(Human Interface Guidelines) 준수

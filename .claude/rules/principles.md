@@ -1,6 +1,8 @@
 ---
 paths:
-  - "components/**"
+  - "system/**"
+  - "user/**"
+  - "common/**"
   - "packaging/**"
   - "docs/SPEC.md"
 ---

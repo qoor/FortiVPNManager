@@ -1,19 +1,13 @@
 ---
 paths:
-  - "components/**"
+  - "system/**"
+  - "user/**"
+  - "common/**"
   - "packaging/**"
   - ".github/**"
   - "VERSION"
   - "docs/SPEC.md"
 ---
-
-# 연결 관리
-- 타이머 입력의 판정 시각: 읽은 시각과 타이머 예정 시각 중 늦은 쪽
-  - 사유: 타이머 대기와 판정의 시계 읽기 시점 차이
-    - 시계가 뒤로 조정되면 읽은 시각이 예정 시각보다 이를 수 있음
-  - 이른 판정 시: 인증 실패 대기 후 재시도가 같은 대기로 복귀
-    - 같은 시각 타이머: 재설정 미적용
-    - 결과: 재시도 영구 정지
 
 # OTP
 - 수동 OTP 입력 창 미제공
@@ -63,16 +57,10 @@ paths:
   - 4를 고른 이유: 1·2는 Helper가 이미 사용, 3은 C 런타임 abort()의 종료 코드
   - macOS: abort() 유지, launchd가 재시작
 - 연결당 한 번에 하나만 처리하는 요청
-  - 예외 route 읽기·쓰기
   - 업데이트 준비·설치
   - 사유: 다른 로컬 프로그램의 요청 누적 방지
 
 ## macOS
-- 앱↔Helper 통신: NSXPC 유지
-  - 사유: 설치 중 다른 빌드 Helper와 getVersion·exitWhenIdle로 통신
-  - getVersion·exitWhenIdle의 selector·응답 형식 변경 금지
-- XPC 프로토콜 선언: 앱·Helper 공용 ObjC 헤더 하나
-  - 사유: 두 선언의 수동 일치 제거
 - SIGTERM 수신: signal-hook 사용
   - 사유: 신호 차단 방식은 Helper가 실행하는 자식 프로세스에 차단 상태 상속
 
@@ -90,10 +78,6 @@ paths:
 - OpenConnect 빌드 환경: C:\msys64의 MSYS2 UCRT64 고정
   - 사유: PATH의 bash는 Git Bash·WSL일 수 있음
   - C:\msys64: MSYS2 설치 프로그램 기본 폴더, GitHub Windows runner 설치 위치
-
-## macOS
-- 번들 ID 변경 금지
-  - 사유: Helper 등록이 Team ID와 번들 ID에 묶여 있어, 바꾸면 설치된 Mac마다 Helper 재등록·재승인 필요
 
 # 자동 업데이트
 - 업데이트 작업: Helper 멈춤 감시 제외
