@@ -282,6 +282,7 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
     <li>서비스 관리, 헤더, 로그 관리, UI의 세 기능에 적용합니다.</li>
     <li>서비스 관리의 총괄 구현체가 메인 서비스입니다.</li>
     <li>세부 기능은 헤더 디렉토리 안에 모듈 파일로 추가합니다.</li>
+    <li>기능은 서로를 참조하지 않습니다. 의존이 필요해지면 사용자 검토를 요청합니다.</li>
   </ul>
   <h3>단계의 예외</h3>
   <ul>
@@ -572,7 +573,8 @@ footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--li
   <ul>
     <li>이름 규칙은 <code>fvm-영역-디렉토리</code>입니다.</li>
     <li>crate 안은 Cargo 표준 배치인 <code>src/</code>를 씁니다.</li>
-    <li>crate끼리는 서로 의존할 수 없습니다. 두 묶음이 서로를 필요로 하면 묶음의 crate 경계를 다시 봅니다.</li>
+    <li>crate끼리는 서로 의존할 수 없습니다.</li>
+    <li>묶음 사이에 의존이 필요해지면 사용자 검토를 요청합니다.</li>
   </ul>
 </section>
 
