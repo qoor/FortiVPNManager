@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>FortiVPNManager 구조 설계</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; each area carries its own hue from the overview down to the directory tree. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #18222d;
+  --muted: #586675;
+  --line: #d3dae2;
+  --code-bg: #e9edf2;
+  --sys: #1c5ea8;
+  --usr: #0b7765;
+  --com: #7550a6;
+  --etc: #8a5a14;
+  --font-text: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Consolas, "D2Coding", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c;
+    --surface: #161f29;
+    --ink: #e1e7ee;
+    --muted: #94a2b0;
+    --line: #2b3744;
+    --code-bg: #1c2733;
+    --sys: #6dabee;
+    --usr: #4fc4ad;
+    --com: #b89ce3;
+    --etc: #d9a95a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c;
+  --surface: #161f29;
+  --ink: #e1e7ee;
+  --muted: #94a2b0;
+  --line: #2b3744;
+  --code-bg: #1c2733;
+  --sys: #6dabee;
+  --usr: #4fc4ad;
+  --com: #b89ce3;
+  --etc: #d9a95a;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.page {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding-block: 2.5rem 4rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 2.75rem;
+}
+header.top { display: flex; flex-direction: column; gap: 0.75rem; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+h1 { font-size: 2rem; font-weight: 600; line-height: 1.25; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); max-width: 44rem; margin: 0; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+nav.toc a {
+  font-size: 0.82rem;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.75rem;
+  background: var(--surface);
+}
+nav.toc a:hover { border-color: var(--sys); color: var(--sys); }
+a:focus-visible { outline: 2px solid var(--sys); outline-offset: 2px; }
+section { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  text-wrap: balance;
+}
+h3 { font-size: 1rem; font-weight: 600; margin: 0.5rem 0 0; }
+p { margin: 0; max-width: 46rem; }
+ul { margin: 0; padding-left: 1.2rem; max-width: 46rem; }
+li { margin: 0.15rem 0; }
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+td.group { font-weight: 500; white-space: nowrap; }
+td.nowrap { white-space: nowrap; }
+.areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.area {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--hue);
+  border-radius: 6px;
+  padding: 1rem 1.1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.area .dir { font-family: var(--font-mono); font-size: 0.8rem; color: var(--hue); }
+.area h3 { margin: 0; font-size: 1.05rem; }
+.area dl { margin: 0.3rem 0 0; display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.88rem; }
+.area dt { color: var(--muted); white-space: nowrap; }
+.area dd { margin: 0; }
+.sys { --hue: var(--sys); }
+.usr { --hue: var(--usr); }
+.com { --hue: var(--com); }
+.etc { --hue: var(--etc); }
+.tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--hue);
+  border: 1px solid var(--hue);
+  border-radius: 4px;
+  padding: 0 0.4rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.flows { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+.flow {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  min-width: 0;
+}
+.flow h3 { margin: 0 0 0.6rem; color: var(--hue); }
+.flow ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+.flow li { margin: 0; padding-left: calc(var(--d, 0) * 1.1rem); font-size: 0.9rem; }
+.flow li span { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); margin-left: 0.4rem; }
+pre.tree {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  color: var(--ink);
+}
+pre.tree .n { color: var(--muted); font-family: var(--font-text); }
+pre.tree .f { font-family: var(--font-text); }
+pre.tree .sys, pre.tree .usr, pre.tree .com, pre.tree .etc { color: var(--hue); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+.feat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--hue);
+  border-radius: 6px;
+  padding: 1rem 1.1rem 1.1rem;
+  min-width: 0;
+}
+.feat h3 { margin: 0; font-size: 1.05rem; }
+.feat h4 { margin: 1rem 0 0.25rem; font-size: 0.8rem; font-weight: 500; color: var(--hue); }
+.feat h5 { margin: 0.8rem 0 0.15rem; font-size: 0.92rem; font-weight: 600; }
+.feat ul { font-size: 0.9rem; }
+footer { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>
+
+<div class="page">
+
+<header class="top">
+  <div class="eyebrow">ARCHITECTURE · 재구현 기준</div>
+  <h1>FortiVPNManager 구조 설계</h1>
+  <p class="lead">재구현 대상의 기능 구성, 아키텍처 구성, 디렉토리 구성 기준입니다. 영역·묶음·헤더의 구분과 역할, 디렉토리와 crate 구성을 다루고, 공개 인터페이스와 세부 동작은 다루지 않습니다.</p>
+  <nav class="toc" aria-label="목차">
+    <a href="#areas">영역</a>
+    <a href="#levels">구성 단계</a>
+    <a href="#flow">실행 흐름</a>
+    <a href="#system">시스템 영역</a>
+    <a href="#user">사용자 영역</a>
+    <a href="#common">공용</a>
+    <a href="#tree">디렉토리 구조</a>
+    <a href="#crates">crate</a>
+    <a href="#placement">그 밖의 배치</a>
+    <a href="#later">구현 단계 결정 항목</a>
+    <a href="#features">기능 목록</a>
+    <a href="#terms">용어</a>
+  </nav>
+</header>
+
+<section id="areas">
+  <h2>1. 영역</h2>
+  <div class="areas">
+    <div class="area sys">
+      <div class="dir">system/</div>
+      <h3>시스템 영역</h3>
+      <dl>
+        <dt>실행 주체</dt><dd>Helper 서비스</dd>
+        <dt>역할</dt><dd>사용자 영역 요청의 실제 처리</dd>
+        <dt>실행</dt><dd>상시</dd>
+      </dl>
+    </div>
+    <div class="area usr">
+      <div class="dir">user/</div>
+      <h3>사용자 영역</h3>
+      <dl>
+        <dt>실행 주체</dt><dd>앱</dd>
+        <dt>역할</dt><dd>VPN 연결 제어, 사용자 표시와 입력</dd>
+        <dt>실행</dt><dd>사용자 종료 가능</dd>
+      </dl>
+    </div>
+    <div class="area com">
+      <div class="dir">common/</div>
+      <h3>공용</h3>
+      <dl>
+        <dt>실행 주체</dt><dd>없음</dd>
+        <dt>역할</dt><dd>두 영역이 함께 쓰는 정의와 OS 호출</dd>
+        <dt>기준</dt><dd>두 영역이 함께 쓰는 것 한정</dd>
+      </dl>
+    </div>
+  </div>
+  <ul>
+    <li>VPN 연결 제어의 주체는 사용자 영역입니다.</li>
+    <li>앱이 실행 중이 아니면 재연결하지 않습니다.</li>
+    <li>한 영역만 쓰는 구조는 공용이 아니라 해당 영역의 crate에 둡니다.</li>
+  </ul>
+</section>
+
+<section id="levels">
+  <h2>2. 구성 단계</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>단계</th><th>단위</th><th>대표 파일</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td class="group">영역</td><td>디렉토리</td><td>없음</td><td>시스템, 사용자, 공용</td></tr>
+        <tr><td class="group">묶음</td><td>crate</td><td><code>lib.rs</code></td><td>연결 관리, 프로토콜 관리, 서비스 관리</td></tr>
+        <tr><td class="group">헤더</td><td>모듈</td><td><code>mod.rs</code></td><td>헤더의 총괄 구현체</td></tr>
+        <tr><td class="group">세부 기능</td><td>모듈 파일</td><td>없음</td><td>총괄 구현체가 쓰는 기능</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>묶음</th><th>다루는 대상</th></tr></thead>
+      <tbody>
+        <tr><td class="group">연결 관리</td><td>VPN 연결</td></tr>
+        <tr><td class="group">프로토콜 관리</td><td>앱과 Helper 사이 통신의 구현체</td></tr>
+        <tr><td class="group">서비스 관리</td><td>서비스로 실행되는 프로그램 자신</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>총괄 구현체</h3>
+  <ul>
+    <li>대상마다 그 이름을 가진 구현체가 최소 하나 있습니다.</li>
+    <li>서비스 관리, 헤더, 로그 관리, UI의 세 기능에 적용합니다.</li>
+    <li>서비스 관리의 총괄 구현체가 메인 서비스입니다.</li>
+    <li>세부 기능은 헤더 디렉토리 안에 모듈 파일로 추가합니다.</li>
+  </ul>
+  <h3>단계의 예외</h3>
+  <ul>
+    <li>메인 서비스는 헤더 없이 서비스 관리 crate의 <code>lib.rs</code>에 있습니다.</li>
+    <li>로그 관리는 묶음 밖의 crate입니다.</li>
+    <li>UI는 묶음 밖이고 Rust crate가 아닙니다.</li>
+  </ul>
+</section>
+
+<section id="flow">
+  <h2>3. 실행 흐름</h2>
+  <div class="flows">
+    <div class="flow sys">
+      <h3>Helper</h3>
+      <ol>
+        <li>main 진입<span>system/helper</span></li>
+        <li style="--d:1">메인 서비스 생성<span>system/service</span></li>
+        <li style="--d:2">메인 루프</li>
+        <li style="--d:1">메인 루프 종료</li>
+        <li>main 종료</li>
+      </ol>
+    </div>
+    <div class="flow usr">
+      <h3>앱</h3>
+      <ol>
+        <li>main 진입<span>user/app · Swift, C#</span></li>
+        <li style="--d:1">시작 호출<span>user/app · Rust 통로</span></li>
+        <li style="--d:2">메인 서비스 생성<span>user/service</span></li>
+        <li style="--d:3">메인 루프</li>
+        <li style="--d:1">UI 실행<span>user/ui</span></li>
+        <li style="--d:1">메인 루프 종료 통지</li>
+        <li>main 종료</li>
+      </ol>
+    </div>
+  </div>
+  <ul>
+    <li>진입점은 메인 서비스 생성과 종료만 맡습니다.</li>
+    <li>메인 서비스는 기능을 만들어 조합하고, 메인 루프를 관리하며, 서비스 시작과 종료의 경계가 됩니다.</li>
+    <li>앱 진입점의 Rust 통로는 메인 서비스 시작·종료 호출과, UI와 메인 서비스 사이의 통로를 맡습니다.</li>
+  </ul>
+</section>
+
+<section id="system">
+  <h2>4. 시스템 영역</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>묶음</th><th>디렉토리</th><th>헤더</th><th>모듈</th><th>인터페이스 예시</th></tr></thead>
+      <tbody>
+        <tr><td class="group" rowspan="3">서비스 관리</td><td rowspan="3"><code>service</code></td><td class="nowrap">VPN Helper 서비스</td><td><code>lib.rs</code></td><td>메인 서비스</td></tr>
+        <tr><td class="nowrap">Helper 운영 상태 관리</td><td><code>operation_state</code></td><td>운영 상태 확인 기능, 운영 상태 저장 기능, 운영 상태 복구 기능</td></tr>
+        <tr><td class="nowrap">업데이트 관리</td><td><code>update</code></td><td>업데이트 설치 기능</td></tr>
+        <tr><td class="group" rowspan="2">연결 관리</td><td rowspan="2"><code>connection</code></td><td class="nowrap">VPN 연결 관리</td><td><code>vpn</code></td><td>VPN 멀티 세션 관리 기능, VPN 세션 연결 관리 기능</td></tr>
+        <tr><td class="nowrap">네트워크 관리</td><td><code>network</code></td><td>VPN 터널 설정 기능, 예외 경로 관리 기능, 네트워크 상태 관리 기능</td></tr>
+        <tr><td class="group">프로토콜 관리</td><td><code>protocol</code></td><td class="nowrap">앱 연동 관리</td><td><code>app_link</code></td><td>앱 요청 채널 관리 기능, Helper 전파 채널 관리 기능, 앱 요청 분석 기능</td></tr>
+        <tr><td class="group">묶음 밖</td><td><code>log</code></td><td class="nowrap">로그 관리</td><td><code>lib.rs</code></td><td>VPN 로그 기록 기능, Helper 로그 기록 기능, 시스템 로그 기록 기능</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li>진입점은 <code>helper</code>입니다.</li>
+    <li>OpenConnect 바인딩은 <code>openconnect</code>이고, 시스템 영역만 씁니다.</li>
+  </ul>
+</section>
+
+<section id="user">
+  <h2>5. 사용자 영역</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>묶음</th><th>디렉토리</th><th>헤더</th><th>모듈</th><th>인터페이스 예시</th></tr></thead>
+      <tbody>
+        <tr><td class="group" rowspan="3">서비스 관리</td><td rowspan="3"><code>service</code></td><td class="nowrap">VPN 앱 서비스</td><td><code>lib.rs</code></td><td>메인 서비스</td></tr>
+        <tr><td class="nowrap">설정 관리</td><td><code>config</code></td><td>설정 로드 기능, 설정 가져오기 기능, 설정 저장 기능, 앱 상태 유지 기능</td></tr>
+        <tr><td class="nowrap">업데이트 관리</td><td><code>update</code></td><td>업데이트 확인 기능, 업데이트 수행 기능</td></tr>
+        <tr><td class="group" rowspan="3">연결 관리</td><td rowspan="3"><code>connection</code></td><td class="nowrap">VPN 연결 제어</td><td><code>control</code></td><td>VPN 연결 제어 기능</td></tr>
+        <tr><td class="nowrap">연결 정책 관리</td><td><code>policy</code></td><td>연결 스케줄 관리 기능, 유휴 상태 관리 기능</td></tr>
+        <tr><td class="nowrap">인증 관리</td><td><code>auth</code></td><td>VPN 계정 관리 기능, MFA(OTP) 인증 기능</td></tr>
+        <tr><td class="group">프로토콜 관리</td><td><code>protocol</code></td><td class="nowrap">Helper 연동 관리</td><td><code>helper_link</code></td><td>앱 요청 채널 관리 기능, Helper 전파 채널 관리 기능, Helper 서비스 관리 기능</td></tr>
+        <tr><td class="group" rowspan="2">묶음 밖</td><td><code>log</code></td><td class="nowrap">로그 관리</td><td><code>lib.rs</code></td><td>VPN 로그 기록 기능, 앱 로그 기록 기능, 시스템 로그 기록 기능</td></tr>
+        <tr><td><code>ui</code></td><td class="nowrap">UI</td><td>OS별 디렉토리</td><td>메뉴바(트레이) 기능, 설정창 기능, 알림 기능</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>진입점</h3>
+  <ul>
+    <li><code>app</code>은 Rust 통로, Swift main, C# main으로 이루어집니다.</li>
+    <li>진입 코드만 두고, 화면 구성은 두지 않습니다.</li>
+  </ul>
+  <h3>Helper 서비스 준비</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>일</th><th>담당</th></tr></thead>
+      <tbody>
+        <tr><td>서비스 등록과 자동 시작 설정</td><td>설치 패키지</td></tr>
+        <tr><td>앱 실행 시 Helper 기동</td><td>Helper 연동 관리</td></tr>
+        <tr><td>기동을 부르는 시점</td><td>VPN 앱 서비스</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>UI와 리소스</h3>
+  <ul>
+    <li>UI는 표시와 입력만 맡습니다.</li>
+    <li>UI가 아닌 헤더는 UI를 참조하지 않습니다.</li>
+    <li>UI는 OS 이름으로 먼저 나누고, 세 기능 디렉토리를 두 OS에 똑같이 둡니다.</li>
+    <li>문장 생성 코드는 <code>ui/OS/Localization</code>에, 앱 리소스는 <code>resources/OS/유형</code>에 둡니다.</li>
+    <li>번역 리소스를 쓰는 곳은 UI뿐입니다.</li>
+  </ul>
+</section>
+
+<section id="common">
+  <h2>6. 공용</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>crate</th><th>디렉토리</th><th>모듈</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td class="group" rowspan="3">공용 기반</td><td rowspan="3"><code>base</code></td><td><code>constants</code></td><td>공유 상수</td></tr>
+        <tr><td><code>validation</code></td><td>유효성 검사</td></tr>
+        <tr><td><code>protocol</code></td><td>앱과 Helper 사이 통신 메시지 구조</td></tr>
+        <tr><td class="group" rowspan="2">OS API</td><td rowspan="2"><code>os-api</code></td><td><code>macos</code></td><td>macOS API</td></tr>
+        <tr><td><code>windows</code></td><td>Windows API</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li>프로토콜 구조는 <code>common/base</code>의 <code>protocol</code>에 둡니다.</li>
+    <li>프로토콜 구현체는 두 영역의 <code>protocol</code> crate가 클라이언트 또는 서버 역할로 갖습니다.</li>
+  </ul>
+</section>
+
+<section id="tree">
+  <h2>7. 디렉토리 구조</h2>
+  <div class="legend">
+    <span class="tag sys">시스템 영역</span>
+    <span class="tag usr">사용자 영역</span>
+    <span class="tag com">공용</span>
+    <span class="tag etc">프로젝트 정의·설치 패키지</span>
+  </div>
+  <ul>
+    <li>번호는 <code>docs/FEATURES.md</code>의 헤더 번호입니다.</li>
+    <li>헤더 아래 들여 쓴 이름은 <code>docs/FEATURES.md</code>의 기능 항목이고, 해당 헤더의 총괄 구현체에 놓입니다.</li>
+  </ul>
+<pre class="tree"><span class="etc">Cargo.toml</span>                       <span class="n">Rust workspace</span>
+<span class="etc">project.yml</span>                      <span class="n">Xcode 프로젝트 정의</span>
+<span class="etc">Config/</span>                          <span class="n">Xcode 설정 파일</span>
+<span class="etc">FortiVPNManager.slnx</span>             <span class="n">Visual Studio 솔루션</span>
+<span class="etc">*.csproj</span>                         <span class="n">C# 프로젝트</span>
+
+<span class="sys">system/</span>                          <span class="n">시스템 영역 (Helper 서비스)</span>
+  helper/                        <span class="n">진입점</span>
+  service/                       <span class="n">서비스 관리</span>
+    src/
+      lib.rs                     <span class="n">메인 서비스: VPN Helper 서비스</span>
+      operation_state/mod.rs     <span class="n">4. Helper 운영 상태 관리</span>
+                                   <span class="f">운영 상태 확인 기능</span>
+                                   <span class="f">운영 상태 저장 기능</span>
+                                   <span class="f">운영 상태 복구 기능</span>
+      update/mod.rs              <span class="n">6. 업데이트 관리</span>
+                                   <span class="f">업데이트 설치 기능</span>
+  connection/                    <span class="n">연결 관리</span>
+    src/
+      lib.rs
+      vpn/mod.rs                 <span class="n">1. VPN 연결 관리</span>
+                                   <span class="f">VPN 멀티 세션 관리 기능</span>
+                                   <span class="f">VPN 세션 연결 관리 기능</span>
+      network/mod.rs             <span class="n">3. 네트워크 관리</span>
+                                   <span class="f">VPN 터널 설정 기능</span>
+                                   <span class="f">예외 경로 관리 기능</span>
+                                   <span class="f">네트워크 상태 관리 기능</span>
+  protocol/                      <span class="n">프로토콜 관리</span>
+    src/
+      lib.rs
+      app_link/mod.rs            <span class="n">2. 앱 연동 관리</span>
+                                   <span class="f">앱 요청 채널 관리 기능</span>
+                                   <span class="f">Helper 전파 채널 관리 기능</span>
+                                   <span class="f">앱 요청 분석 기능</span>
+  log/                           <span class="n">5. 로그 관리</span>
+    src/
+      lib.rs                       <span class="f">VPN 로그 기록 기능</span>
+                                   <span class="f">Helper 로그 기록 기능</span>
+                                   <span class="f">시스템 로그 기록 기능</span>
+  openconnect/                   <span class="n">OpenConnect 바인딩</span>
+
+<span class="usr">user/</span>                            <span class="n">사용자 영역 (앱)</span>
+  app/                           <span class="n">진입점</span>
+    src/                         <span class="n">Rust 통로</span>
+    macos/                       <span class="n">Swift main</span>
+    windows/                     <span class="n">C# main</span>
+  service/                       <span class="n">서비스 관리</span>
+    src/
+      lib.rs                     <span class="n">메인 서비스: VPN 앱 서비스</span>
+      config/mod.rs              <span class="n">3. 설정 관리</span>
+                                   <span class="f">설정 로드 기능</span>
+                                   <span class="f">설정 가져오기 기능</span>
+                                   <span class="f">설정 저장 기능</span>
+                                   <span class="f">앱 상태 유지 기능</span>
+      update/mod.rs              <span class="n">6. 업데이트 관리</span>
+                                   <span class="f">업데이트 확인 기능</span>
+                                   <span class="f">업데이트 수행 기능</span>
+  connection/                    <span class="n">연결 관리</span>
+    src/
+      lib.rs
+      control/mod.rs             <span class="n">1. VPN 연결 제어</span>
+                                   <span class="f">VPN 연결 제어 기능</span>
+      policy/mod.rs              <span class="n">7. 연결 정책 관리</span>
+                                   <span class="f">연결 스케줄 관리 기능</span>
+                                   <span class="f">유휴 상태 관리 기능</span>
+      auth/mod.rs                <span class="n">4. 인증 관리</span>
+                                   <span class="f">VPN 계정 관리 기능</span>
+                                   <span class="f">MFA(OTP) 인증 기능</span>
+  protocol/                      <span class="n">프로토콜 관리</span>
+    src/
+      lib.rs
+      helper_link/mod.rs         <span class="n">2. Helper 연동 관리</span>
+                                   <span class="f">앱 요청 채널 관리 기능</span>
+                                   <span class="f">Helper 전파 채널 관리 기능</span>
+                                   <span class="f">Helper 서비스 관리 기능</span>
+  log/                           <span class="n">8. 로그 관리</span>
+    src/
+      lib.rs                       <span class="f">VPN 로그 기록 기능</span>
+                                   <span class="f">앱 로그 기록 기능</span>
+                                   <span class="f">시스템 로그 기록 기능</span>
+  ui/                            <span class="n">5. UI</span>
+    macos/
+      MenuBar/                     <span class="f">메뉴바(트레이) 기능</span>
+      Settings/                    <span class="f">설정창 기능</span>
+      Notification/                <span class="f">알림 기능</span>
+      Localization/              <span class="n">문장 생성 코드</span>
+    windows/
+      MenuBar/                     <span class="f">메뉴바(트레이) 기능</span>
+      Settings/                    <span class="f">설정창 기능</span>
+      Notification/                <span class="f">알림 기능</span>
+      Localization/              <span class="n">문장 생성 코드</span>
+  resources/                     <span class="n">앱 리소스</span>
+    macos/
+      Localization/              <span class="n">번역</span>
+      Icons/                     <span class="n">아이콘</span>
+    windows/
+      Localization/              <span class="n">번역</span>
+      Icons/                     <span class="n">아이콘</span>
+
+<span class="com">common/</span>                          <span class="n">공용</span>
+  base/                          <span class="n">공용 기반</span>
+    src/
+      lib.rs
+      constants/mod.rs           <span class="n">공유 상수</span>
+      validation/mod.rs          <span class="n">유효성 검사</span>
+      protocol/mod.rs            <span class="n">통신 메시지 구조</span>
+  os-api/                        <span class="n">OS API</span>
+    src/
+      lib.rs
+      macos/mod.rs               <span class="n">macOS API</span>
+      windows/mod.rs             <span class="n">Windows API</span>
+
+<span class="etc">packaging/</span>                       <span class="n">설치 패키지</span>
+  macos/
+    installer/                   <span class="n">설치 패키지 정의</span>
+    scripts/                     <span class="n">빌드·설치 스크립트</span>
+    resources/                   <span class="n">설치 패키지 리소스</span>
+  windows/
+    installer/                   <span class="n">설치 패키지 정의</span>
+    scripts/                     <span class="n">빌드·설치 스크립트</span>
+    resources/                   <span class="n">설치 패키지 리소스</span>
+  openconnect/
+    scripts/                     <span class="n">OpenConnect 빌드 스크립트</span></pre>
+</section>
+
+<section id="crates">
+  <h2>8. crate</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>영역</th><th>crate</th><th>디렉토리</th><th>산출물</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="6"><span class="tag sys">시스템</span></td><td><code>fvm-system-helper</code></td><td><code>system/helper</code></td><td>실행 파일</td></tr>
+        <tr><td><code>fvm-system-service</code></td><td><code>system/service</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-system-connection</code></td><td><code>system/connection</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-system-protocol</code></td><td><code>system/protocol</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-system-log</code></td><td><code>system/log</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-system-openconnect</code></td><td><code>system/openconnect</code></td><td>라이브러리</td></tr>
+        <tr><td rowspan="5"><span class="tag usr">사용자</span></td><td><code>fvm-user-app</code></td><td><code>user/app</code></td><td>정적 라이브러리</td></tr>
+        <tr><td><code>fvm-user-service</code></td><td><code>user/service</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-user-connection</code></td><td><code>user/connection</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-user-protocol</code></td><td><code>user/protocol</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-user-log</code></td><td><code>user/log</code></td><td>라이브러리</td></tr>
+        <tr><td rowspan="2"><span class="tag com">공용</span></td><td><code>fvm-common-base</code></td><td><code>common/base</code></td><td>라이브러리</td></tr>
+        <tr><td><code>fvm-common-os-api</code></td><td><code>common/os-api</code></td><td>라이브러리</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li>이름 규칙은 <code>fvm-영역-디렉토리</code>입니다.</li>
+    <li>crate 안은 Cargo 표준 배치인 <code>src/</code>를 씁니다.</li>
+    <li>crate끼리는 서로 의존할 수 없습니다. 두 묶음이 서로를 필요로 하면 묶음의 crate 경계를 다시 봅니다.</li>
+  </ul>
+</section>
+
+<section id="placement">
+  <h2>9. 그 밖의 배치</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>대상</th><th>자리</th><th>구분 방식</th></tr></thead>
+      <tbody>
+        <tr><td>Rust workspace, Xcode 프로젝트 정의, Visual Studio 솔루션, C# 프로젝트</td><td>저장소 최상위</td><td>없음</td></tr>
+        <tr><td>Xcode 설정 파일</td><td>최상위 <code>Config</code></td><td>없음</td></tr>
+        <tr><td>앱 리소스</td><td><code>user/resources</code></td><td>OS 이름, 유형</td></tr>
+        <tr><td>설치 패키지</td><td><code>packaging</code></td><td>OS 이름, <code>installer</code>·<code>scripts</code>·<code>resources</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>언어별 담당</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>언어</th><th>담당</th><th>자리</th></tr></thead>
+      <tbody>
+        <tr><td>Swift</td><td>macOS UI, macOS 앱의 main</td><td><code>user/ui/macos</code>, <code>user/app/macos</code></td></tr>
+        <tr><td>C#</td><td>Windows UI, Windows 앱의 main</td><td><code>user/ui/windows</code>, <code>user/app/windows</code></td></tr>
+        <tr><td>Rust</td><td>그 밖의 전부</td><td><code>system</code>, <code>user</code>의 나머지, <code>common</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>시험</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>언어</th><th>시험 자리</th></tr></thead>
+      <tbody>
+        <tr><td>Rust</td><td>헤더 디렉토리 안 시험 파일, crate의 <code>tests</code></td></tr>
+        <tr><td>Swift</td><td>기능 디렉토리 안 <code>Tests</code></td></tr>
+        <tr><td>C#</td><td>기능 디렉토리 안 <code>Tests</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul>
+    <li>시험은 대상 코드와 같은 디렉토리에 둡니다.</li>
+    <li>Swift·C# 제품 대상에는 <code>Tests</code>를 넣지 않습니다.</li>
+  </ul>
+</section>
+
+<section id="later">
+  <h2>10. 구현 단계 결정 항목</h2>
+  <ul>
+    <li>헤더 안 세부 모듈의 수와 이름</li>
+    <li>총괄 구현체의 영문 이름과 공개 인터페이스</li>
+    <li>OS API의 OS별 모듈을 쓰는 쪽에 내주는 방식</li>
+    <li>진입점도 UI도 아닌 Swift·C# 코드의 필요 여부</li>
+    <li>최상위 C# 프로젝트의 소스 경로 지정과 중간 산출물 분리</li>
+  </ul>
+</section>
+
+<section id="features">
+  <h2>11. 기능 목록</h2>
+  <div class="features">
+    <div class="feat sys">
+      <h3>시스템 영역 (Helper 서비스)</h3>
+      <h4>목적</h4>
+      <ul>
+        <li>시스템 레벨에서 실제 VPN 연결을 위한 인증, 터널 관리를 통해 VPN 구간 통신 지원</li>
+      </ul>
+      <h4>메인 서비스</h4>
+      <ul>
+        <li>VPN Helper 서비스</li>
+      </ul>
+      <h4>기능</h4>
+      <h5>1. VPN 연결 관리</h5>
+      <ul>
+        <li>VPN 멀티 세션 관리 기능</li>
+        <li>VPN 세션 연결 관리 기능</li>
+      </ul>
+      <h5>2. 앱 연동 관리</h5>
+      <ul>
+        <li>앱 요청 채널 관리 기능</li>
+        <li>Helper 전파 채널 관리 기능</li>
+        <li>앱 요청 분석 기능</li>
+      </ul>
+      <h5>3. 네트워크 관리</h5>
+      <ul>
+        <li>VPN 터널 설정 기능</li>
+        <li>예외 경로 관리 기능</li>
+        <li>네트워크 상태 관리 기능</li>
+      </ul>
+      <h5>4. Helper 운영 상태 관리</h5>
+      <ul>
+        <li>운영 상태 확인 기능</li>
+        <li>운영 상태 저장 기능</li>
+        <li>운영 상태 복구 기능</li>
+      </ul>
+      <h5>5. 로그 관리</h5>
+      <ul>
+        <li>VPN 로그 기록 기능</li>
+        <li>Helper 로그 기록 기능</li>
+        <li>시스템 로그 기록 기능</li>
+      </ul>
+      <h5>6. 업데이트 관리</h5>
+      <ul>
+        <li>업데이트 설치 기능</li>
+      </ul>
+    </div>
+    <div class="feat usr">
+      <h3>사용자 영역 (앱)</h3>
+      <h4>목적</h4>
+      <ul>
+        <li>사용자가 Helper 연동을 통한 VPN 연결에 대해 전반적으로 관리하기 위함</li>
+      </ul>
+      <h4>메인 서비스</h4>
+      <ul>
+        <li>VPN 앱 서비스</li>
+      </ul>
+      <h4>기능</h4>
+      <h5>1. VPN 연결 제어</h5>
+      <ul>
+        <li>VPN 연결 제어 기능</li>
+      </ul>
+      <h5>2. Helper 연동 관리</h5>
+      <ul>
+        <li>앱 요청 채널 관리 기능</li>
+        <li>Helper 전파 채널 관리 기능</li>
+        <li>Helper 서비스 관리 기능</li>
+      </ul>
+      <h5>3. 설정 관리</h5>
+      <ul>
+        <li>설정 로드 기능</li>
+        <li>설정 가져오기 기능</li>
+        <li>설정 저장 기능</li>
+        <li>앱 상태 유지 기능</li>
+      </ul>
+      <h5>4. 인증 관리</h5>
+      <ul>
+        <li>VPN 계정 관리 기능</li>
+        <li>MFA(OTP) 인증 기능</li>
+      </ul>
+      <h5>5. UI</h5>
+      <ul>
+        <li>메뉴바(트레이) 기능</li>
+        <li>설정창 기능</li>
+        <li>알림 기능</li>
+      </ul>
+      <h5>6. 업데이트 관리</h5>
+      <ul>
+        <li>업데이트 확인 기능</li>
+        <li>업데이트 수행 기능</li>
+      </ul>
+      <h5>7. 연결 정책 관리</h5>
+      <ul>
+        <li>연결 스케줄 관리 기능</li>
+        <li>유휴 상태 관리 기능</li>
+      </ul>
+      <h5>8. 로그 관리</h5>
+      <ul>
+        <li>VPN 로그 기록 기능</li>
+        <li>앱 로그 기록 기능</li>
+        <li>시스템 로그 기록 기능</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="terms">
+  <h2>용어</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>용어</th><th>뜻</th></tr></thead>
+      <tbody>
+        <tr><td class="group">영역</td><td>실행 주체와 역할로 나눈 최상위 구분</td></tr>
+        <tr><td class="group">묶음</td><td>다루는 대상이 같은 헤더의 모음</td></tr>
+        <tr><td class="group">헤더</td><td>기능 단위</td></tr>
+        <tr><td class="group">총괄 구현체</td><td>묶음 또는 헤더의 기능을 총괄하는, 그 이름을 가진 구현체</td></tr>
+        <tr><td class="group">메인 서비스</td><td>서비스 관리의 총괄 구현체</td></tr>
+        <tr><td class="group">진입점</td><td>실행 파일 또는 라이브러리의 시작 지점</td></tr>
+        <tr><td class="group">연결</td><td>사용자가 보는 VPN 하나</td></tr>
+        <tr><td class="group">세션</td><td>연결을 이루는 서버 로그인과 터널 한 벌</td></tr>
+        <tr><td class="group">채널</td><td>앱과 Helper 사이의 통신 경로</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>같은 내용의 문서: <code>docs/ARCHITECTURE.md</code> · 기능 목록: <code>docs/FEATURES.md</code></footer>
+
+</div>
+</body>
+</html>
