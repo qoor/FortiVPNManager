@@ -112,6 +112,8 @@
 
 ## 기록 위치
 - 요구사항: SPEC
+- 구조·디렉토리: docs/ARCHITECTURE.md
+- 기능 목록: docs/FEATURES.md
 - .claude/rules: 코드로 안 보이는 결정과 이유(decisions.md), 외부 제약·특이사항(constraints.md), UI 규칙(ui.md)
 - 특정 시험 기기·세션에서만 성립하는 특성: CLAUDE.local.md
   - .claude/rules·SPEC 기재 금지

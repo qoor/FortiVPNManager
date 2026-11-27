@@ -1,0 +1,11 @@
+[package]
+name = "fvm-system-connection"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+fvm-common-base.workspace = true
+fvm-system-protocol.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "fvm-user-app"
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+fvm-user-protocol.workspace = true
+
+[lints]
+workspace = true

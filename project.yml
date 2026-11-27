@@ -33,21 +33,19 @@ targets:
     type: application
     platform: macOS
     sources:
-      - path: ../../components/contract/macos
-      - path: ../../components/ui/macos
-      - path: ../../components/os-integration/macos
-      - path: ../../components/runtime/macos/swift
-      - path: Support/LaunchDaemons/com.qoor.FortiVPNManager.Helper.plist
+      - path: user/app/macos
+      - path: user/ui/macos
+      - path: packaging/macos/Support/LaunchDaemons/com.qoor.FortiVPNManager.Helper.plist
         buildPhase:
           copyFiles:
             destination: wrapper
             subpath: Contents/Library/LaunchDaemons
       # An Icon Composer document, so macOS draws the Dark, Clear and Tinted icons itself.
-      - path: AppIcon.icon
-      - path: OpenConnect-licenses
+      - path: packaging/macos/AppIcon.icon
+      - path: packaging/macos/OpenConnect-licenses
         type: folder
     info:
-      path: Support/App-Info.plist
+      path: packaging/macos/Support/App-Info.plist
       properties:
         LSUIElement: true
         CFBundleDisplayName: FortiVPNManager
@@ -59,14 +57,11 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # The sources state their isolation themselves, as the contract's types are nonisolated.
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-        # UI text is English in code; Korean lives in components/ui/macos/Localizable.xcstrings.
+        # UI text is English in code; Korean lives in the string catalog.
         SWIFT_EMIT_LOC_STRINGS: YES
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         # The Rust static library is built for Apple Silicon only.
         ARCHS: arm64
-        # The module maps of the Rust start function, whose library build-rust.sh puts in
-        # BUILT_PRODUCTS_DIR, and of the XPC protocols shared with the Helper.
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/runtime/macos/include $(SRCROOT)/../../components/contract/macos/xpc
         LIBRARY_SEARCH_PATHS: $(inherited) $(BUILT_PRODUCTS_DIR)
         # cargo reads the source tree and writes under DerivedData, the OpenConnect build writes the
         # ~/.cache/fvm-openconnect cache, and the OAuth-client script below reads an optional,
@@ -75,15 +70,15 @@ targets:
     preBuildScripts:
       - name: Check formatting and lints
         basedOnDependencyAnalysis: false
-        script: 'env -u SYSROOT CARGO_TARGET_DIR="$OBJROOT/cargo-check" "$SRCROOT/../../scripts/check.sh"'
-      - name: Build Rust runtime
+        script: 'env -u SYSROOT CARGO_TARGET_DIR="$OBJROOT/cargo-check" "$SRCROOT/scripts/check.sh"'
+      - name: Build Rust app library
         basedOnDependencyAnalysis: false
-        script: '"$SRCROOT/build-rust.sh" fvm-runtime'
+        script: '"$SRCROOT/packaging/macos/scripts/build-rust.sh" fvm-user-app'
         outputFiles:
-          - $(BUILT_PRODUCTS_DIR)/libfvm_runtime.a
+          - $(BUILT_PRODUCTS_DIR)/libfvm_user_app.a
       - name: Build Rust Helper
         basedOnDependencyAnalysis: false
-        script: '"$SRCROOT/build-rust.sh" fvm-helper-macos FortiVPNManagerHelper com.qoor.FortiVPNManager.Helper'
+        script: '"$SRCROOT/packaging/macos/scripts/build-rust.sh" fvm-system-helper FortiVPNManagerHelper com.qoor.FortiVPNManager.Helper'
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/FortiVPNManagerHelper
     postBuildScripts:
@@ -92,7 +87,7 @@ targets:
         script: |
           # Copies the gitignored Desktop-app OAuth client (packaging/GoogleOAuthClient.json) into the app
           # bundle. Without it the app still builds; users then import a client JSON in Settings.
-          src="${SRCROOT}/../GoogleOAuthClient.json"
+          src="${SRCROOT}/packaging/GoogleOAuthClient.json"
           dst="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleOAuthClient.json"
           if [ -f "$src" ]; then
             install -m 644 "$src" "$dst"
@@ -101,52 +96,8 @@ targets:
             echo "warning: packaging/GoogleOAuthClient.json not found; building without a built-in Google OAuth client."
           fi
 
-  # The Swift side of the contract against the Rust fixtures; needs no Rust library.
-  ContractTests:
-    type: bundle.unit-test
-    platform: macOS
-    sources:
-      - path: ../../components/contract/macos
-      - path: ../../components/contract/tests/macos
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.ContractTests
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-
-  # The app's Swift parts (UI and OS integration) on the contract, without the Rust runtime.
-  AppSwiftTests:
-    type: bundle.unit-test
-    platform: macOS
-    sources:
-      - path: ../../components/contract/macos
-      - path: ../../components/ui/macos
-      - path: ../../components/os-integration/macos
-        excludes:
-          - "AppEntry.swift"
-      - path: ../../components/ui/tests/macos
-      - path: ../../components/os-integration/tests/macos
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.qoor.FortiVPNManager.AppSwiftTests
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/../../components/contract/macos/xpc
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
-
 schemes:
   FortiVPNManager:
     build:
       targets:
         FortiVPNManager: all
-  ContractTests:
-    build:
-      targets:
-        ContractTests: [test]
-    test:
-      targets: [ContractTests]
-  AppSwiftTests:
-    build:
-      targets:
-        AppSwiftTests: [test]
-    test:
-      targets: [AppSwiftTests]

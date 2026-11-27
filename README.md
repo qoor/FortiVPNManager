@@ -63,7 +63,7 @@ git submodule update --init third_party/openconnect
 1. Add your Apple ID in Xcode > Settings > Accounts.
 2. On the same screen, create a certificate with Manage Certificates… > `+` > **Apple Development**.
    - If it shows as not valid, add the Apple WWDR G3 intermediate certificate to the login Keychain.
-3. Run `make local-config` to create `packaging/macos/Config/Local.xcconfig`.
+3. Run `make local-config` to create `Config/Local.xcconfig`.
 
 ### Build and install
 

@@ -1,65 +1,29 @@
 [workspace]
 resolver = "3"
-members = []
+members = [
+    "common/base",
+    "common/os-api",
+    "system/connection",
+    "system/helper",
+    "system/log",
+    "system/openconnect",
+    "system/protocol",
+    "system/service",
+    "user/app",
+    "user/connection",
+    "user/log",
+    "user/protocol",
+    "user/service",
+]
 
 [workspace.package]
 edition = "2024"
 publish = false
 
 [workspace.dependencies]
-base64 = "0.23"
-block2 = "0.6.2"
-cc = "1.11"
-core-foundation = "0.10.1"
-encoding_rs = "0.8"
-# Writes the Windows Helper's log to the Windows event log.
-eventlog = "0.3"
-# Civil time in a time zone the runtime resolved; nothing that reads the system database.
-jiff = { version = "0.2.41", default-features = false, features = ["std"] }
-getrandom = "0.3"
-# Named pipes with a security descriptor, without unsafe code of our own.
-interprocess = "2.4"
-log = "0.4"
-nix = "0.31"
-notify = "8.2"
-objc2 = "0.6.5"
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData", "NSError", "NSObject", "NSString", "NSXPCConnection", "block2", "libc"] }
-ring = { version = "0.17", default-features = false }
-rustix = "1"
-saphyr-parser = "0.3"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-# TLS with ring only (no aws-lc-rs) and the OS's trust store; the HTTP client also follows the OS's
-# proxy settings.
-reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "system-proxy"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
-rustls-platform-verifier = "0.6"
-security-framework = "3.7"
-security-framework-sys = "2.17"
-sha2 = "0.11"
-signal-hook = "0.4.6"
-# `all` exposes set_nosigpipe.
-socket2 = { version = "0.6", features = ["all"] }
-sysinfo = { version = "0.37", default-features = false, features = ["system"] }
-system-configuration = "0.8.0"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros"] }
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
-widestring = "1"
-windows-service = "0.8"
-windows-sys = { version = "0.61", features = [
-    "Win32_Foundation",
-    "Win32_NetworkManagement_IpHelper",
-    "Win32_NetworkManagement_Ndis",
-    "Win32_Networking_WinSock",
-    "Win32_Security",
-    "Win32_Security_Credentials",
-    "Win32_Security_Cryptography",
-    "Win32_System_Diagnostics_Debug",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Registry",
-    "Win32_System_Threading",
-] }
-zeroize = "1"
+fvm-common-base = { path = "common/base" }
+fvm-system-protocol = { path = "system/protocol" }
+fvm-user-protocol = { path = "user/protocol" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

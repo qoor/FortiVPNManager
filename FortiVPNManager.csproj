@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The Windows app: its entry and its UI. Built by packaging/windows/build.ps1, which sets the version
+    to the app's (VERSION) and the informational version to the build the Helper carries too. The .NET
+    runtime and Windows App SDK ship inside the app's folder, so the PC needs neither installed.
+    Published, the app is compiled ahead of time (Native AOT): one native executable instead of the
+    .NET runtime and the app's assemblies, which starts without compiling and takes less memory.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <AssemblyName>FortiVPNManager</AssemblyName>
+    <RootNamespace>FortiVPNManager</RootNamespace>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Without it, publishing leaves out the app's resources (FortiVPNManager.pri and the compiled XAML). -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisMode>All</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PublishDocumentationFile>false</PublishDocumentationFile>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <ApplicationManifest>user\app\windows\app.manifest</ApplicationManifest>
+    <!-- Program.Main lets only one copy start before XAML does. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- The app icon (packaging/windows/AppIcon.ico, used as it is): the exe's, and the window's in the taskbar. -->
+    <ApplicationIcon>packaging\windows\AppIcon.ico</ApplicationIcon>
+    <!-- The project sits at the repository root, so it names its sources instead of taking every file below it. -->
+    <EnableDefaultItems>false</EnableDefaultItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="user\app\windows\**\*.cs;user\ui\windows\**\*.cs" Exclude="**\Tests\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="packaging\windows\AppIcon.ico" Link="AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="packaging\windows\TrayDisconnected.ico" Link="TrayDisconnected.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="packaging\windows\TrayInProgress.ico" Link="TrayInProgress.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="packaging\windows\TrayError.ico" Link="TrayError.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- Of the Windows App SDK, only the WinUI component, which takes Foundation, InteractiveExperiences and Base. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+  </ItemGroup>
+  <!--
+    WinUI brings its controls' own text (such as a text field's Copy menu) in 86 languages, a folder each.
+    The app speaks only Korean and English, so the published app keeps those two; on Windows in another
+    language WinUI's text falls back to English, as the app's own does (user decision, 2026-11-15).
+  -->
+  <Target Name="KeepKoreanAndEnglishWinUIText" AfterTargets="ComputeResolvedFilesToPublishList">
+    <!-- A condition cannot pass metadata to a property function, so the language folder is metadata first. -->
+    <ItemGroup>
+      <_WinUITextToDrop Include="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.Extension)' == '.mui'">
+        <Language>$([System.IO.Path]::GetDirectoryName('%(ResolvedFileToPublish.RelativePath)'))</Language>
+      </_WinUITextToDrop>
+      <_WinUITextToDrop Remove="@(_WinUITextToDrop)" Condition="'%(Language)' == 'ko-KR' or '%(Language)' == 'en-US'" />
+      <ResolvedFileToPublish Remove="@(_WinUITextToDrop)" />
+    </ItemGroup>
+  </Target>
+</Project>
